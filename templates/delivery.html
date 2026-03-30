@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-4 md:space-y-8 pb-20 fade-in px-2 md:px-0">
+    
+    <!-- HEADER -->
+    <div class="glass-panel rounded-2xl md:rounded-3xl p-6 md:p-8 relative overflow-hidden shadow-2xl flex items-center justify-between">
+        <div class="flex items-center gap-4 md:gap-6 relative z-10">
+            <div class="w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-brand-500/10 flex items-center justify-center text-brand-400 border border-brand-500/20 shadow-xl">
+                <i class="fa-solid fa-truck-ramp-box text-lg md:text-2xl"></i>
+            </div>
+            <div>
+                <h2 class="text-xl md:text-3xl font-black text-white uppercase tracking-tighter">THE LOGISTIC REGISTRATION</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- TRANSACTION CONSOLE -->
+    <div class="glass-panel rounded-3xl md:rounded-[2.5rem] p-8 md:p-10 border border-white/5 bg-brand-500/[0.02] shadow-2xl relative z-50">
+        <div class="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+            <h3 class="text-xl font-black text-white uppercase tracking-tighter flex items-center gap-3">
+                <i class="fa-solid fa-bolt-lightning text-amber-400"></i> New Logistics Transaction
+            </h3>
+            <div id="default-vehicle-badge" class="hidden items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span class="text-[9px] font-black text-emerald-400 uppercase tracking-widest">Active Vehicle Preset</span>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6 md:gap-4 items-end">
+            <!-- Vehicle Selection (Col 1-3) -->
+            <div class="md:col-span-3 space-y-2">
+                <label class="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Company Vehicle</label>
+                <div class="relative group">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-brand-400 group-focus-within:text-brand-300 transition-colors">
+                        <i class="fa-solid fa-truck-moving text-xs"></i>
+                    </div>
+                    {% if trip and trip.vehicle_id %}
+                    <div class="w-full h-14 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl pl-11 pr-5 flex items-center text-emerald-400 group-hover:border-emerald-500/40 transition-all cursor-default shadow-inner">
+                        <span class="text-xs font-black uppercase tracking-widest">{{ trip.vehicle_name or 'Unspecified' }}</span>
+                    </div>
+                    <input type="hidden" id="vehicle-select" value="{{ trip.vehicle_id }}">
+                    {% else %}
+                    <select id="vehicle-select" onchange="saveDefaultVehicle(this.value)" class="w-full h-14 bg-slate-900/80 border border-white/10 rounded-2xl pl-11 pr-5 text-xs font-black text-white outline-none focus:ring-2 focus:ring-brand-500 uppercase tracking-widest transition-all shadow-inner appearance-none cursor-pointer hover:border-white/20">
+                        <option value="">Select vehicle...</option>
+                        {% for v in vehicles %}
+                        <option value="{{ v.id }}">{{ v.name }} ({{ v.plate_number }})</option>
+                        {% endfor %}
+                    </select>
+                    <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-600">
+                        <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Activity Protocol (Col 4-6) -->
+            <div class="md:col-span-3 space-y-2">
+                <label class="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Activity Protocol</label>
+                <div class="relative group">
+                    <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-brand-400 transition-colors">
+                        <i class="fa-solid fa-route text-xs"></i>
+                    </div>
+                    <select id="activity-type" onchange="toggleClientBox()" class="w-full h-14 bg-slate-900/80 border border-white/10 rounded-2xl pl-11 pr-5 text-xs font-black text-white outline-none focus:ring-2 focus:ring-brand-500 uppercase tracking-widest transition-all shadow-inner appearance-none cursor-pointer hover:border-white/20">
+                        {% for act in activities_list %}
+                        <option value="{{ act.name }}">{{ act.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none text-slate-600">
+                        <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Associated Client (Col 7-9) -->
+            <div id="target-client-box" class="md:col-span-3 space-y-2">
+                <label class="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Associated Client</label>
+                <div class="relative">
+                    <select id="customer-select" class="w-full bg-slate-900/80 border border-white/10 rounded-2xl text-sm font-bold text-white outline-none shadow-inner">
+                        <option value="">NA / Warehouse</option>
+                        {% for c in customers %}
+                        <option value="{{ c.id }}">{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- dubai Log Time (Col 10-12) -->
+            <div class="md:col-span-3 space-y-2">
+                <label class="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] ml-1">Dubai Log Time</label>
+                <div class="flex items-center gap-2">
+                    <div class="relative flex-1">
+                        <input type="datetime-local" id="manual-log-time" data-role="dubai-sync" class="w-full h-14 bg-slate-900/80 border border-white/10 rounded-2xl px-5 text-xs font-bold text-white outline-none focus:ring-2 focus:ring-brand-500 tracking-wider shadow-inner [color-scheme:dark]">
+                    </div>
+                    <button onclick="submitLogEntry()" class="h-14 w-14 bg-brand-600 hover:bg-brand-500 text-white rounded-2xl shadow-xl shadow-brand-500/20 transition-all active:scale-95 flex items-center justify-center flex-shrink-0 group">
+                        <i class="fa-solid fa-paper-plane group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TRANSACTION LIST -->
+    <div class="glass-panel rounded-3xl md:rounded-[2.5rem] overflow-hidden border border-white/5 bg-slate-900/20 shadow-2xl relative z-10">
+        <div class="p-6 md:p-8 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+            <h4 class="text-xs md:text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-3 md:gap-4">
+                <i class="fa-solid fa-list-check text-brand-400"></i> Logistics Transaction List
+            </h4>
+            <div class="flex items-center gap-4">
+                <a href="{{ url_for('delivery_export_activities') }}" class="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase tracking-widest rounded-lg border border-emerald-500/20 transition-all">
+                    <i class="fa-solid fa-file-excel mr-2"></i> Export Excel
+                </a>
+            </div>
+        </div>
+        
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse min-w-[700px] md:min-w-0">
+                <thead>
+                    <tr class="bg-white/[0.01] border-b border-white/5 text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-[0.23em]">
+                        <th class="px-4 md:px-6 py-4 md:py-6">Row</th>
+                        <th class="px-6 md:px-10 py-4 md:py-6">Activity Protocol</th>
+                        <th class="px-6 md:px-10 py-4 md:py-6">Client Association</th>
+                        <th class="px-6 md:px-10 py-4 md:py-6">Chronometer Log</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for act in activities %}
+                    <tr class="hover:bg-brand-500/[0.03] transition-all group">
+                        <td class="px-4 md:px-6 py-6 font-mono text-[10px] text-slate-600 font-bold">
+                            #{{ total_count - (offset + loop.index0) }}
+                        </td>
+                        <td class="px-6 md:px-10 py-6 md:py-8">
+                            <div class="flex items-center gap-3 md:gap-5">
+                                <div class="w-8 h-8 md:w-11 md:h-11 rounded-lg md:rounded-xl bg-white/5 flex items-center justify-center text-slate-400 group-hover:bg-brand-500 group-hover:text-white transition-all shadow-inner border border-white/5 group-hover:border-white/20">
+                                    {% if 'warehouse' in act.activity_type|lower %}
+                                    <i class="fa-solid fa-warehouse text-xs md:text-base"></i>
+                                    {% elif 'departure' in act.activity_type|lower %}
+                                    <i class="fa-solid fa-truck-arrow-right text-xs md:text-base"></i>
+                                    {% elif 'arrival' in act.activity_type|lower %}
+                                    <i class="fa-solid fa-location-dot text-xs md:text-base"></i>
+                                    {% else %}
+                                    <i class="fa-solid fa-file-contract text-xs md:text-base"></i>
+                                    {% endif %}
+                                </div>
+                                <p class="text-[11px] md:text-sm font-black text-white uppercase tracking-tight">{{ act.activity_type }}</p>
+                            </div>
+                        </td>
+                        <td class="px-6 md:px-10 py-6 md:py-8">
+                            {% if act.customer_name %}
+                            <div class="space-y-1">
+                                <p class="text-[11px] md:text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{{ act.customer_name }}</p>
+                                <p class="text-[8px] md:text-[10px] text-slate-500 font-bold uppercase tracking-widest">{{ act.customer_loc }}</p>
+                            </div>
+                            {% else %}
+                            <span class="text-[8px] md:text-[10px] text-slate-700 font-black italic tracking-widest">-- GLOBAL / NA --</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 md:px-10 py-6 md:py-8">
+                            <div class="flex items-center gap-4">
+                                <p class="text-[10px] md:text-xs font-mono font-bold text-emerald-400/90 group-hover:text-emerald-400 transition-colors bg-emerald-500/5 py-1.5 md:py-2 px-2 md:px-3 rounded-lg border border-emerald-500/10 inline-block shadow-sm">
+                                    <i class="fa-regular fa-clock mr-1 md:mr-2 opacity-50"></i>{{ act.timestamp }}
+                                </p>
+                                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                    <div class="flex flex-col gap-0.5">
+                                        <button onclick="moveLog('{{ act.id }}', 'up')" class="w-6 h-4 rounded bg-white/5 flex items-center justify-center text-slate-500 hover:text-white hover:bg-brand-500 transition-all border border-white/5" title="Move Up in Order">
+                                            <i class="fa-solid fa-chevron-up text-[8px]"></i>
+                                        </button>
+                                        <button onclick="moveLog('{{ act.id }}', 'down')" class="w-6 h-4 rounded bg-white/5 flex items-center justify-center text-slate-500 hover:text-white hover:bg-brand-500 transition-all border border-white/5" title="Move Down in Order">
+                                            <i class="fa-solid fa-chevron-down text-[8px]"></i>
+                                        </button>
+                                    </div>
+                                    <button onclick="editLog('{{ act.id }}', '{{ act.timestamp }}')" class="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-slate-500 hover:text-white hover:bg-brand-500 transition-all border border-white/5">
+                                        <i class="fa-solid fa-pen-to-square text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not activities %}
+                    <tr>
+                        <td colspan="5" class="px-6 md:px-10 py-20 md:py-32 text-center">
+                            <div class="max-w-xs mx-auto space-y-4 md:space-y-6 opacity-40">
+                                <i class="fa-solid fa-folder-open text-4xl md:text-6xl text-slate-600"></i>
+                                <p class="text-xs md:text-sm font-black text-slate-600 uppercase tracking-widest leading-loose">No distribution events logged.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if total_pages > 1 %}
+        <!-- PAGINATION -->
+        <div class="px-8 py-6 border-t border-white/5 bg-white/[0.01] flex items-center justify-between">
+            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Log Sequence {{ offset + 1 }} - {{ offset + activities|length }} of {{ total_count }}</p>
+            <div class="flex gap-2">
+                {% if page > 1 %}
+                <a href="{{ url_for('delivery', page=page-1) }}" class="px-4 py-2 bg-white/5 rounded-lg border border-white/10 text-[10px] font-black text-white hover:bg-brand-500 transition-all uppercase">Prev</a>
+                {% endif %}
+                {% if page < total_pages %}
+                <a href="{{ url_for('delivery', page=page+1) }}" class="px-4 py-2 bg-white/5 rounded-lg border border-white/10 text-[10px] font-black text-white hover:bg-brand-500 transition-all uppercase">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Initialize Searchable Dropdown
+    const customerSelect = document.getElementById('customer-select');
+    if (customerSelect) {
+        new Choices(customerSelect, {
+            searchEnabled: true,
+            itemSelectText: '',
+            placeholder: true,
+            placeholderValue: 'Select Customer...',
+            shouldSort: false
+        });
+    }
+
+    // Associated Client Box Toggle
+    window.toggleClientBox = function() {
+        const activity = document.getElementById('activity-type').value.toLowerCase();
+        const clientBox = document.getElementById('target-client-box');
+        
+        if (activity.includes('warehouse')) {
+            clientBox.style.opacity = '0.3';
+            clientBox.style.pointerEvents = 'none';
+        } else {
+            clientBox.style.opacity = '1';
+            clientBox.style.pointerEvents = 'auto';
+        }
+    };
+
+    // Dubai Time Sync for Log Inputs
+    function syncDubaiTime() {
+        const dubaiTimeStr = document.getElementById('dubai-clock')?.textContent;
+        if (!dubaiTimeStr) return;
+        
+        const now = new Date();
+        const dateStr = now.toISOString().split('T')[0];
+        const fullTime = `${dateStr}T${dubaiTimeStr}`;
+        
+        document.querySelectorAll('[data-role="dubai-sync"]').forEach(input => {
+            if (!input.value || input.dataset.autoUpdate === 'true') {
+                input.value = fullTime;
+            }
+        });
+    }
+    setInterval(syncDubaiTime, 1000);
+    toggleClientBox();
+    loadDefaultVehicle(); // Call loadDefaultVehicle on DOMContentLoaded
+});
+
+    // Vehicle Persistence Logic
+    function saveDefaultVehicle(vehicleId) {
+        if (!vehicleId) {
+            localStorage.removeItem('default_delivery_vehicle');
+            document.getElementById('default-vehicle-badge').classList.add('hidden');
+            document.getElementById('default-vehicle-badge').classList.remove('flex');
+            return;
+        }
+        localStorage.setItem('default_delivery_vehicle', vehicleId);
+        document.getElementById('default-vehicle-badge').classList.remove('hidden');
+        document.getElementById('default-vehicle-badge').classList.add('flex');
+        window.toast("Vehicle set as default", "info");
+    }
+
+    function loadDefaultVehicle() {
+        const savedId = localStorage.getItem('default_delivery_vehicle');
+        const select = document.getElementById('vehicle-select');
+        
+        // Only auto-select if we aren't already in a fixed-vehicle trip (select is a dropdown)
+        if (savedId && select && select.tagName === 'SELECT') {
+            const option = select.querySelector(`option[value="${savedId}"]`);
+            if (option) {
+                select.value = savedId;
+                document.getElementById('default-vehicle-badge').classList.remove('hidden');
+                document.getElementById('default-vehicle-badge').classList.add('flex');
+                console.log("Applied default vehicle preset:", savedId);
+            }
+        }
+    }
+
+async function submitLogEntry() {
+    const vehicleId = document.getElementById('vehicle-select').value;
+    const customerId = document.getElementById('customer-select').value;
+    const activity = document.getElementById('activity-type').value;
+    const timeInput = document.getElementById('manual-log-time');
+    const customTime = timeInput && timeInput.value ? timeInput.value.replace('T', ' ') : '';
+
+    const isWarehouseActivity = activity.toLowerCase().includes('warehouse');
+
+    if (!vehicleId) {
+        window.toast("Vehicle selection required for mission operations", "error");
+        return;
+    }
+
+    if (!isWarehouseActivity && !customerId) {
+        window.toast("Client association required for this activity", "error");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('vehicle_id', vehicleId);
+    formData.append('customer_id', customerId);
+    formData.append('activity', activity);
+    formData.append('custom_time', customTime);
+
+    window.toast("Synchronizing distribution log...", "info");
+
+    try {
+        const resp = await fetch('/api/delivery/log_entry', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await resp.json();
+        if (data.status === 'success') {
+            window.toast(data.msg);
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            window.toast(data.msg || "Tactical Error", "error");
+        }
+    } catch (e) {
+        window.toast("Network disruption detected", "error");
+    }
+}
+
+async function editLog(id, currentTime) {
+    const { value: newTime } = await Swal.fire({
+        title: 'Calibrate Chronometer',
+        input: 'text',
+        inputValue: currentTime,
+        showCancelButton: true,
+        background: '#1e293b',
+        color: '#fff',
+        confirmButtonColor: '#0ea5e9'
+    });
+
+    if (newTime) {
+        const formData = new FormData();
+        formData.append('id', id);
+        formData.append('timestamp', newTime);
+
+        const resp = await fetch('/api/delivery/edit_log', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (data.status === 'success') {
+            window.toast(data.msg);
+            setTimeout(() => location.reload(), 800);
+        }
+    }
+}
+
+async function moveLog(id, direction) {
+    const formData = new FormData();
+    formData.append('id', id);
+    formData.append('direction', direction);
+
+    const resp = await fetch('/api/delivery/move_log', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.status === 'success') {
+        setTimeout(() => location.reload(), 200);
+    } else {
+        window.toast(data.msg || "Error", "error");
+    }
+}
+
+async function deleteLog(id) {
+    const result = await Swal.fire({
+        title: 'Excise Event Log?',
+        text: "This operation will remove the logistical pulse from audit history.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#334155',
+        confirmButtonText: 'Yes, Excise',
+        background: '#1e293b',
+        color: '#fff'
+    });
+
+    if (result.isConfirmed) {
+        const formData = new FormData();
+        formData.append('id', id);
+        const resp = await fetch('/api/delivery/delete_log', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (data.status === 'success') {
+            window.toast(data.msg);
+            setTimeout(() => location.reload(), 800);
+        }
+    }
+}
+async function confirmTripVehicle(tripId) {
+    const vehicleId = document.getElementById('vehicle-select').value;
+    if (!vehicleId) {
+        window.toast("Please select a vehicle to initialize deployment", "error");
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('trip_id', tripId);
+    formData.append('vehicle_id', vehicleId);
+    
+    try {
+        const resp = await fetch('/api/delivery/update_vehicle', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await resp.json();
+        if (data.status === 'success') {
+            window.toast(data.msg);
+            setTimeout(() => location.reload(), 800);
+        } else {
+            window.toast(data.msg, "error");
+        }
+    } catch (e) {
+        window.toast("Operational failure in telemetry sync", "error");
+    }
+}
+</script>
+{% endblock %}

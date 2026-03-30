@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    tbody {
+        counter-reset: rowNumber;
+    }
+    tbody tr.loc-row td.row-num::before {
+        counter-increment: rowNumber;
+        content: counter(rowNumber, decimal-leading-zero);
+    }
+</style>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    
+    <!-- Location Registry -->
+    <div class="lg:col-span-2 glass-panel p-8 rounded-3xl relative overflow-hidden flex flex-col">
+        <div class="absolute top-0 left-0 w-64 h-64 bg-orange-500/10 rounded-full blur-[100px] -ml-32 -mt-32"></div>
+        
+        <div class="mb-8 relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-white tracking-tight">Location Management</h1>
+                <p class="text-slate-400 text-sm mt-1">Define WMS coordinate zones with company-specific residency.</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <!-- Search -->
+                <div class="relative group">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-brand-400 transition-colors"></i>
+                    <input type="text" id="locSearch" placeholder="Filter coordinates or company..." 
+                           class="pl-10 pr-4 py-2 bg-slate-900/50 border border-slate-700/50 rounded-xl text-xs text-white focus:ring-brand-500 focus:border-brand-500 w-64 outline-none transition-all">
+                </div>
+                <!-- Export -->
+                <a href="{{ url_for('export_locations') }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-file-excel"></i> Export Excel
+                </a>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto relative z-10">
+            <table class="w-full text-left border-separate border-spacing-y-3">
+                <thead>
+                    <tr class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.15em]">
+                        <th class="px-3 py-3 w-10 text-center">#</th>
+                        <th class="px-3 py-3">Rack</th>
+                        <th class="px-3 py-3">Bay</th>
+                        <th class="px-3 py-3">Level</th>
+                        <th class="px-3 py-3">Position</th>
+                        <th class="px-3 py-3">Bin</th>
+                        <th class="px-3 py-3">Company Assignment</th>
+                        <th class="px-3 py-3 text-center">Capacity</th>
+                        <th class="px-3 py-3 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for loc in locations %}
+                    <tr class="group loc-row bg-slate-800/40 hover:bg-slate-800/60 border border-white/5 rounded-2xl transition-all duration-300">
+                        <td class="px-3 py-3.5 text-center text-[10px] font-bold text-slate-600 rounded-l-xl row-num"></td>
+                        <td class="px-3 py-3.5">
+                            <span class="inline-flex items-center justify-center w-10 h-8 bg-orange-500/10 rounded-lg text-orange-400 text-xs font-bold border border-orange-500/20">{{ loc.rack or '—' }}</span>
+                        </td>
+                        <td class="px-3 py-3.5">
+                            <span class="inline-flex items-center justify-center w-10 h-8 bg-slate-700/50 rounded-lg text-white text-xs font-bold">{{ loc.bay or '—' }}</span>
+                        </td>
+                        <td class="px-3 py-3.5">
+                            <span class="inline-flex items-center justify-center w-10 h-8 bg-slate-700/50 rounded-lg text-white text-xs font-bold">{{ loc.level or '—' }}</span>
+                        </td>
+                        <td class="px-3 py-3.5">
+                            <span class="inline-flex items-center justify-center w-10 h-8 bg-slate-700/50 rounded-lg text-white text-xs font-bold">{{ loc.position or '—' }}</span>
+                        </td>
+                        <td class="px-3 py-3.5">
+                            <span class="inline-flex items-center justify-center w-10 h-8 bg-brand-500/10 rounded-lg text-brand-400 text-xs font-bold border border-brand-500/20">{{ loc.bin or '—' }}</span>
+                        </td>
+                        <form action="{{ url_for('location_settings') }}" method="POST">
+                            <input type="hidden" name="id" value="{{ loc.id }}">
+                            <td class="px-3 py-3.5">
+                                <select name="company_id" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-2 py-1.5 text-[10px] text-white focus:ring-brand-500 outline-none">
+                                    <option value="">Unassigned</option>
+                                    {% for comp in companies %}
+                                        <option value="{{ comp.id }}" {% if loc.company_id == comp.id %}selected{% endif %}>{{ comp.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td class="px-3 py-3.5 text-center">
+                                <div class="flex flex-col gap-1 items-center">
+                                    <input type="number" step="0.01" name="max_oil_capacity" value="{{ '%.2f'|format(loc.max_oil_capacity or 0) }}" class="w-16 bg-slate-900/50 border border-slate-700/50 rounded px-1.5 py-1 text-[10px] text-center text-white" title="Max Oil (L)">
+                                    <input type="number" step="0.01" name="max_weight" value="{{ '%.2f'|format(loc.max_weight or 0) }}" class="w-16 bg-slate-900/50 border border-slate-700/50 rounded px-1.5 py-1 text-[10px] text-center text-slate-400" title="Max Weight (KG)">
+                                </div>
+                            </td>
+                            <td class="px-3 py-3.5 text-right rounded-r-xl">
+                                <div class="flex items-center justify-end gap-2">
+                                    <button type="submit" name="action" value="update_location" class="p-2 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded-xl transition-all duration-300" title="Save">
+                                        <i class="fa-solid fa-check text-sm"></i>
+                                    </button>
+                                    <button type="submit" name="action" value="delete_location" onclick="return confirm('Delete this location?')" class="p-2 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white rounded-xl transition-all duration-300" title="Delete">
+                                        <i class="fa-solid fa-trash-can text-sm"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </form>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center py-10 text-slate-500 text-sm">No locations defined. Add one to the right.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Quick Add Location -->
+    <div class="glass-panel p-8 rounded-3xl h-fit sticky top-28">
+        <h3 class="text-lg font-bold text-white mb-6 flex items-center">
+            <i class="fa-solid fa-plus-circle text-orange-500 mr-3"></i> Add New Location
+        </h3>
+        
+        <form action="{{ url_for('location_settings') }}" method="POST" class="space-y-4">
+            <input type="hidden" name="action" value="add_location">
+            
+            <!-- 5-Tier Coordinate Inputs -->
+            <div>
+                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Location Coordinates</label>
+                <div class="grid grid-cols-5 gap-2">
+                    <div>
+                        <label class="block text-[8px] text-slate-600 uppercase text-center mb-1">Rack</label>
+                        <input type="text" name="rack" required placeholder="01" maxlength="3" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-2 py-2.5 text-sm text-center text-white focus:ring-orange-500 focus:border-orange-500 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-[8px] text-slate-600 uppercase text-center mb-1">Bay</label>
+                        <input type="text" name="bay" required placeholder="01" maxlength="3" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-2 py-2.5 text-sm text-center text-white focus:ring-orange-500 focus:border-orange-500 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-[8px] text-slate-600 uppercase text-center mb-1">Level</label>
+                        <input type="text" name="level" required placeholder="01" maxlength="3" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-2 py-2.5 text-sm text-center text-white focus:ring-orange-500 focus:border-orange-500 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-[8px] text-slate-600 uppercase text-center mb-1">Pos</label>
+                        <input type="text" name="position" required placeholder="01" maxlength="3" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-2 py-2.5 text-sm text-center text-white focus:ring-orange-500 focus:border-orange-500 transition-all">
+                    </div>
+                    <div>
+                        <label class="block text-[8px] text-slate-600 uppercase text-center mb-1">Bin</label>
+                        <input type="text" name="bin" required placeholder="A" maxlength="2" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-2 py-2.5 text-sm text-center text-white focus:ring-orange-500 focus:border-orange-500 transition-all">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Company Selection -->
+            <div>
+                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Assign to Subsidiary</label>
+                <select name="company_id" required class="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-white focus:ring-orange-500 focus:border-orange-500 transition-all">
+                    <option value="" disabled selected>Select Subsidiary...</option>
+                    {% for comp in companies %}
+                        <option value="{{ comp.id }}">{{ comp.name }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-[9px] text-slate-500 mt-1 italic">Each company must have its own dedicated storage locations.</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Max Oil (L)</label>
+                    <input type="number" step="0.01" name="max_oil_capacity" value="0.00" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-white focus:ring-orange-500 focus:border-orange-500 transition-all">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Max Weight (kg)</label>
+                    <input type="number" step="0.01" name="max_weight" value="0.00" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-white focus:ring-orange-500 focus:border-orange-500 transition-all">
+                </div>
+            </div>
+
+            <button type="submit" class="w-full py-4 bg-gradient-to-r from-orange-600 to-orange-400 hover:from-orange-500 hover:to-orange-300 text-white font-bold rounded-2xl shadow-lg shadow-orange-500/20 transition-all transform hover:-translate-y-1">
+                Register Location
+            </button>
+        </form>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('locSearch').addEventListener('input', function(e) {
+    const term = e.target.value.toLowerCase();
+    const rows = document.querySelectorAll('.loc-row');
+    
+    rows.forEach(row => {
+        const text = row.innerText.toLowerCase();
+        // Also check values of inputs/selects inside the row
+        const inputs = Array.from(row.querySelectorAll('input, select')).map(i => i.value.toLowerCase()).join(' ');
+        
+        if (text.includes(term) || inputs.includes(term)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+});
+</script>
+{% endblock %}

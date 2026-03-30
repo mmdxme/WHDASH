@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-8 fade-in">
+    <div class="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-rose-300">Workspace Mail</p>
+            <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">Gmail Command Center</h1>
+            <p class="mt-2 max-w-3xl text-sm text-slate-400">Search inbox traffic, inspect message details, and send polished outbound mail from the same operating panel.</p>
+        </div>
+        <a href="{{ url_for('google_workspace.workspace_home') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Workspace Overview</a>
+    </div>
+
+    {% if not workspace_connection.configured %}
+    <div class="glass-panel rounded-3xl border border-amber-400/20 bg-amber-500/10 p-6">
+        <h2 class="text-xl font-black text-white">Google OAuth Setup Needed</h2>
+        <p class="mt-2 text-sm text-amber-100">
+            {% if workspace_connection.can_manage_settings %}
+            Save the Google Client ID, Client Secret, and redirect URI in Workspace Settings to enable Gmail read and send operations.
+            {% else %}
+            Gmail will become available after an administrator completes Google Workspace OAuth settings.
+            {% endif %}
+        </p>
+        {% if workspace_connection.can_manage_settings %}
+        <a href="{{ workspace_setup_url }}" class="mt-4 inline-flex rounded-xl bg-white px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-950 transition-all hover:bg-amber-100">{{ workspace_setup_label }}</a>
+        {% endif %}
+    </div>
+    {% elif not workspace_connection.connected %}
+    <div class="glass-panel rounded-3xl border border-cyan-400/20 bg-cyan-500/10 p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+            <h2 class="text-xl font-black text-white">Connect Gmail</h2>
+            <p class="mt-2 text-sm text-cyan-100">Authorize your Google Workspace account to read inbox messages and send email securely.</p>
+        </div>
+        <a href="{{ url_for('google_workspace.workspace_connect') }}" class="rounded-xl bg-white px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-950 transition-all hover:bg-cyan-100">Connect Google Workspace</a>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_430px]">
+        <div class="glass-panel rounded-3xl border border-white/5 overflow-hidden">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <form method="GET" class="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_180px]">
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Inbox Search</label>
+                        <input type="text" name="q" value="{{ gmail_query }}" placeholder="subject, sender, words, labels..." class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div class="flex items-end">
+                        <button type="submit" class="w-full rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Refresh Inbox</button>
+                    </div>
+                </form>
+            </div>
+            <div class="max-h-[72vh] overflow-auto divide-y divide-white/5">
+                {% for message in gmail_messages %}
+                <a href="{{ url_for('google_workspace.workspace_gmail', q=gmail_query, message_id=message.id) }}" class="block p-5 transition-all hover:bg-white/[0.04] {% if gmail_selected_message and gmail_selected_message.id == message.id %}bg-cyan-500/10{% endif %}">
+                    <div class="flex items-start justify-between gap-4">
+                        <div class="min-w-0">
+                            <p class="text-xs font-black uppercase tracking-widest text-slate-500">{{ message.from }}</p>
+                            <h3 class="mt-2 truncate text-base font-bold text-white">{{ message.subject }}</h3>
+                            <p class="mt-2 line-clamp-2 text-sm text-slate-400">{{ message.snippet }}</p>
+                        </div>
+                        <span class="shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-500">{{ message.date }}</span>
+                    </div>
+                </a>
+                {% else %}
+                <div class="p-12 text-center text-xs font-black uppercase tracking-widest text-slate-500">No inbox messages available in the current query.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="space-y-8">
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-lg font-black text-white">Selected Message</h2>
+                        <p class="mt-1 text-xs text-slate-500">Open any message from the inbox list to inspect it here.</p>
+                    </div>
+                    <span class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-300">{{ workspace_connection.email_address or 'Disconnected' }}</span>
+                </div>
+                {% if gmail_selected_message %}
+                <div class="mt-5 space-y-4">
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">From</p>
+                        <p class="mt-1 text-sm font-bold text-white">{{ gmail_selected_message.from }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Subject</p>
+                        <p class="mt-1 text-sm font-bold text-white">{{ gmail_selected_message.subject }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Message Body</p>
+                        <div class="mt-2 max-h-[260px] overflow-auto rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-sm leading-7 text-slate-300 whitespace-pre-wrap">{{ gmail_selected_message.body }}</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="mt-5 rounded-2xl border border-white/5 bg-white/[0.03] p-5 text-sm text-slate-400">Choose a message from the inbox list to review sender, subject, and content.</div>
+                {% endif %}
+            </div>
+
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <h2 class="text-lg font-black text-white">Compose Email</h2>
+                <p class="mt-1 text-xs text-slate-500">Write and send outbound email directly through Gmail.</p>
+                <form method="POST" action="{{ url_for('google_workspace.workspace_gmail_send') }}" enctype="multipart/form-data" class="mt-5 grid grid-cols-1 gap-4">
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">To</label>
+                        <input type="email" name="to" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" required>
+                    </div>
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                            <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">CC</label>
+                            <input type="text" name="cc" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">BCC</label>
+                            <input type="text" name="bcc" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Subject</label>
+                        <input type="text" name="subject" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Body</label>
+                        <textarea name="body" rows="8" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"></textarea>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Attachments</label>
+                        <input type="file" name="attachments" multiple class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <button type="submit" class="rounded-xl bg-rose-500 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-rose-400">Send Email</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

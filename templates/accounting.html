@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-3xl font-extrabold tracking-tight text-white">Accounting Hub</h2>
+            <p class="text-slate-400 mt-1">Financial overview and receivable management</p>
+        </div>
+        <div class="flex gap-3">
+            <a href="{{ url_for('accounting_transactions') }}" class="px-5 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-white transition-all flex items-center gap-2">
+                <i class="fa-solid fa-list-ul"></i> View Ledger
+            </a>
+            <button class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-bold text-white shadow-lg shadow-brand-500/20 transition-all flex items-center gap-2">
+                <i class="fa-solid fa-plus"></i> New Transaction
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="glass-card p-6 border-l-4 border-brand-500 relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fa-solid fa-money-bill-trend-up text-6xl"></i>
+            </div>
+            <p class="text-slate-400 text-xs font-black uppercase tracking-widest">Total Receivables</p>
+            <h3 class="text-3xl font-black text-white mt-2 tracking-tight">AED {{ "{:,.2f}".format(stats.total_receivable or 0) }}</h3>
+            <p class="text-brand-400 text-xs font-bold mt-2 flex items-center gap-1">
+                <i class="fa-solid fa-circle-info"></i> Outstanding from all clients
+            </p>
+        </div>
+
+        <div class="glass-card p-6 border-l-4 border-amber-500 relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fa-solid fa-triangle-exclamation text-6xl"></i>
+            </div>
+            <p class="text-slate-400 text-xs font-black uppercase tracking-widest">Credit Alerts</p>
+            <h3 class="text-3xl font-black text-white mt-2 tracking-tight">{{ stats.over_limit_count or 0 }}</h3>
+            <p class="text-amber-400 text-xs font-bold mt-2 flex items-center gap-1">
+                <i class="fa-solid fa-user-slash"></i> Customers over credit limit
+            </p>
+        </div>
+
+        <div class="glass-card p-6 border-l-4 border-emerald-500 relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fa-solid fa-hand-holding-dollar text-6xl"></i>
+            </div>
+            <p class="text-slate-400 text-xs font-black uppercase tracking-widest">Monthly Collections</p>
+            <h3 class="text-3xl font-black text-white mt-2 tracking-tight">AED {{ "{:,.2f}".format(stats.monthly_collections or 0) }}</h3>
+            <p class="text-emerald-400 text-xs font-bold mt-2 flex items-center gap-1">
+                <i class="fa-solid fa-calendar-check"></i> Total payments this month
+            </p>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+        <!-- Recent Transactions -->
+        <div class="glass-card flex flex-col">
+            <div class="p-6 border-b border-white/5 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-clock-rotate-left text-brand-400"></i> Recent Activity
+                </h3>
+            </div>
+            <div class="flex-1 overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5">
+                            <th class="px-6 py-4">Date</th>
+                            <th class="px-6 py-4">Customer</th>
+                            <th class="px-6 py-4">Type</th>
+                            <th class="px-6 py-4 text-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+                        {% for tx in transactions %}
+                        <tr class="group hover:bg-white/[0.02] transition-colors">
+                            <td class="px-6 py-4 text-xs text-slate-400 font-medium">
+                                {{ tx.transaction_date[:10] }}
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="text-sm font-bold text-slate-200 group-hover:text-white transition-colors">{{ tx.customer_name }}</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-tighter
+                                    {% if tx.type == 'Invoice' %}bg-amber-500/10 text-amber-500
+                                    {% elif tx.type == 'Payment' %}bg-emerald-500/10 text-emerald-500
+                                    {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                    {{ tx.type }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <span class="text-sm font-mono font-bold {% if tx.type == 'Payment' %}text-emerald-400{% else %}text-slate-200{% endif %}">
+                                    {% if tx.type == 'Payment' %}-{% endif %}AED {{ "{:,.2f}".format(tx.amount) }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-4 border-t border-white/5 text-center">
+                <a href="{{ url_for('accounting_transactions') }}" class="text-xs font-bold text-brand-400 hover:text-white transition-colors">View All Transactions</a>
+            </div>
+        </div>
+
+        <!-- Quick Links / Actions -->
+        <div class="space-y-6">
+            <div class="glass-card p-6">
+                <h3 class="text-lg font-bold text-white mb-4">Financial Actions</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <a href="{{ url_for('accounting_customers') }}" class="p-4 bg-white/5 hover:bg-brand-500/10 border border-white/10 hover:border-brand-500/50 rounded-2xl transition-all group">
+                        <i class="fa-solid fa-users-viewfinder text-2xl text-brand-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                        <h4 class="text-sm font-bold text-white">Client Aging</h4>
+                        <p class="text-[10px] text-slate-500 mt-1">Check customer balances and limits</p>
+                    </a>
+                    <button class="p-4 bg-white/5 hover:bg-amber-500/10 border border-white/10 hover:border-amber-500/50 rounded-2xl transition-all group">
+                        <i class="fa-solid fa-file-invoice text-2xl text-amber-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                        <h4 class="text-sm font-bold text-white">Issue Invoice</h4>
+                        <p class="text-[10px] text-slate-500 mt-1">Record new sales or debits</p>
+                    </button>
+                    <button class="p-4 bg-white/5 hover:bg-emerald-500/10 border border-white/10 hover:border-emerald-500/50 rounded-2xl transition-all group">
+                        <i class="fa-solid fa-receipt text-2xl text-emerald-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                        <h4 class="text-sm font-bold text-white">Post Payment</h4>
+                        <p class="text-[10px] text-slate-500 mt-1">Record collections from clients</p>
+                    </button>
+                    <button class="p-4 bg-white/5 hover:bg-purple-500/10 border border-white/10 hover:border-purple-500/50 rounded-2xl transition-all group">
+                        <i class="fa-solid fa-chart-pie text-2xl text-purple-400 mb-2 group-hover:scale-110 transition-transform"></i>
+                        <h4 class="text-sm font-bold text-white">Profit/Loss</h4>
+                        <p class="text-[10px] text-slate-500 mt-1">Generate financial reports</p>
+                    </button>
+                </div>
+            </div>
+
+            <div class="glass-card p-6 bg-gradient-to-br from-brand-600/20 to-purple-600/20 border-brand-500/30">
+                <div class="flex items-start gap-4">
+                    <div class="w-12 h-12 rounded-xl bg-brand-500/20 flex items-center justify-center text-brand-400">
+                        <i class="fa-solid fa-lightbulb text-xl"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-bold text-white">AI Financial Insight</h4>
+                        <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                            Your collection rate has improved by 12% this month. Consider increasing the credit limit for <span class="text-brand-400 font-bold">Global Motors</span> based on their consistent payment history.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

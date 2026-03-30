@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-8 fade-in">
+    <div class="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Administration</p>
+            <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">Google Workspace Settings</h1>
+            <p class="mt-2 max-w-3xl text-sm text-slate-400">Configure OAuth once, then every user can securely connect Gmail, Google Drive, and Google Sheets from inside the dashboard.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="{{ url_for('google_workspace.workspace_home') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Workspace Overview</a>
+            {% if workspace_connection.configured %}
+            <a href="{{ url_for('google_workspace.workspace_connect') }}" class="rounded-xl bg-brand-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Test Connect Flow</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div class="glass-panel rounded-3xl border border-white/5 p-6 md:p-8">
+            <div class="flex items-start justify-between gap-6">
+                <div>
+                    <h2 class="text-xl font-black text-white">OAuth Credential Vault</h2>
+                    <p class="mt-2 text-sm text-slate-400">Paste the credentials from your Google Cloud OAuth Web Application. The redirect URI below must be added to the same Google OAuth client.</p>
+                </div>
+                <span class="rounded-full border px-4 py-2 text-[10px] font-black uppercase tracking-widest {% if workspace_connection.configured %}border-emerald-400/20 bg-emerald-500/10 text-emerald-200{% else %}border-amber-400/20 bg-amber-500/10 text-amber-200{% endif %}">
+                    {% if workspace_connection.configured %}Configured{% else %}Needs Setup{% endif %}
+                </span>
+            </div>
+
+            {% if workspace_uses_env_override %}
+            <div class="mt-5 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4 text-sm text-cyan-100">
+                Environment variables are currently overriding database-saved Google credentials. Saved settings remain available as a fallback, but the live server will prefer the environment values first.
+            </div>
+            {% endif %}
+            {% if workspace_connection.config_errors %}
+            <div class="mt-5 rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4 text-sm text-rose-100">
+                <p class="font-black uppercase tracking-widest">Current Saved Configuration Is Invalid</p>
+                <ul class="mt-3 space-y-1">
+                    {% for error in workspace_connection.config_errors %}
+                    <li>- {{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <form method="POST" class="mt-6 grid grid-cols-1 gap-5">
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Google Client ID</label>
+                    <input
+                        type="text"
+                        name="client_id"
+                        value="{{ workspace_settings.client_id or '' }}"
+                        placeholder="1234567890-abcdefg.apps.googleusercontent.com"
+                        class="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                        required
+                    >
+                </div>
+
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Google Client Secret</label>
+                    <input
+                        type="password"
+                        name="client_secret"
+                        value=""
+                        placeholder="{% if workspace_has_saved_secret %}Saved already. Leave blank to keep existing secret.{% else %}Enter the client secret from Google Cloud{% endif %}"
+                        class="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                    >
+                    <p class="mt-2 text-xs text-slate-500">
+                        {% if workspace_has_saved_secret %}
+                        A secret is already stored. Leave this field blank if you do not want to replace it.
+                        {% else %}
+                        The client secret is required the first time you save Google Workspace settings.
+                        {% endif %}
+                    </p>
+                </div>
+
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Redirect URI</label>
+                    <input
+                        type="url"
+                        name="redirect_uri"
+                        value="{{ workspace_settings.redirect_uri or workspace_recommended_redirect_uri }}"
+                        placeholder="{{ workspace_recommended_redirect_uri }}"
+                        class="w-full rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                    >
+                    <p class="mt-2 text-xs text-slate-500">Recommended for this server: <span class="font-bold text-slate-300">{{ workspace_recommended_redirect_uri }}</span></p>
+                </div>
+
+                <div class="rounded-2xl border border-white/5 bg-white/[0.03] p-5">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Google Cloud Checklist</p>
+                    <ol class="mt-3 space-y-2 text-sm text-slate-300">
+                        <li>1. Create or open a Google Cloud project.</li>
+                        <li>2. Enable Gmail API, Google Drive API, and Google Sheets API.</li>
+                        <li>3. Create an OAuth Client ID of type <span class="font-bold text-white">Web application</span>.</li>
+                        <li>4. Add <span class="font-bold text-white">{{ workspace_recommended_redirect_uri }}</span> to Authorized redirect URIs.</li>
+                        <li>5. Save the client ID and client secret here, then click <span class="font-bold text-white">Test Connect Flow</span>.</li>
+                    </ol>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3">
+                    <button type="submit" class="rounded-xl bg-brand-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Save Google Workspace Settings</button>
+                    <a href="{{ url_for('google_workspace.workspace_home') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Back To Workspace Hub</a>
+                </div>
+            </form>
+        </div>
+
+        <div class="space-y-6">
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Connection Status</p>
+                <h2 class="mt-3 text-2xl font-black text-white">{{ 'Ready to Connect' if workspace_connection.configured else 'Awaiting OAuth Setup' }}</h2>
+                <p class="mt-2 text-sm text-slate-400">Once configured, each user can authorize their own Google account without touching server files.</p>
+                <div class="mt-5 space-y-3 text-sm">
+                    <div class="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3">
+                        <span class="text-slate-400">Config Source</span>
+                        <span class="font-black text-white">{{ workspace_connection.configuration_source|replace('_', ' ')|title }}</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3">
+                        <span class="text-slate-400">Active Account</span>
+                        <span class="font-black text-white">{{ workspace_connection.email_address or 'None linked yet' }}</span>
+                    </div>
+                    <div class="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3">
+                        <span class="text-slate-400">Token Refresh</span>
+                        <span class="font-black text-white">{{ workspace_connection.expires_at or 'Will appear after first connection' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Why This Fix Matters</p>
+                <div class="mt-4 space-y-3 text-sm text-slate-300">
+                    <p>The original implementation only checked server environment variables, which meant the dashboard could never self-configure Google Workspace.</p>
+                    <p>This settings page removes that bottleneck by letting administrators manage OAuth credentials directly inside the product.</p>
+                    <p class="text-slate-500">Saved settings are stored server-side and used automatically by Gmail, Drive, and Sheets modules.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

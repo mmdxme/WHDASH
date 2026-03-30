@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-8 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">{{ title }}</h1>
+            <p class="text-slate-400 text-sm mt-1">Complete supplier registry with contact details, financial terms, and performance tracking.</p>
+        </div>
+        <button onclick="openAddModal()" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-brand-500/20 flex items-center gap-2">
+            <i class="fa-solid fa-plus text-[10px]"></i> Add Supplier
+        </button>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {% set active_count = suppliers|selectattr('status', 'equalto', 'Active')|list|length %}
+        {% set inactive_count = suppliers|selectattr('status', 'equalto', 'Inactive')|list|length %}
+        {% set blacklisted_count = suppliers|selectattr('status', 'equalto', 'Blacklisted')|list|length %}
+        <div class="glass-panel rounded-2xl p-5 border border-white/5">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center"><i class="fa-solid fa-building text-brand-400"></i></div>
+                <div>
+                    <div class="text-2xl font-black text-white">{{ suppliers|length }}</div>
+                    <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Suppliers</div>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 border border-emerald-500/10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><i class="fa-solid fa-circle-check text-emerald-400"></i></div>
+                <div>
+                    <div class="text-2xl font-black text-emerald-400">{{ active_count }}</div>
+                    <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active</div>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 border border-amber-500/10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center"><i class="fa-solid fa-pause-circle text-amber-400"></i></div>
+                <div>
+                    <div class="text-2xl font-black text-amber-400">{{ inactive_count }}</div>
+                    <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Inactive</div>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 border border-red-500/10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center"><i class="fa-solid fa-ban text-red-400"></i></div>
+                <div>
+                    <div class="text-2xl font-black text-red-400">{{ blacklisted_count }}</div>
+                    <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Blacklisted</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Table -->
+    <div class="glass-panel rounded-3xl overflow-hidden border border-white/5 shadow-2xl">
+        <div class="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+            <h4 class="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-4">
+                <i class="fa-solid fa-building-shield text-brand-400"></i> Supplier Registry
+            </h4>
+            <input type="text" id="searchInput" placeholder="Search suppliers..." 
+                   class="bg-slate-900/80 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:border-brand-500 outline-none w-64 transition-all"
+                   oninput="filterTable()">
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse" id="supplierTable">
+                <thead>
+                    <tr class="bg-slate-800/50 text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold border-b border-white/5">
+                        <th class="px-4 py-5 w-12 text-center">#</th>
+                        <th class="px-4 py-5">Code</th>
+                        <th class="px-4 py-5">Supplier</th>
+                        <th class="px-4 py-5">Contact</th>
+                        <th class="px-4 py-5">Region</th>
+                        <th class="px-4 py-5">Lead Time</th>
+                        <th class="px-4 py-5">Terms</th>
+                        <th class="px-4 py-5 text-center">Rating</th>
+                        <th class="px-4 py-5 text-right">Margin</th>
+                        <th class="px-4 py-5 text-center">Status</th>
+                        <th class="px-4 py-5 text-right w-32">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/20" id="supplierBody">
+                    {% for s in suppliers %}
+                    <tr class="hover:bg-white/5 transition-colors group supplier-row">
+                        <td class="px-4 py-4 text-center text-[10px] font-bold text-slate-600">{{ loop.index }}</td>
+                        <td class="px-4 py-4">
+                            <span class="px-2 py-1 bg-slate-800 rounded-lg text-[10px] font-bold text-brand-400 uppercase tracking-widest border border-brand-500/20">{{ s.code }}</span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="text-sm font-bold text-white">{{ s.name }}</div>
+                            <div class="text-[10px] text-slate-500 mt-0.5"><i class="fa-solid fa-location-dot text-[8px] mr-1 text-brand-500"></i>{{ s.address or '—' }}, {{ s.city or '—' }}, {{ s.country or '—' }}</div>
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="text-xs font-semibold text-white">{{ s.contact_person or '—' }}</div>
+                            <div class="text-[10px] text-slate-500">{{ s.email or '' }}</div>
+                            <div class="text-[10px] text-slate-500">{{ s.phone or '' }}</div>
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="text-[11px] font-semibold text-slate-300">{{ s.region or '—' }}</div>
+                            <div class="text-[10px] text-slate-500">{{ s.currency or 'USD' }}</div>
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="flex items-center gap-1.5">
+                                <i class="fa-regular fa-clock text-amber-500 text-[10px]"></i>
+                                <span class="text-xs font-bold text-slate-300">{{ s.lead_time or '—' }}</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-xs text-slate-300">{{ s.payment_terms or 'Net 30' }}</td>
+                        <td class="px-4 py-4 text-center">
+                            <div class="flex items-center justify-center gap-0.5">
+                                {% for i in range(5) %}
+                                <i class="fa-solid fa-star text-[9px] {% if i < (s.rating or 0) %}text-amber-400{% else %}text-slate-700{% endif %}"></i>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-sm font-black text-emerald-400">{{ s.margin or '—' }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            {% if s.status == 'Active' %}
+                            <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-full text-[9px] font-black uppercase tracking-widest border border-emerald-500/20">Active</span>
+                            {% elif s.status == 'Inactive' %}
+                            <span class="px-2 py-0.5 bg-amber-500/10 text-amber-400 rounded-full text-[9px] font-black uppercase tracking-widest border border-amber-500/20">Inactive</span>
+                            {% else %}
+                            <span class="px-2 py-0.5 bg-red-500/10 text-red-400 rounded-full text-[9px] font-black uppercase tracking-widest border border-red-500/20">Blacklisted</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <div class="flex items-center justify-end gap-1.5">
+                                <button onclick="openEditModal({{ s.id }}, {{ s|tojson }})" class="p-1.5 w-7 h-7 flex items-center justify-center bg-brand-500/10 hover:bg-brand-500 text-brand-400 hover:text-white rounded-lg transition-all border border-brand-500/20" title="Edit">
+                                    <i class="fa-solid fa-pen text-[9px]"></i>
+                                </button>
+                                <button onclick="confirmDelete({{ s.id }}, '{{ s.name }}')" class="p-1.5 w-7 h-7 flex items-center justify-center bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-lg transition-all border border-red-500/20" title="Delete">
+                                    <i class="fa-solid fa-trash text-[9px]"></i>
+                                </button>
+                                <button onclick="toggleStatus({{ s.id }}, '{{ s.status }}')" class="p-1.5 w-7 h-7 flex items-center justify-center bg-slate-500/10 hover:bg-slate-500 text-slate-400 hover:text-white rounded-lg transition-all border border-slate-500/20" title="Toggle Status">
+                                    <i class="fa-solid fa-toggle-on text-[9px]"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not suppliers %}
+                    <tr><td colspan="11" class="px-6 py-16 text-center text-slate-500 text-sm">No suppliers registered. Click <strong>+ Add Supplier</strong> to begin.</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden forms for delete/status toggle -->
+<form id="deleteForm" method="POST" action="{{ url_for('procurement') }}" class="hidden">
+    <input type="hidden" name="action" value="delete">
+    <input type="hidden" name="supplier_id" id="deleteId">
+</form>
+<form id="statusForm" method="POST" action="{{ url_for('procurement') }}" class="hidden">
+    <input type="hidden" name="action" value="toggle_status">
+    <input type="hidden" name="supplier_id" id="statusId">
+    <input type="hidden" name="new_status" id="newStatus">
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function buildFormHtml(data = {}) {
+    return `
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-left mt-2" style="max-height:65vh;overflow-y:auto;padding-right:4px;">
+        <div class="md:col-span-2"><div class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2"><i class="fa-solid fa-building"></i> Company Details</div></div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Supplier Name *</label>
+            <input id="s_name" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500" value="${data.name||''}" required>
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Supplier Code *</label>
+            <input id="s_code" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500" value="${data.code||''}" placeholder="SUP-XXXX">
+        </div>
+        <div class="md:col-span-2"><div class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 mt-2 flex items-center gap-2"><i class="fa-solid fa-user-tie"></i> Contact Information</div></div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Contact Person</label>
+            <input id="s_contact" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500" value="${data.contact_person||''}">
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Email</label>
+            <input id="s_email" type="email" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500" value="${data.email||''}">
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Phone</label>
+            <input id="s_phone" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500" value="${data.phone||''}">
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Region / Hub</label>
+            <input id="s_region" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500" value="${data.region||''}" placeholder="e.g. HQ-Dubai">
+        </div>
+        <div class="md:col-span-2"><div class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 mt-2 flex items-center gap-2"><i class="fa-solid fa-map-location-dot"></i> Address</div></div>
+        <div class="md:col-span-2">
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Street Address</label>
+            <input id="s_address" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500" value="${data.address||''}">
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">City</label>
+            <input id="s_city" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500" value="${data.city||''}">
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Country</label>
+            <input id="s_country" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500" value="${data.country||''}">
+        </div>
+        <div class="md:col-span-2"><div class="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-3 mt-2 flex items-center gap-2"><i class="fa-solid fa-coins"></i> Financial & Logistics</div></div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Payment Terms</label>
+            <select id="s_terms" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500">
+                <option value="Net 15" ${(data.payment_terms||'')==='Net 15'?'selected':''}>Net 15</option>
+                <option value="Net 30" ${(data.payment_terms||'Net 30')==='Net 30'?'selected':''}>Net 30</option>
+                <option value="Net 45" ${(data.payment_terms||'')==='Net 45'?'selected':''}>Net 45</option>
+                <option value="Net 60" ${(data.payment_terms||'')==='Net 60'?'selected':''}>Net 60</option>
+                <option value="Net 90" ${(data.payment_terms||'')==='Net 90'?'selected':''}>Net 90</option>
+                <option value="COD" ${(data.payment_terms||'')==='COD'?'selected':''}>Cash on Delivery</option>
+                <option value="Prepaid" ${(data.payment_terms||'')==='Prepaid'?'selected':''}>Prepaid</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Lead Time</label>
+            <input id="s_lead" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500" value="${data.lead_time||''}" placeholder="e.g. 5 Days">
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Currency</label>
+            <select id="s_currency" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500">
+                <option value="USD" ${(data.currency||'USD')==='USD'?'selected':''}>USD</option>
+                <option value="EUR" ${(data.currency||'')==='EUR'?'selected':''}>EUR</option>
+                <option value="GBP" ${(data.currency||'')==='GBP'?'selected':''}>GBP</option>
+                <option value="AED" ${(data.currency||'')==='AED'?'selected':''}>AED</option>
+                <option value="SAR" ${(data.currency||'')==='SAR'?'selected':''}>SAR</option>
+                <option value="JPY" ${(data.currency||'')==='JPY'?'selected':''}>JPY</option>
+                <option value="CNY" ${(data.currency||'')==='CNY'?'selected':''}>CNY</option>
+                <option value="INR" ${(data.currency||'')==='INR'?'selected':''}>INR</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Yield Margin</label>
+            <input id="s_margin" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500" value="${data.margin||''}" placeholder="e.g. 18%">
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Rating (1-5)</label>
+            <select id="s_rating" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500">
+                <option value="0" ${(data.rating||0)==0?'selected':''}>Not Rated</option>
+                <option value="1" ${(data.rating||0)==1?'selected':''}>★ (1)</option>
+                <option value="2" ${(data.rating||0)==2?'selected':''}>★★ (2)</option>
+                <option value="3" ${(data.rating||0)==3?'selected':''}>★★★ (3)</option>
+                <option value="4" ${(data.rating||0)==4?'selected':''}>★★★★ (4)</option>
+                <option value="5" ${(data.rating||0)==5?'selected':''}>★★★★★ (5)</option>
+            </select>
+        </div>
+        <div>
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Status</label>
+            <select id="s_status" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500">
+                <option value="Active" ${(data.status||'Active')==='Active'?'selected':''}>Active</option>
+                <option value="Inactive" ${(data.status||'')==='Inactive'?'selected':''}>Inactive</option>
+                <option value="Blacklisted" ${(data.status||'')==='Blacklisted'?'selected':''}>Blacklisted</option>
+            </select>
+        </div>
+        <div class="md:col-span-2">
+            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-widest ml-1 mb-1 block">Notes</label>
+            <textarea id="s_notes" rows="2" class="swal-input w-full bg-slate-900 border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-brand-500 resize-y">${data.notes||''}</textarea>
+        </div>
+    </div>`;
+}
+
+function getFormValues() {
+    return {
+        name: document.getElementById('s_name').value,
+        code: document.getElementById('s_code').value,
+        contact_person: document.getElementById('s_contact').value,
+        email: document.getElementById('s_email').value,
+        phone: document.getElementById('s_phone').value,
+        address: document.getElementById('s_address').value,
+        city: document.getElementById('s_city').value,
+        country: document.getElementById('s_country').value,
+        region: document.getElementById('s_region').value,
+        payment_terms: document.getElementById('s_terms').value,
+        lead_time: document.getElementById('s_lead').value,
+        currency: document.getElementById('s_currency').value,
+        margin: document.getElementById('s_margin').value,
+        rating: document.getElementById('s_rating').value,
+        status: document.getElementById('s_status').value,
+        notes: document.getElementById('s_notes').value
+    };
+}
+
+function submitSupplierForm(action, supplierId) {
+    const vals = getFormValues();
+    if (!vals.name || !vals.code) {
+        Swal.showValidationMessage('Name and Code are required');
+        return false;
+    }
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("procurement") }}';
+    
+    const addField = (name, value) => {
+        const input = document.createElement('input');
+        input.type = 'hidden'; input.name = name; input.value = value;
+        form.appendChild(input);
+    };
+    
+    addField('action', action);
+    if (supplierId) addField('supplier_id', supplierId);
+    Object.entries(vals).forEach(([k, v]) => addField(k, v));
+    
+    document.body.appendChild(form);
+    form.submit();
+}
+
+function openAddModal() {
+    Swal.fire({
+        title: '<i class="fa-solid fa-building-circle-arrow-right mr-2"></i> Register New Supplier',
+        html: buildFormHtml(),
+        width: 700,
+        background: '#1e293b',
+        color: '#f8fafc',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fa-solid fa-plus mr-1"></i> Register Supplier',
+        confirmButtonColor: '#0ea5e9',
+        cancelButtonColor: '#334155',
+        preConfirm: () => submitSupplierForm('add', null)
+    });
+}
+
+function openEditModal(id, data) {
+    Swal.fire({
+        title: '<i class="fa-solid fa-pen-to-square mr-2"></i> Edit Supplier',
+        html: buildFormHtml(data),
+        width: 700,
+        background: '#1e293b',
+        color: '#f8fafc',
+        showCancelButton: true,
+        confirmButtonText: '<i class="fa-solid fa-save mr-1"></i> Save Changes',
+        confirmButtonColor: '#0ea5e9',
+        cancelButtonColor: '#334155',
+        preConfirm: () => submitSupplierForm('edit', id)
+    });
+}
+
+function confirmDelete(id, name) {
+    Swal.fire({
+        title: 'Remove Supplier?',
+        html: `This will permanently remove <strong>${name}</strong> from the system.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#334155',
+        confirmButtonText: 'Yes, remove',
+        background: '#1e293b',
+        color: '#f8fafc'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            document.getElementById('deleteId').value = id;
+            document.getElementById('deleteForm').submit();
+        }
+    });
+}
+
+function toggleStatus(id, currentStatus) {
+    const options = {'Active': 'Inactive', 'Inactive': 'Blacklisted', 'Blacklisted': 'Active'};
+    const next = options[currentStatus] || 'Active';
+    Swal.fire({
+        title: 'Change Status?',
+        html: `Switch from <strong>${currentStatus}</strong> → <strong>${next}</strong>?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#0ea5e9',
+        cancelButtonColor: '#334155',
+        confirmButtonText: `Set to ${next}`,
+        background: '#1e293b',
+        color: '#f8fafc'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            document.getElementById('statusId').value = id;
+            document.getElementById('newStatus').value = next;
+            document.getElementById('statusForm').submit();
+        }
+    });
+}
+
+function filterTable() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    document.querySelectorAll('.supplier-row').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}

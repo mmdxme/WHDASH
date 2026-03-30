@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-8 fade-in">
+    <div class="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Workspace Spreadsheets</p>
+            <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">Sheets Console</h1>
+            <p class="mt-2 max-w-3xl text-sm text-slate-400">Search spreadsheets across Google Drive and preview sheet data directly inside the dashboard.</p>
+        </div>
+        <a href="{{ url_for('google_workspace.workspace_home') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Workspace Overview</a>
+    </div>
+
+    {% if not workspace_connection.configured %}
+    <div class="glass-panel rounded-3xl border border-amber-400/20 bg-amber-500/10 p-6 text-sm text-amber-100">
+        <div>Google OAuth configuration is still missing.</div>
+        <div class="mt-2">
+            {% if workspace_connection.can_manage_settings %}
+            Save the Google client credentials in Workspace Settings to enable Sheets access.
+            {% else %}
+            An administrator needs to complete Google Workspace Settings before Sheets can connect.
+            {% endif %}
+        </div>
+        {% if workspace_connection.can_manage_settings %}
+        <a href="{{ workspace_setup_url }}" class="mt-4 inline-flex rounded-xl bg-white px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-950 transition-all hover:bg-amber-100">{{ workspace_setup_label }}</a>
+        {% endif %}
+    </div>
+    {% elif not workspace_connection.connected %}
+    <div class="glass-panel rounded-3xl border border-cyan-400/20 bg-cyan-500/10 p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+            <h2 class="text-xl font-black text-white">Connect Sheets</h2>
+            <p class="mt-2 text-sm text-cyan-100">Authorize your Google Workspace account to browse and preview spreadsheets from this panel.</p>
+        </div>
+        <a href="{{ url_for('google_workspace.workspace_connect') }}" class="rounded-xl bg-white px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-950 transition-all hover:bg-cyan-100">Connect Google Workspace</a>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 gap-8 xl:grid-cols-[420px_minmax(0,1fr)]">
+        <div class="glass-panel rounded-3xl border border-white/5 overflow-hidden">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <form method="GET" class="grid grid-cols-1 gap-4">
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Search Sheets</label>
+                        <input type="text" name="q" value="{{ sheets_query }}" placeholder="spreadsheet title..." class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <button type="submit" class="rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Refresh List</button>
+                </form>
+            </div>
+            <div class="max-h-[72vh] overflow-auto divide-y divide-white/5">
+                {% for file in sheets_files %}
+                <a href="{{ url_for('google_workspace.workspace_sheets', q=sheets_query, spreadsheet_id=file.id) }}" class="block p-5 transition-all hover:bg-white/[0.04] {% if sheets_preview and sheets_preview.metadata.spreadsheetId == file.id %}bg-cyan-500/10{% endif %}">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">{{ file.modifiedTime or '--' }}</p>
+                    <h3 class="mt-2 text-base font-bold text-white">{{ file.name }}</h3>
+                    <p class="mt-2 text-xs text-slate-400">{{ file.webViewLink or 'Google Sheet' }}</p>
+                </a>
+                {% else %}
+                <div class="p-12 text-center text-xs font-black uppercase tracking-widest text-slate-500">No spreadsheets found in the current query.</div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-3xl border border-white/5 overflow-hidden">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6 flex items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-black text-white">Sheet Preview</h2>
+                    <p class="mt-1 text-xs text-slate-500">Live preview of the first sheet tab and its top rows.</p>
+                </div>
+                {% if sheets_preview %}
+                <a href="{{ url_for('google_workspace.workspace_drive_download', file_id=sheets_preview.metadata.spreadsheetId) }}" class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-200 transition-all hover:bg-emerald-500 hover:text-slate-950">Download XLSX</a>
+                {% endif %}
+            </div>
+            {% if sheets_preview %}
+            <div class="p-6 border-b border-white/5 bg-white/[0.02]">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Spreadsheet</p>
+                <h3 class="mt-2 text-2xl font-black text-white">{{ sheets_preview.metadata.properties.title }}</h3>
+                <p class="mt-2 text-sm text-slate-400">Showing tab: {{ sheets_preview.sheet_title }}</p>
+            </div>
+            <div class="overflow-auto max-h-[68vh]">
+                <table class="min-w-[960px] w-full text-left text-sm">
+                    <thead class="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-white/5">
+                        <tr class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                            {% for header in sheets_preview.headers %}
+                            <th class="px-4 py-4">{{ header }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5 bg-slate-900/10">
+                        {% for row in sheets_preview.rows %}
+                        <tr class="hover:bg-white/[0.04] transition-colors">
+                            {% for value in row %}
+                            <td class="px-4 py-4 text-slate-300" dir="auto">{{ value }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="{{ sheets_preview.headers|length or 1 }}" class="px-4 py-16 text-center text-xs font-black uppercase tracking-widest text-slate-500">No preview rows available for this spreadsheet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="p-16 text-center text-sm text-slate-400">Choose a spreadsheet from the list to inspect its first worksheet and preview rows here.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,202 @@
+--- Table: companies ---
+CREATE TABLE `companies` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` TEXT NOT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+
+--- Table: sqlite_sequence ---
+CREATE TABLE sqlite_sequence(name,seq)
+
+--- Table: roles ---
+CREATE TABLE `roles` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `role_name` TEXT NOT NULL,
+  `company_id` INTEGER DEFAULT NULL,
+  `can_edit_stock` INTEGER DEFAULT 0,
+  `can_manage_users` INTEGER DEFAULT 0, can_view_reports TINYINT(1) DEFAULT 0, can_view_valuation TINYINT(1) DEFAULT 0, can_manage_parts TINYINT(1) DEFAULT 0, can_manage_locations TINYINT(1) DEFAULT 0, can_manage_taxonomies TINYINT(1) DEFAULT 0,
+  FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON DELETE CASCADE
+)
+
+--- Table: users ---
+CREATE TABLE `users` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `username` TEXT NOT NULL UNIQUE,
+  `email` TEXT NOT NULL UNIQUE,
+  `password` TEXT NOT NULL,
+  `role_id` INTEGER NOT NULL,
+  `profile_pic` TEXT DEFAULT 'default.png',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`role_id`) REFERENCES `roles`(`id`)
+)
+
+--- Table: categories ---
+CREATE TABLE `categories` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` TEXT NOT NULL
+)
+
+--- Table: brands ---
+CREATE TABLE `brands` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` TEXT NOT NULL,
+  `type` TEXT NOT NULL DEFAULT 'Genuine'
+)
+
+--- Table: statuses ---
+CREATE TABLE `statuses` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` TEXT NOT NULL
+)
+
+--- Table: parts ---
+CREATE TABLE `parts` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `part_number` TEXT NOT NULL UNIQUE,
+  `description` TEXT,
+  `weight` REAL DEFAULT NULL,
+  `dimension` TEXT DEFAULT NULL,
+  `volume` REAL DEFAULT NULL,
+  `category_id` INTEGER NULL,
+  `brand_id` INTEGER NULL,
+  `status_id` INTEGER NULL,
+  `reorder_point` INTEGER DEFAULT 0,
+  `cost_price` REAL DEFAULT 0.00,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP, length REAL DEFAULT 0.0, width REAL DEFAULT 0.0, height REAL DEFAULT 0.0, notes TEXT DEFAULT NULL, fitted_vehicle TEXT DEFAULT NULL, name TEXT DEFAULT NULL, vitality_id INTEGER REFERENCES vitalities(id) ON DELETE SET NULL, hs_code TEXT, supplier TEXT,
+  FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY (`brand_id`) REFERENCES `brands`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY (`status_id`) REFERENCES `statuses`(`id`) ON DELETE SET NULL
+)
+
+--- Table: locations ---
+CREATE TABLE locations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        location_code TEXT NOT NULL UNIQUE,
+        charge_rate REAL DEFAULT 0.0,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    , rack TEXT DEFAULT NULL, bay TEXT DEFAULT NULL, level TEXT DEFAULT NULL, position TEXT DEFAULT NULL, bin TEXT DEFAULT NULL, max_oil_capacity REAL DEFAULT 0, max_weight REAL DEFAULT 0, company_id INTEGER REFERENCES companies(id))
+
+--- Table: vitalities ---
+CREATE TABLE vitalities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(50) NOT NULL
+        )
+
+--- Table: customers ---
+CREATE TABLE customers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name VARCHAR(255) NOT NULL,
+            phone VARCHAR(50),
+            location VARCHAR(255), -- City, Country
+            type VARCHAR(50), -- Wholesale, Retail, Garage, Shop
+            salesperson_id INTEGER,
+            working_hours VARCHAR(100), -- e.g., 08:00 - 18:00
+            working_days VARCHAR(100), -- e.g., Mon-Fri
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, balance DECIMAL(12,2) DEFAULT 0.00, credit_limit DECIMAL(12,2) DEFAULT 5000.00,
+            FOREIGN KEY (salesperson_id) REFERENCES users(id)
+        )
+
+--- Table: delivery_trips ---
+CREATE TABLE delivery_trips (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            driver_id INTEGER NOT NULL,
+            date DATE DEFAULT CURRENT_DATE,
+            warehouse_departure TIMESTAMP,
+            warehouse_arrival TIMESTAMP,
+            status VARCHAR(20) DEFAULT 'At Warehouse', -- At Warehouse, In Transit, Completed
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, warehouse_checkin DATETIME, vehicle_id INTEGER,
+            FOREIGN KEY (driver_id) REFERENCES users(id)
+        )
+
+--- Table: delivery_stops ---
+CREATE TABLE delivery_stops (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trip_id INTEGER NOT NULL,
+            customer_id INTEGER NOT NULL,
+            arrival_time TIMESTAMP,
+            departure_time TIMESTAMP,
+            arrival_gps VARCHAR(100),
+            departure_gps VARCHAR(100),
+            status VARCHAR(20) DEFAULT 'Pending', -- Pending, Arrived, Departed
+            sequence_order INTEGER,
+            FOREIGN KEY (trip_id) REFERENCES delivery_trips(id) ON DELETE CASCADE,
+            FOREIGN KEY (customer_id) REFERENCES customers(id)
+        )
+
+--- Table: delivery_activity_logs ---
+CREATE TABLE delivery_activity_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trip_id INTEGER,
+            activity_type TEXT,
+            customer_id INTEGER,
+            timestamp TEXT,
+            notes TEXT,
+            FOREIGN KEY (trip_id) REFERENCES delivery_trips(id),
+            FOREIGN KEY (customer_id) REFERENCES customers(id)
+        )
+
+--- Table: delivery_activities ---
+CREATE TABLE delivery_activities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+
+--- Table: warehouses ---
+CREATE TABLE warehouses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            company_id INTEGER NOT NULL,
+            FOREIGN KEY (company_id) REFERENCES companies (id)
+        )
+
+--- Table: suppliers ---
+CREATE TABLE suppliers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            code TEXT NOT NULL UNIQUE,
+            contact_person TEXT,
+            email TEXT,
+            phone TEXT,
+            address TEXT,
+            city TEXT,
+            country TEXT,
+            region TEXT,
+            payment_terms TEXT DEFAULT 'Net 30',
+            lead_time TEXT,
+            currency TEXT DEFAULT 'USD',
+            margin TEXT,
+            rating INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'Active',
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+
+--- Table: inventory ---
+CREATE TABLE "inventory" (id INTEGER PRIMARY KEY AUTOINCREMENT, part_id INTEGER, company_id INTEGER NOT NULL, zone TEXT DEFAULT 'NULL', quantity INTEGER NOT NULL DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, receiving_date TEXT, reserved_customer TEXT, warehouse_id INTEGER, hs_code TEXT)
+
+--- Table: movements ---
+CREATE TABLE "movements" (id INTEGER PRIMARY KEY AUTOINCREMENT, part_id INTEGER, company_id INTEGER NOT NULL, user_id INTEGER DEFAULT 'NULL', movement_type TEXT NOT NULL, quantity INTEGER NOT NULL, reference TEXT DEFAULT 'NULL', movement_date DATETIME DEFAULT CURRENT_TIMESTAMP, warehouse_id INTEGER, hs_code TEXT)
+
+--- Table: customer_transactions ---
+CREATE TABLE customer_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER NOT NULL,
+            transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            type TEXT NOT NULL, -- 'Invoice', 'Payment', 'Adjustment'
+            amount DECIMAL(12,2) NOT NULL,
+            reference TEXT,
+            notes TEXT,
+            FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+        )
+
+--- Table: vehicles ---
+CREATE TABLE vehicles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            plate_number TEXT,
+            status TEXT DEFAULT 'Active',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+

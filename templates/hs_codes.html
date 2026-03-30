@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-8 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">{{ title }}</h1>
+            <p class="text-slate-400 text-sm mt-1">Comprehensive HS Code analytics — cumulative balances, company breakdowns, and warehouse-level distribution.</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('export_hs_reports') }}" class="px-5 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl text-xs font-black uppercase tracking-widest transition-all border border-emerald-500/20 shadow-xl">
+                <i class="fa-solid fa-file-excel mr-2"></i> Export Excel
+            </a>
+            <a href="{{ url_for('reports') }}" class="px-5 py-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-black uppercase tracking-widest transition-all border border-white/10">
+                <i class="fa-solid fa-arrow-left mr-2"></i> Master Reports
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass-panel rounded-2xl p-5 border border-cyan-500/10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center"><i class="fa-solid fa-barcode text-cyan-400"></i></div>
+                <div>
+                    <div class="text-2xl font-black text-cyan-400">{{ hs_summary|length }}</div>
+                    <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Unique HS Codes</div>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 border border-emerald-500/10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center"><i class="fa-solid fa-cubes text-emerald-400"></i></div>
+                <div>
+                    {% set total_qty = hs_summary|sum(attribute='total_qty') %}
+                    <div class="text-2xl font-black text-emerald-400">{{ "{:,}".format(total_qty|int) }}</div>
+                    <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Units (HS Tracked)</div>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 border border-amber-500/10">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center"><i class="fa-solid fa-coins text-amber-400"></i></div>
+                <div>
+                    {% set total_val = hs_summary|sum(attribute='total_val') %}
+                    <div class="text-2xl font-black text-amber-400">AED {{ "{:,.0f}".format(total_val|float) }}</div>
+                    <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Valuation</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 1. Cumulative HS Code Table -->
+    <div class="glass-panel rounded-3xl overflow-hidden border border-white/5 shadow-2xl">
+        <div class="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+            <h4 class="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
+                <i class="fa-solid fa-barcode text-cyan-400"></i> Cumulative HS Code Summary
+            </h4>
+            <input type="text" id="searchHS" placeholder="Search HS code..." 
+                   class="bg-slate-900/80 border border-white/10 rounded-xl px-4 py-2 text-xs text-white focus:border-cyan-500 outline-none w-56 transition-all"
+                   oninput="filterAllTables()">
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse" id="hsSummaryTable">
+                <thead>
+                    <tr class="bg-slate-800/50 text-[9px] uppercase tracking-[0.2em] text-slate-500 font-bold border-b border-white/5">
+                        <th class="px-5 py-4 w-12 text-center">#</th>
+                        <th class="px-5 py-4">HS Code</th>
+                        <th class="px-5 py-4 text-center">Part Count</th>
+                        <th class="px-5 py-4 text-center">Total Qty</th>
+                        <th class="px-5 py-4 text-right">Total Value</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/20">
+                    {% for h in hs_summary %}
+                    <tr class="hover:bg-white/5 transition-colors hs-row">
+                        <td class="px-5 py-3 text-center text-[10px] font-bold text-slate-600">{{ loop.index }}</td>
+                        <td class="px-5 py-3"><span class="px-2 py-1 bg-cyan-500/10 rounded-lg text-xs font-mono font-bold text-cyan-300 border border-cyan-500/20">{{ h.hs_code }}</span></td>
+                        <td class="px-5 py-3 text-center text-xs font-bold text-slate-300">{{ h.part_count }}</td>
+                        <td class="px-5 py-3 text-center text-sm font-black text-white">{{ "{:,}".format(h.total_qty|int) }}</td>
+                        <td class="px-5 py-3 text-right text-xs font-bold text-emerald-400">AED {{ "{:,.2f}".format(h.total_val or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center py-16 text-slate-500 text-xs">No HS Code data available. Assign HS Codes to parts to see reports.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 2. HS Code by Company -->
+    <div class="glass-panel rounded-3xl overflow-hidden border border-white/5 shadow-2xl">
+        <div class="p-6 border-b border-white/5 bg-white/[0.02]">
+            <h4 class="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
+                <i class="fa-solid fa-building text-cyan-400"></i> HS Code Balance by Company
+            </h4>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse" id="hsCompanyTable">
+                <thead>
+                    <tr class="bg-slate-800/50 text-[9px] uppercase tracking-[0.2em] text-slate-500 font-bold border-b border-white/5">
+                        <th class="px-5 py-4 w-12 text-center">#</th>
+                        <th class="px-5 py-4">HS Code</th>
+                        <th class="px-5 py-4">Company</th>
+                        <th class="px-5 py-4 text-center">Quantity</th>
+                        <th class="px-5 py-4 text-right">Value</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/20">
+                    {% for h in hs_company %}
+                    <tr class="hover:bg-white/5 transition-colors hs-row">
+                        <td class="px-5 py-3 text-center text-[10px] font-bold text-slate-600">{{ loop.index }}</td>
+                        <td class="px-5 py-3"><span class="text-xs font-mono font-bold text-cyan-300">{{ h.hs_code }}</span></td>
+                        <td class="px-5 py-3">
+                            <span class="text-xs font-bold text-white">{{ h.company }}</span>
+                        </td>
+                        <td class="px-5 py-3 text-center text-sm font-black text-white">{{ "{:,}".format(h.total_qty|int) }}</td>
+                        <td class="px-5 py-3 text-right text-xs font-bold text-emerald-400">AED {{ "{:,.2f}".format(h.total_val or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center py-16 text-slate-500 text-xs">No data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 3. HS Code by Warehouse -->
+    <div class="glass-panel rounded-3xl overflow-hidden border border-white/5 shadow-2xl">
+        <div class="p-6 border-b border-white/5 bg-white/[0.02]">
+            <h4 class="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
+                <i class="fa-solid fa-warehouse text-cyan-400"></i> HS Code Balance by Warehouse
+            </h4>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse" id="hsWarehouseTable">
+                <thead>
+                    <tr class="bg-slate-800/50 text-[9px] uppercase tracking-[0.2em] text-slate-500 font-bold border-b border-white/5">
+                        <th class="px-5 py-4 w-12 text-center">#</th>
+                        <th class="px-5 py-4">HS Code</th>
+                        <th class="px-5 py-4">Company</th>
+                        <th class="px-5 py-4">Warehouse</th>
+                        <th class="px-5 py-4 text-center">Quantity</th>
+                        <th class="px-5 py-4 text-right">Value</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/20">
+                    {% for h in hs_warehouse %}
+                    <tr class="hover:bg-white/5 transition-colors hs-row">
+                        <td class="px-5 py-3 text-center text-[10px] font-bold text-slate-600">{{ loop.index }}</td>
+                        <td class="px-5 py-3"><span class="text-xs font-mono font-bold text-cyan-300">{{ h.hs_code }}</span></td>
+                        <td class="px-5 py-3 text-xs font-bold text-white">{{ h.company }}</td>
+                        <td class="px-5 py-3 text-xs text-slate-300">{{ h.warehouse }}</td>
+                        <td class="px-5 py-3 text-center text-sm font-black text-white">{{ "{:,}".format(h.total_qty|int) }}</td>
+                        <td class="px-5 py-3 text-right text-xs font-bold text-emerald-400">AED {{ "{:,.2f}".format(h.total_val or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center py-16 text-slate-500 text-xs">No data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 4. Part Numbers by HS Code -->
+    <div class="glass-panel rounded-3xl overflow-hidden border border-white/5 shadow-2xl">
+        <div class="p-6 border-b border-white/5 bg-white/[0.02]">
+            <h4 class="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
+                <i class="fa-solid fa-list text-cyan-400"></i> Part Number Detail by HS Code
+            </h4>
+        </div>
+        <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table class="w-full text-left border-collapse" id="hsPartsTable">
+                <thead class="sticky top-0 z-10">
+                    <tr class="bg-slate-800 text-[9px] uppercase tracking-[0.2em] text-slate-500 font-bold border-b border-white/5">
+                        <th class="px-5 py-4">HS Code</th>
+                        <th class="px-5 py-4">Part Number</th>
+                        <th class="px-5 py-4">Description</th>
+                        <th class="px-5 py-4">Company</th>
+                        <th class="px-5 py-4">Warehouse</th>
+                        <th class="px-5 py-4 text-center">Quantity</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/20">
+                    {% for h in hs_parts %}
+                    <tr class="hover:bg-white/5 transition-colors hs-row">
+                        <td class="px-5 py-3"><span class="text-xs font-mono font-bold text-cyan-300">{{ h.hs_code }}</span></td>
+                        <td class="px-5 py-3 text-xs font-bold text-white">{{ h.part_number }}</td>
+                        <td class="px-5 py-3 text-[11px] text-slate-400 max-w-[200px] truncate" title="{{ h.description }}">{{ h.description or '—' }}</td>
+                        <td class="px-5 py-3 text-xs font-bold text-slate-300">{{ h.company }}</td>
+                        <td class="px-5 py-3 text-xs text-slate-400">{{ h.warehouse }}</td>
+                        <td class="px-5 py-3 text-center text-sm font-black text-white">{{ h.total_qty or 0 }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center py-16 text-slate-500 text-xs">No part data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterAllTables() {
+    const q = document.getElementById('searchHS').value.toLowerCase();
+    document.querySelectorAll('.hs-row').forEach(row => {
+        row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+}
+</script>
+{% endblock %}

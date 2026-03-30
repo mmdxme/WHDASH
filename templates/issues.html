@@ -1,0 +1,1179 @@
+﻿{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-8 pb-20 fade-in">
+    <div class="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Enterprise Quality Loop</p>
+            <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">Issue Tracker</h1>
+            <p class="mt-2 max-w-3xl text-sm text-slate-400">A bilingual operating dashboard for tracking issues, assigning ownership, and closing root causes with discipline.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            {% if can_edit_issues %}
+            <button type="button" onclick="openIssueModal()" class="rounded-xl bg-brand-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                <i class="fa-solid fa-plus mr-2"></i>New Issue
+            </button>
+            {% endif %}
+            <a href="#issue-grid" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                <i class="fa-solid fa-table-cells mr-2"></i>Open Grid
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-5">
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Issues</p>
+            <h3 class="mt-3 text-4xl font-black text-white">{{ stats.total }}</h3>
+            <p class="mt-2 text-xs text-slate-500">All seeded and newly logged cases.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Open</p>
+            <h3 class="mt-3 text-4xl font-black text-sky-300">{{ stats.open }}</h3>
+            <p class="mt-2 text-xs text-slate-500">Needs active ownership and execution.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Pending</p>
+            <h3 class="mt-3 text-4xl font-black text-amber-300">{{ stats.pending }}</h3>
+            <p class="mt-2 text-xs text-slate-500">Waiting for confirmation, dependency, or follow-up.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Closed</p>
+            <h3 class="mt-3 text-4xl font-black text-emerald-300">{{ stats.closed }}</h3>
+            <p class="mt-2 text-xs text-slate-500">Resolved and documented for reference.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Pareto Focus</p>
+            <h3 class="mt-3 text-4xl font-black text-fuchsia-300">{{ stats.pareto }}</h3>
+            <p class="mt-2 text-xs text-slate-500">Flagged as high-leverage operational blockers.</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-[1.4fr_1fr]">
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-6 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-300">Comprehensive Report</p>
+                    <h3 class="mt-2 text-2xl font-black text-white">Executive Snapshot</h3>
+                    <p class="mt-2 text-sm text-slate-400">A management view of ownership gaps, reporting pressure, and operational concentration points across the issue register.</p>
+                </div>
+                <div class="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-xs text-slate-300">
+                    <span class="font-black uppercase tracking-widest text-slate-500">Top Department</span>
+                    <div class="mt-2 text-lg font-bold text-white">{{ issue_report.executive.top_department }}</div>
+                    <div class="text-xs text-slate-500">{{ issue_report.executive.top_department_total }} linked issues</div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <div class="rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-rose-200">High Priority Open</p>
+                    <div class="mt-3 text-3xl font-black text-white">{{ issue_report.summary.high_priority_open }}</div>
+                    <p class="mt-2 text-xs text-rose-100/80">Still active and not closed.</p>
+                </div>
+                <div class="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-amber-200">Unassigned Owners</p>
+                    <div class="mt-3 text-3xl font-black text-white">{{ issue_report.summary.unassigned_owner }}</div>
+                    <p class="mt-2 text-xs text-amber-100/80">Need a responsible person.</p>
+                </div>
+                <div class="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-cyan-200">Missing Root Cause</p>
+                    <div class="mt-3 text-3xl font-black text-white">{{ issue_report.summary.missing_root_cause }}</div>
+                    <p class="mt-2 text-xs text-cyan-100/80">No root cause captured yet.</p>
+                </div>
+                <div class="rounded-2xl border border-violet-400/20 bg-violet-500/10 p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-violet-200">Missing Action Plan</p>
+                    <div class="mt-3 text-3xl font-black text-white">{{ issue_report.summary.missing_action_plan }}</div>
+                    <p class="mt-2 text-xs text-violet-100/80">Execution plan still undefined.</p>
+                </div>
+                <div class="rounded-2xl border border-slate-400/20 bg-slate-500/10 p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-200">Missing Target Date</p>
+                    <div class="mt-3 text-3xl font-black text-white">{{ issue_report.summary.missing_target_date }}</div>
+                    <p class="mt-2 text-xs text-slate-200/70">No target resolution date set.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Leadership Notes</h3>
+                <span class="rounded-full bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Highlights</span>
+            </div>
+            <div class="space-y-4">
+                <div class="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Most Active Reporter</p>
+                    <p class="mt-2 text-lg font-bold text-white">{{ issue_report.executive.top_reporter }}</p>
+                    <p class="mt-1 text-xs text-slate-400">{{ issue_report.executive.top_reporter_total }} issue(s) reported</p>
+                </div>
+                <div class="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Most Assigned Owner</p>
+                    <p class="mt-2 text-lg font-bold text-white">{{ issue_report.executive.top_owner }}</p>
+                    <p class="mt-1 text-xs text-slate-400">{{ issue_report.executive.top_owner_total }} issue(s) owned</p>
+                </div>
+                <div class="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Reporting Quality</p>
+                    <p class="mt-2 text-sm text-slate-300">Use the cards on the left as a weekly quality checklist: ownership, root cause, action plan, and target date should all trend down.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Status Distribution</h3>
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Current Mix</span>
+            </div>
+            <div class="h-72"><canvas id="issueStatusChart"></canvas></div>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Priority Pressure</h3>
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">By Volume</span>
+            </div>
+            <div class="h-72"><canvas id="issuePriorityChart"></canvas></div>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Issue Type Mix</h3>
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Problem vs Suggestion</span>
+            </div>
+            <div class="h-72"><canvas id="issueTypeChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Department Hotspots</h3>
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Top 8</span>
+            </div>
+            <div class="h-80"><canvas id="issueDepartmentChart"></canvas></div>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Ownership Load</h3>
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Top 8</span>
+            </div>
+            <div class="h-80"><canvas id="issueOwnerChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                <div>
+                    <h3 class="text-lg font-bold text-white">Grid Controls</h3>
+                    <p class="text-xs text-slate-500">Search instantly, use multi-select filters for department/status/priority, and double-click a row to revise it.</p>
+                </div>
+                <div class="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-3 text-xs text-cyan-100">
+                    <span class="font-black uppercase tracking-widest">Visible Rows</span>
+                    <span id="issueVisibleCount" class="ml-2 font-bold">{{ issues|length }}</span>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 gap-4 lg:grid-cols-4">
+                <div class="lg:col-span-2">
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Global Search</label>
+                    <input id="issueSearchInput" type="text" placeholder="Search issue, writer, root cause, linked issues..." class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Involved Department</label>
+                    <select id="issueDepartmentFilter" multiple class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        {% for dept in issue_departments %}
+                        <option value="{{ dept }}">{{ dept }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
+                    <select id="issuePriorityFilter" multiple class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        {% for priority in issue_priority_options %}
+                        <option value="{{ priority }}">{{ priority }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                    <select id="issueStatusFilter" multiple class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        {% for status in issue_status_options %}
+                        <option value="{{ status }}">{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button type="button" onclick="resetIssueFilters()" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                        Reset Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Recent Activity</h3>
+                <span class="rounded-full bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Audit Trail</span>
+            </div>
+            <div class="space-y-3">
+                {% for item in recent_updates %}
+                <div class="rounded-2xl border border-white/5 bg-white/[0.03] p-4">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-brand-300">Row {{ item.row_id }} | {{ item.action_type.replace('_', ' ') }}</p>
+                    <p class="mt-2 text-sm font-bold text-white" dir="auto">{{ item.issue }}</p>
+                    <p class="mt-2 text-xs text-slate-400">{{ item.created_at[:16] if item.created_at else '--' }} | {{ item.actor_name or 'System' }}</p>
+                    <p class="mt-2 text-xs text-slate-300" dir="auto">{{ item.note or '--' }}</p>
+                </div>
+                {% else %}
+                <div class="rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-xs font-black uppercase tracking-widest text-slate-500">No issue activity yet.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div id="issue-grid" class="glass-panel overflow-hidden rounded-3xl border border-white/5">
+        <div class="border-b border-white/5 bg-white/[0.02] p-6">
+            <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div>
+                    <h3 class="text-lg font-bold text-white">Issue Management Dashboard</h3>
+                    <p class="mt-1 text-xs text-slate-500">Professional issue register with full schema coverage, bilingual labels, multi-select filtering, and double-click editing.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span id="selectedIssuesBadge" class="rounded-full bg-brand-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-brand-300">0 selected</span>
+                    <button type="button" onclick="selectVisibleIssues()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Select All</button>
+                    <button type="button" onclick="clearSelectedIssues()" id="clearIssuesBtn" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white" disabled>Clear All</button>
+                    <button type="button" onclick="openIssueColumnsModal()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Columns</button>
+                    {% if can_edit_issues %}
+                    <button type="button" onclick="runIssueBulkAction('status', 'Open')" class="issue-bulk-action rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-sky-200 transition-all hover:bg-sky-500 hover:text-slate-950" disabled>Set Open</button>
+                    <button type="button" onclick="runIssueBulkAction('status', 'Pending')" class="issue-bulk-action rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-amber-200 transition-all hover:bg-amber-500 hover:text-slate-950" disabled>Set Pending</button>
+                    <button type="button" onclick="runIssueBulkAction('status', 'Closed')" class="issue-bulk-action rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-200 transition-all hover:bg-emerald-500 hover:text-slate-950" disabled>Set Closed</button>
+                    <button type="button" onclick="runIssueBulkAction('delete')" class="issue-bulk-action rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-200 transition-all hover:bg-red-500 hover:text-white" disabled>Delete</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="max-h-[76vh] overflow-auto">
+            <table class="min-w-[3900px] w-full text-left text-sm">
+                <thead class="sticky top-0 z-20 bg-slate-900/95 backdrop-blur">
+                    <tr class="border-b border-white/5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <th class="px-4 py-4 text-center"><input type="checkbox" id="selectAllIssuesCheckbox" class="h-4 w-4 rounded border-white/10 bg-slate-800 text-brand-500 focus:ring-brand-500"></th>
+                        {% for column in issue_column_options %}
+                        <th class="px-4 py-4"><button type="button" onclick="setIssueSort('{{ column.key }}')" class="issue-sort-header" data-sort-key="{{ column.key }}">{{ column.label }}<br><span class="font-medium tracking-normal text-slate-600">{{ column.rtl }}</span><span class="issue-sort-indicator text-[11px] font-black tracking-normal text-slate-600"></span></button></th>
+                        {% endfor %}
+                        <th class="px-4 py-4 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="issueTableBody" class="divide-y divide-white/5 bg-slate-900/10">
+                    {% for issue in issues %}
+                    <tr
+                        class="issue-row odd:bg-white/[0.02] even:bg-slate-900/10 transition-colors hover:bg-white/5 {% if issue.priority == 'High' and issue.status != 'Closed' %}border-l-2 border-l-rose-400/40{% endif %}"
+                        data-issue-id="{{ issue.id }}"
+                        data-row-id="{{ issue.row_id }}"
+                        data-issue-date="{{ issue.issue_date }}"
+                        data-date-sort="{{ issue.issue_date_sort_value or '9999-12-31' }}"
+                        data-issue="{{ issue.issue|lower }}"
+                        data-pareto-law="{{ 1 if issue.pareto_law else 0 }}"
+                        data-involved-departments="{{ issue.involved_departments_display|lower }}"
+                        data-section-team="{{ issue.section_team|lower }}"
+                        data-issue-type="{{ issue.issue_type|lower }}"
+                        data-writer="{{ issue.writer|lower }}"
+                        data-reported-by="{{ issue.reported_by|lower }}"
+                        data-priority="{{ issue.priority }}"
+                        data-status="{{ issue.status }}"
+                        data-responsible-section="{{ issue.responsible_section|lower }}"
+                        data-responsible-person="{{ issue.responsible_person|lower }}"
+                        data-root-cause="{{ issue.root_cause|lower }}"
+                        data-impact="{{ issue.impact|lower }}"
+                        data-action-plan="{{ issue.action_plan|lower }}"
+                        data-resources-needed="{{ issue.resources_needed|lower }}"
+                        data-target-resolution-date="{{ issue.target_resolution_date|lower }}"
+                        data-first-follow-up-date="{{ issue.first_follow_up_date|lower }}"
+                        data-first-follow-up-notes="{{ issue.first_follow_up_notes|lower }}"
+                        data-second-follow-up-date="{{ issue.second_follow_up_date|lower }}"
+                        data-second-follow-up-notes="{{ issue.second_follow_up_notes|lower }}"
+                        data-follow-up-by="{{ issue.follow_up_by|lower }}"
+                        data-progress-note="{{ issue.progress_note|lower }}"
+                        data-linked-issues="{{ issue.linked_issues|lower }}"
+                        data-final-status="{{ issue.final_status|lower }}"
+                        data-search="{{ (issue.issue ~ ' ' ~ issue.involved_departments_display ~ ' ' ~ issue.writer ~ ' ' ~ issue.reported_by ~ ' ' ~ issue.priority ~ ' ' ~ issue.status ~ ' ' ~ issue.root_cause ~ ' ' ~ issue.impact ~ ' ' ~ issue.action_plan ~ ' ' ~ issue.linked_issues ~ ' ' ~ issue.final_status)|lower }}"
+                        {% if can_edit_issues %}ondblclick='handleIssueRowDoubleClick(event, {{ issue|tojson|safe }})'{% endif %}
+                    >
+                        <td class="px-4 py-4 text-center">
+                            <input type="checkbox" value="{{ issue.id }}" class="issue-selector h-4 w-4 rounded border-white/10 bg-slate-800 text-brand-500 focus:ring-brand-500">
+                        </td>
+                        <td class="px-4 py-4 font-black text-white">{{ issue.row_id }}</td>
+                        <td class="px-4 py-4 text-slate-300">{{ issue.issue_date }}</td>
+                        <td class="min-w-[320px] px-4 py-4 font-semibold text-white" dir="auto">{{ issue.issue }}</td>
+                        <td class="px-4 py-4">
+                            <span class="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest {% if issue.pareto_law %}border-fuchsia-400/30 bg-fuchsia-500/15 text-fuchsia-200{% else %}border-slate-500/20 bg-slate-500/10 text-slate-300{% endif %}">
+                                {{ issue.pareto_display }}
+                            </span>
+                        </td>
+                        <td class="min-w-[240px] px-4 py-4">
+                            <div class="flex flex-wrap gap-2">
+                                {% for dept in issue.involved_departments_list %}
+                                <span class="inline-flex rounded-full border border-cyan-400/20 bg-cyan-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-cyan-100">{{ dept }}</span>
+                                {% else %}
+                                <span class="text-slate-500">--</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="min-w-[180px] px-4 py-4 text-slate-300" dir="auto">{{ issue.section_team or '--' }}</td>
+                        <td class="px-4 py-4">
+                            <span class="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest {{ issue.type_badge }}">{{ issue.issue_type }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-slate-300">{{ issue.writer or '--' }}</td>
+                        <td class="px-4 py-4 text-slate-300">{{ issue.reported_by or '--' }}</td>
+                        <td class="px-4 py-4">
+                            <span class="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest {{ issue.priority_badge }}">{{ issue.priority }}</span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest {{ issue.status_badge }}">{{ issue.status }}</span>
+                        </td>
+                        <td class="min-w-[180px] px-4 py-4 text-slate-300" dir="auto">{{ issue.responsible_section_display }}</td>
+                        <td class="min-w-[180px] px-4 py-4 text-slate-300" dir="auto">{{ issue.responsible_person_display }}</td>
+                        <td class="min-w-[220px] px-4 py-4 text-slate-300" dir="auto">{{ issue.root_cause or '--' }}</td>
+                        <td class="min-w-[220px] px-4 py-4 text-slate-300" dir="auto">{{ issue.impact or '--' }}</td>
+                        <td class="min-w-[240px] px-4 py-4 text-slate-300" dir="auto">{{ issue.action_plan or '--' }}</td>
+                        <td class="min-w-[200px] px-4 py-4 text-slate-300" dir="auto">{{ issue.resources_needed or '--' }}</td>
+                        <td class="px-4 py-4 text-slate-300">{{ issue.target_resolution_date or '--' }}</td>
+                        <td class="px-4 py-4 text-slate-300">{{ issue.first_follow_up_date or '--' }}</td>
+                        <td class="min-w-[220px] px-4 py-4 text-slate-300" dir="auto">{{ issue.first_follow_up_notes or '--' }}</td>
+                        <td class="px-4 py-4 text-slate-300">{{ issue.second_follow_up_date or '--' }}</td>
+                        <td class="min-w-[220px] px-4 py-4 text-slate-300" dir="auto">{{ issue.second_follow_up_notes or '--' }}</td>
+                        <td class="px-4 py-4 text-slate-300" dir="auto">{{ issue.follow_up_by or '--' }}</td>
+                        <td class="min-w-[240px] px-4 py-4 text-slate-300" dir="auto">{{ issue.progress_note or '--' }}</td>
+                        <td class="min-w-[160px] px-4 py-4 text-slate-300" dir="auto">{{ issue.linked_issues_display }}</td>
+                        <td class="min-w-[160px] px-4 py-4 text-slate-300" dir="auto">{{ issue.final_status_display }}</td>
+                        <td class="px-4 py-4 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                {% if can_edit_issues %}
+                                <button type="button" onclick='event.stopPropagation(); openIssueModal({{ issue|tojson|safe }})' class="rounded-xl bg-brand-500/10 p-2 text-brand-300 transition-all hover:bg-brand-500 hover:text-white" title="Edit issue"><i class="fa-solid fa-pen-to-square text-xs"></i></button>
+                                <button type="button" onclick='event.stopPropagation(); duplicateIssue({{ issue|tojson|safe }})' class="rounded-xl bg-violet-500/10 p-2 text-violet-300 transition-all hover:bg-violet-500 hover:text-white" title="Duplicate issue"><i class="fa-solid fa-clone text-xs"></i></button>
+                                <button type="button" onclick="event.stopPropagation(); runIssueBulkAction('delete', null, [{{ issue.id }}])" class="rounded-xl bg-red-500/10 p-2 text-red-300 transition-all hover:bg-red-500 hover:text-white" title="Delete issue"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="28" class="px-4 py-20 text-center text-xs font-black uppercase tracking-widest text-slate-500">No issues available.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="issueColumnsModal" class="fixed inset-0 z-[95] hidden">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="absolute left-1/2 top-1/2 w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 p-6">
+        <div class="glass-panel overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <div class="flex items-center justify-between gap-4">
+                    <div>
+                        <h3 class="text-lg font-black uppercase tracking-widest text-white">Column Preferences</h3>
+                        <p class="mt-1 text-xs text-slate-500">Choose which columns appear in your Issue Tracker. This layout is saved for your user account.</p>
+                    </div>
+                    <button type="button" onclick="closeIssueColumnsModal()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Close</button>
+                </div>
+                <div class="mt-4 flex flex-wrap items-center gap-2">
+                    <button type="button" onclick="selectAllIssueColumns()" class="rounded-xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-100 transition-all hover:bg-cyan-500 hover:text-slate-950">Show All</button>
+                    <button type="button" onclick="setIssueCoreColumns()" class="rounded-xl border border-violet-400/20 bg-violet-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-violet-100 transition-all hover:bg-violet-500 hover:text-white">Core View</button>
+                    <button type="button" onclick="resetIssueColumnsToDefault()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Default</button>
+                    <div class="rounded-xl border border-white/5 bg-white/[0.03] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        <span id="issueColumnSelectionCount">{{ visible_issue_columns|length }}</span> selected
+                    </div>
+                </div>
+            </div>
+            <div class="max-h-[60vh] overflow-y-auto p-6">
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {% for column in issue_column_options %}
+                    <label class="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
+                        <input type="checkbox" class="issue-column-toggle h-4 w-4 rounded border-white/10 bg-slate-800 text-brand-500 focus:ring-brand-500" value="{{ column.key }}" {% if column.key in visible_issue_columns %}checked{% endif %}>
+                        <span>
+                            <span class="block font-semibold text-white">{{ column.label }}</span>
+                            <span class="block text-xs text-slate-500">{{ column.rtl }}</span>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="border-t border-white/5 bg-white/[0.02] p-6">
+                <div class="flex flex-col gap-3 md:flex-row md:justify-end">
+                    <button type="button" onclick="resetIssueColumnsToDefault()" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Reset Default</button>
+                    <button type="button" onclick="saveIssueColumnPreferences()" class="rounded-xl bg-brand-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Save View</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if can_edit_issues %}
+<div id="issueModal" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="absolute left-1/2 top-1/2 w-full max-w-7xl -translate-x-1/2 -translate-y-1/2 p-6">
+        <div class="glass-panel max-h-[92vh] overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 id="issueModalTitle" class="text-lg font-black uppercase tracking-widest text-white">Create Issue</h3>
+                        <p class="mt-1 text-xs text-slate-500">Update ownership, status, follow-ups, and resolution details from a single control surface.</p>
+                    </div>
+                    <button type="button" onclick="closeIssueModal()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Close</button>
+                </div>
+            </div>
+            <div class="max-h-[78vh] overflow-y-auto p-6">
+                <input type="hidden" id="issueId">
+                <div class="grid grid-cols-1 gap-6 xl:grid-cols-4">
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Row ID</label>
+                        <input id="issueRowId" type="number" min="1" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Date</label>
+                        <input id="issueDate" type="text" placeholder="DD/MM/YYYY or Past" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Type</label>
+                        <select id="issueType" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            {% for issue_type in issue_type_options %}
+                            <option value="{{ issue_type }}">{{ issue_type }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <label class="inline-flex items-center gap-3 rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-slate-200">
+                            <input id="issueParetoLaw" type="checkbox" class="h-4 w-4 rounded border-white/10 bg-slate-800 text-fuchsia-500 focus:ring-fuchsia-500">
+                            <span>Pareto Law Focus</span>
+                        </label>
+                    </div>
+
+                    <div class="xl:col-span-4">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Issue</label>
+                        <textarea id="issueText" rows="3" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" dir="auto"></textarea>
+                    </div>
+
+                    <div class="xl:col-span-2">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Involved Department</label>
+                        <select id="issueInvolvedDepartments" multiple class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            {% for dept in issue_departments %}
+                            <option value="{{ dept }}">{{ dept }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Section / Team</label>
+                        <input id="issueSectionTeam" type="text" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" dir="auto">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Writer</label>
+                        <input id="issueWriter" list="issuePeopleList" type="text" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Reported By</label>
+                        <input id="issueReportedBy" list="issuePeopleList" type="text" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
+                        <select id="issuePriority" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            {% for priority in issue_priority_options %}
+                            <option value="{{ priority }}">{{ priority }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                        <select id="issueStatus" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            {% for status in issue_status_options %}
+                            <option value="{{ status }}">{{ status }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Responsible Section</label>
+                        <input id="issueResponsibleSection" type="text" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" dir="auto">
+                    </div>
+
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Responsible Person</label>
+                        <input id="issueResponsiblePerson" list="issuePeopleList" type="text" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Target Resolution Date</label>
+                        <input id="issueTargetResolutionDate" type="date" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">First Follow-up Date</label>
+                        <input id="issueFirstFollowUpDate" type="date" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Second Follow-up Date</label>
+                        <input id="issueSecondFollowUpDate" type="date" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+
+                    <div class="xl:col-span-2">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Root Cause</label>
+                        <textarea id="issueRootCause" rows="3" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" dir="auto"></textarea>
+                    </div>
+                    <div class="xl:col-span-2">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Impact</label>
+                        <textarea id="issueImpact" rows="3" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" dir="auto"></textarea>
+                    </div>
+
+                    <div class="xl:col-span-2">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Action Plan</label>
+                        <textarea id="issueActionPlan" rows="3" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" dir="auto"></textarea>
+                    </div>
+                    <div class="xl:col-span-2">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Resources Needed</label>
+                        <textarea id="issueResourcesNeeded" rows="3" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" dir="auto"></textarea>
+                    </div>
+
+                    <div class="xl:col-span-2">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Notes</label>
+                        <textarea id="issueFirstFollowUpNotes" rows="3" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" dir="auto"></textarea>
+                    </div>
+                    <div class="xl:col-span-2">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Second Notes</label>
+                        <textarea id="issueSecondFollowUpNotes" rows="3" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" dir="auto"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Follow-up By</label>
+                        <input id="issueFollowUpBy" list="issuePeopleList" type="text" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Linked Issues</label>
+                        <input id="issueLinkedIssues" type="text" placeholder="Examples: 2, 7, 15" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div class="xl:col-span-2">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Final Status</label>
+                        <input id="issueFinalStatus" type="text" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" dir="auto">
+                    </div>
+
+                    <div class="xl:col-span-4">
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Note of Progress</label>
+                        <textarea id="issueProgressNote" rows="4" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" dir="auto"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="border-t border-white/5 bg-white/[0.02] p-6">
+                <div class="flex flex-col gap-3 md:flex-row md:justify-end">
+                    <button type="button" onclick="closeIssueModal()" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Cancel</button>
+                    <button type="button" onclick="saveIssue()" class="rounded-xl bg-brand-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Save Issue</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <datalist id="issuePeopleList">
+        {% for person in issue_people_options %}
+        <option value="{{ person }}"></option>
+        {% endfor %}
+    </datalist>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .issue-sort-header {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.15rem;
+        color: inherit;
+        text-align: left;
+        transition: color 0.2s ease;
+    }
+
+    .issue-sort-header:hover,
+    .issue-sort-header.is-active {
+        color: #e2e8f0;
+    }
+
+    .issue-sort-header.is-active .issue-sort-indicator {
+        color: #38bdf8;
+    }
+
+    .issue-grid-row-hidden {
+        display: none;
+    }
+</style>
+<script>
+const issueSortState = { key: 'row_id', direction: 'asc' };
+const issueColumnKeys = {{ issue_column_keys|tojson }};
+const issueDefaultVisibleColumns = {{ issue_column_keys|tojson }};
+const issueCoreVisibleColumns = ['row_id', 'issue_date', 'issue', 'involved_departments', 'priority', 'status', 'responsible_person', 'target_resolution_date', 'progress_note'];
+let currentVisibleIssueColumns = new Set({{ visible_issue_columns|tojson }});
+let issueDepartmentChoices = null;
+let issueDepartmentFilterChoices = null;
+let issuePriorityFilterChoices = null;
+let issueStatusFilterChoices = null;
+
+const issueStatusChartData = {{ issue_report.status_chart|tojson }};
+const issuePriorityChartData = {{ issue_report.priority_chart|tojson }};
+const issueTypeChartData = {{ issue_report.type_chart|tojson }};
+const issueDepartmentChartData = {{ issue_report.department_chart|tojson }};
+const issueOwnerChartData = {{ issue_report.owner_chart|tojson }};
+
+function issueRows() {
+    return Array.from(document.querySelectorAll('#issueTableBody .issue-row'));
+}
+
+function selectedIssueFilterValues(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return [];
+    return Array.from(select.selectedOptions || []).map((option) => option.value.trim()).filter(Boolean);
+}
+
+function selectedIssueCheckboxes() {
+    return Array.from(document.querySelectorAll('.issue-selector:checked'));
+}
+
+function getSelectedIssueIds() {
+    return selectedIssueCheckboxes().map((checkbox) => parseInt(checkbox.value, 10)).filter(Boolean);
+}
+
+function normalizeIssueSortValue(row, key) {
+    if (key === 'row_id') return parseInt(row.dataset.rowId || '0', 10);
+    if (key === 'pareto_law') return parseInt(row.dataset.paretoLaw || '0', 10);
+    if (key === 'issue_date') return row.dataset.dateSort || '9999-12-31';
+    if (key === 'priority') return ({ High: 3, Medium: 2, Low: 1 }[row.dataset.priority] || 0);
+    if (key === 'status') return ({ Open: 1, Pending: 2, Closed: 3 }[row.dataset.status] || 99);
+    return (row.dataset[key.replace(/_/g, '-')] || '').toString().trim().toLowerCase();
+}
+
+function setIssueSort(key) {
+    issueSortState.direction = issueSortState.key === key && issueSortState.direction === 'asc' ? 'desc' : 'asc';
+    issueSortState.key = key;
+    applyIssueFilters();
+}
+
+function updateIssueSortHeaders() {
+    document.querySelectorAll('.issue-sort-header').forEach((button) => {
+        button.classList.remove('is-active');
+        button.removeAttribute('aria-sort');
+        const indicator = button.querySelector('.issue-sort-indicator');
+        if (indicator) indicator.textContent = '';
+    });
+
+    const activeButton = document.querySelector(`.issue-sort-header[data-sort-key="${issueSortState.key}"]`);
+    if (!activeButton) return;
+    activeButton.classList.add('is-active');
+    activeButton.setAttribute('aria-sort', issueSortState.direction === 'asc' ? 'ascending' : 'descending');
+    const indicator = activeButton.querySelector('.issue-sort-indicator');
+    if (indicator) indicator.textContent = issueSortState.direction === 'asc' ? '^' : 'v';
+}
+
+function applyIssueSorting() {
+    const tbody = document.getElementById('issueTableBody');
+    if (!tbody) return;
+    const rows = issueRows();
+    rows.sort((left, right) => {
+        const leftValue = normalizeIssueSortValue(left, issueSortState.key);
+        const rightValue = normalizeIssueSortValue(right, issueSortState.key);
+        let comparison = 0;
+        if (typeof leftValue === 'number' && typeof rightValue === 'number') {
+            comparison = leftValue - rightValue;
+        } else {
+            comparison = String(leftValue).localeCompare(String(rightValue), undefined, { numeric: true, sensitivity: 'base' });
+        }
+        return issueSortState.direction === 'asc' ? comparison : comparison * -1;
+    });
+    rows.forEach((row) => tbody.appendChild(row));
+    updateIssueSortHeaders();
+}
+
+function syncIssueBulkUi() {
+    const selectedCount = getSelectedIssueIds().length;
+    const selectedBadge = document.getElementById('selectedIssuesBadge');
+    const clearButton = document.getElementById('clearIssuesBtn');
+    if (selectedBadge) selectedBadge.textContent = `${selectedCount} selected`;
+    if (clearButton) clearButton.disabled = selectedCount === 0;
+    document.querySelectorAll('.issue-bulk-action').forEach((button) => {
+        button.disabled = selectedCount === 0;
+    });
+
+    const visibleRows = issueRows().filter((row) => !row.classList.contains('issue-grid-row-hidden'));
+    const visibleCheckboxes = visibleRows.map((row) => row.querySelector('.issue-selector')).filter(Boolean);
+    const checkedVisible = visibleCheckboxes.filter((checkbox) => checkbox.checked).length;
+    const selectAll = document.getElementById('selectAllIssuesCheckbox');
+    if (selectAll) {
+        selectAll.checked = visibleCheckboxes.length > 0 && checkedVisible === visibleCheckboxes.length;
+        selectAll.indeterminate = checkedVisible > 0 && checkedVisible < visibleCheckboxes.length;
+    }
+}
+
+function updateIssueVisibleCount() {
+    const visibleCount = issueRows().filter((row) => !row.classList.contains('issue-grid-row-hidden')).length;
+    const badge = document.getElementById('issueVisibleCount');
+    if (badge) badge.textContent = visibleCount;
+}
+
+function applyIssueFilters() {
+    applyIssueSorting();
+
+    const searchValue = (document.getElementById('issueSearchInput')?.value || '').trim().toLowerCase();
+    const departmentValues = selectedIssueFilterValues('issueDepartmentFilter').map((value) => value.toLowerCase());
+    const priorityValues = selectedIssueFilterValues('issuePriorityFilter');
+    const statusValues = selectedIssueFilterValues('issueStatusFilter');
+
+    issueRows().forEach((row) => {
+        const matchesSearch = !searchValue || (row.dataset.search || '').includes(searchValue);
+        const rowDepartments = (row.dataset.involvedDepartments || '').split('/').map((value) => value.trim()).filter(Boolean);
+        const matchesDepartment = !departmentValues.length || departmentValues.some((value) => rowDepartments.some((dept) => dept.includes(value)));
+        const matchesPriority = !priorityValues.length || priorityValues.includes(row.dataset.priority || '');
+        const matchesStatus = !statusValues.length || statusValues.includes(row.dataset.status || '');
+        row.classList.toggle('issue-grid-row-hidden', !(matchesSearch && matchesDepartment && matchesPriority && matchesStatus));
+    });
+
+    updateIssueVisibleCount();
+    syncIssueBulkUi();
+}
+
+function resetIssueFilters() {
+    const searchInput = document.getElementById('issueSearchInput');
+    if (searchInput) searchInput.value = '';
+    ['issueDepartmentFilter', 'issuePriorityFilter', 'issueStatusFilter'].forEach((id) => {
+        const select = document.getElementById(id);
+        if (select) {
+            Array.from(select.options).forEach((option) => {
+                option.selected = false;
+            });
+        }
+    });
+    [issueDepartmentFilterChoices, issuePriorityFilterChoices, issueStatusFilterChoices].forEach((instance) => {
+        if (instance) instance.removeActiveItems();
+    });
+    applyIssueFilters();
+}
+
+function applyIssueColumnVisibility() {
+    document.querySelectorAll('#issue-grid table tr').forEach((row) => {
+        issueColumnKeys.forEach((columnKey, index) => {
+            const cell = row.children[index + 1];
+            if (!cell) return;
+            cell.classList.toggle('hidden', !currentVisibleIssueColumns.has(columnKey));
+        });
+    });
+    updateIssueColumnSelectionCount();
+}
+
+function updateIssueColumnSelectionCount() {
+    const badge = document.getElementById('issueColumnSelectionCount');
+    if (badge) badge.textContent = String(currentIssueColumnSelection().length);
+}
+
+function openIssueColumnsModal() {
+    const modal = document.getElementById('issueColumnsModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+}
+
+function closeIssueColumnsModal() {
+    const modal = document.getElementById('issueColumnsModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+}
+
+function currentIssueColumnSelection() {
+    return Array.from(document.querySelectorAll('.issue-column-toggle:checked')).map((checkbox) => checkbox.value);
+}
+
+function applyIssueColumnCheckboxes(columns) {
+    const selectedColumns = new Set(columns);
+    document.querySelectorAll('.issue-column-toggle').forEach((checkbox) => {
+        checkbox.checked = selectedColumns.has(checkbox.value);
+    });
+    updateIssueColumnSelectionCount();
+}
+
+function selectAllIssueColumns() {
+    currentVisibleIssueColumns = new Set(issueColumnKeys);
+    applyIssueColumnCheckboxes(issueColumnKeys);
+    applyIssueColumnVisibility();
+}
+
+function setIssueCoreColumns() {
+    currentVisibleIssueColumns = new Set(issueCoreVisibleColumns);
+    applyIssueColumnCheckboxes(issueCoreVisibleColumns);
+    applyIssueColumnVisibility();
+}
+
+function resetIssueColumnsToDefault() {
+    currentVisibleIssueColumns = new Set(issueDefaultVisibleColumns);
+    applyIssueColumnCheckboxes(issueDefaultVisibleColumns);
+    applyIssueColumnVisibility();
+}
+
+async function saveIssueColumnPreferences() {
+    const selectedColumns = currentIssueColumnSelection();
+    if (!selectedColumns.length) {
+        Swal.fire('Select Columns', 'Choose at least one column to keep the grid usable.', 'warning');
+        return;
+    }
+
+    currentVisibleIssueColumns = new Set(selectedColumns);
+    applyIssueColumnVisibility();
+
+    try {
+        const response = await fetch('{{ url_for("save_issue_preferences") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visible_columns: selectedColumns })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Issue column preferences could not be saved.');
+        closeIssueColumnsModal();
+        if (window.toast) {
+            window.toast('Issue view saved.');
+        } else {
+            Swal.fire('Saved', result.message, 'success');
+        }
+    } catch (error) {
+        Swal.fire('Preference Save Failed', error.message, 'error');
+    }
+}
+
+function selectVisibleIssues() {
+    issueRows()
+        .filter((row) => !row.classList.contains('issue-grid-row-hidden'))
+        .forEach((row) => {
+            const checkbox = row.querySelector('.issue-selector');
+            if (checkbox) checkbox.checked = true;
+        });
+    syncIssueBulkUi();
+}
+
+function clearSelectedIssues() {
+    document.querySelectorAll('.issue-selector').forEach((checkbox) => {
+        checkbox.checked = false;
+    });
+    syncIssueBulkUi();
+}
+
+function handleIssueRowDoubleClick(event, issue) {
+    const target = event.target;
+    if (target.closest('button, a, input, select, textarea, label')) return;
+    openIssueModal(issue);
+}
+
+function issueFieldValue(fieldId, fallback = '') {
+    const field = document.getElementById(fieldId);
+    return field ? field.value.trim() : fallback;
+}
+
+function setIssueFieldValue(fieldId, value) {
+    const field = document.getElementById(fieldId);
+    if (field) field.value = value || '';
+}
+
+function openIssueModal(issue = null) {
+    const modal = document.getElementById('issueModal');
+    if (!modal) return;
+
+    document.getElementById('issueModalTitle').textContent = issue ? `Edit Issue Row ${issue.row_id}` : 'Create Issue';
+    setIssueFieldValue('issueId', issue?.id || '');
+    setIssueFieldValue('issueRowId', issue?.row_id || '');
+    setIssueFieldValue('issueDate', issue?.issue_date || '');
+    setIssueFieldValue('issueText', issue?.issue || '');
+    document.getElementById('issueParetoLaw').checked = Boolean(issue?.pareto_law);
+    setIssueFieldValue('issueSectionTeam', issue?.section_team || '');
+    setIssueFieldValue('issueType', issue?.issue_type || 'Problem');
+    setIssueFieldValue('issueWriter', issue?.writer || '');
+    setIssueFieldValue('issueReportedBy', issue?.reported_by || '');
+    setIssueFieldValue('issuePriority', issue?.priority || 'Medium');
+    setIssueFieldValue('issueStatus', issue?.status || 'Open');
+    setIssueFieldValue('issueResponsibleSection', issue?.responsible_section || '');
+    setIssueFieldValue('issueResponsiblePerson', issue?.responsible_person || '');
+    setIssueFieldValue('issueRootCause', issue?.root_cause || '');
+    setIssueFieldValue('issueImpact', issue?.impact || '');
+    setIssueFieldValue('issueActionPlan', issue?.action_plan || '');
+    setIssueFieldValue('issueResourcesNeeded', issue?.resources_needed || '');
+    setIssueFieldValue('issueTargetResolutionDate', issue?.target_resolution_date || '');
+    setIssueFieldValue('issueFirstFollowUpDate', issue?.first_follow_up_date || '');
+    setIssueFieldValue('issueFirstFollowUpNotes', issue?.first_follow_up_notes || '');
+    setIssueFieldValue('issueSecondFollowUpDate', issue?.second_follow_up_date || '');
+    setIssueFieldValue('issueSecondFollowUpNotes', issue?.second_follow_up_notes || '');
+    setIssueFieldValue('issueFollowUpBy', issue?.follow_up_by || '');
+    setIssueFieldValue('issueLinkedIssues', issue?.linked_issues || '');
+    setIssueFieldValue('issueFinalStatus', issue?.final_status || '');
+    setIssueFieldValue('issueProgressNote', issue?.progress_note || '');
+
+    const selectedDepartments = Array.isArray(issue?.involved_departments_list) ? issue.involved_departments_list : [];
+    const departmentSelect = document.getElementById('issueInvolvedDepartments');
+    if (departmentSelect) {
+        Array.from(departmentSelect.options).forEach((option) => {
+            option.selected = selectedDepartments.includes(option.value);
+        });
+        if (issueDepartmentChoices) {
+            issueDepartmentChoices.removeActiveItems();
+            issueDepartmentChoices.setChoiceByValue(selectedDepartments);
+        }
+    }
+
+    modal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+}
+
+function duplicateIssue(issue) {
+    const duplicate = { ...issue, id: null, row_id: '' };
+    openIssueModal(duplicate);
+    const title = document.getElementById('issueModalTitle');
+    if (title) title.textContent = `Duplicate Issue Row ${issue.row_id}`;
+}
+
+function closeIssueModal() {
+    const modal = document.getElementById('issueModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+}
+
+async function saveIssue() {
+    const payload = {
+        issue_id: issueFieldValue('issueId') || null,
+        row_id: issueFieldValue('issueRowId') || null,
+        issue_date: issueFieldValue('issueDate') || 'Past',
+        issue: issueFieldValue('issueText'),
+        pareto_law: document.getElementById('issueParetoLaw')?.checked || false,
+        involved_departments: Array.from(document.getElementById('issueInvolvedDepartments')?.selectedOptions || []).map((option) => option.value),
+        section_team: issueFieldValue('issueSectionTeam'),
+        issue_type: issueFieldValue('issueType', 'Problem'),
+        writer: issueFieldValue('issueWriter'),
+        reported_by: issueFieldValue('issueReportedBy'),
+        priority: issueFieldValue('issuePriority', 'Medium'),
+        status: issueFieldValue('issueStatus', 'Open'),
+        responsible_section: issueFieldValue('issueResponsibleSection'),
+        responsible_person: issueFieldValue('issueResponsiblePerson'),
+        root_cause: issueFieldValue('issueRootCause'),
+        impact: issueFieldValue('issueImpact'),
+        action_plan: issueFieldValue('issueActionPlan'),
+        resources_needed: issueFieldValue('issueResourcesNeeded'),
+        target_resolution_date: issueFieldValue('issueTargetResolutionDate'),
+        first_follow_up_date: issueFieldValue('issueFirstFollowUpDate'),
+        first_follow_up_notes: issueFieldValue('issueFirstFollowUpNotes'),
+        second_follow_up_date: issueFieldValue('issueSecondFollowUpDate'),
+        second_follow_up_notes: issueFieldValue('issueSecondFollowUpNotes'),
+        follow_up_by: issueFieldValue('issueFollowUpBy'),
+        linked_issues: issueFieldValue('issueLinkedIssues'),
+        final_status: issueFieldValue('issueFinalStatus'),
+        progress_note: issueFieldValue('issueProgressNote')
+    };
+
+    if (!payload.issue) {
+        Swal.fire('Issue Required', 'Please enter the issue statement before saving.', 'warning');
+        return;
+    }
+
+    try {
+        const response = await fetch('{{ url_for("save_issue") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Issue could not be saved.');
+        await Swal.fire({ title: 'Saved', text: result.message, icon: 'success', timer: 1400, showConfirmButton: false });
+        window.location.reload();
+    } catch (error) {
+        Swal.fire('Save Failed', error.message, 'error');
+    }
+}
+
+async function runIssueBulkAction(action, statusValue = null, explicitIssueIds = null) {
+    const issueIds = explicitIssueIds || getSelectedIssueIds();
+    if (!issueIds.length) {
+        Swal.fire('No Issue Selected', 'Select at least one issue first.', 'warning');
+        return;
+    }
+
+    const confirmation = await Swal.fire({
+        title: action === 'delete' ? 'Delete Selected Issues?' : 'Confirm Bulk Update',
+        text: action === 'delete'
+            ? `This will permanently remove ${issueIds.length} issue(s).`
+            : `Apply ${statusValue} to ${issueIds.length} issue(s)?`,
+        icon: action === 'delete' ? 'warning' : 'question',
+        showCancelButton: true,
+        confirmButtonColor: action === 'delete' ? '#dc2626' : '#0284c7',
+        cancelButtonColor: '#475569'
+    });
+    if (!confirmation.isConfirmed) return;
+
+    try {
+        const response = await fetch('{{ url_for("issue_bulk_action") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: action, status: statusValue, issue_ids: issueIds })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Bulk issue update failed.');
+        await Swal.fire({ title: 'Updated', text: result.message, icon: 'success', timer: 1400, showConfirmButton: false });
+        window.location.reload();
+    } catch (error) {
+        Swal.fire('Bulk Action Failed', error.message, 'error');
+    }
+}
+
+function buildIssueDoughnutChart(canvasId, rows, palette) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !rows.length) return;
+    new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+            labels: rows.map((item) => item.label),
+            datasets: [{
+                data: rows.map((item) => item.total),
+                backgroundColor: palette,
+                borderWidth: 0,
+                hoverOffset: 10
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { color: '#cbd5e1', boxWidth: 12, padding: 18, font: { size: 11, weight: '700' } }
+                }
+            },
+            cutout: '62%'
+        }
+    });
+}
+
+function buildIssueBarChart(canvasId, rows, palette, axis = 'y') {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !rows.length) return;
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: rows.map((item) => item.label),
+            datasets: [{
+                data: rows.map((item) => item.total),
+                borderRadius: 14,
+                borderSkipped: false,
+                backgroundColor: palette
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: axis,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: {
+                    ticks: { color: '#94a3b8', font: { size: 10, weight: '700' } },
+                    grid: { color: 'rgba(148, 163, 184, 0.08)' }
+                },
+                y: {
+                    ticks: { color: '#cbd5e1', font: { size: 10, weight: '700' } },
+                    grid: { color: 'rgba(148, 163, 184, 0.08)' }
+                }
+            }
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.issue-sort-header').forEach((button) => {
+        const sortKey = button.getAttribute('onclick')?.match(/'([^']+)'/)?.[1];
+        if (sortKey) button.dataset.sortKey = sortKey;
+        if (!button.querySelector('.issue-sort-indicator')) {
+            const indicator = document.createElement('span');
+            indicator.className = 'issue-sort-indicator text-[11px] font-black tracking-normal text-slate-600';
+            button.appendChild(indicator);
+        }
+    });
+
+    document.querySelectorAll('.issue-selector').forEach((checkbox) => {
+        checkbox.addEventListener('change', syncIssueBulkUi);
+    });
+    document.querySelectorAll('.issue-column-toggle').forEach((checkbox) => {
+        checkbox.addEventListener('change', updateIssueColumnSelectionCount);
+    });
+
+    const selectAllCheckbox = document.getElementById('selectAllIssuesCheckbox');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', (event) => {
+            if (event.target.checked) {
+                selectVisibleIssues();
+            } else {
+                clearSelectedIssues();
+            }
+        });
+    }
+
+    const searchField = document.getElementById('issueSearchInput');
+    if (searchField) searchField.addEventListener('input', applyIssueFilters);
+
+    ['issueModal', 'issueColumnsModal'].forEach((modalId) => {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal || event.target.classList.contains('absolute')) {
+                if (modalId === 'issueModal') closeIssueModal();
+                if (modalId === 'issueColumnsModal') closeIssueColumnsModal();
+            }
+        });
+    });
+
+    if (window.Choices) {
+        const departmentSelect = document.getElementById('issueInvolvedDepartments');
+        if (departmentSelect) {
+            issueDepartmentChoices = new Choices(departmentSelect, {
+                removeItemButton: true,
+                searchEnabled: true,
+                searchResultLimit: 50,
+                placeholder: true,
+                placeholderValue: 'Select involved departments'
+            });
+        }
+
+        const filterConfig = {
+            issueDepartmentFilter: 'Filter departments',
+            issuePriorityFilter: 'Filter priorities',
+            issueStatusFilter: 'Filter statuses'
+        };
+        Object.entries(filterConfig).forEach(([id, placeholder]) => {
+            const select = document.getElementById(id);
+            if (!select) return;
+            const instance = new Choices(select, {
+                removeItemButton: true,
+                searchEnabled: true,
+                searchResultLimit: 50,
+                placeholder: true,
+                placeholderValue: placeholder
+            });
+            select.addEventListener('change', applyIssueFilters);
+            if (id === 'issueDepartmentFilter') issueDepartmentFilterChoices = instance;
+            if (id === 'issuePriorityFilter') issuePriorityFilterChoices = instance;
+            if (id === 'issueStatusFilter') issueStatusFilterChoices = instance;
+        });
+    } else {
+        ['issueDepartmentFilter', 'issuePriorityFilter', 'issueStatusFilter'].forEach((id) => {
+            const field = document.getElementById(id);
+            if (field) field.addEventListener('change', applyIssueFilters);
+        });
+    }
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        closeIssueModal();
+        closeIssueColumnsModal();
+    });
+
+    applyIssueColumnCheckboxes(Array.from(currentVisibleIssueColumns));
+    applyIssueColumnVisibility();
+    applyIssueFilters();
+
+    buildIssueDoughnutChart('issueStatusChart', issueStatusChartData, ['#38bdf8', '#f59e0b', '#10b981']);
+    buildIssueDoughnutChart('issueTypeChart', issueTypeChartData, ['#ef4444', '#8b5cf6', '#06b6d4']);
+    buildIssueBarChart('issuePriorityChart', issuePriorityChartData, ['#fb7185', '#fbbf24', '#34d399'], 'x');
+    buildIssueBarChart('issueDepartmentChart', issueDepartmentChartData, ['#38bdf8', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#14b8a6', '#f97316', '#64748b']);
+    buildIssueBarChart('issueOwnerChart', issueOwnerChartData, ['#0ea5e9', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b', '#22c55e']);
+});
+</script>
+{% endblock %}

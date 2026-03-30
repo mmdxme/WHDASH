@@ -1,0 +1,595 @@
+{% extends "base.html" %}
+{% set selected_warehouses = request.args.getlist('f_warehouse') %}
+{% set selected_brands = request.args.getlist('f_brand') %}
+
+{% block content %}
+<div class="space-y-8 pb-20 fade-in">
+    <div class="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">{{ title }}</h1>
+            <p class="mt-1 text-sm text-slate-400">Advanced Global Matrix: bulk row controls, sortable reports, and paged inventory visibility.</p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+            <div class="flex rounded-xl border border-white/10 bg-slate-950/70 p-1 shadow-inner">
+                <a href="{{ url_for('inventory_dashboard', report_mode='part', q_part=request.args.get('q_part', ''), q_hs=request.args.get('q_hs', ''), f_status=request.args.get('f_status', 'all'), f_warehouse=selected_warehouses, f_brand=selected_brands, sort_by=sort_by if report_mode == 'part' else 'part_number', sort_dir=sort_dir if report_mode == 'part' else 'asc') }}"
+                   class="rounded-lg px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all {% if report_mode == 'part' %}bg-brand-500 text-white shadow-lg{% else %}text-slate-500 hover:text-slate-300{% endif %}">
+                    Part Report
+                </a>
+                <a href="{{ url_for('inventory_dashboard', report_mode='hs', q_part=request.args.get('q_part', ''), q_hs=request.args.get('q_hs', ''), f_status=request.args.get('f_status', 'all'), f_warehouse=selected_warehouses, f_brand=selected_brands, sort_by=sort_by if report_mode == 'hs' else 'hs_code', sort_dir=sort_dir if report_mode == 'hs' else 'asc') }}"
+                   class="rounded-lg px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all {% if report_mode == 'hs' %}bg-cyan-600 text-white shadow-lg{% else %}text-slate-500 hover:text-slate-300{% endif %}">
+                    HS Report
+                </a>
+            </div>
+
+            <a href="{{ url_for('export_inventory', report_mode=report_mode, q_part=request.args.get('q_part', ''), q_hs=request.args.get('q_hs', ''), f_status=request.args.get('f_status', 'all'), f_warehouse=selected_warehouses, f_brand=selected_brands, sort_by=sort_by, sort_dir=sort_dir) }}"
+               class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-2.5 text-xs font-black uppercase tracking-widest text-emerald-400 transition-all hover:bg-emerald-500/20">
+                <i class="fa-solid fa-file-excel mr-2"></i> Export Excel
+            </a>
+
+            <div class="mx-1 hidden h-8 w-px bg-white/10 sm:block"></div>
+
+            <a href="{{ url_for('dash_entry') }}" class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-2.5 text-xs font-black uppercase tracking-widest text-emerald-400 transition-all hover:bg-emerald-500 hover:text-white">
+                <i class="fa-solid fa-arrow-right-to-bracket mr-2"></i> Entry
+            </a>
+            <a href="{{ url_for('dash_exit') }}" class="rounded-xl border border-red-500/20 bg-red-500/10 px-5 py-2.5 text-xs font-black uppercase tracking-widest text-red-400 transition-all hover:bg-red-500 hover:text-white">
+                <i class="fa-solid fa-arrow-right-from-bracket mr-2"></i> Exit
+            </a>
+            <a href="{{ url_for('dash_transfer') }}" class="rounded-xl border border-brand-500/20 bg-brand-500/10 px-5 py-2.5 text-xs font-black uppercase tracking-widest text-brand-400 transition-all hover:bg-brand-500 hover:text-white">
+                <i class="fa-solid fa-truck-fast mr-2"></i> Transfer
+            </a>
+        </div>
+    </div>
+
+    <div class="glass-panel overflow-hidden rounded-3xl border border-white/5 shadow-2xl">
+        <form method="GET" action="{{ url_for('inventory_dashboard') }}" class="space-y-6 p-6">
+            <input type="hidden" name="report_mode" value="{{ report_mode }}">
+
+            <div class="grid grid-cols-1 gap-6 xl:grid-cols-12">
+                <div class="space-y-4 xl:col-span-3">
+                    <div class="space-y-2">
+                        <label class="ml-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Search Part #</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                            <input type="text" name="q_part" value="{{ request.args.get('q_part', '') }}"
+                                   class="w-full rounded-xl border border-white/10 bg-slate-900/80 py-2.5 pl-10 pr-4 text-xs text-white outline-none transition-all focus:border-brand-500"
+                                   placeholder="Ex: OEM-10003">
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="ml-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Search HS Code</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-barcode absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                            <input type="text" name="q_hs" value="{{ request.args.get('q_hs', '') }}"
+                                   class="w-full rounded-xl border border-white/10 bg-slate-900/80 py-2.5 pl-10 pr-4 text-xs text-white outline-none transition-all focus:border-cyan-500"
+                                   placeholder="Ex: 8708">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-2 xl:col-span-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <label class="ml-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Warehouses (Multiple)</label>
+                        <div class="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest">
+                            <button type="button" onclick="setFilterSelections('f_warehouse', true)" class="rounded-full border border-white/10 px-2 py-1 text-slate-400 transition-all hover:border-brand-500/30 hover:text-white">Select all</button>
+                            <button type="button" onclick="setFilterSelections('f_warehouse', false)" class="rounded-full border border-white/10 px-2 py-1 text-slate-400 transition-all hover:border-red-500/30 hover:text-white">Clear all</button>
+                        </div>
+                    </div>
+                    <div class="h-40 space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-slate-900/80 p-3">
+                        {% for wh in filter_options.warehouses %}
+                        <label class="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 transition-all hover:bg-white/5">
+                            <input type="checkbox" name="f_warehouse" value="{{ wh.id }}"
+                                   {% if wh.id|string in selected_warehouses %}checked{% endif %}
+                                   class="mt-0.5 h-4 w-4 rounded border-white/10 bg-slate-800 text-brand-500 focus:ring-brand-500">
+                            <span class="min-w-0">
+                                <span class="block text-xs font-bold text-slate-200">{{ wh.name }}</span>
+                                <span class="block text-[10px] uppercase tracking-widest text-slate-500">{{ wh.company_name or 'No Company' }}</span>
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="space-y-2 xl:col-span-3">
+                    <div class="flex items-center justify-between gap-3">
+                        <label class="ml-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Brands (Multiple)</label>
+                        <div class="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest">
+                            <button type="button" onclick="setFilterSelections('f_brand', true)" class="rounded-full border border-white/10 px-2 py-1 text-slate-400 transition-all hover:border-amber-500/30 hover:text-white">Select all</button>
+                            <button type="button" onclick="setFilterSelections('f_brand', false)" class="rounded-full border border-white/10 px-2 py-1 text-slate-400 transition-all hover:border-red-500/30 hover:text-white">Clear all</button>
+                        </div>
+                    </div>
+                    <div class="h-40 space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-slate-900/80 p-3">
+                        {% for brand in filter_options.brands %}
+                        <label class="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 transition-all hover:bg-white/5">
+                            <input type="checkbox" name="f_brand" value="{{ brand.id }}"
+                                   {% if brand.id|string in selected_brands %}checked{% endif %}
+                                   class="h-4 w-4 rounded border-white/10 bg-slate-800 text-amber-500 focus:ring-amber-500">
+                            <span class="text-xs font-bold text-slate-200">{{ brand.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="space-y-4 xl:col-span-3">
+                    <div class="space-y-2">
+                        <label class="ml-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Stock Criticality</label>
+                        <select name="f_status" class="w-full rounded-xl border border-white/10 bg-slate-900/80 px-4 py-2.5 text-xs text-white outline-none transition-all focus:border-emerald-500">
+                            <option value="all" {% if request.args.get('f_status', 'all') == 'all' %}selected{% endif %}>Show All Stock</option>
+                            <option value="in_stock" {% if request.args.get('f_status') == 'in_stock' %}selected{% endif %}>Healthy (&gt; 10)</option>
+                            <option value="low" {% if request.args.get('f_status') == 'low' %}selected{% endif %}>Low Stock (1 - 10)</option>
+                            <option value="out" {% if request.args.get('f_status') == 'out' %}selected{% endif %}>Depleted (0)</option>
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div class="space-y-2">
+                            <label class="ml-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Sort Column</label>
+                            <select name="sort_by" class="w-full rounded-xl border border-white/10 bg-slate-900/80 px-4 py-2.5 text-xs text-white outline-none transition-all focus:border-brand-500">
+                                {% if report_mode == 'hs' %}
+                                <option value="hs_code" {% if sort_by == 'hs_code' %}selected{% endif %}>HS Code</option>
+                                <option value="part_count" {% if sort_by == 'part_count' %}selected{% endif %}>Included Parts</option>
+                                <option value="quantity" {% if sort_by == 'quantity' %}selected{% endif %}>Total Qty</option>
+                                <option value="warehouse" {% if sort_by == 'warehouse' %}selected{% endif %}>Warehouses</option>
+                                <option value="brand" {% if sort_by == 'brand' %}selected{% endif %}>Brands</option>
+                                <option value="supplier" {% if sort_by == 'supplier' %}selected{% endif %}>Suppliers</option>
+                                {% else %}
+                                <option value="part_number" {% if sort_by == 'part_number' %}selected{% endif %}>Part Number</option>
+                                <option value="brand" {% if sort_by == 'brand' %}selected{% endif %}>Brand</option>
+                                <option value="quantity" {% if sort_by == 'quantity' %}selected{% endif %}>Qty</option>
+                                <option value="warehouse" {% if sort_by == 'warehouse' %}selected{% endif %}>Warehouse</option>
+                                <option value="company" {% if sort_by == 'company' %}selected{% endif %}>Company</option>
+                                <option value="hs_code" {% if sort_by == 'hs_code' %}selected{% endif %}>HS Code</option>
+                                <option value="supplier" {% if sort_by == 'supplier' %}selected{% endif %}>Supplier</option>
+                                <option value="receiving_date" {% if sort_by == 'receiving_date' %}selected{% endif %}>Receiving Date</option>
+                                <option value="reserved_customer" {% if sort_by == 'reserved_customer' %}selected{% endif %}>Reserved Customer</option>
+                                {% endif %}
+                            </select>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label class="ml-1 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Sort Direction</label>
+                            <select name="sort_dir" class="w-full rounded-xl border border-white/10 bg-slate-900/80 px-4 py-2.5 text-xs text-white outline-none transition-all focus:border-brand-500">
+                                <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>Highest to Lowest</option>
+                                <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>Lowest to Highest</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button type="submit" class="flex-1 rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                            Apply Filters
+                        </button>
+                        <a href="{{ url_for('inventory_dashboard', report_mode=report_mode) }}"
+                           class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-white/10 hover:text-white"
+                           title="Clear all filters">
+                            <i class="fa-solid fa-filter-circle-xmark"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="glass-panel overflow-hidden rounded-3xl border border-white/5 shadow-2xl">
+        <div class="border-b border-white/5 bg-white/[0.02] p-6">
+            <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div>
+                    <h4 class="flex items-center gap-4 text-sm font-black uppercase tracking-widest text-slate-400">
+                        <i class="fa-solid fa-boxes-stacked text-brand-400"></i>
+                        {{ 'HS Aggregated Report' if report_mode == 'hs' else 'Global Stock Matrix' }}
+                        <span class="rounded-full bg-brand-500/10 px-3 py-1 text-[10px] text-brand-400">{{ total_count }} records found</span>
+                    </h4>
+                    <p class="mt-2 text-xs text-slate-500">
+                        Showing {{ page_start }} to {{ page_end }} of {{ total_count }} rows. Each page displays up to {{ per_page }} rows.
+                    </p>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <span id="selectedRowsBadge" class="rounded-full border border-brand-500/20 bg-brand-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-brand-300">0 selected</span>
+                    <button type="button" onclick="selectAllVisibleRows()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                        Select all
+                    </button>
+                    <button type="button" id="clearSelectedBtn" onclick="clearSelectedRows()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white" disabled>
+                        Clear all
+                    </button>
+                    <button type="button" id="editSelectedBtn" onclick="openBulkEditModal()" class="bulk-action rounded-xl border border-brand-500/20 bg-brand-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-brand-300 transition-all hover:bg-brand-500 hover:text-white" disabled>
+                        Edit selected
+                    </button>
+                    <button type="button" id="removeSelectedBtn" onclick="runBulkAction('remove')" class="bulk-action rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-amber-300 transition-all hover:bg-amber-500 hover:text-slate-950" disabled>
+                        Remove selected
+                    </button>
+                    <button type="button" id="deleteSelectedBtn" onclick="runBulkAction('delete')" class="bulk-action rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-300 transition-all hover:bg-red-500 hover:text-white" disabled>
+                        Delete selected
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[1200px] border-collapse text-left">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-800/50 text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">
+                        <th class="w-12 px-4 py-5 text-center">#</th>
+                        <th class="w-14 px-4 py-5 text-center">
+                            <input id="selectAllRows" type="checkbox" class="h-4 w-4 rounded border-white/10 bg-slate-800 text-brand-500 focus:ring-brand-500">
+                        </th>
+                        {% if report_mode == 'hs' %}
+                        <th class="px-4 py-5">HS Code</th>
+                        <th class="px-4 py-5">Included Parts</th>
+                        <th class="px-4 py-5 text-center">Included Parts Count</th>
+                        <th class="px-4 py-5 text-center">Total Qty</th>
+                        <th class="px-4 py-5">Warehouses</th>
+                        <th class="px-4 py-5">Brands</th>
+                        <th class="px-4 py-5">Suppliers</th>
+                        <th class="px-4 py-5 text-center">Actions</th>
+                        {% else %}
+                        <th class="px-4 py-5">Part Number</th>
+                        <th class="px-4 py-5">Brand</th>
+                        <th class="px-4 py-5 text-center">Qty</th>
+                        <th class="px-4 py-5">Company / Warehouse</th>
+                        <th class="px-4 py-5">HS Code</th>
+                        <th class="px-4 py-5">Supplier</th>
+                        <th class="px-4 py-5">Receiving Date</th>
+                        <th class="px-4 py-5">Reserved Customer</th>
+                        <th class="px-4 py-5 text-center">Actions</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/20">
+                    {% for item in items %}
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-4 py-4 text-center text-[10px] font-black text-slate-600">{{ page_start + loop.index0 }}</td>
+                        <td class="px-4 py-4 text-center">
+                            <input type="checkbox"
+                                   value="{% if report_mode == 'hs' %}{{ item.hs_code }}{% else %}{{ item.inv_id }}{% endif %}"
+                                   class="dashboard-row-selector h-4 w-4 rounded border-white/10 bg-slate-800 text-brand-500 focus:ring-brand-500">
+                        </td>
+
+                        {% if report_mode == 'hs' %}
+                        <td class="px-4 py-4">
+                            <span class="rounded-md bg-cyan-500/10 px-2 py-1 text-xs font-black text-cyan-300">{{ item.hs_code or 'N/A' }}</span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="max-w-[280px] text-xs font-bold text-slate-200">{{ item.part_numbers or 'HS Independent Record' }}</div>
+                            <div class="mt-1 text-[10px] text-slate-500">{{ item.descriptions or 'No description' }}</div>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <span class="text-base font-black text-white">{{ item.part_count }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <span class="text-base font-black {% if item.quantity > 10 %}text-emerald-400{% elif item.quantity > 0 %}text-amber-400{% else %}text-red-500{% endif %}">{{ item.quantity }}</span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="max-w-[220px] text-xs font-bold text-brand-300">{{ item.warehouse_names or 'Unassigned' }}</div>
+                            <div class="mt-1 text-[10px] uppercase tracking-widest text-slate-500">{{ item.company_names or 'No company' }}</div>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="text-xs font-black uppercase tracking-wider text-slate-300">{{ item.brand_names or 'Standard' }}</span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="text-xs font-bold text-slate-300">{{ item.suppliers or 'Standard' }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <button type="button" onclick='openBulkEditModal([{{ item.hs_code|tojson }}])' class="rounded-lg bg-brand-500/10 p-2 text-brand-300 transition-all hover:bg-brand-500 hover:text-white" title="Edit selected HS group">
+                                    <i class="fa-solid fa-pen-to-square text-[10px]"></i>
+                                </button>
+                                <button type="button" onclick='runBulkAction("remove", [{{ item.hs_code|tojson }}])' class="rounded-lg bg-amber-500/10 p-2 text-amber-300 transition-all hover:bg-amber-500 hover:text-slate-950" title="Remove selected HS group">
+                                    <i class="fa-solid fa-link-slash text-[10px]"></i>
+                                </button>
+                                <button type="button" onclick='runBulkAction("delete", [{{ item.hs_code|tojson }}])' class="rounded-lg bg-red-500/10 p-2 text-red-300 transition-all hover:bg-red-500 hover:text-white" title="Delete inventory rows in this HS group">
+                                    <i class="fa-solid fa-trash-can text-[10px]"></i>
+                                </button>
+                            </div>
+                        </td>
+                        {% else %}
+                        <td class="px-4 py-4">
+                            {% if item.part_number %}
+                            <div class="text-sm font-extrabold text-white">{{ item.part_number }}</div>
+                            <div class="mt-1 max-w-[220px] text-[10px] text-slate-400">{{ item.description or 'No description' }}</div>
+                            {% else %}
+                            <div class="text-[10px] font-black uppercase italic text-slate-600">HS Independent Record</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="text-[11px] font-black uppercase tracking-wider text-slate-300">{{ item.brand_name or 'Standard' }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <span class="text-base font-black {% if item.quantity > 10 %}text-emerald-400{% elif item.quantity > 0 %}text-amber-400{% else %}text-red-500{% endif %}">{{ item.quantity }}</span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="text-xs font-bold text-brand-300">{{ item.company_name }}</div>
+                            <div class="mt-1 text-[10px] text-slate-500">{{ item.warehouse_name }}{% if item.zone %} / {{ item.zone }}{% endif %}</div>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="text-xs font-mono font-bold text-cyan-400">{{ item.hs_code or 'N/A' }}</span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="text-[11px] font-bold text-slate-300">{{ item.supplier or 'Standard' }}</span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="text-[10px] font-bold text-slate-400">{{ item.receiving_date or '--' }}</span>
+                        </td>
+                        <td class="px-4 py-4">
+                            {% if item.reserved_customer %}
+                            <span class="text-[11px] font-black uppercase text-brand-300">{{ item.reserved_customer }}</span>
+                            {% else %}
+                            <span class="block text-[10px] font-bold uppercase text-slate-600 opacity-60">Available</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <button type="button" onclick='openBulkEditModal([{{ item.inv_id|tojson }}])' class="rounded-lg bg-brand-500/10 p-2 text-brand-300 transition-all hover:bg-brand-500 hover:text-white" title="Edit selected row HS code">
+                                    <i class="fa-solid fa-pen-to-square text-[10px]"></i>
+                                </button>
+                                <button type="button" onclick='runBulkAction("remove", [{{ item.inv_id|tojson }}])' class="rounded-lg bg-amber-500/10 p-2 text-amber-300 transition-all hover:bg-amber-500 hover:text-slate-950" title="Remove selected row HS code">
+                                    <i class="fa-solid fa-link-slash text-[10px]"></i>
+                                </button>
+                                <button type="button" onclick='runBulkAction("delete", [{{ item.inv_id|tojson }}])' class="rounded-lg bg-red-500/10 p-2 text-red-300 transition-all hover:bg-red-500 hover:text-white" title="Delete this inventory row">
+                                    <i class="fa-solid fa-trash-can text-[10px]"></i>
+                                </button>
+                            </div>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{% if report_mode == 'hs' %}10{% else %}11{% endif %}" class="py-24 text-center text-xs font-bold uppercase tracking-widest text-slate-500 opacity-60">
+                            No inventory matches the current parameters.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="border-t border-white/5 bg-white/[0.02] p-6">
+            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div class="text-xs text-slate-500">
+                    Page {{ page }} of {{ total_pages }}{% if total_count %} • {{ page_start }}-{{ page_end }} of {{ total_count }} rows{% endif %}
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="{{ url_for('inventory_dashboard', report_mode=report_mode, q_part=request.args.get('q_part', ''), q_hs=request.args.get('q_hs', ''), f_status=request.args.get('f_status', 'all'), f_warehouse=selected_warehouses, f_brand=selected_brands, sort_by=sort_by, sort_dir=sort_dir, page=page-1 if page > 1 else 1) }}"
+                       class="rounded-xl border border-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all {% if page > 1 %}bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white{% else %}cursor-not-allowed bg-white/5 text-slate-600 opacity-50{% endif %}">
+                        Previous
+                    </a>
+                    {% for page_num in page_window %}
+                    <a href="{{ url_for('inventory_dashboard', report_mode=report_mode, q_part=request.args.get('q_part', ''), q_hs=request.args.get('q_hs', ''), f_status=request.args.get('f_status', 'all'), f_warehouse=selected_warehouses, f_brand=selected_brands, sort_by=sort_by, sort_dir=sort_dir, page=page_num) }}"
+                       class="rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all {% if page_num == page %}bg-brand-500 text-white{% else %}border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white{% endif %}">
+                        {{ page_num }}
+                    </a>
+                    {% endfor %}
+                    <a href="{{ url_for('inventory_dashboard', report_mode=report_mode, q_part=request.args.get('q_part', ''), q_hs=request.args.get('q_hs', ''), f_status=request.args.get('f_status', 'all'), f_warehouse=selected_warehouses, f_brand=selected_brands, sort_by=sort_by, sort_dir=sort_dir, page=page+1 if page < total_pages else total_pages) }}"
+                       class="rounded-xl border border-white/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all {% if page < total_pages %}bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white{% else %}cursor-not-allowed bg-white/5 text-slate-600 opacity-50{% endif %}">
+                        Next
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="bulkEditModal" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="absolute left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 p-6">
+        <div class="glass-panel overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <h3 class="flex items-center gap-3 text-lg font-black uppercase tracking-widest text-white">
+                    <i class="fa-solid fa-pen-nib text-brand-400"></i>
+                    Edit Selected {{ 'HS Groups' if report_mode == 'hs' else 'Rows' }}
+                </h3>
+            </div>
+            <div class="space-y-5 p-6">
+                <div class="rounded-2xl border border-brand-500/20 bg-brand-500/10 p-4 text-xs text-slate-200">
+                    <span id="bulkSelectionCount" class="font-black text-white">0 rows</span> will be updated.
+                    {% if report_mode == 'hs' %}
+                    This changes the selected HS groups across parts, inventory, and movement history.
+                    {% else %}
+                    This updates the displayed HS code only for the selected inventory rows.
+                    {% endif %}
+                </div>
+
+                <div class="space-y-2">
+                    <label class="ml-1 text-[10px] font-black uppercase tracking-widest text-slate-500">New HS Code</label>
+                    <input type="text" id="bulkNewHSInput"
+                           class="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                           placeholder="Enter the new HS code">
+                </div>
+            </div>
+            <div class="flex gap-3 border-t border-white/5 bg-white/[0.02] p-6">
+                <button type="button" onclick="closeBulkEditModal()" class="flex-1 rounded-xl bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-white/10 hover:text-white">
+                    Cancel
+                </button>
+                <button type="button" onclick="submitBulkEdit()" class="flex-1 rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                    Update selected
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const reportMode = {{ report_mode|tojson }};
+const bulkActionUrl = {{ url_for('inventory_dashboard_bulk_action')|tojson }};
+let pendingEditSelection = [];
+
+function getRowCheckboxes() {
+    return Array.from(document.querySelectorAll('.dashboard-row-selector'));
+}
+
+function getSelectedIds() {
+    return getRowCheckboxes().filter((checkbox) => checkbox.checked).map((checkbox) => checkbox.value);
+}
+
+function setFilterSelections(fieldName, checked) {
+    document.querySelectorAll(`input[name="${fieldName}"]`).forEach((checkbox) => {
+        checkbox.checked = checked;
+    });
+}
+
+function syncSelectionUi() {
+    const rowCheckboxes = getRowCheckboxes();
+    const selected = getSelectedIds();
+    const selectedCount = selected.length;
+    const allVisibleSelected = rowCheckboxes.length > 0 && selectedCount === rowCheckboxes.length;
+
+    const badge = document.getElementById('selectedRowsBadge');
+    const headerCheckbox = document.getElementById('selectAllRows');
+    const clearButton = document.getElementById('clearSelectedBtn');
+
+    if (badge) {
+        badge.textContent = `${selectedCount} selected`;
+    }
+    if (headerCheckbox) {
+        headerCheckbox.checked = allVisibleSelected;
+        headerCheckbox.indeterminate = selectedCount > 0 && !allVisibleSelected;
+    }
+    if (clearButton) {
+        clearButton.disabled = selectedCount === 0;
+    }
+
+    document.querySelectorAll('.bulk-action').forEach((button) => {
+        button.disabled = selectedCount === 0;
+        button.classList.toggle('opacity-50', selectedCount === 0);
+        button.classList.toggle('cursor-not-allowed', selectedCount === 0);
+    });
+}
+
+function selectAllVisibleRows() {
+    getRowCheckboxes().forEach((checkbox) => {
+        checkbox.checked = true;
+    });
+    syncSelectionUi();
+}
+
+function clearSelectedRows() {
+    getRowCheckboxes().forEach((checkbox) => {
+        checkbox.checked = false;
+    });
+    syncSelectionUi();
+}
+
+function setSelectedIds(selectedIds) {
+    const normalized = selectedIds.map((value) => String(value));
+    getRowCheckboxes().forEach((checkbox) => {
+        checkbox.checked = normalized.includes(String(checkbox.value));
+    });
+    syncSelectionUi();
+}
+
+function openBulkEditModal(selectedIds = null) {
+    if (selectedIds) {
+        setSelectedIds(selectedIds);
+    }
+
+    pendingEditSelection = getSelectedIds();
+    if (!pendingEditSelection.length) {
+        Swal.fire('Selection required', 'Choose at least one row before editing.', 'warning');
+        return;
+    }
+
+    document.getElementById('bulkSelectionCount').textContent = `${pendingEditSelection.length} ${reportMode === 'hs' ? 'group(s)' : 'row(s)'}`;
+    document.getElementById('bulkNewHSInput').value = '';
+    document.getElementById('bulkEditModal').classList.remove('hidden');
+}
+
+function closeBulkEditModal() {
+    document.getElementById('bulkEditModal').classList.add('hidden');
+    pendingEditSelection = [];
+}
+
+async function submitBulkEdit() {
+    const newHs = document.getElementById('bulkNewHSInput').value.trim();
+    if (!newHs) {
+        Swal.fire('HS code required', 'Enter the new HS code before saving.', 'warning');
+        return;
+    }
+
+    await executeBulkAction('edit', pendingEditSelection, newHs);
+}
+
+async function runBulkAction(action, selectedIds = null) {
+    const ids = selectedIds ? selectedIds.map((value) => String(value)) : getSelectedIds();
+    if (!ids.length) {
+        Swal.fire('Selection required', 'Choose at least one row before running a bulk action.', 'warning');
+        return;
+    }
+
+    const actionCopy = {
+        edit: 'update the HS code for',
+        remove: 'remove the HS code from',
+        delete: reportMode === 'hs' ? 'delete inventory rows tied to' : 'delete'
+    };
+
+    const noun = reportMode === 'hs' ? 'selected HS groups' : 'selected inventory rows';
+    const confirmation = await Swal.fire({
+        title: 'Confirm bulk action',
+        text: `This will ${actionCopy[action]} ${noun}.`,
+        icon: action === 'delete' ? 'warning' : 'question',
+        showCancelButton: true,
+        confirmButtonColor: action === 'delete' ? '#dc2626' : '#0284c7',
+        cancelButtonColor: '#475569',
+        confirmButtonText: action === 'delete' ? 'Yes, continue' : 'Apply changes'
+    });
+
+    if (!confirmation.isConfirmed) {
+        return;
+    }
+
+    await executeBulkAction(action, ids);
+}
+
+async function executeBulkAction(action, ids, newHs = '') {
+    try {
+        const response = await fetch(bulkActionUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: action,
+                report_mode: reportMode,
+                selected_ids: ids,
+                new_hs: newHs
+            })
+        });
+
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || 'The action could not be completed.');
+        }
+
+        closeBulkEditModal();
+        await Swal.fire({
+            title: 'Updated',
+            text: `${result.affected || ids.length} ${reportMode === 'hs' ? 'group' : 'row'} record(s) processed successfully.`,
+            icon: 'success',
+            timer: 1400,
+            showConfirmButton: false
+        });
+        window.location.reload();
+    } catch (error) {
+        Swal.fire('Action failed', error.message || 'A network error occurred.', 'error');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const headerCheckbox = document.getElementById('selectAllRows');
+    if (headerCheckbox) {
+        headerCheckbox.addEventListener('change', (event) => {
+            getRowCheckboxes().forEach((checkbox) => {
+                checkbox.checked = event.target.checked;
+            });
+            syncSelectionUi();
+        });
+    }
+
+    getRowCheckboxes().forEach((checkbox) => {
+        checkbox.addEventListener('change', syncSelectionUi);
+    });
+
+    syncSelectionUi();
+});
+</script>
+{% endblock %}

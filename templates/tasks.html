@@ -1,0 +1,1348 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .task-grid-row-hidden {
+        display: none;
+    }
+</style>
+<div class="space-y-8 pb-20 fade-in">
+    <div class="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">Task Command Center</h1>
+            <p class="mt-1 text-sm text-slate-400">Professional manager and employee workflow control with live progress, archive controls, and accountability history.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <button type="button" onclick="openTaskModal()" class="rounded-xl bg-brand-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                <i class="fa-solid fa-plus mr-2"></i>Create Task
+            </button>
+            {% if session.get('can_manage_users') %}
+            <button type="button" onclick="openDepartmentModal()" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                <i class="fa-solid fa-building-user mr-2"></i>Departments
+            </button>
+            {% endif %}
+            <a href="{{ url_for('export_tasks', q=filters.q, company_id=filters.company_id or '', department_id=filters.department_id or '', assigned_to=filters.assigned_to or '', report_to=filters.report_to or '', status=filters.status, priority=filters.priority, archived=filters.archived, sort_by=filters.sort_by, sort_dir=filters.sort_dir) }}"
+               class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-emerald-300 transition-all hover:bg-emerald-500 hover:text-white">
+                <i class="fa-solid fa-file-excel mr-2"></i>Export Report
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-6">
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Visible Tasks</p>
+            <h3 class="mt-3 text-4xl font-black text-white">{{ stats.total_tasks or 0 }}</h3>
+            <p class="mt-2 text-xs text-slate-500">Current scope after filters and permissions.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Completed</p>
+            <h3 class="mt-3 text-4xl font-black text-emerald-400">{{ stats.completed_tasks or 0 }}</h3>
+            <p class="mt-2 text-xs text-slate-500">Tasks delivered and closed out.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Blocked</p>
+            <h3 class="mt-3 text-4xl font-black text-amber-400">{{ stats.blocked_tasks or 0 }}</h3>
+            <p class="mt-2 text-xs text-slate-500">Needs intervention or dependency clearance.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Overdue</p>
+            <h3 class="mt-3 text-4xl font-black text-rose-400">{{ stats.overdue_tasks or 0 }}</h3>
+            <p class="mt-2 text-xs text-slate-500">Past due and not yet completed.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Average Progress</p>
+            <h3 class="mt-3 text-4xl font-black text-brand-300">{{ (stats.average_progress or 0)|round(1) }}%</h3>
+            <p class="mt-2 text-xs text-slate-500">Execution maturity across visible tasks.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Future Tasks</p>
+            <h3 class="mt-3 text-4xl font-black text-cyan-300">{{ stats.future_tasks or 0 }}</h3>
+            <p class="mt-2 text-xs {% if (stats.future_missing_time or 0) > 0 %}text-rose-300{% else %}text-slate-500{% endif %}">
+                {{ stats.future_missing_time or 0 }} future task(s) missing time.
+            </p>
+        </div>
+    </div>
+
+    <div class="glass-panel overflow-hidden rounded-3xl border border-white/5">
+        <div class="border-b border-white/5 bg-white/[0.02] p-6">
+            <h3 class="text-lg font-bold text-white">Future Task Register</h3>
+            <p class="mt-1 text-xs text-slate-500">Future tasks are listed separately. If time is missing, the task is highlighted in red.</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-[1200px] w-full text-left">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-800/50 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <th class="px-4 py-4 text-center">#</th>
+                        <th class="px-4 py-4">Source</th>
+                        <th class="px-4 py-4">Company</th>
+                        <th class="px-4 py-4">Department</th>
+                        <th class="px-4 py-4">Task</th>
+                        <th class="px-4 py-4">Priority</th>
+                        <th class="px-4 py-4">Status</th>
+                        <th class="px-4 py-4">Time</th>
+                        <th class="px-4 py-4">Add desc</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/10">
+                    {% for task in future_tasks %}
+                    <tr class="{% if task.is_future_without_time %}bg-red-500/10{% endif %}">
+                        <td class="px-4 py-4 text-center text-[10px] font-black text-slate-500">{{ loop.index }}</td>
+                        <td class="px-4 py-4 text-sm text-slate-300">{{ task.source_label }}</td>
+                        <td class="px-4 py-4 text-sm font-bold text-white">{{ task.company_name or 'Unassigned' }}</td>
+                        <td class="px-4 py-4 text-sm text-slate-300">{{ task.department_name or 'Unassigned' }}</td>
+                        <td class="px-4 py-4" data-task-column="source">
+                            <div class="font-bold text-white">{{ task.task_name }}</div>
+                            <div class="mt-1 text-[10px] uppercase tracking-widest text-slate-500">{{ task.report_to_display }} • {{ task.assigned_to_display }}</div>
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-300">{{ task.priority or 'Medium' }}</td>
+                        <td class="px-4 py-4 text-sm text-slate-300">{{ task.status or 'Open' }}</td>
+                        <td class="px-4 py-4">
+                            <div class="text-sm font-bold {% if task.is_future_without_time %}text-red-300{% else %}text-white{% endif %}">
+                                {{ task.time_display }}
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-300">{{ task.display_note or '--' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="9" class="px-4 py-12 text-center text-xs font-black uppercase tracking-widest text-slate-500">No future tasks in the current scope.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-8 xl:grid-cols-3">
+        <div class="glass-panel rounded-3xl border border-white/5 p-6 xl:col-span-2">
+            <div class="mb-6 flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-bold text-white">Task Filters</h3>
+                    <p class="text-xs text-slate-500">Slice by company, department, ownership, lifecycle, and sort order. Double-click any row below to revise it instantly.</p>
+                </div>
+                <a href="{{ url_for('task_manager') }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                    Clear Filters
+                </a>
+            </div>
+            <form method="GET" action="{{ url_for('task_manager') }}" class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div class="xl:col-span-2">
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Search Task</label>
+                    <input type="text" name="q" value="{{ filters.q }}" placeholder="Task title, description, note, company..."
+                           class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Company</label>
+                    <select name="company_id" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">All Companies</option>
+                        {% for comp in companies %}
+                        <option value="{{ comp.id }}" {% if filters.company_id == comp.id %}selected{% endif %}>{{ comp.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Department</label>
+                    <select name="department_id" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">All Departments</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}" {% if filters.department_id == dept.id %}selected{% endif %}>{{ dept.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Assigned To</label>
+                    <select name="assigned_to" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">All Employees</option>
+                        {% for user in task_users %}
+                        <option value="{{ user.id }}" {% if filters.assigned_to == user.id %}selected{% endif %}>{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Report To</label>
+                    <select name="report_to" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">All Managers</option>
+                        {% for user in task_users %}
+                        <option value="{{ user.id }}" {% if filters.report_to == user.id %}selected{% endif %}>{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
+                    <select name="priority" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="all" {% if filters.priority == 'all' %}selected{% endif %}>All Priorities</option>
+                        {% for priority in task_priorities %}
+                        <option value="{{ priority }}" {% if filters.priority == priority %}selected{% endif %}>{{ priority }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                    <select name="status" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="all" {% if filters.status == 'all' %}selected{% endif %}>All Statuses</option>
+                        {% for status in task_statuses %}
+                        <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Lifecycle</label>
+                    <select name="archived" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="active" {% if filters.archived == 'active' %}selected{% endif %}>Active Only</option>
+                        <option value="archived" {% if filters.archived == 'archived' %}selected{% endif %}>Archived Only</option>
+                        <option value="all" {% if filters.archived == 'all' %}selected{% endif %}>All Tasks</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Sort By</label>
+                    <select name="sort_by" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        {% for field, label in [('updated_at', 'Latest Activity'),('created_at', 'Created Date'),('due_at', 'Due Time'),('task_name', 'Task'),('company', 'Company'),('department', 'Department'),('priority', 'Priority'),('report_to', 'Report To'),('assigned_to', 'Assigned To'),('progress', 'Progress'),('status', 'Status')] %}
+                        <option value="{{ field }}" {% if filters.sort_by == field %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Direction</label>
+                    <select name="sort_dir" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="desc" {% if filters.sort_dir == 'desc' %}selected{% endif %}>Highest / Latest First</option>
+                        <option value="asc" {% if filters.sort_dir == 'asc' %}selected{% endif %}>Lowest / Earliest First</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="w-full rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                        Apply Filters
+                    </button>
+                </div>
+            </form>
+
+            <div class="mt-6 rounded-3xl border border-cyan-400/15 bg-cyan-500/5 p-5">
+                <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                    <div>
+                        <h4 class="text-sm font-black uppercase tracking-widest text-cyan-100">Quick Multi-Filter</h4>
+                        <p class="mt-1 text-xs text-slate-400">Filter the current grid by multiple companies, departments, owners, managers, priorities, and statuses without leaving the page.</p>
+                    </div>
+                    <div class="rounded-2xl border border-cyan-400/20 bg-slate-950/30 px-4 py-3 text-xs text-cyan-100">
+                        <span class="font-black uppercase tracking-widest">Visible Rows</span>
+                        <span id="taskVisibleCount" class="ml-2 font-bold">{{ tasks|length }}</span>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Companies</label>
+                        <select id="taskCompanyQuickFilter" multiple class="task-quick-filter w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            {% for comp in companies %}
+                            <option value="{{ comp.name|lower }}">{{ comp.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Departments</label>
+                        <select id="taskDepartmentQuickFilter" multiple class="task-quick-filter w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            {% for dept in departments %}
+                            <option value="{{ dept.name|lower }}">{{ dept.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Assigned To</label>
+                        <select id="taskAssignedQuickFilter" multiple class="task-quick-filter w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            {% for user in task_users %}
+                            <option value="{{ user.username|lower }}">{{ user.username }}</option>
+                            {% endfor %}
+                            <option value="unassigned">Unassigned</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Report To</label>
+                        <select id="taskReportToQuickFilter" multiple class="task-quick-filter w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            {% for user in task_users %}
+                            <option value="{{ user.username|lower }}">{{ user.username }}</option>
+                            {% endfor %}
+                            <option value="unassigned">Unassigned</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
+                        <select id="taskPriorityQuickFilter" multiple class="task-quick-filter w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            {% for priority in task_priorities %}
+                            <option value="{{ priority }}">{{ priority }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                        <select id="taskStatusQuickFilter" multiple class="task-quick-filter w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            {% for status in task_statuses %}
+                            <option value="{{ status }}">{{ status }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-end">
+                    <button type="button" onclick="resetTaskQuickFilters()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                        Reset Quick Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-8">
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">Status Distribution</h3>
+                    <span class="rounded-full bg-brand-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-brand-300">Live</span>
+                </div>
+                <div class="h-64">
+                    <canvas id="taskStatusChart"></canvas>
+                </div>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">Department Load</h3>
+                    <span class="rounded-full bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Top 8</span>
+                </div>
+                <div class="h-64">
+                    <canvas id="departmentTaskChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-panel overflow-hidden rounded-3xl border border-white/5">
+        <div class="border-b border-white/5 bg-white/[0.02] p-6">
+            <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+                <div>
+                    <h3 class="text-lg font-bold text-white">Manager & Employee Task Register</h3>
+                    <p class="mt-1 text-xs text-slate-500">Showing {{ page_start }} to {{ page_end }} of {{ total_tasks }} tasks. Bulk actions apply to the current visible selection.</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span id="selectedTasksBadge" class="rounded-full bg-brand-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-brand-300">0 selected</span>
+                    <button type="button" onclick="selectAllTasks()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Select Visible</button>
+                    <button type="button" onclick="selectFutureTasks()" class="rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-200 transition-all hover:bg-cyan-500 hover:text-slate-950">Select Future</button>
+                    <button type="button" onclick="selectOpenTasks()" class="rounded-xl border border-slate-400/20 bg-slate-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-200 transition-all hover:bg-slate-400 hover:text-slate-950">Select Open</button>
+                    <button type="button" id="clearTasksBtn" onclick="clearSelectedTasks()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white" disabled>Clear All</button>
+                    <button type="button" onclick="openTaskColumnsModal()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Columns</button>
+                    <button type="button" id="markInProgressBtn" onclick="runTaskBulkAction('status', 'In Progress')" class="task-bulk-action rounded-xl border border-brand-500/20 bg-brand-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-brand-300 transition-all hover:bg-brand-500 hover:text-white" disabled>Mark In Progress</button>
+                    <button type="button" id="markCompletedBtn" onclick="runTaskBulkAction('status', 'Completed')" class="task-bulk-action rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-300 transition-all hover:bg-emerald-500 hover:text-white" disabled>Mark Completed</button>
+                    {% if filters.archived == 'archived' or filters.archived == 'all' %}
+                    <button type="button" id="unarchiveBtn" onclick="runTaskBulkAction('unarchive')" class="task-bulk-action rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-amber-300 transition-all hover:bg-amber-500 hover:text-slate-950" disabled>Unarchive</button>
+                    {% endif %}
+                    <button type="button" id="archiveBtn" onclick="runTaskBulkAction('archive')" class="task-bulk-action rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-amber-300 transition-all hover:bg-amber-500 hover:text-slate-950" disabled>Archive</button>
+                    {% if session.get('can_manage_users') %}
+                    <button type="button" id="deleteTasksBtn" onclick="runTaskBulkAction('delete')" class="task-bulk-action rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-red-300 transition-all hover:bg-red-500 hover:text-white" disabled>Delete</button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="max-h-[72vh] overflow-auto">
+            <table class="min-w-[1880px] w-full text-left">
+                <thead class="sticky top-0 z-20">
+                    <tr class="border-b border-white/5 bg-slate-800/50 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <th class="px-4 py-4 text-center">#</th>
+                        <th class="px-4 py-4 text-center"><input type="checkbox" id="selectAllTaskCheckbox" class="h-4 w-4 rounded border-white/10 bg-slate-800 text-brand-500 focus:ring-brand-500"></th>
+                        <th class="px-4 py-4" data-task-column="source">Source</th>
+                        <th class="px-4 py-4" data-task-column="company">Company</th>
+                        <th class="px-4 py-4" data-task-column="department">Department</th>
+                        <th class="px-4 py-4" data-task-column="task">Task</th>
+                        <th class="px-4 py-4" data-task-column="assigned_to">Assigned To</th>
+                        <th class="px-4 py-4" data-task-column="priority">Priority</th>
+                        <th class="px-4 py-4" data-task-column="report_to">Report To</th>
+                        <th class="px-4 py-4 text-center" data-task-column="progress">Progress %</th>
+                        <th class="px-4 py-4" data-task-column="status">Status</th>
+                        <th class="px-4 py-4" data-task-column="desc">Desc</th>
+                        <th class="px-4 py-4" data-task-column="time">Time</th>
+                        <th class="px-4 py-4" data-task-column="add_desc">Add desc</th>
+                        <th class="px-4 py-4 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/10">
+                    {% for task in tasks %}
+                    <tr class="task-row transition-colors {% if task.is_future_without_time %}bg-red-500/10 hover:bg-red-500/15{% else %}hover:bg-white/5{% endif %}"
+                        data-company="{{ (task.company_name or 'Unassigned')|lower }}"
+                        data-department="{{ (task.department_name or 'Unassigned')|lower }}"
+                        data-assigned="{{ task.assigned_to_display|lower }}"
+                        data-report-to="{{ task.report_to_display|lower }}"
+                        data-priority="{{ task.priority }}"
+                        data-status="{{ task.status }}"
+                        data-search="{{ (task.task_name ~ ' ' ~ (task.description or '') ~ ' ' ~ (task.display_note or '') ~ ' ' ~ (task.company_name or '') ~ ' ' ~ (task.department_name or '') ~ ' ' ~ task.assigned_to_display ~ ' ' ~ task.report_to_display)|lower }}"
+                        ondblclick='handleTaskRowDoubleClick(event, {{ task|tojson|safe }})'>
+                        <td class="px-4 py-4 text-center text-[10px] font-black text-slate-600">{{ page_start + loop.index0 }}</td>
+                        <td class="px-4 py-4 text-center">
+                            <input type="checkbox" value="{{ task.id }}" data-is-future="{{ 'true' if task.is_future_task else 'false' }}" data-status="{{ task.status }}" class="task-selector h-4 w-4 rounded border-white/10 bg-slate-800 text-brand-500 focus:ring-brand-500">
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest {% if task.source_row %}border-slate-400/20 bg-slate-500/10 text-slate-200{% else %}border-brand-400/20 bg-brand-500/10 text-brand-200{% endif %}">
+                                {{ task.source_label }}
+                            </div>
+                            <div class="mt-2 text-[10px] uppercase tracking-widest text-slate-500">{{ task.task_origin }}</div>
+                        </td>
+                        <td class="px-4 py-4 text-sm font-bold text-white" data-task-column="company">{{ task.company_name or 'Unassigned' }}</td>
+                        <td class="px-4 py-4 text-sm text-slate-300" data-task-column="department">{{ task.department_name or 'Unassigned' }}</td>
+                        <td class="px-4 py-4" data-task-column="task">
+                            <div class="font-bold text-white" dir="auto">{{ task.task_name }}</div>
+                            <div class="mt-1 text-[10px] uppercase tracking-widest text-slate-500">
+                                Created by {{ task.created_by_name or 'System' }} • {{ task.created_at[:16] if task.created_at else '--' }} • Updated {{ task.updated_at[:16] if task.updated_at else '--' }}
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-300" data-task-column="assigned_to">{{ task.assigned_to_display }}</td>
+                        <td class="px-4 py-4" data-task-column="priority">
+                            {% set priority_colors = {'Low':'bg-slate-500/10 text-slate-300 border-slate-500/20','Medium':'bg-brand-500/10 text-brand-300 border-brand-500/20','High':'bg-amber-500/10 text-amber-300 border-amber-500/20','Critical':'bg-red-500/10 text-red-300 border-red-500/20'} %}
+                            <span class="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest {{ priority_colors.get(task.priority, 'bg-slate-500/10 text-slate-300 border-slate-500/20') }}">{{ task.priority }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-300" data-task-column="report_to">
+                            <div>{{ task.report_to_display }}</div>
+                            {% if task.source_report_to and not task.report_to_name %}
+                            <div class="mt-1 text-[10px] uppercase tracking-widest text-amber-300">Pending user mapping</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4" data-task-column="progress">
+                            <div class="flex items-center gap-3">
+                                <div class="h-2.5 w-28 overflow-hidden rounded-full bg-slate-800">
+                                    <div class="h-full rounded-full {% if task.progress >= 100 %}bg-emerald-500{% elif task.progress >= 60 %}bg-brand-500{% elif task.progress >= 30 %}bg-amber-500{% else %}bg-rose-500{% endif %}" style="width: {{ task.progress }}%;"></div>
+                                </div>
+                                <span class="text-xs font-black text-white">{{ task.progress }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4" data-task-column="status">
+                            {% set status_colors = {'Open':'bg-slate-500/10 text-slate-300 border-slate-500/20','In Progress':'bg-brand-500/10 text-brand-300 border-brand-500/20','Blocked':'bg-red-500/10 text-red-300 border-red-500/20','Review':'bg-purple-500/10 text-purple-300 border-purple-500/20','Completed':'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'} %}
+                            <span class="inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest {{ status_colors.get(task.status, 'bg-slate-500/10 text-slate-300 border-slate-500/20') }}">{{ task.status }}</span>
+                        </td>
+                        <td class="px-4 py-4" data-task-column="desc"><div class="max-w-[260px] text-sm text-slate-300" dir="auto">{{ task.description or '--' }}</div></td>
+                        <td class="px-4 py-4" data-task-column="time">
+                            <div class="text-sm font-bold {% if task.is_future_without_time %}text-red-300{% else %}text-white{% endif %}">
+                                {{ task.time_display }}
+                            </div>
+                            {% if task.is_future_task %}
+                            <div class="mt-1 inline-flex rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest {% if task.is_future_without_time %}border-red-400/50 bg-red-500/15 text-red-200{% else %}border-cyan-400/40 bg-cyan-500/10 text-cyan-200{% endif %}">
+                                Future Task{% if task.future_reason == 'keyword' %} (From Note){% endif %}
+                            </div>
+                            {% endif %}
+                            <div class="mt-1 text-[10px] uppercase tracking-widest text-slate-500">{{ 'Archived' if task.is_archived else 'Active' }} • {{ task.updated_at[:16] if task.updated_at else '--' }}</div>
+                        </td>
+                        <td class="px-4 py-4" data-task-column="add_desc">
+                            <div class="max-w-[260px] text-sm text-slate-300" dir="auto">{{ task.display_note or 'No update yet' }}</div>
+                            {% if task.raw_status_label %}
+                            <div class="mt-2 text-[10px] uppercase tracking-widest text-slate-500">Source Status: {{ task.raw_status_label }}</div>
+                            {% endif %}
+                            <button type="button" onclick='openNoteModal({{ task.id }}, {{ task.task_name|tojson }}, {{ task.progress }}, {{ task.status|tojson }})' class="mt-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                                Add Update
+                            </button>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <button type="button" onclick='openTaskModal({{ task|tojson|safe }})' class="rounded-xl bg-brand-500/10 p-2 text-brand-300 transition-all hover:bg-brand-500 hover:text-white" title="Edit task"><i class="fa-solid fa-pen-to-square text-xs"></i></button>
+                                <button type="button" onclick="showTaskHistory({{ task.id }}, {{ task.task_name|tojson }})" class="rounded-xl bg-white/5 p-2 text-slate-300 transition-all hover:bg-white/10 hover:text-white" title="Jump to history"><i class="fa-solid fa-clock-rotate-left text-xs"></i></button>
+                                <button type="button" onclick="runTaskBulkAction('{{ 'unarchive' if task.is_archived else 'archive' }}', null, [{{ task.id }}])" class="rounded-xl bg-amber-500/10 p-2 text-amber-300 transition-all hover:bg-amber-500 hover:text-slate-950" title="{{ 'Unarchive' if task.is_archived else 'Archive' }}"><i class="fa-solid fa-box-archive text-xs"></i></button>
+                                {% if session.get('can_manage_users') %}
+                                <button type="button" onclick="runTaskBulkAction('delete', null, [{{ task.id }}])" class="rounded-xl bg-red-500/10 p-2 text-red-300 transition-all hover:bg-red-500 hover:text-white" title="Delete"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="15" class="px-4 py-20 text-center text-xs font-black uppercase tracking-widest text-slate-500">No tasks match the current filters.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="border-t border-white/5 bg-white/[0.02] p-6">
+            <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <p class="text-xs text-slate-500">Page {{ page }} of {{ total_pages }} • {{ page_start }}-{{ page_end }} of {{ total_tasks }} tasks</p>
+                <div class="flex flex-wrap items-center gap-2">
+                    <a href="{{ url_for('task_manager', q=filters.q, company_id=filters.company_id or '', department_id=filters.department_id or '', assigned_to=filters.assigned_to or '', report_to=filters.report_to or '', status=filters.status, priority=filters.priority, archived=filters.archived, sort_by=filters.sort_by, sort_dir=filters.sort_dir, page=page-1 if page > 1 else 1) }}"
+                       class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white {% if page <= 1 %}pointer-events-none opacity-40{% endif %}">Previous</a>
+                    {% for page_number in page_window %}
+                    <a href="{{ url_for('task_manager', q=filters.q, company_id=filters.company_id or '', department_id=filters.department_id or '', assigned_to=filters.assigned_to or '', report_to=filters.report_to or '', status=filters.status, priority=filters.priority, archived=filters.archived, sort_by=filters.sort_by, sort_dir=filters.sort_dir, page=page_number) }}"
+                       class="rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest transition-all {% if page_number == page %}bg-brand-500 text-white{% else %}border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white{% endif %}">{{ page_number }}</a>
+                    {% endfor %}
+                    <a href="{{ url_for('task_manager', q=filters.q, company_id=filters.company_id or '', department_id=filters.department_id or '', assigned_to=filters.assigned_to or '', report_to=filters.report_to or '', status=filters.status, priority=filters.priority, archived=filters.archived, sort_by=filters.sort_by, sort_dir=filters.sort_dir, page=page+1 if page < total_pages else total_pages) }}"
+                       class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white {% if page >= total_pages %}pointer-events-none opacity-40{% endif %}">Next</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-8 xl:grid-cols-3">
+        <div class="glass-panel rounded-3xl border border-white/5 p-6 xl:col-span-2">
+            <div class="mb-5 flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-bold text-white">Transaction History</h3>
+                    <p class="text-xs text-slate-500">Complete activity log for task creation, updates, notes, archiving, and status changes.</p>
+                </div>
+                <button type="button" onclick="document.getElementById('taskHistoryTable').scrollIntoView({ behavior: 'smooth', block: 'start' });" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                    Focus Log
+                </button>
+            </div>
+            <div id="taskHistoryTable" class="overflow-x-auto">
+                <table class="min-w-full text-left">
+                    <thead>
+                        <tr class="border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                            <th class="px-4 py-3">Time</th>
+                            <th class="px-4 py-3">Task</th>
+                            <th class="px-4 py-3">Action</th>
+                            <th class="px-4 py-3">Field</th>
+                            <th class="px-4 py-3">Old</th>
+                            <th class="px-4 py-3">New</th>
+                            <th class="px-4 py-3">Note</th>
+                            <th class="px-4 py-3">By</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+                        {% for item in task_history %}
+                        <tr data-task-id="{{ item.task_id or '' }}">
+                            <td class="px-4 py-3 text-xs text-slate-400">{{ item.created_at[:19] if item.created_at else '--' }}</td>
+                            <td class="px-4 py-3 text-sm font-bold text-white">{{ item.task_name or 'Deleted Task' }}</td>
+                            <td class="px-4 py-3 text-xs font-black uppercase tracking-widest text-brand-300">{{ item.action_type.replace('_', ' ') }}</td>
+                            <td class="px-4 py-3 text-xs text-slate-400">{{ item.field_name or '--' }}</td>
+                            <td class="px-4 py-3 text-xs text-slate-500">{{ item.old_value or '--' }}</td>
+                            <td class="px-4 py-3 text-xs text-slate-300">{{ item.new_value or '--' }}</td>
+                            <td class="px-4 py-3 text-xs text-slate-300">{{ item.note or '--' }}</td>
+                            <td class="px-4 py-3 text-xs text-slate-400">{{ item.actor_name or 'System' }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="8" class="px-4 py-12 text-center text-xs font-black uppercase tracking-widest text-slate-500">No history in current scope.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Company Load</h3>
+                <span class="rounded-full bg-white/5 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Top 8</span>
+            </div>
+            <div class="h-[420px]">
+                <canvas id="companyTaskChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="taskModal" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="absolute left-1/2 top-1/2 w-full max-w-4xl -translate-x-1/2 -translate-y-1/2 p-6">
+        <div class="glass-panel overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <h3 id="taskModalTitle" class="text-lg font-black uppercase tracking-widest text-white">Create Task</h3>
+            </div>
+            <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                <input type="hidden" id="taskId">
+                <div class="md:col-span-2">
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Task</label>
+                    <input id="taskName" type="text" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Company</label>
+                    <select id="taskCompany" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">Select Company</option>
+                        {% for comp in companies %}
+                        <option value="{{ comp.id }}">{{ comp.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Department</label>
+                    <select id="taskDepartment" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">Select Department</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}">{{ dept.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Assigned To</label>
+                    <select id="taskAssignedTo" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">Unassigned</option>
+                        {% for user in task_users %}
+                        <option value="{{ user.id }}">{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Report To</label>
+                    <select id="taskReportTo" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">Unassigned</option>
+                        {% for user in task_users %}
+                        <option value="{{ user.id }}">{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
+                    <select id="taskPriority" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        {% for priority in task_priorities %}
+                        <option value="{{ priority }}">{{ priority }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                    <select id="taskStatus" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        {% for status in task_statuses %}
+                        <option value="{{ status }}">{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Progress %</label>
+                    <input id="taskProgress" type="number" min="0" max="100" value="0" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Time</label>
+                    <input id="taskDueAt" type="datetime-local" value="{{ now_value }}" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div class="md:col-span-2">
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Desc</label>
+                    <textarea id="taskDescription" rows="4" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"></textarea>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Add desc</label>
+                    <textarea id="taskLatestNote" rows="3" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" placeholder="Latest execution note, blocker, or handoff update"></textarea>
+                </div>
+            </div>
+            <div class="flex gap-3 border-t border-white/5 bg-white/[0.02] p-6">
+                <button type="button" onclick="closeTaskModal()" class="flex-1 rounded-xl bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-white/10 hover:text-white">Cancel</button>
+                <button type="button" onclick="saveTask()" class="flex-1 rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Save Task</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="noteModal" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="absolute left-1/2 top-1/2 w-full max-w-xl -translate-x-1/2 -translate-y-1/2 p-6">
+        <div class="glass-panel overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <h3 id="noteModalTitle" class="text-lg font-black uppercase tracking-widest text-white">Add Task Update</h3>
+            </div>
+            <div class="space-y-4 p-6">
+                <input type="hidden" id="noteTaskId">
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Progress %</label>
+                    <input id="noteProgress" type="number" min="0" max="100" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                    <select id="noteStatus" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        {% for status in task_statuses %}
+                        <option value="{{ status }}">{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Add desc</label>
+                    <textarea id="noteBody" rows="5" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500" placeholder="Add a progress note, blocker, or delivery detail"></textarea>
+                </div>
+            </div>
+            <div class="flex gap-3 border-t border-white/5 bg-white/[0.02] p-6">
+                <button type="button" onclick="closeNoteModal()" class="flex-1 rounded-xl bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-white/10 hover:text-white">Cancel</button>
+                <button type="button" onclick="saveTaskNote()" class="flex-1 rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Save Update</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if session.get('can_manage_users') %}
+<div id="departmentModal" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="absolute left-1/2 top-1/2 w-full max-w-3xl -translate-x-1/2 -translate-y-1/2 p-6">
+        <div class="glass-panel overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <h3 class="text-lg font-black uppercase tracking-widest text-white">Department Manager</h3>
+            </div>
+            <div class="grid grid-cols-1 gap-6 p-6 lg:grid-cols-5">
+                <div class="space-y-4 lg:col-span-2">
+                    <input type="hidden" id="departmentId">
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Department</label>
+                        <input id="departmentName" type="text" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Description</label>
+                        <textarea id="departmentDescription" rows="4" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"></textarea>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                        <select id="departmentStatus" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            <option value="Active">Active</option>
+                            <option value="Inactive">Inactive</option>
+                        </select>
+                    </div>
+                    <button type="button" onclick="saveDepartment()" class="w-full rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Save Department</button>
+                </div>
+                <div class="lg:col-span-3">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-left">
+                            <thead>
+                                <tr class="border-b border-white/5 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                    <th class="px-4 py-3">Department</th>
+                                    <th class="px-4 py-3">Status</th>
+                                    <th class="px-4 py-3 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-white/5">
+                                {% for dept in departments %}
+                                <tr>
+                                    <td class="px-4 py-3">
+                                        <div class="font-bold text-white">{{ dept.name }}</div>
+                                        <div class="text-xs text-slate-500">{{ dept.description or '--' }}</div>
+                                    </td>
+                                    <td class="px-4 py-3 text-sm text-slate-300">{{ dept.status }}</td>
+                                    <td class="px-4 py-3 text-center">
+                                        <div class="flex items-center justify-center gap-2">
+                                            <button type="button" onclick='editDepartment({{ dept|tojson|safe }})' class="rounded-xl bg-brand-500/10 p-2 text-brand-300 transition-all hover:bg-brand-500 hover:text-white"><i class="fa-solid fa-pen-to-square text-xs"></i></button>
+                                            <button type="button" onclick="deleteDepartment({{ dept.id }})" class="rounded-xl bg-red-500/10 p-2 text-red-300 transition-all hover:bg-red-500 hover:text-white"><i class="fa-solid fa-trash-can text-xs"></i></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="border-t border-white/5 bg-white/[0.02] p-6">
+                <button type="button" onclick="closeDepartmentModal()" class="w-full rounded-xl bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-white/10 hover:text-white">Close Department Manager</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div id="taskColumnsModal" class="fixed inset-0 z-[95] hidden">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="absolute left-1/2 top-1/2 w-full max-w-4xl -translate-x-1/2 -translate-y-1/2 p-6">
+        <div class="glass-panel overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <div class="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <h3 class="text-lg font-black uppercase tracking-widest text-white">Task Column Preferences</h3>
+                        <p class="mt-1 text-xs text-slate-500">Choose which columns appear in Task Center. This layout is saved to your user account and restored automatically.</p>
+                    </div>
+                    <button type="button" onclick="closeTaskColumnsModal()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Close</button>
+                </div>
+                <div class="mt-4 flex flex-wrap items-center gap-2">
+                    <button type="button" onclick="selectAllTaskColumns()" class="rounded-xl border border-cyan-400/20 bg-cyan-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-cyan-100 transition-all hover:bg-cyan-500 hover:text-slate-950">Show All</button>
+                    <button type="button" onclick="setTaskCoreColumns()" class="rounded-xl border border-violet-400/20 bg-violet-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-violet-100 transition-all hover:bg-violet-500 hover:text-white">Core View</button>
+                    <button type="button" onclick="resetTaskColumnsToDefault()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Default</button>
+                    <div class="rounded-xl border border-white/5 bg-white/[0.03] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        <span id="taskColumnSelectionCount">{{ visible_task_columns|length }}</span> selected
+                    </div>
+                </div>
+            </div>
+            <div class="max-h-[60vh] overflow-y-auto p-6">
+                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+                    {% for column in task_column_options %}
+                    <label class="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-sm text-slate-200">
+                        <input type="checkbox" class="task-column-toggle h-4 w-4 rounded border-white/10 bg-slate-800 text-brand-500 focus:ring-brand-500" value="{{ column.key }}" {% if column.key in visible_task_columns %}checked{% endif %}>
+                        <span>
+                            <span class="block font-semibold text-white">{{ column.label }}</span>
+                            <span class="block text-xs text-slate-500">{{ column.description }}</span>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="border-t border-white/5 bg-white/[0.02] p-6">
+                <div class="flex flex-col gap-3 md:flex-row md:justify-end">
+                    <button type="button" onclick="closeTaskColumnsModal()" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Cancel</button>
+                    <button type="button" onclick="saveTaskColumnPreferences()" class="rounded-xl bg-brand-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Save View</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const taskStatusData = {{ status_breakdown|tojson }};
+const departmentTaskData = {{ department_breakdown|tojson }};
+const companyTaskData = {{ company_breakdown|tojson }};
+const taskQuickFilterIds = [
+    'taskCompanyQuickFilter',
+    'taskDepartmentQuickFilter',
+    'taskAssignedQuickFilter',
+    'taskReportToQuickFilter',
+    'taskPriorityQuickFilter',
+    'taskStatusQuickFilter'
+];
+const taskQuickFilterChoices = {};
+const taskColumnKeys = {{ task_column_keys|tojson }};
+const taskDefaultVisibleColumns = {{ task_column_keys|tojson }};
+const taskCoreVisibleColumns = ['company', 'department', 'task', 'assigned_to', 'priority', 'status', 'time', 'add_desc'];
+let currentVisibleTaskColumns = new Set({{ visible_task_columns|tojson }});
+
+function taskModalElement(id) {
+    return document.getElementById(id);
+}
+
+function formatDateTimeForInput(value) {
+    if (!value) return {{ now_value|tojson }};
+    return String(value).replace(' ', 'T').slice(0, 16);
+}
+
+function getSelectedTaskIds() {
+    return Array.from(document.querySelectorAll('.task-selector:checked')).map((checkbox) => parseInt(checkbox.value, 10));
+}
+
+function taskRows() {
+    return Array.from(document.querySelectorAll('.task-row'));
+}
+
+function visibleTaskRows() {
+    return taskRows().filter((row) => !row.classList.contains('task-grid-row-hidden'));
+}
+
+function selectedValuesFromSelect(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return [];
+    return Array.from(select.selectedOptions || []).map((option) => option.value).filter(Boolean);
+}
+
+function setTaskSelection(predicate) {
+    visibleTaskRows().forEach((row) => {
+        const checkbox = row.querySelector('.task-selector');
+        if (!checkbox) return;
+        checkbox.checked = Boolean(predicate(checkbox));
+    });
+    syncTaskBulkUi();
+}
+
+function syncTaskBulkUi() {
+    const selectedCount = getSelectedTaskIds().length;
+    const selectors = visibleTaskRows().map((row) => row.querySelector('.task-selector')).filter(Boolean);
+    const header = document.getElementById('selectAllTaskCheckbox');
+    const badge = document.getElementById('selectedTasksBadge');
+    const clearBtn = document.getElementById('clearTasksBtn');
+    const visibleBadge = document.getElementById('taskVisibleCount');
+    if (badge) badge.textContent = `${selectedCount} selected`;
+    if (visibleBadge) visibleBadge.textContent = visibleTaskRows().length;
+    if (clearBtn) clearBtn.disabled = selectedCount === 0;
+    if (header) {
+        const checkedVisible = selectors.filter((checkbox) => checkbox.checked).length;
+        header.checked = selectors.length > 0 && checkedVisible === selectors.length;
+        header.indeterminate = checkedVisible > 0 && checkedVisible !== selectors.length;
+    }
+    document.querySelectorAll('.task-bulk-action').forEach((button) => {
+        button.disabled = selectedCount === 0;
+        button.classList.toggle('opacity-50', selectedCount === 0);
+        button.classList.toggle('cursor-not-allowed', selectedCount === 0);
+    });
+}
+
+function updateTaskColumnSelectionCount() {
+    const badge = document.getElementById('taskColumnSelectionCount');
+    if (badge) badge.textContent = String(currentTaskColumnSelection().length);
+}
+
+function applyTaskColumnVisibility() {
+    taskColumnKeys.forEach((columnKey) => {
+        const visible = currentVisibleTaskColumns.has(columnKey);
+        document.querySelectorAll(`[data-task-column="${columnKey}"]`).forEach((cell) => {
+            cell.classList.toggle('hidden', !visible);
+        });
+    });
+    updateTaskColumnSelectionCount();
+}
+
+function openTaskColumnsModal() {
+    const modal = document.getElementById('taskColumnsModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+}
+
+function closeTaskColumnsModal() {
+    const modal = document.getElementById('taskColumnsModal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+}
+
+function currentTaskColumnSelection() {
+    return Array.from(document.querySelectorAll('.task-column-toggle:checked')).map((checkbox) => checkbox.value);
+}
+
+function applyTaskColumnCheckboxes(columns) {
+    const selected = new Set(columns);
+    document.querySelectorAll('.task-column-toggle').forEach((checkbox) => {
+        checkbox.checked = selected.has(checkbox.value);
+    });
+    updateTaskColumnSelectionCount();
+}
+
+function selectAllTaskColumns() {
+    currentVisibleTaskColumns = new Set(taskColumnKeys);
+    applyTaskColumnCheckboxes(taskColumnKeys);
+    applyTaskColumnVisibility();
+}
+
+function setTaskCoreColumns() {
+    currentVisibleTaskColumns = new Set(taskCoreVisibleColumns);
+    applyTaskColumnCheckboxes(taskCoreVisibleColumns);
+    applyTaskColumnVisibility();
+}
+
+function resetTaskColumnsToDefault() {
+    currentVisibleTaskColumns = new Set(taskDefaultVisibleColumns);
+    applyTaskColumnCheckboxes(taskDefaultVisibleColumns);
+    applyTaskColumnVisibility();
+}
+
+async function saveTaskColumnPreferences() {
+    const selectedColumns = currentTaskColumnSelection();
+    if (!selectedColumns.length) {
+        Swal.fire('Select Columns', 'Choose at least one column to keep Task Center usable.', 'warning');
+        return;
+    }
+
+    currentVisibleTaskColumns = new Set(selectedColumns);
+    applyTaskColumnVisibility();
+
+    try {
+        const response = await fetch('{{ url_for("save_task_preferences") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visible_columns: selectedColumns })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Task column preferences could not be saved.');
+        closeTaskColumnsModal();
+        if (window.toast) {
+            window.toast('Task view saved.');
+        } else {
+            Swal.fire('Saved', result.message, 'success');
+        }
+    } catch (error) {
+        Swal.fire('Preference Save Failed', error.message, 'error');
+    }
+}
+
+function selectAllTasks() {
+    setTaskSelection(() => true);
+}
+
+function selectFutureTasks() {
+    setTaskSelection((checkbox) => checkbox.dataset.isFuture === 'true');
+}
+
+function selectOpenTasks() {
+    setTaskSelection((checkbox) => ['Open', 'In Progress', 'Review', 'Blocked'].includes(checkbox.dataset.status));
+}
+
+function clearSelectedTasks() {
+    setTaskSelection(() => false);
+}
+
+function applyTaskQuickFilters() {
+    const companyValues = selectedValuesFromSelect('taskCompanyQuickFilter');
+    const departmentValues = selectedValuesFromSelect('taskDepartmentQuickFilter');
+    const assignedValues = selectedValuesFromSelect('taskAssignedQuickFilter');
+    const reportToValues = selectedValuesFromSelect('taskReportToQuickFilter');
+    const priorityValues = selectedValuesFromSelect('taskPriorityQuickFilter');
+    const statusValues = selectedValuesFromSelect('taskStatusQuickFilter');
+
+    taskRows().forEach((row) => {
+        const matchesCompany = !companyValues.length || companyValues.includes(row.dataset.company || '');
+        const matchesDepartment = !departmentValues.length || departmentValues.includes(row.dataset.department || '');
+        const matchesAssigned = !assignedValues.length || assignedValues.includes(row.dataset.assigned || '');
+        const matchesReportTo = !reportToValues.length || reportToValues.includes(row.dataset.reportTo || '');
+        const matchesPriority = !priorityValues.length || priorityValues.includes(row.dataset.priority || '');
+        const matchesStatus = !statusValues.length || statusValues.includes(row.dataset.status || '');
+        const isVisible = matchesCompany && matchesDepartment && matchesAssigned && matchesReportTo && matchesPriority && matchesStatus;
+        row.classList.toggle('task-grid-row-hidden', !isVisible);
+        if (!isVisible) {
+            const checkbox = row.querySelector('.task-selector');
+            if (checkbox) checkbox.checked = false;
+        }
+    });
+
+    syncTaskBulkUi();
+}
+
+function resetTaskQuickFilters() {
+    taskQuickFilterIds.forEach((id) => {
+        const select = document.getElementById(id);
+        if (select) {
+            Array.from(select.options).forEach((option) => {
+                option.selected = false;
+            });
+        }
+        if (taskQuickFilterChoices[id]) {
+            taskQuickFilterChoices[id].removeActiveItems();
+        }
+    });
+    applyTaskQuickFilters();
+}
+
+function handleTaskRowDoubleClick(event, task) {
+    if (event.target.closest('button, a, input, select, textarea, label')) return;
+    openTaskModal(task);
+}
+
+function openTaskModal(task = null) {
+    document.getElementById('taskModalTitle').textContent = task ? 'Edit Task' : 'Create Task';
+    document.getElementById('taskId').value = task ? task.id : '';
+    document.getElementById('taskName').value = task ? (task.task_name || '') : '';
+    document.getElementById('taskCompany').value = task ? (task.company_id || '') : '';
+    document.getElementById('taskDepartment').value = task ? (task.department_id || '') : '';
+    document.getElementById('taskAssignedTo').value = task ? (task.assigned_to_user_id || '') : '';
+    document.getElementById('taskReportTo').value = task ? (task.report_to_user_id || '') : '';
+    document.getElementById('taskPriority').value = task ? (task.priority || 'Medium') : 'Medium';
+    document.getElementById('taskStatus').value = task ? (task.status || 'Open') : 'Open';
+    document.getElementById('taskProgress').value = task ? (task.progress || 0) : 0;
+    document.getElementById('taskDescription').value = task ? (task.description || '') : '';
+    document.getElementById('taskLatestNote').value = task ? (task.display_note || task.latest_note || '') : '';
+    document.getElementById('taskDueAt').value = task ? formatDateTimeForInput(task.due_at) : {{ now_value|tojson }};
+    taskModalElement('taskModal').classList.remove('hidden');
+}
+
+function closeTaskModal() {
+    taskModalElement('taskModal').classList.add('hidden');
+}
+
+async function saveTask() {
+    const payload = {
+        task_id: document.getElementById('taskId').value || null,
+        task_name: document.getElementById('taskName').value.trim(),
+        company_id: document.getElementById('taskCompany').value || null,
+        department_id: document.getElementById('taskDepartment').value || null,
+        assigned_to_user_id: document.getElementById('taskAssignedTo').value || null,
+        report_to_user_id: document.getElementById('taskReportTo').value || null,
+        priority: document.getElementById('taskPriority').value,
+        status: document.getElementById('taskStatus').value,
+        progress: document.getElementById('taskProgress').value,
+        description: document.getElementById('taskDescription').value.trim(),
+        latest_note: document.getElementById('taskLatestNote').value.trim(),
+        due_at: document.getElementById('taskDueAt').value || null
+    };
+    try {
+        const response = await fetch('{{ url_for("save_task") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Task could not be saved.');
+        await Swal.fire({ title: 'Saved', text: result.message, icon: 'success', timer: 1400, showConfirmButton: false });
+        window.location.reload();
+    } catch (error) {
+        Swal.fire('Task Save Failed', error.message, 'error');
+    }
+}
+
+function openNoteModal(taskId, taskName, progress, status) {
+    document.getElementById('noteTaskId').value = taskId;
+    document.getElementById('noteModalTitle').textContent = `Add Update - ${taskName}`;
+    document.getElementById('noteProgress').value = progress || 0;
+    document.getElementById('noteStatus').value = status || 'Open';
+    document.getElementById('noteBody').value = '';
+    taskModalElement('noteModal').classList.remove('hidden');
+}
+
+function closeNoteModal() {
+    taskModalElement('noteModal').classList.add('hidden');
+}
+
+async function saveTaskNote() {
+    const payload = {
+        task_id: document.getElementById('noteTaskId').value,
+        progress: document.getElementById('noteProgress').value,
+        status: document.getElementById('noteStatus').value,
+        note: document.getElementById('noteBody').value.trim()
+    };
+    try {
+        const response = await fetch('{{ url_for("add_task_note") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Task note could not be saved.');
+        await Swal.fire({ title: 'Updated', text: 'Task note added successfully.', icon: 'success', timer: 1400, showConfirmButton: false });
+        window.location.reload();
+    } catch (error) {
+        Swal.fire('Update Failed', error.message, 'error');
+    }
+}
+
+async function runTaskBulkAction(action, statusValue = null, explicitTaskIds = null) {
+    const taskIds = explicitTaskIds || getSelectedTaskIds();
+    if (!taskIds.length) {
+        Swal.fire('No Task Selected', 'Select at least one task first.', 'warning');
+        return;
+    }
+    const confirmation = await Swal.fire({
+        title: 'Confirm Action',
+        text: `Apply ${action} to ${taskIds.length} task(s)?`,
+        icon: action === 'delete' ? 'warning' : 'question',
+        showCancelButton: true,
+        confirmButtonColor: action === 'delete' ? '#dc2626' : '#0284c7',
+        cancelButtonColor: '#475569'
+    });
+    if (!confirmation.isConfirmed) return;
+
+    try {
+        const response = await fetch('{{ url_for("task_bulk_action") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: action, status: statusValue, task_ids: taskIds })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Bulk task update failed.');
+        await Swal.fire({ title: 'Done', text: result.message, icon: 'success', timer: 1400, showConfirmButton: false });
+        window.location.reload();
+    } catch (error) {
+        Swal.fire('Bulk Action Failed', error.message, 'error');
+    }
+}
+
+function showTaskHistory(taskId, taskName) {
+    const rows = Array.from(document.querySelectorAll(`#taskHistoryTable tr[data-task-id="${taskId}"]`));
+    if (rows.length) {
+        rows[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        rows.forEach((row) => row.classList.add('bg-brand-500/10'));
+        setTimeout(() => rows.forEach((row) => row.classList.remove('bg-brand-500/10')), 1800);
+    } else {
+        Swal.fire('History Notice', `No visible history row found for "${taskName}" in the current scope.`, 'info');
+    }
+}
+
+function syncProgressAndStatus(progressInput, statusInput) {
+    const progressValue = parseInt(progressInput.value || '0', 10);
+    if (progressValue >= 100) {
+        statusInput.value = 'Completed';
+    } else if (statusInput.value === 'Completed' && progressValue < 100) {
+        statusInput.value = 'In Progress';
+    }
+}
+
+{% if session.get('can_manage_users') %}
+function openDepartmentModal() {
+    document.getElementById('departmentId').value = '';
+    document.getElementById('departmentName').value = '';
+    document.getElementById('departmentDescription').value = '';
+    document.getElementById('departmentStatus').value = 'Active';
+    taskModalElement('departmentModal').classList.remove('hidden');
+}
+
+function closeDepartmentModal() {
+    taskModalElement('departmentModal').classList.add('hidden');
+}
+
+function editDepartment(department) {
+    openDepartmentModal();
+    document.getElementById('departmentId').value = department.id || '';
+    document.getElementById('departmentName').value = department.name || '';
+    document.getElementById('departmentDescription').value = department.description || '';
+    document.getElementById('departmentStatus').value = department.status || 'Active';
+}
+
+async function saveDepartment() {
+    const payload = {
+        department_id: document.getElementById('departmentId').value || null,
+        name: document.getElementById('departmentName').value.trim(),
+        description: document.getElementById('departmentDescription').value.trim(),
+        status: document.getElementById('departmentStatus').value
+    };
+    try {
+        const response = await fetch('{{ url_for("save_task_department") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Department could not be saved.');
+        await Swal.fire({ title: 'Saved', text: 'Department updated successfully.', icon: 'success', timer: 1400, showConfirmButton: false });
+        window.location.reload();
+    } catch (error) {
+        Swal.fire('Department Save Failed', error.message, 'error');
+    }
+}
+
+async function deleteDepartment(departmentId) {
+    const confirmation = await Swal.fire({
+        title: 'Delete Department?',
+        text: 'This only works when the department has no linked tasks.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#475569'
+    });
+    if (!confirmation.isConfirmed) return;
+
+    try {
+        const response = await fetch('{{ url_for("delete_task_department") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ department_id: departmentId })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Department could not be deleted.');
+        await Swal.fire({ title: 'Deleted', text: 'Department removed successfully.', icon: 'success', timer: 1400, showConfirmButton: false });
+        window.location.reload();
+    } catch (error) {
+        Swal.fire('Department Delete Failed', error.message, 'error');
+    }
+}
+{% endif %}
+
+function buildDoughnutChart(canvasId, rows, palette) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !rows.length) return;
+    new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+            labels: rows.map((item) => item.label),
+            datasets: [{
+                data: rows.map((item) => item.total),
+                backgroundColor: palette,
+                borderWidth: 0,
+                hoverOffset: 12
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        color: '#cbd5e1',
+                        boxWidth: 12,
+                        padding: 18,
+                        font: { size: 11, weight: '700' }
+                    }
+                }
+            },
+            cutout: '65%'
+        }
+    });
+}
+
+function buildBarChart(canvasId, rows, palette, axis = 'y') {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas || !rows.length) return;
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: rows.map((item) => item.label),
+            datasets: [{
+                label: 'Tasks',
+                data: rows.map((item) => item.total),
+                borderRadius: 14,
+                borderSkipped: false,
+                backgroundColor: palette
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: axis,
+            scales: {
+                x: {
+                    ticks: { color: '#94a3b8', font: { size: 10, weight: '700' } },
+                    grid: { color: 'rgba(148, 163, 184, 0.08)' }
+                },
+                y: {
+                    ticks: { color: '#cbd5e1', font: { size: 10, weight: '700' } },
+                    grid: { color: 'rgba(148, 163, 184, 0.08)' }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.task-selector').forEach((checkbox) => {
+        checkbox.addEventListener('change', syncTaskBulkUi);
+    });
+
+    const selectAllCheckbox = document.getElementById('selectAllTaskCheckbox');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', (event) => {
+            if (event.target.checked) {
+                selectAllTasks();
+            } else {
+                clearSelectedTasks();
+            }
+        });
+    }
+
+    const taskProgress = document.getElementById('taskProgress');
+    const taskStatus = document.getElementById('taskStatus');
+    if (taskProgress && taskStatus) {
+        taskProgress.addEventListener('input', () => syncProgressAndStatus(taskProgress, taskStatus));
+        taskStatus.addEventListener('change', () => {
+            if (taskStatus.value === 'Completed') taskProgress.value = 100;
+        });
+    }
+
+    const noteProgress = document.getElementById('noteProgress');
+    const noteStatus = document.getElementById('noteStatus');
+    if (noteProgress && noteStatus) {
+        noteProgress.addEventListener('input', () => syncProgressAndStatus(noteProgress, noteStatus));
+        noteStatus.addEventListener('change', () => {
+            if (noteStatus.value === 'Completed') noteProgress.value = 100;
+        });
+    }
+
+    ['taskModal', 'noteModal', 'departmentModal', 'taskColumnsModal'].forEach((modalId) => {
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal || event.target.classList.contains('absolute')) {
+                if (modalId === 'taskColumnsModal') {
+                    closeTaskColumnsModal();
+                } else {
+                    modal.classList.add('hidden');
+                }
+            }
+        });
+    });
+
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Escape') return;
+        closeTaskModal();
+        closeNoteModal();
+        closeTaskColumnsModal();
+        {% if session.get('can_manage_users') %}closeDepartmentModal();{% endif %}
+    });
+
+    document.querySelectorAll('.task-column-toggle').forEach((checkbox) => {
+        checkbox.addEventListener('change', updateTaskColumnSelectionCount);
+    });
+
+    if (window.Choices) {
+        taskQuickFilterIds.forEach((id) => {
+            const select = document.getElementById(id);
+            if (!select) return;
+            taskQuickFilterChoices[id] = new Choices(select, {
+                removeItemButton: true,
+                searchEnabled: true,
+                searchResultLimit: 50,
+                placeholder: true,
+                placeholderValue: 'Select one or more'
+            });
+            select.addEventListener('change', applyTaskQuickFilters);
+        });
+    } else {
+        taskQuickFilterIds.forEach((id) => {
+            const select = document.getElementById(id);
+            if (select) select.addEventListener('change', applyTaskQuickFilters);
+        });
+    }
+
+    syncTaskBulkUi();
+    applyTaskColumnVisibility();
+
+    buildDoughnutChart('taskStatusChart', taskStatusData, ['#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#475569']);
+    buildBarChart('departmentTaskChart', departmentTaskData, ['#38bdf8', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#14b8a6', '#f97316', '#64748b']);
+    buildBarChart('companyTaskChart', companyTaskData, ['#38bdf8', '#0ea5e9', '#06b6d4', '#22c55e', '#f59e0b', '#f97316', '#8b5cf6', '#64748b'], 'x');
+});
+</script>
+{% endblock %}

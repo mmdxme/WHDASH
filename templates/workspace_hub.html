@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-8 fade-in">
+    <div class="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Connected Operations</p>
+            <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">Google Workspace Hub</h1>
+            <p class="mt-2 max-w-3xl text-sm text-slate-400">A unified command layer for Gmail, Google Drive, and Google Sheets with clean navigation, enterprise styling, and user-level OAuth connection.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            {% if workspace_connection.connected %}
+            <form method="POST" action="{{ url_for('google_workspace.workspace_disconnect') }}">
+                <button type="submit" class="rounded-xl border border-red-500/20 bg-red-500/10 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-red-200 transition-all hover:bg-red-500 hover:text-white">Disconnect Workspace</button>
+            </form>
+            <a href="{{ url_for('google_workspace.workspace_settings') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white {% if not session.get('can_manage_users') %}hidden{% endif %}">OAuth Settings</a>
+            {% else %}
+            <a href="{% if workspace_connection.configured %}{{ url_for('google_workspace.workspace_connect') }}{% else %}{{ workspace_setup_url }}{% endif %}" class="rounded-xl bg-brand-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">{{ 'Connect Google Workspace' if workspace_connection.configured else workspace_setup_label }}</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="glass-panel rounded-3xl border border-white/5 p-6">
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-center">
+            <div>
+                <h2 class="text-xl font-black text-white">Connection Status</h2>
+                <p class="mt-2 text-sm text-slate-400">The module is live. Once Google OAuth credentials are configured, users can read Gmail, send email, browse Drive, download files and folders, and inspect Google Sheets previews.</p>
+                <div class="mt-5 flex flex-wrap gap-3 text-xs">
+                    <span class="rounded-full border px-4 py-2 font-black uppercase tracking-widest {% if workspace_connection.configured %}border-emerald-400/20 bg-emerald-500/10 text-emerald-200{% else %}border-amber-400/20 bg-amber-500/10 text-amber-200{% endif %}">
+                        {% if workspace_connection.configured %}OAuth Config Ready{% else %}OAuth Config Needed{% endif %}
+                    </span>
+                    <span class="rounded-full border px-4 py-2 font-black uppercase tracking-widest {% if workspace_connection.connected %}border-cyan-400/20 bg-cyan-500/10 text-cyan-100{% else %}border-slate-400/20 bg-white/5 text-slate-300{% endif %}">
+                        {% if workspace_connection.connected %}Connected{% else %}Not Connected{% endif %}
+                    </span>
+                </div>
+            </div>
+            <div class="rounded-3xl border border-white/5 bg-white/[0.03] p-5">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Active Account</p>
+                <p class="mt-3 text-lg font-bold text-white">{{ workspace_connection.email_address or 'No Google account linked yet' }}</p>
+                <p class="mt-2 text-xs text-slate-500">{{ workspace_connection.expires_at or 'Connect once and the server will manage token refresh automatically.' }}</p>
+                {% if not workspace_connection.configured %}
+                <div class="mt-4 rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4 text-xs text-amber-100">
+                    {% if workspace_connection.can_manage_settings %}
+                    Save your Google Client ID, Client Secret, and redirect URI in Google Workspace Settings to enable live Gmail, Drive, and Sheets actions.
+                    {% else %}
+                    Google Workspace is waiting for an administrator to complete OAuth settings before users can connect their Gmail accounts.
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% if workspace_connection.config_errors %}
+                <div class="mt-4 rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4 text-xs text-rose-100">
+                    <p class="font-black uppercase tracking-widest">Configuration Problem</p>
+                    <ul class="mt-2 space-y-1">
+                        {% for error in workspace_connection.config_errors %}
+                        <li>- {{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                <div class="mt-4 text-xs text-slate-500">
+                    <div><span class="font-black text-slate-400">Redirect URI:</span> {{ workspace_connection.redirect_uri or workspace_connection.recommended_redirect_uri or '--' }}</div>
+                    <div class="mt-1"><span class="font-black text-slate-400">Config Source:</span> {{ workspace_connection.configuration_source|replace('_', ' ')|title }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+        <a href="{{ url_for('google_workspace.workspace_gmail') }}" class="glass-panel rounded-3xl border border-white/5 p-6 transition-all hover:-translate-y-1 hover:border-cyan-400/20">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Gmail</p>
+                    <h3 class="mt-3 text-3xl font-black text-white">{{ workspace_metrics.gmail }}</h3>
+                </div>
+                <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-300"><i class="fa-solid fa-envelope text-lg"></i></span>
+            </div>
+            <p class="mt-4 text-sm text-slate-400">Read inbox traffic, review individual messages, and send professional emails with attachments.</p>
+        </a>
+        <a href="{{ url_for('google_workspace.workspace_drive') }}" class="glass-panel rounded-3xl border border-white/5 p-6 transition-all hover:-translate-y-1 hover:border-cyan-400/20">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Drive</p>
+                    <h3 class="mt-3 text-3xl font-black text-white">{{ workspace_metrics.drive }}</h3>
+                </div>
+                <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-300"><i class="fa-brands fa-google-drive text-lg"></i></span>
+            </div>
+            <p class="mt-4 text-sm text-slate-400">Browse folders, inspect file metadata, and download single items or full folders as ZIP archives.</p>
+        </a>
+        <a href="{{ url_for('google_workspace.workspace_sheets') }}" class="glass-panel rounded-3xl border border-white/5 p-6 transition-all hover:-translate-y-1 hover:border-cyan-400/20">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Sheets</p>
+                    <h3 class="mt-3 text-3xl font-black text-white">{{ workspace_metrics.sheets }}</h3>
+                </div>
+                <span class="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-500/10 text-cyan-200"><i class="fa-solid fa-table-cells-large text-lg"></i></span>
+            </div>
+            <p class="mt-4 text-sm text-slate-400">List spreadsheets, search your workspace, and preview live sheet data directly in the dashboard.</p>
+        </a>
+    </div>
+</div>
+{% endblock %}

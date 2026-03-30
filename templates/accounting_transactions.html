@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-3xl font-extrabold tracking-tight text-white">Financial Ledger</h2>
+            <p class="text-slate-400 mt-1">Full transaction history for all enterprise clients</p>
+        </div>
+        <div class="flex gap-3">
+            <button class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-bold text-white shadow-lg shadow-brand-500/20 transition-all flex items-center gap-2">
+                <i class="fa-solid fa-plus"></i> Manual Posting
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="glass-card p-4 flex flex-wrap items-center gap-4">
+        <div class="flex-1 min-w-[200px]">
+            <div class="relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                <input type="text" placeholder="Search by reference or customer..." class="pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs text-white focus:ring-1 focus:ring-brand-500 w-full transition-all">
+            </div>
+        </div>
+        <select class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-xs text-slate-300 focus:ring-1 focus:ring-brand-500 transition-all">
+            <option>All Types</option>
+            <option>Invoice</option>
+            <option>Payment</option>
+            <option>Adjustment</option>
+        </select>
+        <div class="flex items-center gap-2 text-xs font-bold text-slate-500">
+            <span>From:</span>
+            <input type="date" class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
+            <span>To:</span>
+            <input type="date" class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
+        </div>
+    </div>
+
+    <!-- Ledger Table -->
+    <div class="glass-card overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 bg-white/[0.01]">
+                        <th class="px-6 py-4">Transaction ID</th>
+                        <th class="px-6 py-4">Timestamp</th>
+                        <th class="px-6 py-4">Customer</th>
+                        <th class="px-6 py-4">Reference</th>
+                        <th class="px-6 py-4">Type</th>
+                        <th class="px-6 py-4 text-right">Debit (AED)</th>
+                        <th class="px-6 py-4 text-right">Credit (AED)</th>
+                        <th class="px-6 py-4">Notes</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for tx in transactions %}
+                    <tr class="group hover:bg-white/[0.02] transition-colors">
+                        <td class="px-6 py-4 text-xs font-mono text-slate-500">#TX-{{ "{:04d}".format(tx.id) }}</td>
+                        <td class="px-6 py-4 text-xs text-slate-400">{{ tx.transaction_date }}</td>
+                        <td class="px-6 py-4">
+                            <span class="text-sm font-bold text-slate-200">{{ tx.customer_name }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-xs font-mono text-brand-400">{{ tx.reference or '---' }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest
+                                {% if tx.type == 'Invoice' %}bg-amber-500/10 text-amber-500
+                                {% elif tx.type == 'Payment' %}bg-emerald-500/10 text-emerald-500
+                                {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ tx.type }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-right text-sm font-mono font-bold">
+                            {% if tx.type == 'Invoice' or (tx.type == 'Adjustment' and tx.amount > 0) %}
+                                <span class="text-rose-400">AED {{ "{:,.2f}".format(tx.amount | abs) }}</span>
+                            {% else %}
+                                <span class="text-slate-600">0.00</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-right text-sm font-mono font-bold">
+                            {% if tx.type == 'Payment' or (tx.type == 'Adjustment' and tx.amount < 0) %}
+                                <span class="text-emerald-400">AED {{ "{:,.2f}".format(tx.amount | abs) }}</span>
+                            {% else %}
+                                <span class="text-slate-600">0.00</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            <p class="text-xs text-slate-500 italic max-w-xs truncate" title="{{ tx.notes }}">{{ tx.notes or '-' }}</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

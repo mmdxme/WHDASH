@@ -1,0 +1,625 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-8 pb-20 fade-in px-4">
+    
+    <!-- DASHBOARD HEADER -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+            <h1 class="text-3xl md:text-4xl font-black text-white uppercase tracking-tighter">Logistics Intelligence</h1>
+            <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em] mt-2 flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+               Real-time Efficiency Analytics & Distribution Audit
+            </p>
+        </div>
+    <!-- TEMPORAL FILTRATION CONSOLE -->
+    <div class="glass-panel p-6 md:p-8 rounded-[2rem] border border-white/5 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl bg-brand-500/[0.02]">
+        <div class="flex flex-wrap items-center gap-2">
+            <button onclick="setFilterRange('today')" class="px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all filter-btn" id="btn-today">Day</button>
+            <button onclick="setFilterRange('week')" class="px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all filter-btn" id="btn-week">Week</button>
+            <button onclick="setFilterRange('month')" class="px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all filter-btn" id="btn-month">Month</button>
+            <button onclick="setFilterRange('year')" class="px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all filter-btn" id="btn-year">Year</button>
+            <div class="h-6 w-px bg-white/10 mx-2 hidden md:block"></div>
+        </div>
+        
+        <div class="flex items-center gap-4 w-full md:w-auto">
+            <div class="flex-1 md:flex-initial flex items-center gap-3">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Start Threshold</label>
+                    <input type="date" id="filter-start" value="{{ start_date or '' }}" class="bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold text-white outline-none focus:border-brand-500 transition-all shadow-inner">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">End Threshold</label>
+                    <input type="date" id="filter-end" value="{{ end_date or '' }}" class="bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold text-white outline-none focus:border-brand-500 transition-all shadow-inner">
+                </div>
+            </div>
+            <button onclick="applyManualFilter()" class="mt-4 md:mt-0 px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl flex items-center justify-center transition-all shadow-lg shadow-brand-500/20 active:scale-95">
+                <i class="fa-solid fa-bolt text-xs mr-2"></i> Apply Audit
+            </button>
+        </div>
+    </div>
+    </div>
+
+    <style>
+        .filter-btn { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); color: #64748b; }
+        .filter-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .filter-btn.active { background: #0ea5e9; border-color: #0ea5e9; color: #fff; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3); }
+    </style>
+
+    <!-- STATS GRID -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Total Managed Trips -->
+        <div class="glass-panel p-8 rounded-3xl border border-white/5 relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fa-solid fa-route text-6xl text-brand-400"></i>
+            </div>
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Total Managed Trips</p>
+            <div class="flex items-end gap-3">
+                <h3 class="text-5xl font-black text-white tracking-tighter">{{ total_trips }}</h3>
+                <span class="text-xs font-bold text-brand-400 mb-2 uppercase">Missions</span>
+            </div>
+            <div class="w-12 h-1.5 bg-brand-500/20 rounded-full mt-6 overflow-hidden">
+                <div class="h-full bg-brand-500 w-2/3"></div>
+            </div>
+        </div>
+
+        <!-- Total Engagements -->
+        <div class="glass-panel p-8 rounded-3xl border border-white/5 relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fa-solid fa-bullseye text-6xl text-emerald-400"></i>
+            </div>
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Activity Log Count</p>
+            <div class="flex items-end gap-3">
+                <h3 class="text-5xl font-black text-white tracking-tighter">{{ total_activities }}</h3>
+                <span class="text-xs font-bold text-emerald-400 mb-2 uppercase">Pulses</span>
+            </div>
+            <div class="w-12 h-1.5 bg-emerald-500/20 rounded-full mt-6 overflow-hidden">
+                <div class="h-full bg-emerald-500 w-3/4"></div>
+            </div>
+        </div>
+
+        <!-- Avg Service duration -->
+        {% set total_at_cust = customer_stats|sum(attribute='total_mins') %}
+        <div class="glass-panel p-8 rounded-3xl border border-white/5 relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fa-solid fa-stopwatch text-6xl text-amber-400"></i>
+            </div>
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Total Service Time</p>
+            <div class="flex items-end gap-3">
+                <h3 class="text-5xl font-black text-white tracking-tighter">{{ (total_at_cust / 60)|round(1) if total_at_cust else 0 }}</h3>
+                <span class="text-xs font-bold text-amber-400 mb-2 uppercase">Hours</span>
+            </div>
+            <div class="w-12 h-1.5 bg-amber-500/20 rounded-full mt-6 overflow-hidden">
+                <div class="h-full bg-amber-500 w-1/2"></div>
+            </div>
+        </div>
+
+        <!-- System Utilization -->
+        <div class="glass-panel p-8 rounded-3xl border border-white/5 relative overflow-hidden group">
+            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <i class="fa-solid fa-microchip text-6xl text-purple-400"></i>
+            </div>
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Fleet Utilization</p>
+            <div class="flex items-end gap-3">
+                <h3 class="text-5xl font-black text-white tracking-tighter">98</h3>
+                <span class="text-xs font-bold text-purple-400 mb-2 uppercase">%</span>
+            </div>
+            <div class="w-12 h-1.5 bg-purple-500/20 rounded-full mt-6 overflow-hidden">
+                <div class="h-full bg-purple-500 w-[98%]"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHARTS SECTION -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Customer Service Allocation -->
+        <div class="glass-panel rounded-[2.5rem] p-8 md:p-10 border border-white/5">
+            <div class="flex items-center justify-between mb-10">
+                <h4 class="text-lg font-black text-white uppercase tracking-tighter flex items-center gap-4">
+                    <i class="fa-solid fa-chart-column text-brand-400"></i> Client Service Allocation
+                </h4>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Total Service Minutes</p>
+            </div>
+            <div class="h-[400px]">
+                <canvas id="customerChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Activity Intelligence -->
+        <div class="glass-panel rounded-[2.5rem] p-8 md:p-10 border border-white/5">
+            <div class="flex items-center justify-between mb-10">
+                <h4 class="text-lg font-black text-white uppercase tracking-tighter flex items-center gap-4">
+                    <i class="fa-solid fa-fingerprint text-emerald-400"></i> Activity Pulse Distribution
+                </h4>
+                <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Event Frequency</p>
+            </div>
+            <div class="h-[400px] flex items-center justify-center">
+                <canvas id="activityChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- NEW CHARTS ROW: Total Deliveries + Customer Visits -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <!-- Total Deliveries Per Day (Area Chart) -->
+        <div class="glass-panel rounded-[2.5rem] p-8 md:p-10 border border-violet-500/20 shadow-lg shadow-violet-500/5">
+            <div class="flex items-center justify-between mb-10">
+                <h4 class="text-lg font-black text-white uppercase tracking-tighter flex items-center gap-4">
+                    <i class="fa-solid fa-truck-fast text-violet-400"></i> Total Deliveries
+                </h4>
+                <p class="text-[10px] text-violet-400 font-black uppercase tracking-widest bg-violet-500/10 px-4 py-1.5 rounded-full border border-violet-500/20">Daily Throughput</p>
+            </div>
+            <div class="h-[350px]">
+                <canvas id="dailyDeliveriesChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Customer Visit Frequency (Horizontal Bar Chart) -->
+        <div class="glass-panel rounded-[2.5rem] p-8 md:p-10 border border-amber-500/20 shadow-lg shadow-amber-500/5">
+            <div class="flex items-center justify-between mb-10">
+                <h4 class="text-lg font-black text-white uppercase tracking-tighter flex items-center gap-4">
+                    <i class="fa-solid fa-people-arrows text-amber-400"></i> Customer Visits
+                </h4>
+                <p class="text-[10px] text-amber-400 font-black uppercase tracking-widest bg-amber-500/10 px-4 py-1.5 rounded-full border border-amber-500/20">Visit Frequency</p>
+            </div>
+            <div class="h-[350px]">
+                <canvas id="customerVisitsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- CUMULATIVE CUSTOMER SERVICE TIME REPORT -->
+    <div class="glass-panel rounded-[2.5rem] overflow-hidden border border-brand-500/20 shadow-lg shadow-brand-500/5 mb-8">
+        <div class="p-8 border-b border-white/5 bg-brand-500/[0.02] flex items-center justify-between">
+            <h4 class="text-sm font-black text-brand-400 uppercase tracking-widest flex items-center gap-4">
+                <i class="fa-solid fa-users-viewfinder text-white"></i> Cumulative Customer Service Analytics
+            </h4>
+            <div class="text-[9px] text-brand-400 font-black uppercase tracking-widest bg-brand-500/10 px-4 py-1.5 rounded-full border border-brand-500/20">Aggregated Audit</div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-white/[0.01] border-b border-white/5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+                        <th class="px-10 py-6">Customer Name</th>
+                        <th class="px-10 py-6 text-center">Total Visits</th>
+                        <th class="px-10 py-6 text-center">Avg Duration (Mins)</th>
+                        <th class="px-10 py-6 text-right">Cumulative Service Time</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for stat in customer_stats %}
+                    <tr class="hover:bg-brand-500/[0.03] transition-all group">
+                        <td class="px-10 py-6">
+                            <p class="text-sm font-black text-white">{{ stat.customer }}</p>
+                        </td>
+                        <td class="px-10 py-6 text-center">
+                            <span class="px-3 py-1.5 bg-slate-800/50 text-slate-300 rounded-lg text-xs font-bold shadow-inner">
+                                {{ stat.visits }}
+                            </span>
+                        </td>
+                        <td class="px-10 py-6 text-center">
+                            <p class="text-sm font-bold text-amber-400/80">{{ stat.avg_mins|round(1) }} <span class="text-[10px] text-slate-500 uppercase">m</span></p>
+                        </td>
+                        <td class="px-10 py-6 text-right">
+                            <p class="text-lg font-black text-brand-400">{{ stat.total_mins|round(1) }} <span class="text-[10px] text-slate-500 uppercase">Mins</span></p>
+                            <p class="text-[10px] text-slate-500 font-bold uppercase mt-1">~ {{ (stat.total_mins / 60)|round(1) }} Hours</p>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="px-10 py-12 text-center text-slate-500 text-xs font-black uppercase tracking-widest">
+                            No service data logged within this timeframe.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- DELIVERY SEQUENCE BENCHMARKS -->
+    <div class="glass-panel rounded-[2.5rem] overflow-hidden border border-emerald-500/20 shadow-lg shadow-emerald-500/5 mb-8">
+        <div class="p-8 border-b border-white/5 bg-emerald-500/[0.02] flex items-center justify-between">
+            <h4 class="text-sm font-black text-emerald-400 uppercase tracking-widest flex items-center gap-4">
+                <i class="fa-solid fa-route text-white"></i> Delivery Sequence Benchmarks
+            </h4>
+            <div class="text-[9px] text-emerald-400 font-black uppercase tracking-widest bg-emerald-500/10 px-4 py-1.5 rounded-full border border-emerald-500/20">Chronological Logistics</div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-white/[0.01] border-b border-white/5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+                        <th class="px-10 py-6">Sequence Leg</th>
+                        <th class="px-10 py-6 text-center">Data Points (Deliveries)</th>
+                        <th class="px-10 py-6 text-right">Avg Process Duration</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for stat in order_stats %}
+                    <tr class="hover:bg-emerald-500/[0.03] transition-all group">
+                        <td class="px-10 py-6">
+                            <span class="inline-flex items-center justify-center w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 font-black text-sm mr-3 border border-emerald-500/30">
+                                {{ stat.delivery_order }}
+                            </span>
+                            <span class="text-xs font-black text-white uppercase tracking-widest">{{ stat.delivery_order }}{% if stat.delivery_order == 1 %}ST{% elif stat.delivery_order == 2 %}ND{% elif stat.delivery_order == 3 %}RD{% else %}TH{% endif %} STOP</span>
+                        </td>
+                        <td class="px-10 py-6 text-center">
+                            <span class="px-3 py-1.5 bg-slate-800/50 text-slate-300 rounded-lg text-xs font-bold shadow-inner">
+                                {{ stat.deliveries_count }}
+                            </span>
+                        </td>
+                        <td class="px-10 py-6 text-right">
+                            <p class="text-lg font-black text-emerald-400">{{ stat.avg_mins|round(1) }} <span class="text-[10px] text-slate-500 uppercase">Mins</span></p>
+                            <p class="text-[10px] text-slate-500 font-bold mt-1 uppercase">Time lapsed reaching this step</p>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" class="px-10 py-12 text-center text-slate-500 text-xs font-black uppercase tracking-widest">
+                            No sequential metrics available.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- RECENT TRANSACTIONS LEDGER -->
+    <div class="glass-panel rounded-[2.5rem] overflow-hidden border border-white/5">
+        <div class="p-8 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+            <h4 class="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-4">
+                <i class="fa-solid fa-clock-rotate-left text-brand-400"></i> Recent Distribution Chronology
+            </h4>
+            <div class="text-[9px] text-slate-600 font-black uppercase tracking-widest bg-white/5 px-4 py-1.5 rounded-full border border-white/5">Tactical Event Stream</div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-white/[0.01] border-b border-white/5 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">
+                        <th class="px-10 py-6">Row</th>
+                        <th class="px-10 py-6">Operator</th>
+                        <th class="px-10 py-6">Activity Protocol</th>
+                        <th class="px-10 py-6">Associated Client</th>
+                        <th class="px-10 py-6">Chronometer Log</th>
+                        <th class="px-10 py-6 text-right">Authenticity</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for log in recent_logs %}
+                    <tr class="hover:bg-brand-500/[0.03] transition-all group">
+                        <td class="px-10 py-6">
+                            <span class="text-[10px] font-black text-slate-700">#{{ loop.index }}</span>
+                        </td>
+                        <td class="px-10 py-6">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 font-black text-xs">
+                                    {{ log.driver[0]|upper }}
+                                </div>
+                                <p class="text-sm font-bold text-white">{{ log.driver }}</p>
+                            </div>
+                        </td>
+                        <td class="px-10 py-6">
+                            <span class="px-3 py-1.5 bg-brand-500/10 text-brand-400 border border-brand-500/20 rounded-lg text-[10px] font-black uppercase tracking-wider">
+                                {{ log.activity_type }}
+                            </span>
+                        </td>
+                        <td class="px-10 py-6">
+                            <p class="text-sm font-bold text-slate-300">{{ log.customer_name or '-- GLOBAL --' }}</p>
+                        </td>
+                        <td class="px-10 py-6 font-mono text-xs text-emerald-400/80">
+                            {{ log.timestamp }}
+                        </td>
+                        <td class="px-10 py-6 text-right">
+                            <span class="text-[9px] font-black text-slate-600 uppercase tracking-widest">CALIBRATED</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+window.setFilterRange = function(range) {
+    const today = new Date();
+    let start = new Date();
+    let end = new Date();
+
+    if (range === 'today') {
+        // Today already set
+    } else if (range === 'week') {
+        start.setDate(today.getDate() - 7);
+    } else if (range === 'month') {
+        start.setMonth(today.getMonth() - 1);
+    } else if (range === 'year') {
+        start.setFullYear(today.getFullYear() - 1);
+    }
+
+    const startStr = start.toISOString().split('T')[0];
+    const endStr = end.toISOString().split('T')[0];
+    
+    window.location.href = `?start_date=${startStr}&end_date=${endStr}`;
+};
+
+window.applyManualFilter = function() {
+    const start = document.getElementById('filter-start').value;
+    const end = document.getElementById('filter-end').value;
+    if (start && end) {
+        window.location.href = `?start_date=${start}&end_date=${end}`;
+    } else {
+        window.toast("Surgical thresholds required", "error");
+    }
+};
+
+document.addEventListener('DOMContentLoaded', async () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const start = urlParams.get('start_date');
+    const end = urlParams.get('end_date');
+
+    // Sync Export Link
+    if (start && end) {
+        const exportBtn = document.querySelector('a[href*="/delivery/export"]');
+        if (exportBtn) exportBtn.href = `/delivery/export?start_date=${start}&end_date=${end}`;
+        
+        // Highlight active btn
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (start === todayStr && end === todayStr) document.getElementById('btn-today').classList.add('active');
+    }
+
+    try {
+        const resp = await fetch(`/api/reports/logistic_stats${window.location.search}`);
+        const data = await resp.json();
+
+        // Customer Service Time Chart
+        new Chart(document.getElementById('customerChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: data.customers,
+                datasets: [{
+                    label: 'Service Mins',
+                    data: data.customer_times,
+                    backgroundColor: 'rgba(14, 165, 233, 0.4)',
+                    borderColor: '#0ea5e9',
+                    borderWidth: 2,
+                    borderRadius: 12,
+                    hoverBackgroundColor: '#0ea5e9'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#64748b', font: { family: 'Outfit', weight: 'bold' } }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#64748b', font: { family: 'Outfit', weight: 'bold' } }
+                    }
+                }
+            }
+        });
+
+        // Activity Pulse Chart
+        new Chart(document.getElementById('activityChart').getContext('2d'), {
+            type: 'doughnut',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: data.activities,
+                datasets: [{
+                    data: data.activity_counts,
+                    backgroundColor: [
+                        'rgba(14, 165, 233, 0.6)',
+                        'rgba(16, 185, 129, 0.6)',
+                        'rgba(245, 158, 11, 0.6)',
+                        'rgba(139, 92, 246, 0.6)',
+                        'rgba(239, 68, 68, 0.6)',
+                        'rgba(100, 116, 139, 0.6)'
+                    ],
+                    borderColor: 'rgba(255,255,255,0.1)',
+                    borderWidth: 2,
+                    hoverOffset: 20
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#94a3b8',
+                            font: { family: 'Outfit', size: 10, weight: 'bold' },
+                            padding: 20,
+                            usePointStyle: true
+                        }
+                    },
+                    datalabels: {
+                        formatter: (value, ctx) => {
+                            let sum = 0;
+                            let dataArr = ctx.chart.data.datasets[0].data;
+                            dataArr.map(d => { sum += d; });
+                            let percentage = (value * 100 / sum).toFixed(1) + "%";
+                            return ctx.chart.data.labels[ctx.dataIndex] + "\n" + percentage;
+                        },
+                        color: '#fff',
+                        font: { family: 'Outfit', weight: '900', size: 9 },
+                        textAlign: 'center',
+                        display: (ctx) => {
+                            return ctx.dataset.data[ctx.dataIndex] > 0;
+                        }
+                    }
+                }
+            }
+        });
+
+        // ---- TOTAL DELIVERIES PER DAY (Gradient Area Chart) ----
+        const dailyCtx = document.getElementById('dailyDeliveriesChart').getContext('2d');
+        const dailyGrad = dailyCtx.createLinearGradient(0, 0, 0, 350);
+        dailyGrad.addColorStop(0, 'rgba(139, 92, 246, 0.45)');
+        dailyGrad.addColorStop(1, 'rgba(139, 92, 246, 0.02)');
+
+        new Chart(dailyCtx, {
+            type: 'line',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: (data.daily_labels || []).map(d => {
+                    const dt = new Date(d + 'T00:00:00');
+                    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }),
+                datasets: [{
+                    label: 'Deliveries',
+                    data: data.daily_deliveries || [],
+                    fill: true,
+                    backgroundColor: dailyGrad,
+                    borderColor: '#8b5cf6',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    pointBackgroundColor: '#8b5cf6',
+                    pointBorderColor: '#1e1b4b',
+                    pointBorderWidth: 3,
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    pointHoverBackgroundColor: '#c4b5fd',
+                    pointHoverBorderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15,23,42,0.95)',
+                        titleColor: '#c4b5fd',
+                        bodyColor: '#e2e8f0',
+                        borderColor: '#8b5cf6',
+                        borderWidth: 1,
+                        cornerRadius: 12,
+                        padding: 14,
+                        titleFont: { family: 'Outfit', weight: '900', size: 12 },
+                        bodyFont: { family: 'Outfit', weight: '600', size: 11 },
+                        callbacks: {
+                            label: (ctx) => `${ctx.parsed.y} customer stops`
+                        }
+                    },
+                    datalabels: {
+                        align: 'top',
+                        anchor: 'end',
+                        color: '#c4b5fd',
+                        font: { family: 'Outfit', weight: '900', size: 12 },
+                        offset: 4,
+                        formatter: (val) => val
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(139,92,246,0.08)', drawBorder: false },
+                        ticks: {
+                            color: '#64748b',
+                            font: { family: 'Outfit', weight: 'bold', size: 11 },
+                            stepSize: 1
+                        }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: {
+                            color: '#64748b',
+                            font: { family: 'Outfit', weight: 'bold', size: 10 },
+                            maxRotation: 45
+                        }
+                    }
+                }
+            }
+        });
+
+        // ---- CUSTOMER VISIT FREQUENCY (Horizontal Bar Chart) ----
+        const visitColors = (data.visit_counts || []).map((_, i) => {
+            const hue = 35 + (i * 8);
+            return `hsla(${hue}, 85%, 55%, 0.6)`;
+        });
+        const visitBorders = (data.visit_counts || []).map((_, i) => {
+            const hue = 35 + (i * 8);
+            return `hsla(${hue}, 85%, 55%, 1)`;
+        });
+
+        new Chart(document.getElementById('customerVisitsChart').getContext('2d'), {
+            type: 'bar',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: data.visit_customers || [],
+                datasets: [{
+                    label: 'Visit Days',
+                    data: data.visit_counts || [],
+                    backgroundColor: visitColors,
+                    borderColor: visitBorders,
+                    borderWidth: 2,
+                    borderRadius: 8,
+                    hoverBackgroundColor: visitBorders,
+                    barThickness: 22
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15,23,42,0.95)',
+                        titleColor: '#fbbf24',
+                        bodyColor: '#e2e8f0',
+                        borderColor: '#f59e0b',
+                        borderWidth: 1,
+                        cornerRadius: 12,
+                        padding: 14,
+                        titleFont: { family: 'Outfit', weight: '900', size: 12 },
+                        bodyFont: { family: 'Outfit', weight: '600', size: 11 },
+                        callbacks: {
+                            label: (ctx) => `${ctx.parsed.x} visit day${ctx.parsed.x > 1 ? 's' : ''}`
+                        }
+                    },
+                    datalabels: {
+                        align: 'right',
+                        anchor: 'end',
+                        color: '#fbbf24',
+                        font: { family: 'Outfit', weight: '900', size: 12 },
+                        offset: 8,
+                        formatter: (val) => val
+                    }
+                },
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(245,158,11,0.08)', drawBorder: false },
+                        ticks: {
+                            color: '#64748b',
+                            font: { family: 'Outfit', weight: 'bold', size: 11 },
+                            stepSize: 1
+                        }
+                    },
+                    y: {
+                        grid: { display: false },
+                        ticks: {
+                            color: '#e2e8f0',
+                            font: { family: 'Outfit', weight: '900', size: 11 }
+                        }
+                    }
+                }
+            }
+        });
+
+    } catch (e) {
+        console.error("Intelligence synchronization failure:", e);
+    }
+});
+</script>
+{% endblock %}

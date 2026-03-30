@@ -1,0 +1,688 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="fade-in space-y-8 pb-16">
+    <!-- Top Configuration Bar -->
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight flex items-center">
+                <i class="fa-solid fa-chart-pie text-brand-400 mr-3"></i> Dashboard
+            </h1>
+        </div>
+        <div class="flex gap-4">
+            <button id="btn-export-trigger" class="inline-flex justify-center items-center px-6 py-2.5 shadow-[0_0_20px_rgba(16,185,129,0.3)] text-sm font-bold rounded-xl text-white bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 transition-all transform hover:-translate-y-0.5">
+                <i class="fa-solid fa-file-csv mr-2"></i> Export Report
+            </button>
+        </div>
+    </div>
+
+    <!-- Advanced Glassmorphism Filter Bar -->
+    <div class="glass-panel rounded-2xl p-6 relative z-50">
+        <div class="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+            <div class="absolute top-0 right-0 w-64 h-64 bg-brand-500/10 rounded-full blur-[80px] -mr-20 -mt-20"></div>
+        </div>
+        <h3 class="text-xs font-bold text-brand-400 uppercase tracking-widest mb-4 flex items-center"><i class="fa-solid fa-filter mr-2"></i> Refine Dataset</h3>
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-5 relative z-50 w-full items-start">
+            
+            <div class="group relative">
+                <span class="absolute -top-2.5 left-3 px-1 bg-slate-800 text-[10px] font-bold text-brand-400 uppercase tracking-widest z-10 rounded">Subsidiaries</span>
+                <span class="absolute -top-2.5 right-3 px-1 bg-slate-800 text-[9px] font-bold z-10 rounded flex gap-1.5">
+                    <span class="text-emerald-400 cursor-pointer hover:text-emerald-300 transition-colors uppercase tracking-widest" onclick="toggleAll('filter_company')">All</span>
+                    <span class="text-red-400 cursor-pointer hover:text-red-300 transition-colors uppercase tracking-widest" onclick="clearAll('filter_company')">Clear</span>
+                </span>
+                <select id="filter_company" multiple class="hidden" {% if session.get('company_id') %}disabled{% endif %} data-placeholder="Select Subsidiaries (Empty = All)">
+                    {% for comp in companies %}
+                        <option value="{{ comp.id }}" {% if session.get('company_id') == comp.id %}selected{% endif %}>{{ comp.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="group relative">
+                <span class="absolute -top-2.5 left-3 px-1 bg-slate-800 text-[10px] font-bold text-brand-400 uppercase tracking-widest z-10 rounded">Categories</span>
+                <span class="absolute -top-2.5 right-3 px-1 bg-slate-800 text-[9px] font-bold z-10 rounded flex gap-1.5">
+                    <span class="text-emerald-400 cursor-pointer hover:text-emerald-300 transition-colors uppercase tracking-widest" onclick="toggleAll('filter_category')">All</span>
+                    <span class="text-red-400 cursor-pointer hover:text-red-300 transition-colors uppercase tracking-widest" onclick="clearAll('filter_category')">Clear</span>
+                </span>
+                <select id="filter_category" multiple class="hidden" data-placeholder="Select Categories">
+                    {% for cat in categories %}
+                        <option value="{{ cat.id }}">{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="group relative">
+                <span class="absolute -top-2.5 left-3 px-1 bg-slate-800 text-[10px] font-bold text-brand-400 uppercase tracking-widest z-10 rounded">Brands</span>
+                <span class="absolute -top-2.5 right-3 px-1 bg-slate-800 text-[9px] font-bold z-10 rounded flex gap-1.5">
+                    <span class="text-emerald-400 cursor-pointer hover:text-emerald-300 transition-colors uppercase tracking-widest" onclick="toggleAll('filter_brand')">All</span>
+                    <span class="text-red-400 cursor-pointer hover:text-red-300 transition-colors uppercase tracking-widest" onclick="clearAll('filter_brand')">Clear</span>
+                </span>
+                <select id="filter_brand" multiple class="hidden" data-placeholder="Select Brands">
+                    {% for b in brands %}
+                        <option value="{{ b.id }}">{{ b.name }} ({{ b.type }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="group relative">
+                <span class="absolute -top-2.5 left-3 px-1 bg-slate-800 text-[10px] font-bold text-brand-400 uppercase tracking-widest z-10 rounded">Statuses</span>
+                <span class="absolute -top-2.5 right-3 px-1 bg-slate-800 text-[9px] font-bold z-10 rounded flex gap-1.5">
+                    <span class="text-emerald-400 cursor-pointer hover:text-emerald-300 transition-colors uppercase tracking-widest" onclick="toggleAll('filter_status')">All</span>
+                    <span class="text-red-400 cursor-pointer hover:text-red-300 transition-colors uppercase tracking-widest" onclick="clearAll('filter_status')">Clear</span>
+                </span>
+                <select id="filter_status" multiple class="hidden" data-placeholder="Statuses">
+                    {% for st in statuses %}
+                        <option value="{{ st.id }}">{{ st.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="group relative">
+                <span class="absolute -top-2.5 left-3 px-1 bg-slate-800 text-[10px] font-bold text-brand-400 uppercase tracking-widest z-10 rounded">Vitality</span>
+                <span class="absolute -top-2.5 right-3 px-1 bg-slate-800 text-[9px] font-bold z-10 rounded flex gap-1.5">
+                    <span class="text-emerald-400 cursor-pointer hover:text-emerald-300 transition-colors uppercase tracking-widest" onclick="toggleAll('filter_vitality')">All</span>
+                    <span class="text-red-400 cursor-pointer hover:text-red-300 transition-colors uppercase tracking-widest" onclick="clearAll('filter_vitality')">Clear</span>
+                </span>
+                <select id="filter_vitality" multiple class="hidden" data-placeholder="Vitality Classification">
+                    {% for v in vitalities %}
+                        <option value="{{ v.id }}">{{ v.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="group relative">
+                <span class="absolute -top-2.5 left-3 px-1 bg-slate-800 text-[10px] font-bold text-brand-400 uppercase tracking-widest z-10 rounded">Stock Health</span>
+                <span class="absolute -top-2.5 right-3 px-1 bg-slate-800 text-[9px] font-bold z-10 rounded flex gap-1.5">
+                    <span class="text-emerald-400 cursor-pointer hover:text-emerald-300 transition-colors uppercase tracking-widest" onclick="toggleAll('filter_health_status')">All</span>
+                    <span class="text-red-400 cursor-pointer hover:text-red-300 transition-colors uppercase tracking-widest" onclick="clearAll('filter_health_status')">Clear</span>
+                </span>
+                <select id="filter_health_status" multiple class="hidden" data-placeholder="Availability Alerts">
+                    <option value="Critical">Critical (Low stock)</option>
+                    <option value="Warning">Warning (Approaching low)</option>
+                    <option value="Healthy">Healthy (Optimal level)</option>
+                </select>
+            </div>
+
+            <div class="group relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500 group-focus-within:text-brand-400 z-10">
+                    <i class="fa-solid fa-search"></i>
+                </div>
+                <input type="text" id="filter_zone" placeholder="Zone ID..." class="block w-full pl-10 px-4 py-[11px] bg-slate-800/80 border border-slate-700/50 rounded-xl text-[13px] text-slate-200 outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all">
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Charts Grid Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        
+        <!-- Premium Donut -->
+        <div class="lg:col-span-1 glass-panel rounded-2xl p-6 relative">
+            <h3 class="text-[11px] font-bold text-slate-300 uppercase tracking-widest mb-6 border-b border-slate-700/50 pb-2 flex items-center"><i class="fa-solid fa-coins text-amber-500 mr-2"></i> Value Distribution</h3>
+            <div class="relative h-60 w-full flex justify-center items-center">
+                <canvas id="chart-distribution"></canvas>
+            </div>
+        </div>
+
+        <!-- Part-Centric Bar Chart -->
+        <div class="lg:col-span-2 glass-panel rounded-2xl p-6 relative">
+            <h3 class="text-[11px] font-bold text-slate-300 uppercase tracking-widest mb-6 border-b border-slate-700/50 pb-2 flex items-center"><i class="fa-solid fa-chart-column text-brand-400 mr-2"></i> Stock Density by Part & Subsidiary</h3>
+            <div class="relative h-60 w-full flex justify-center items-center">
+                <canvas id="chart-bar-parts"></canvas>
+            </div>
+        </div>
+        
+        <!-- Summary KPIs -->
+        <div class="grid grid-rows-2 gap-6 lg:col-span-1">
+            <div class="glass-panel rounded-2xl p-8 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300">
+                <div class="absolute -right-6 -top-6 text-brand-500/10 text-9xl group-hover:text-brand-500/20 transition-colors"><i class="fa-solid fa-wallet"></i></div>
+                <p class="text-sm font-bold text-brand-400 uppercase tracking-widest relative z-10 mb-2">Total Locked Value</p>
+                <h4 class="text-3xl font-extrabold text-white relative z-10 truncate" id="kpi-total-value">AED 0.00</h4>
+            </div>
+            <div class="glass-panel rounded-2xl p-8 relative overflow-hidden group hover:-translate-y-1 transition-transform duration-300 border-b-4 border-red-500">
+                <div class="absolute -right-6 -top-6 text-red-500/10 text-9xl group-hover:text-red-500/20 transition-colors"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                <p class="text-sm font-bold text-red-400 uppercase tracking-widest relative z-10 mb-2">Critical Low Stock</p>
+                <h4 class="text-5xl font-extrabold text-white relative z-10" id="kpi-critical">0</h4>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dynamic Datatable -->
+    <div class="glass-panel rounded-2xl overflow-hidden shadow-2xl relative">
+        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-500 via-purple-500 to-emerald-500"></div>
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-700/50">
+                <thead class="bg-slate-800/50">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em]">#</th>
+                        <th class="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest">PART DETAILS</th>
+                        <th class="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest">ORIGIN & ZONE</th>
+                        <th class="px-6 py-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest">CATEGORY / BRAND</th>
+                        <th class="px-6 py-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer group" onclick="setSort('quantity')">
+                            UNITS HELD <i class="fa-solid fa-sort ml-1 text-slate-700 group-hover:text-brand-400 transition-colors" id="sort-icon-quantity"></i>
+                        </th>
+                        <th class="px-6 py-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer group" onclick="setSort('cost_price')">
+                            UNIT PRICE <i class="fa-solid fa-sort ml-1 text-slate-700 group-hover:text-brand-400 transition-colors" id="sort-icon-cost_price"></i>
+                        </th>
+                        <th class="px-6 py-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer group" onclick="setSort('total_value')">
+                            TOTAL PRICE <i class="fa-solid fa-sort ml-1 text-slate-700 group-hover:text-brand-400 transition-colors" id="sort-icon-total_value"></i>
+                        </th>
+                        <th class="px-6 py-4 text-center text-[10px] font-bold text-slate-500 uppercase tracking-widest">STOCK HEALTH</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-table-body" class="divide-y divide-slate-700/50 bg-slate-900/40">
+                    <tr>
+                        <td colspan="5" class="px-6 py-16 text-center text-slate-500">
+                            <i class="fa-solid fa-circle-notch fa-spin text-4xl mb-4 text-brand-500"></i>
+                            <p class="text-lg font-medium text-slate-400">Syncing live records...</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="px-6 py-4 bg-slate-800/80 text-sm text-slate-400 border-t border-slate-700/50 flex justify-between items-center" id="table-footer">
+            <span>Showing 0 records</span>
+        </div>
+    </div>
+
+</div>
+
+<!-- EXPORT MODAL -->
+<div id="export-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" id="export-backdrop"></div>
+    <div class="flex items-center justify-center min-h-screen px-4 animate-bounce-in">
+        <div class="relative glass-panel bg-slate-800 rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.5)] max-w-lg w-full p-8 z-10 border border-slate-600">
+            <h3 class="text-2xl font-bold text-white mb-2"><i class="fa-solid fa-file-export mr-3 text-emerald-400"></i> Data Export Matrix</h3>
+            <p class="text-sm text-slate-400 mb-8">Select the specific data vectors you wish to compile into the CSV payload. All currently active UI filters are strictly applied.</p>
+            
+            <form id="export-form" class="space-y-6" onsubmit="event.preventDefault(); submitExport();">
+                <div class="grid grid-cols-2 gap-4" id="export-columns-container">
+                    <label class="flex items-center space-x-3 text-sm text-slate-300 cursor-pointer group">
+                        <input type="checkbox" name="cols[]" value="part_number" checked class="w-5 h-5 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50">
+                        <span class="group-hover:text-emerald-400 transition-colors">Part Number</span>
+                    </label>
+                    <label class="flex items-center space-x-3 text-sm text-slate-300 cursor-pointer group">
+                        <input type="checkbox" name="cols[]" value="description" checked class="w-5 h-5 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50">
+                        <span class="group-hover:text-emerald-400 transition-colors">Description</span>
+                    </label>
+                    <label class="flex items-center space-x-3 text-sm text-slate-300 cursor-pointer group">
+                        <input type="checkbox" name="cols[]" value="subsidiary" checked class="w-5 h-5 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50">
+                        <span class="group-hover:text-emerald-400 transition-colors">Subsidiary</span>
+                    </label>
+                    <label class="flex items-center space-x-3 text-sm text-slate-300 cursor-pointer group">
+                        <input type="checkbox" name="cols[]" value="zone_location" checked class="w-5 h-5 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50">
+                        <span class="group-hover:text-emerald-400 transition-colors">Zone Location</span>
+                    </label>
+                    <label class="flex items-center space-x-3 text-sm text-slate-300 cursor-pointer group">
+                        <input type="checkbox" name="cols[]" value="quantity" checked class="w-5 h-5 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50">
+                        <span class="group-hover:text-emerald-400 transition-colors">Stock Level</span>
+                    </label>
+                    <label class="flex items-center space-x-3 text-sm text-slate-300 cursor-pointer group">
+                        <input type="checkbox" name="cols[]" value="cost_price" class="w-5 h-5 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50">
+                        <span class="group-hover:text-emerald-400 transition-colors">Unit Cost (AED)</span>
+                    </label>
+                    <label class="flex items-center space-x-3 text-sm text-slate-300 cursor-pointer group">
+                        <input type="checkbox" name="cols[]" value="brand" class="w-5 h-5 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50">
+                        <span class="group-hover:text-emerald-400 transition-colors">Brand</span>
+                    </label>
+                    <label class="flex items-center space-x-3 text-sm text-slate-300 cursor-pointer group">
+                        <input type="checkbox" name="cols[]" value="category" class="w-5 h-5 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500/50">
+                        <span class="group-hover:text-emerald-400 transition-colors">Category</span>
+                    </label>
+                </div>
+
+                <div class="mt-8 flex justify-end gap-3 pt-6 border-t border-slate-700/50">
+                    <button type="button" id="btn-cancel-export" class="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:text-white hover:bg-slate-700 transition-all">
+                        Cancel
+                    </button>
+                    <button type="submit" id="btn-confirm-export" class="px-5 py-2.5 rounded-xl shadow-[0_0_15px_rgba(16,185,129,0.3)] text-sm font-bold text-white bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 transition-all transform hover:-translate-y-0.5">
+                        <i class="fa-solid fa-download mr-2"></i> Download CSV Payload
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    
+    // Globals
+    let currentData = [];
+    let sortConfig = { key: 'id', dir: 'desc' }; // Default sort
+
+    function setSort(key) {
+        if (sortConfig.key === key) {
+            sortConfig.dir = sortConfig.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortConfig.key = key;
+            sortConfig.dir = 'desc';
+        }
+        updateSortIcons();
+        renderTable();
+    }
+
+    function updateSortIcons() {
+        const keys = ['quantity', 'cost_price', 'total_value'];
+        keys.forEach(k => {
+            const icon = document.getElementById(`sort-icon-${k}`);
+            if (k === sortConfig.key) {
+                icon.className = `fa-solid fa-sort-${sortConfig.dir === 'asc' ? 'up' : 'down'} ml-1 text-brand-400`;
+            } else {
+                icon.className = 'fa-solid fa-sort ml-1 text-slate-700';
+            }
+        });
+    }
+    let donutChart = null;
+    let barChart = null;
+
+    // Filters
+    const F = {
+        company: document.getElementById('filter_company'),
+        category: document.getElementById('filter_category'),
+        brand: document.getElementById('filter_brand'),
+        status: document.getElementById('filter_status'),
+        vitality: document.getElementById('filter_vitality'),
+        health: document.getElementById('filter_health_status'),
+        zone: document.getElementById('filter_zone')
+    };
+
+    // Get selected values using Choices instance or standard array map
+    function getMultiValues(selectEl) {
+        if (selectEl.choicesInstance) {
+            return selectEl.choicesInstance.getValue(true).join(',');
+        }
+        return Array.from(selectEl.selectedOptions).map(opt => opt.value).join(',');
+    }
+
+    // Initialize Choices.js
+    const choiceConfig = {
+        removeItemButton: true,
+        searchEnabled: true,
+        searchPlaceholderValue: "Search here...",
+        itemSelectText: '',
+        shouldSort: false
+    };
+
+    ['filter_company', 'filter_category', 'filter_brand', 'filter_status', 'filter_vitality', 'filter_health_status'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.choicesInstance = new Choices(el, choiceConfig);
+            el.addEventListener('change', fetchInventory);
+        }
+    });
+
+    // Select All / Deselect All toggle
+    window.toggleAll = function(selectId) {
+        const el = document.getElementById(selectId);
+        if (!el || !el.choicesInstance) return;
+        const ci = el.choicesInstance;
+        const currentSelected = ci.getValue(true);
+        const allValues = Array.from(el.querySelectorAll('option')).map(o => o.value);
+
+        if (currentSelected.length === allValues.length) {
+            // Deselect all
+            ci.removeActiveItems();
+        } else {
+            // Select all
+            ci.removeActiveItems();
+            allValues.forEach(v => ci.setChoiceByValue(v));
+        }
+        fetchInventory();
+    };
+
+    // Clear all selections
+    window.clearAll = function(selectId) {
+        const el = document.getElementById(selectId);
+        if (!el || !el.choicesInstance) return;
+        el.choicesInstance.removeActiveItems();
+        fetchInventory();
+    };
+
+    // Debounce Helper
+    function _() {}
+    _.debounce = function(func, wait) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    };
+
+    F.zone.addEventListener('keyup', _.debounce(fetchInventory, 300));
+
+    // UI Elements
+    const tbody = document.getElementById('inventory-table-body');
+    const footerCount = document.getElementById('table-footer');
+    const kpiTotal = document.getElementById('kpi-total-value');
+    const kpiCritical = document.getElementById('kpi-critical');
+
+    function fetchInventory() {
+        const params = new URLSearchParams({
+            company_id: getMultiValues(F.company),
+            category_id: getMultiValues(F.category),
+            brand_id: getMultiValues(F.brand),
+            status_id: getMultiValues(F.status),
+            vitality_id: getMultiValues(F.vitality),
+            health_status: getMultiValues(F.health),
+            zone: F.zone.value
+        });
+
+        fetch(`{{ url_for('api_inventory') }}?` + params.toString(), { credentials: 'same-origin' })
+            .then(res => res.json())
+            .then(res => {
+                if (res && res.data !== undefined) {
+                    currentData = res.data;
+                    renderTable();
+                    renderCharts();
+                } else {
+                    toast('Error fetching valid data format', 'error');
+                }
+            })
+            .catch(e => {
+                console.error(e);
+                toast('Network Request Failed. Is the server running?', 'error');
+            });
+    }
+
+    function renderTable() {
+        if (!currentData || currentData.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-16 text-center text-slate-500"><i class="fa-solid fa-folder-open text-4xl mb-4 text-slate-600"></i><p>No inventory records match the current filters.</p></td></tr>`;
+            footerCount.innerHTML = '<span>Showing 0 records</span>';
+            return;
+        }
+
+        // Apply Sorting
+        const sorted = [...currentData].sort((a, b) => {
+            let vA = a[sortConfig.key];
+            let vB = b[sortConfig.key];
+            if (sortConfig.dir === 'asc') return vA > vB ? 1 : -1;
+            return vA < vB ? 1 : -1;
+        });
+
+        tbody.innerHTML = '';
+        let html = '';
+        sorted.forEach((item, index) => {
+            let hClass = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]';
+            let icon = 'fa-circle-check';
+            if (item.health === 'Critical') {
+                hClass = 'bg-red-500/10 text-red-400 border border-red-500/20 shadow-[0_0_10px_rgba(239,68,68,0.1)]';
+                icon = 'fa-triangle-exclamation animate-pulse';
+            }
+            if (item.health === 'Warning') {
+                hClass = 'bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.1)]';
+                icon = 'fa-circle-exclamation';
+            }
+
+            let rowClass = 'hover:bg-slate-800/60 transition-colors border-b border-slate-700/30';
+            if (item.health === 'Critical') {
+                rowClass = 'bg-red-500/10 border-b border-red-500/20 hover:bg-red-500/20 transition-colors';
+            } else if (item.health === 'Warning') {
+                rowClass = 'bg-amber-500/10 border-b border-amber-500/20 hover:bg-amber-500/20 transition-colors';
+            }
+
+            html += `
+            <tr class="${rowClass}">
+                <td class="px-6 py-5 whitespace-nowrap text-[10px] font-bold text-slate-600 tracking-widest">
+                    ${(index + 1).toString().padStart(2, '0')}
+                </td>
+                <td class="px-6 py-5 whitespace-nowrap">
+                    <div class="flex items-center">
+                        <a href="{{ url_for('parts_settings') }}" class="h-10 w-10 rounded-lg bg-slate-800 flex items-center justify-center border border-slate-700 text-brand-400 mr-4 hover:bg-brand-500/10 hover:text-brand-300 transition-all transform hover:scale-105" title="Configure Part Attributes">
+                            <i class="fa-solid fa-gear"></i>
+                        </a>
+                        <div>
+                            <div class="text-sm font-bold text-white tracking-wide">${item.part_number}</div>
+                            <div class="text-xs text-slate-400 truncate max-w-[250px]" title="${item.description}">${item.description}</div>
+                        </div>
+                    </div>
+                </td>
+                <td class="px-6 py-5 whitespace-nowrap">
+                    <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-bold bg-slate-800 text-slate-300 mb-1.5 border border-slate-700">
+                        ${item.subsidiary}
+                    </span>
+                    <div class="text-xs text-slate-400 font-medium tracking-wide"><i class="fa-solid fa-location-dot text-brand-500 mr-1"></i> ${item.zone}</div>
+                </td>
+                <td class="px-6 py-5 whitespace-nowrap text-sm text-slate-300">
+                    <div class="font-bold text-white mb-0.5">${item.category}</div>
+                    <div class="text-[10px] text-slate-400 font-medium mb-1">${item.brand}</div>
+                    <div class="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 border border-slate-700/50 inline-block uppercase tracking-wider font-bold"> Vitality: ${item.vitality}</div>
+                </td>
+                <td class="px-6 py-5 whitespace-nowrap text-right">
+                    <div class="text-lg font-extrabold text-white">${item.quantity} <span class="text-xs text-slate-500 font-normal">PCs</span></div>
+                    <div class="text-[11px] uppercase tracking-wider font-bold ${item.health === 'Critical' ? 'text-red-400' : 'text-slate-500'}">Min Req: ${item.reorder_point}</div>
+                </td>
+                <td class="px-6 py-5 whitespace-nowrap text-right text-sm font-bold text-slate-300">
+                    AED ${item.cost_price.toFixed(2)}
+                </td>
+                <td class="px-6 py-5 whitespace-nowrap text-right">
+                    <div class="text-sm font-bold text-emerald-400">AED ${item.total_value.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                </td>
+                <td class="px-6 py-5 whitespace-nowrap text-center">
+                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${hClass}">
+                        <i class="fa-solid ${icon} mr-1.5"></i> ${item.health}
+                    </span>
+                </td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = html;
+        footerCount.innerHTML = `<span>Showing <strong class="text-white">${currentData.length}</strong> active vectors</span>`;
+    }
+
+    function renderCharts() {
+        let totalVal = 0;
+        let critCount = 0;
+        let distData = {};
+
+        currentData.forEach(i => {
+            totalVal += i.total_value;
+            if (i.health === 'Critical') critCount++;
+            
+            // Distribute by subsidiary if "All" is selected, else by Category/Brand
+            let splitKey = F.company.value === '' ? i.subsidiary : i.category;
+            if (!splitKey) splitKey = 'Uncategorized';
+            
+            distData[splitKey] = (distData[splitKey] || 0) + i.total_value;
+        });
+
+        // Update KPIs with counting animation style (just set for now)
+        kpiTotal.textContent = new Intl.NumberFormat('en-AE', { style: 'currency', currency: 'AED', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totalVal);
+        kpiCritical.textContent = critCount;
+
+        // Render Donut Chart
+        const ctx = document.getElementById('chart-distribution');
+        if (donutChart) donutChart.destroy();
+
+        if (Object.keys(distData).length === 0) return;
+
+        Chart.defaults.color = '#94a3b8';
+        Chart.defaults.font.family = 'Outfit, sans-serif';
+
+        // Custom premium colorplot gradients for chart
+        const ctx2d = ctx.getContext('2d');
+        const gradientBlue = ctx2d.createLinearGradient(0, 0, 0, 400);
+        gradientBlue.addColorStop(0, '#0ea5e9'); gradientBlue.addColorStop(1, '#6366f1');
+        
+        const gradientPurple = ctx2d.createLinearGradient(0, 0, 0, 400);
+        gradientPurple.addColorStop(0, '#8b5cf6'); gradientPurple.addColorStop(1, '#d946ef');
+        
+        const gradientEmerald = ctx2d.createLinearGradient(0, 0, 0, 400);
+        gradientEmerald.addColorStop(0, '#10b981'); gradientEmerald.addColorStop(1, '#3b82f6');
+        
+        const gradientAmber = ctx2d.createLinearGradient(0, 0, 0, 400);
+        gradientAmber.addColorStop(0, '#f59e0b'); gradientAmber.addColorStop(1, '#ef4444');
+
+        const bgColors = [gradientBlue, gradientPurple, gradientEmerald, gradientAmber, '#3b82f6', '#14b8a6', '#f43f5e', '#8b5cf6'];
+
+        donutChart = new Chart(ctx, {
+            type: 'doughnut',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: Object.keys(distData),
+                datasets: [{
+                    data: Object.values(distData),
+                    backgroundColor: bgColors,
+                    borderWidth: 2,
+                    borderColor: '#1e293b',
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleFont: { size: 14, family: 'Outfit' },
+                        bodyFont: { size: 14, family: 'Outfit', weight: 'bold' }
+                    },
+                    datalabels: {
+                        color: '#fff',
+                        font: { weight: 'bold', size: 11 },
+                        formatter: (value, ctx) => ctx.chart.data.labels[ctx.dataIndex],
+                        anchor: 'center',
+                        align: 'center',
+                        textShadowBlur: 4,
+                        textShadowColor: 'rgba(0,0,0,0.5)'
+                    }
+                },
+                cutout: '80%',
+                animation: { animateScale: true, animateRotate: true }
+            }
+        });
+
+        // Render Bar Chart (Part-Centric)
+        const ctxBar = document.getElementById('chart-bar-parts');
+        if (barChart) barChart.destroy();
+
+        // Group by Part Number, getting total qty
+        let partQty = {};
+        currentData.forEach(i => {
+            partQty[i.part_number] = (partQty[i.part_number] || 0) + i.quantity;
+        });
+
+        // Top 10 by quantity
+        const sortedParts = Object.keys(partQty).sort((a,b) => partQty[b] - partQty[a]).slice(0, 10);
+        const barData = sortedParts.map(p => partQty[p]);
+
+        const ctxBar2d = ctxBar.getContext('2d');
+        const barGradient = ctxBar2d.createLinearGradient(0, 0, 0, 400);
+        barGradient.addColorStop(0, '#38bdf8'); barGradient.addColorStop(1, '#6366f1');
+
+        barChart = new Chart(ctxBar, {
+            type: 'bar',
+            plugins: [ChartDataLabels],
+            data: {
+                labels: sortedParts,
+                datasets: [{
+                    label: 'Units Held',
+                    data: barData,
+                    backgroundColor: barGradient,
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleFont: { size: 14, family: 'Outfit' },
+                        bodyFont: { size: 14, family: 'Outfit', weight: 'bold' }
+                    },
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'top',
+                        color: '#fff',
+                        font: {
+                            weight: 'bold',
+                            size: 10
+                        },
+                        formatter: (value) => value.toLocaleString()
+                    }
+                },
+                scales: {
+                    y: { 
+                        grid: { color: 'rgba(255,255,255,0.05)' }, 
+                        border: { dash: [4, 4] }, 
+                        beginAtZero: true,
+                        suggestedMax: Math.max(...barData) * 1.1 // Add some padding for the labels
+                    },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    // --- Export Logic ---
+    const modal = document.getElementById('export-modal');
+    
+    document.getElementById('btn-export-trigger').addEventListener('click', () => {
+        modal.classList.remove('hidden');
+    });
+
+    document.getElementById('btn-cancel-export').addEventListener('click', () => {
+        modal.classList.add('hidden');
+    });
+    document.getElementById('export-backdrop').addEventListener('click', () => {
+        modal.classList.add('hidden');
+    });
+
+    window.submitExport = function() {
+        const checkboxes = document.querySelectorAll('input[name="cols[]"]:checked');
+        if (checkboxes.length === 0) {
+            toast("You must select at least one data vector", "error");
+            return;
+        }
+        
+        const selectedCols = Array.from(checkboxes).map(cb => cb.value);
+        
+        const payload = {
+            filters: {
+                company_id: getMultiValues(F.company),
+                category_id: getMultiValues(F.category),
+                brand_id: getMultiValues(F.brand),
+                status_id: getMultiValues(F.status),
+                zone: F.zone.value
+            },
+            selected_columns: selectedCols
+        };
+
+        toast("Aggregating CSV Payload...", 'success');
+
+        fetch('{{ url_for("export") }}', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.blob())
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = "Enterprise_Report_" + (new Date().getTime()) + ".csv";
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            
+            modal.classList.add('hidden');
+            toast("Download Synthesized!");
+        })
+        .catch(err => {
+            console.error(err);
+            toast("Export failed to compile", "error");
+        });
+    };
+
+    // Auto Init
+    fetchInventory();
+});
+</script>
+{% endblock %}

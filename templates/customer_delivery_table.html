@@ -1,0 +1,457 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-8 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">Customer Delivery Table</h1>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('delivery_export') }}" class="px-5 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl text-xs font-black uppercase tracking-widest transition-all border border-emerald-500/20 shadow-xl">
+                <i class="fa-solid fa-file-excel mr-2"></i> Export Logs
+            </a>
+        </div>
+    </div>
+
+    <!-- Filtration Console -->
+    <div class="glass-panel p-6 rounded-[2rem] border border-white/5 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl bg-brand-500/[0.02]">
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{{ url_for('customer_delivery_table', filter='today') }}" class="px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all {% if filter_type == 'today' %}bg-brand-500 text-white shadow-lg shadow-brand-500/20{% else %}bg-white/5 text-slate-500 hover:text-white{% endif %}">Day</a>
+            <a href="{{ url_for('customer_delivery_table', filter='week') }}" class="px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all {% if filter_type == 'week' %}bg-brand-500 text-white shadow-lg shadow-brand-500/20{% else %}bg-white/5 text-slate-500 hover:text-white{% endif %}">Week</a>
+            <a href="{{ url_for('customer_delivery_table', filter='month') }}" class="px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all {% if filter_type == 'month' %}bg-brand-500 text-white shadow-lg shadow-brand-500/20{% else %}bg-white/5 text-slate-500 hover:text-white{% endif %}">Month</a>
+            <div class="h-6 w-px bg-white/10 mx-2 hidden md:block"></div>
+        </div>
+        
+        <form action="{{ url_for('customer_delivery_table') }}" method="GET" class="flex items-center gap-4 w-full md:w-auto">
+            <input type="hidden" name="filter" value="custom">
+            <div class="flex-1 md:flex-initial flex items-center gap-3">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Start Date</label>
+                    <input type="date" name="start_date" value="{{ start_date or '' }}" class="bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2 text-xs font-bold text-white outline-none focus:border-brand-500 transition-all shadow-inner">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">End Date</label>
+                    <input type="date" name="end_date" value="{{ end_date or '' }}" class="bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2 text-xs font-bold text-white outline-none focus:border-brand-500 transition-all shadow-inner">
+                </div>
+            </div>
+            <button type="submit" class="self-end px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl flex items-center justify-center transition-all shadow-lg shadow-brand-500/20 active:scale-95">
+                <i class="fa-solid fa-filter text-xs mr-2"></i> Apply Range
+            </button>
+        </form>
+    </div>
+
+    <!-- Data Table -->
+    <div class="glass-panel rounded-3xl border border-white/5 shadow-2xl">
+        <div class="hidden md:block overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-800/50 text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold border-b border-white/5">
+                        <th class="px-6 py-5">Date & Day</th>
+                        <th class="px-6 py-5">Customer Name</th>
+                        <th class="px-6 py-5">Driver</th>
+                        <th class="px-6 py-5 border-l border-white/5 bg-emerald-500/5">Arrival Time</th>
+                        <th class="px-6 py-5 bg-blue-500/5">Departure Time</th>
+                        <th class="px-6 py-5 text-center border-l border-white/5">Offloading Time</th>
+                        <th class="px-6 py-5 text-center">Delivery Time</th>
+                        <th class="px-6 py-5 text-right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/20">
+                    {% for stop in stops %}
+                    <tr class="hover:bg-white/5 transition-all group">
+                        <td class="px-6 py-4">
+                            <div class="text-xs font-bold text-white whitespace-nowrap">{{ stop.date }}</div>
+                            <div class="text-[10px] text-brand-400 font-black uppercase tracking-widest">{{ stop.day_name }}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm font-extrabold text-slate-200 flex items-center gap-2">
+                                {{ stop.customer_name }}
+                                {% if stop.delivery_order %}
+                                <div class="flex items-center gap-1 bg-brand-500/10 border border-brand-500/20 text-brand-400 pl-2 pr-1 py-0.5 rounded-full shadow-sm">
+                                    <span class="text-[9px] font-black uppercase tracking-widest">{{ stop.delivery_order }}{% if stop.delivery_order == 1 %}st{% elif stop.delivery_order == 2 %}nd{% elif stop.delivery_order == 3 %}rd{% else %}th{% endif %} Stop</span>
+                                    <div class="flex flex-col ml-1">
+                                        <button onclick="moveStopOrder('{{ stop.trip_id }}', '{{ stop.customer_id }}', 'up')" title="Move Earlier" class="w-4 h-3 rounded flex items-center justify-center hover:bg-brand-500 hover:text-white transition-all bg-brand-500/20 mb-px"><i class="fa-solid fa-chevron-up text-[7px]"></i></button>
+                                        <button onclick="moveStopOrder('{{ stop.trip_id }}', '{{ stop.customer_id }}', 'down')" title="Move Later" class="w-4 h-3 rounded flex items-center justify-center hover:bg-brand-500 hover:text-white transition-all bg-brand-500/20 mt-px"><i class="fa-solid fa-chevron-down text-[7px]"></i></button>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-2">
+                                <div class="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                                    {{ stop.driver[0]|upper if stop.driver else '?' }}
+                                </div>
+                                <span class="text-xs font-medium text-slate-400 whitespace-nowrap">{{ stop.driver }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 border-l border-white/5 bg-emerald-500/5 transition-colors group-hover:bg-emerald-500/10">
+                            {% if stop.arrival_time %}
+                            <div class="text-xs font-mono font-bold text-emerald-400 cursor-pointer" onclick="editStopLog('{{ stop.trip_id }}', '{{ stop.customer_id }}', 'Arrival', '{{ stop.arrival_time }}')">
+                                {{ stop.arrival_time.split(' ')[1] if (stop.arrival_time and ' ' in stop.arrival_time) else stop.arrival_time }}
+                                <i class="fa-solid fa-pen ml-2 opacity-30 hover:opacity-100"></i>
+                            </div>
+                            {% else %}
+                            <button onclick="logInteraction('{{ stop.trip_id }}', '{{ stop.customer_id }}', 'Arrival')" class="w-full px-3 py-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-lg text-[10px] font-black uppercase transition-all border border-emerald-500/20 shadow flex items-center justify-center gap-2 flex-nowrap">
+                                <i class="fa-solid fa-truck-arrow-right hidden xl:block"></i> Log Arrival
+                            </button>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 bg-blue-500/5 transition-colors group-hover:bg-blue-500/10">
+                            {% if stop.departure_time %}
+                            <div class="text-xs font-mono font-bold text-blue-400 cursor-pointer" onclick="editStopLog('{{ stop.trip_id }}', '{{ stop.customer_id }}', 'Departure', '{{ stop.departure_time }}')">
+                                {{ stop.departure_time.split(' ')[1] if (stop.departure_time and ' ' in stop.departure_time) else stop.departure_time }}
+                                <i class="fa-solid fa-pen ml-2 opacity-30 hover:opacity-100"></i>
+                            </div>
+                            {% else %}
+                            <button {% if not stop.arrival_time %}disabled{% endif %} onclick="logInteraction('{{ stop.trip_id }}', '{{ stop.customer_id }}', 'Departure')" class="w-full px-3 py-2 {% if stop.arrival_time %}bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border-red-500/20 shadow{% else %}opacity-30 cursor-not-allowed bg-slate-800 text-slate-500 border border-white/5{% endif %} rounded-lg text-[10px] font-black uppercase transition-all border flex items-center justify-center gap-2 flex-nowrap">
+                                <i class="fa-solid fa-person-walking-arrow-right hidden xl:block"></i> Log Departure
+                            </button>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-center border-l border-white/5">
+                            {% if stop.offloading_time is not none and stop.offloading_time >= 0 %}
+                            <div class="inline-flex items-center px-3 py-1 bg-emerald-500/10 text-emerald-400 rounded-lg text-xs font-black">
+                                {{ stop.offloading_time }} <span class="ml-1 text-[8px] opacity-70">MIN</span>
+                            </div>
+                            {% elif stop.offloading_time is not none and stop.offloading_time < 0 %}
+                            <span class="text-red-500 font-bold text-[10px] opacity-70">DATA ERR</span>
+                            {% else %}
+                            <span class="text-red-500/50 font-bold text-xs">NA</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            {% if stop.delivery_time is not none and stop.delivery_time >= 0 %}
+                            <div class="inline-flex items-center px-3 py-1 bg-brand-500/10 text-brand-400 rounded-lg text-xs font-black">
+                                {{ stop.delivery_time }} <span class="ml-1 text-[8px] opacity-70">MIN</span>
+                            </div>
+                            {% elif stop.delivery_time is not none and stop.delivery_time < 0 %}
+                            <span class="text-amber-500 font-bold text-[10px] opacity-70">DATA ERR</span>
+                            {% else %}
+                            <span class="text-red-500/50 font-bold text-xs">NA</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <div class="flex items-center justify-end gap-2 xl:opacity-0 group-hover:opacity-100 transition-all">
+                                <button onclick="deleteStop('{{ stop.trip_id }}', '{{ stop.customer_id }}')" title="Excise Transaction Data"
+                                    class="w-8 h-8 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all border border-red-500/20 shrink-0">
+                                    <i class="fa-solid fa-trash-can text-xs"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="px-6 py-20 text-center">
+                            <div class="flex flex-col items-center gap-4">
+                                <div class="w-16 h-16 rounded-3xl bg-slate-800/50 flex items-center justify-center text-slate-500 text-2xl border border-white/5">
+                                    <i class="fa-solid fa-truck-loading"></i>
+                                </div>
+                                <div>
+                                    <p class="text-lg font-bold text-white">No visit data found</p>
+                                    <p class="text-xs text-slate-500">Try adjusting your filtration criteria or date range.</p>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Mobile View (Cards) -->
+        <div class="md:hidden divide-y divide-white/5">
+            {% for stop in stops %}
+            <div class="p-5 flex flex-col gap-4 bg-slate-900/20 hover:bg-white/5 transition-all">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h4 class="text-lg font-extrabold text-slate-200">{{ stop.customer_name }}</h4>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-[10px] bg-brand-500/20 text-brand-400 px-2 py-0.5 rounded uppercase tracking-widest font-black">{{ stop.date }}</span>
+                            <span class="text-xs text-slate-500 font-medium"><i class="fa-solid fa-user-circle mr-1 text-slate-600"></i>{{ stop.driver }}</span>
+                        </div>
+                    </div>
+                    <button onclick="deleteStop('{{ stop.trip_id }}', '{{ stop.customer_id }}')" class="w-8 h-8 shrink-0 rounded-lg bg-red-500/10 text-red-500 flex items-center justify-center border border-red-500/20 hover:bg-red-500 hover:text-white transition-all">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 mt-2">
+                    <div class="p-3 bg-emerald-500/5 rounded-xl border border-emerald-500/10 flex flex-col items-center justify-center gap-2 text-center relative overflow-hidden">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-emerald-600/50 absolute top-2 left-0 w-full">Arrival</span>
+                        <div class="mt-4 w-full">
+                        {% if stop.arrival_time %}
+                            <div class="text-sm font-mono font-bold text-emerald-400 flex items-center justify-center cursor-pointer hover:text-emerald-300 transition-colors" onclick="editStopLog('{{ stop.trip_id }}', '{{ stop.customer_id }}', 'Arrival', '{{ stop.arrival_time }}')">
+                                {{ stop.arrival_time.split(' ')[1] if ' ' in stop.arrival_time else stop.arrival_time }}
+                                <i class="fa-solid fa-pen ml-2 opacity-50 text-[10px]"></i>
+                            </div>
+                        {% else %}
+                            <button onclick="logInteraction('{{ stop.trip_id }}', '{{ stop.customer_id }}', 'Arrival')" class="w-full px-2 py-2 bg-emerald-500 text-white rounded-lg text-[10px] font-black uppercase shadow-lg shadow-emerald-500/20 active:scale-95 transition-all">
+                                Log Arrival
+                            </button>
+                        {% endif %}
+                        </div>
+                    </div>
+                    <div class="p-3 bg-blue-500/5 rounded-xl border border-blue-500/10 flex flex-col items-center justify-center gap-2 text-center relative overflow-hidden">
+                        <span class="text-[9px] font-black uppercase tracking-widest text-blue-600/50 absolute top-2 left-0 w-full">Departure</span>
+                        <div class="mt-4 w-full">
+                        {% if stop.departure_time %}
+                            <div class="text-sm font-mono font-bold text-blue-400 flex items-center justify-center cursor-pointer hover:text-blue-300 transition-colors" onclick="editStopLog('{{ stop.trip_id }}', '{{ stop.customer_id }}', 'Departure', '{{ stop.departure_time }}')">
+                                {{ stop.departure_time.split(' ')[1] if ' ' in stop.departure_time else stop.departure_time }}
+                                <i class="fa-solid fa-pen ml-2 opacity-50 text-[10px]"></i>
+                            </div>
+                        {% else %}
+                            <button {% if not stop.arrival_time %}disabled{% endif %} onclick="logInteraction('{{ stop.trip_id }}', '{{ stop.customer_id }}', 'Departure')" class="w-full px-2 py-2 {% if stop.arrival_time %}bg-red-500 text-white shadow-lg shadow-red-500/20 active:scale-95 transition-all{% else %}bg-slate-800 text-slate-500 opacity-50 cursor-not-allowed{% endif %} rounded-lg text-[10px] font-black uppercase">
+                                Log Departure
+                            </button>
+                        {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between border-t border-white/5 pt-3 mt-1">
+                    <div class="flex flex-col items-start gap-1">
+                        <span class="text-[9px] uppercase tracking-widest font-black text-slate-500">Offloading</span>
+                        {% if stop.offloading_time is not none and stop.offloading_time >= 0 %}
+                            <span class="text-sm font-black text-emerald-400">{{ stop.offloading_time }} <span class="text-[8px] opacity-70">MIN</span></span>
+                        {% elif stop.offloading_time is not none and stop.offloading_time < 0 %}
+                            <span class="text-[10px] font-bold text-red-500/70">DATA ERR</span>
+                        {% else %}
+                            <span class="text-xs font-bold text-slate-600">--</span>
+                        {% endif %}
+                    </div>
+                    <div class="flex flex-col items-end gap-1 border-l border-white/5 pl-4">
+                        <span class="text-[9px] uppercase tracking-widest font-black text-slate-500">Delivery</span>
+                        {% if stop.delivery_time is not none and stop.delivery_time >= 0 %}
+                            <span class="text-sm font-black text-brand-400">{{ stop.delivery_time }} <span class="text-[8px] opacity-70">MIN</span></span>
+                        {% elif stop.delivery_time is not none and stop.delivery_time < 0 %}
+                            <span class="text-[10px] font-bold text-amber-500/70">DATA ERR</span>
+                        {% else %}
+                            <span class="text-xs font-bold text-slate-600">--</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="p-10 text-center">
+                <i class="fa-solid fa-truck-loading text-slate-600 border border-white/5 rounded-3xl p-5 text-2xl mb-4"></i>
+                <p class="text-slate-400 text-sm font-bold">No visit data found.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+async function deleteStop(tripId, custId) {
+    if (!confirm("Are you sure you want to excise this transaction data entirely? This will remove arrival and departure logs for this stop.")) return;
+
+    window.toast("Excising transaction logs...", "info");
+    
+    try {
+        const formData = new FormData();
+        formData.append('trip_id', tripId);
+        formData.append('customer_id', custId);
+        
+        await fetch('/api/delivery/stop/delete', {
+            method: 'POST',
+            body: formData
+        });
+        
+        window.toast("Transaction data excised successfully");
+        setTimeout(() => location.reload(), 800);
+    } catch (e) {
+        window.toast("Operation failed", "error");
+    }
+}
+
+async function moveStopOrder(tripId, custId, direction) {
+    const formData = new FormData();
+    formData.append('trip_id', tripId);
+    formData.append('customer_id', custId);
+    formData.append('direction', direction);
+
+    try {
+        window.toast("Calibrating logistical sequence...", "info");
+        const resp = await fetch('/api/delivery/move_stop', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await resp.json();
+        if (data.status === 'success') {
+            setTimeout(() => location.reload(), 300);
+        } else {
+            window.toast(data.msg || "Sequence boundary reached", "warning");
+        }
+    } catch (e) {
+        window.toast("Failed to calibrate sequence", "error");
+    }
+}
+
+function formatToDatetimeLocal(sqlTime) {
+    if (!sqlTime) return "";
+    return sqlTime.replace(' ', 'T').slice(0, 16);
+}
+
+function formatFromDatetimeLocal(localTime) {
+    if (!localTime) return "";
+    return localTime.replace('T', ' ') + ":00";
+}
+
+async function editStopLog(tripId, custId, type, existingTime) {
+    const defaultVal = formatToDatetimeLocal(existingTime);
+    
+    const { value: formValues } = await Swal.fire({
+        title: `<i class="fa-solid fa-clock-rotate-left mr-2 font-black text-brand-400"></i> Edit ${type} Time`,
+        html: `
+            <div class="mb-2 text-left text-sm font-bold text-slate-400">Specify the correct ${type.toLowerCase()} date & time:</div>
+            <input type="datetime-local" id="swal-datetime" class="w-full bg-slate-900 border border-slate-700/50 rounded-xl px-4 py-3 text-white outline-none focus:border-brand-500 shadow-inner" value="${defaultVal}">
+        `,
+        background: '#1e293b',
+        color: '#f8fafc',
+        showCancelButton: true,
+        confirmButtonText: 'Save Update',
+        confirmButtonColor: '#0ea5e9',
+        cancelButtonText: 'Cancel',
+        cancelButtonColor: '#334155',
+        focusConfirm: false,
+        preConfirm: () => {
+            const dt = document.getElementById('swal-datetime').value;
+            if (!dt) {
+                Swal.showValidationMessage('Please select a valid time');
+                return null;
+            }
+            return dt;
+        }
+    });
+
+    if (formValues) {
+        const newSqlTime = formatFromDatetimeLocal(formValues);
+        const formData = new FormData();
+        formData.append('trip_id', tripId);
+        formData.append('customer_id', custId);
+        if (type === 'Arrival') formData.append('arrival_time', newSqlTime);
+        if (type === 'Departure') formData.append('departure_time', newSqlTime);
+        
+        try {
+            window.toast("Updating timestamp...", "info");
+            const resp = await fetch('/api/delivery/stop/update', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+            if (data.status === 'success') {
+                window.toast("Timestamp updated.");
+                setTimeout(() => location.reload(), 600);
+            }
+        } catch (e) {
+            window.toast("Failed to update time", "error");
+        }
+    }
+}
+
+async function logInteraction(tripId, custId, type) {
+    const now = new Date();
+    // Adjust to local timezone ISO format for datetime-local
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+    const defaultLocal = now.toISOString().slice(0, 16);
+
+    const { value: result } = await Swal.fire({
+        title: `<i class="fa-solid fa-truck-fast mr-2 font-black ${type === 'Arrival' ? 'text-emerald-400' : 'text-blue-400'}"></i> Record ${type}`,
+        html: `
+            <div class="text-sm font-bold text-slate-400 mb-4 text-left">Choose logging method for this location:</div>
+            
+            <button id="btn-log-now" class="w-full px-4 py-3 bg-brand-600 hover:bg-brand-500 active:scale-95 text-white shadow-xl shadow-brand-500/20 font-black tracking-widest uppercase rounded-xl transition-all border border-brand-500/50 flex items-center justify-center gap-2">
+                <i class="fa-regular fa-clock"></i> Log Current Time
+            </button>
+            
+            <div class="flex items-center gap-2 my-5">
+                <div class="h-px bg-white/10 flex-1"></div>
+                <span class="text-[10px] text-slate-500 uppercase tracking-widest font-black">OR ENTER MANUALLY</span>
+                <div class="h-px bg-white/10 flex-1"></div>
+            </div>
+            
+            <div class="text-left mb-2 text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Select Custom Date & Time</div>
+            <input type="datetime-local" id="swal-manual-datetime" class="w-full bg-slate-900 border border-slate-700/50 rounded-xl px-4 py-3 text-white outline-none focus:border-brand-500 shadow-inner" value="${defaultLocal}">
+        `,
+        background: '#1e293b',
+        color: '#f8fafc',
+        showCancelButton: true,
+        showConfirmButton: true,
+        confirmButtonText: 'Save Custom Time',
+        confirmButtonColor: '#334155',
+        cancelButtonColor: '#0f172a',
+        didOpen: () => {
+             const b = Swal.getPopup().querySelector('#btn-log-now');
+             b.addEventListener('click', () => {
+                 Swal.getPopup().setAttribute('data-action', 'now');
+                 Swal.clickConfirm();
+             });
+        },
+        preConfirm: () => {
+            const popup = Swal.getPopup();
+            const action = popup.getAttribute('data-action');
+            if (action === 'now') {
+                return { mode: 'now' };
+            } else {
+                const dt = popup.querySelector('#swal-manual-datetime').value;
+                if (!dt) {
+                    Swal.showValidationMessage('Please select a valid time');
+                    return null;
+                }
+                return { mode: 'manual', time: formatFromDatetimeLocal(dt) };
+            }
+        }
+    });
+
+    if (result) {
+        if (result.mode === 'now') {
+            window.toast(`Registering pulse...`, "info");
+            const formData = new FormData();
+            formData.append('trip_id', tripId);
+            formData.append('customer_id', custId);
+            formData.append('type', type);
+            // activity string expected by quick_log/log_entry
+            if (type === 'Arrival') formData.append('activity', 'Arrival at Customer');
+            if (type === 'Departure') formData.append('activity', 'Departure from Customer');
+            
+            try {
+                const resp = await fetch('/api/delivery/quick_log', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                if (data.status === 'success') {
+                    window.toast(data.msg);
+                    setTimeout(() => location.reload(), 600);
+                }
+            } catch (e) {
+                window.toast("Quick log failed", "error");
+            }
+        } else if (result.mode === 'manual') {
+            window.toast(`Logging historical pulse...`, "info");
+            const formData = new FormData();
+            formData.append('trip_id', tripId);
+            formData.append('customer_id', custId);
+            if (type === 'Arrival') formData.append('arrival_time', result.time);
+            if (type === 'Departure') formData.append('departure_time', result.time);
+            
+            try {
+                const resp = await fetch('/api/delivery/stop/update', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                if (data.status === 'success') {
+                    window.toast("Manual trace saved.");
+                    setTimeout(() => location.reload(), 600);
+                }
+            } catch (e) {
+                window.toast("Failed to save trace", "error");
+            }
+        }
+    }
+}
+</script>
+{% endblock %}

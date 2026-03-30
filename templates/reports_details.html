@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    tbody {
+        counter-reset: rowNumber;
+    }
+    tbody tr td.row-num::before {
+        counter-increment: rowNumber;
+        content: counter(rowNumber, decimal-leading-zero);
+    }
+</style>
+
+<div class="space-y-8 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">{{ title }}</h1>
+            <p class="text-slate-400 text-sm mt-1">Full analytical breakdown of all active inventory items.</p>
+        </div>
+        <a href="{{ url_for('reports') }}" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-all flex items-center gap-2 border border-white/5">
+            <i class="fa-solid fa-arrow-left"></i> Back to Intelligence
+        </a>
+    </div>
+
+    <!-- Main Table -->
+    <div class="glass-panel rounded-3xl overflow-hidden border border-white/5">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse" id="fullTable">
+                <thead>
+                    <tr class="bg-slate-800/50 text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold border-b border-white/5">
+                        <th class="px-6 py-5 w-16 text-center">#</th>
+                        <th class="px-6 py-5 cursor-pointer hover:text-brand-400" onclick="sortStaticTable('fullTable', 1)">Part Number <i class="fa-solid fa-sort ml-1 opacity-30"></i></th>
+                        <th class="px-6 py-5 cursor-pointer hover:text-brand-400" onclick="sortStaticTable('fullTable', 2)">Brand / Category <i class="fa-solid fa-sort ml-1 opacity-30"></i></th>
+                        <th class="px-6 py-5 cursor-pointer hover:text-brand-400" onclick="sortStaticTable('fullTable', 3)">Subsidiaries <i class="fa-solid fa-sort ml-1 opacity-30"></i></th>
+                        <th class="px-6 py-5 text-right cursor-pointer hover:text-brand-400" onclick="sortStaticTable('fullTable', 4, true)">Qty <i class="fa-solid fa-sort ml-1 opacity-30"></i></th>
+                        <th class="px-6 py-5 text-right cursor-pointer hover:text-brand-400" onclick="sortStaticTable('fullTable', 5, true)">{% if type == 'valuation' %}Value (AED){% else %}Total Valuation{% endif %} <i class="fa-solid fa-sort ml-1 opacity-30"></i></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/20">
+                    {% for item in items %}
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4 text-center text-[10px] font-bold text-slate-600 row-num"></td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm font-bold text-white">{{ item.part_number }}</div>
+                            <div class="text-[10px] text-slate-500">{{ item.name }}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-2">
+                                <span class="px-2 py-0.5 bg-slate-800 rounded text-[9px] font-bold text-slate-400 uppercase">{{ item.brand }}</span>
+                                <span class="px-2 py-0.5 bg-slate-800 rounded text-[9px] font-bold text-brand-400 uppercase">{{ item.category }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-[9px] text-slate-500 flex flex-wrap gap-1">
+                                {% if item.companies %}
+                                    {% for co in item.companies.split(',') %}
+                                        <span class="px-2 py-0.5 bg-slate-800/50 rounded-full border border-white/5">{{ co }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <div class="text-sm font-extrabold {% if type == 'volume' %}text-white{% else %}text-slate-400{% endif %}">
+                                {{ "{:,}".format(item.total_qty) }}
+                                <span class="text-[9px] font-normal text-slate-600 ml-1">PCs</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <div class="text-sm font-black {% if type == 'valuation' %}text-emerald-400{% else %}text-slate-400{% endif %}">
+                                AED {{ "{:,.2f}".format(item.total_val) }}
+                            </div>
+                            <span class="hidden">{{ item.total_val }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function sortStaticTable(tableId, colIdx, isNumeric = false) {
+        const table = document.getElementById(tableId);
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const isAsc = table.dataset.sortIdx == colIdx && table.dataset.sortDir === 'asc';
+        const newDir = isAsc ? 'desc' : 'asc';
+        
+        rows.sort((a, b) => {
+            let cellA = a.cells[colIdx].innerText;
+            let cellB = b.cells[colIdx].innerText;
+            
+            const spanA = a.cells[colIdx].querySelector('span.hidden');
+            const spanB = b.cells[colIdx].querySelector('span.hidden');
+            if (spanA && spanB) {
+                cellA = spanA.innerText;
+                cellB = spanB.innerText;
+            }
+
+            if (isNumeric) {
+                let valA = parseFloat(cellA.replace(/[^0-9.-]+/g, ""));
+                let valB = parseFloat(cellB.replace(/[^0-9.-]+/g, ""));
+                return newDir === 'asc' ? valA - valB : valB - valA;
+            } else {
+                return newDir === 'asc' ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+            }
+        });
+
+        table.dataset.sortIdx = colIdx;
+        table.dataset.sortDir = newDir;
+        
+        // Update icons
+        table.querySelectorAll('i.fa-solid.fa-sort').forEach(i => i.className = 'fa-solid fa-sort ml-1 opacity-30');
+        const currentIcon = table.querySelectorAll('th')[colIdx].querySelector('i');
+        currentIcon.className = `fa-solid fa-sort-${newDir === 'asc' ? 'up' : 'down'} ml-1 text-brand-400 opacity-100`;
+
+        rows.forEach(row => tbody.appendChild(row));
+    }
+</script>
+{% endblock %}

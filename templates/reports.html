@@ -1,0 +1,1083 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    tbody {
+        counter-reset: rowNumber;
+    }
+    tbody tr td.row-num::before {
+        counter-increment: rowNumber;
+        content: counter(rowNumber, decimal-leading-zero);
+    }
+</style>
+
+<div class="space-y-8 pb-20 fade-in">
+    
+    <!-- Page Header & Global Stats -->
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">Master Warehouse Intelligence</h1>
+            <p class="text-slate-400 text-sm mt-1">Cross-subsidiary analytical performance and stock valuation metrics.</p>
+        </div>
+        <div class="flex items-center gap-4 bg-slate-800/40 p-2 rounded-2xl border border-white/5 backdrop-blur-sm">
+            <div class="px-4 py-2 text-center border-r border-white/10">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Global Valuation</p>
+                <p class="text-lg font-extrabold text-emerald-400">AED {{ "{:,.2f}".format(fin_stats.grand_total_value or 0) }}</p>
+            </div>
+            <div class="px-4 py-2 text-center">
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Part Diversity</p>
+                <p class="text-lg font-extrabold text-brand-400">{{ diversity.unique_parts }} <span class="text-xs font-normal text-slate-500">Models</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- TEMPORAL FILTRATION CONSOLE -->
+    <div class="glass-panel p-6 md:p-8 rounded-[2rem] border border-white/5 flex flex-col md:flex-row items-center justify-between gap-6 shadow-2xl bg-brand-500/[0.02]">
+        <div class="flex flex-wrap items-center gap-2">
+            <button onclick="setFilterRange('today')" class="px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all filter-btn" id="btn-today">Day</button>
+            <button onclick="setFilterRange('week')" class="px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all filter-btn" id="btn-week">Week</button>
+            <button onclick="setFilterRange('month')" class="px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all filter-btn" id="btn-month">Month</button>
+            <button onclick="setFilterRange('year')" class="px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all filter-btn" id="btn-year">Year</button>
+            <div class="h-6 w-px bg-white/10 mx-2 hidden md:block"></div>
+        </div>
+        
+        <div class="flex items-center gap-4 w-full md:w-auto">
+            <div class="flex-1 md:flex-initial flex items-center gap-3">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">Start Threshold</label>
+                    <input type="date" id="filter-start" value="{{ start_date or '' }}" class="bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold text-white outline-none focus:border-brand-500 transition-all shadow-inner">
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[8px] font-black text-slate-500 uppercase tracking-widest ml-1">End Threshold</label>
+                    <input type="date" id="filter-end" value="{{ end_date or '' }}" class="bg-slate-900/50 border border-white/10 rounded-xl px-4 py-2.5 text-xs font-bold text-white outline-none focus:border-brand-500 transition-all shadow-inner">
+                </div>
+            </div>
+            <button onclick="applyManualFilter()" class="mt-4 md:mt-0 px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl flex items-center justify-center transition-all shadow-lg shadow-brand-500/20 active:scale-95">
+                <i class="fa-solid fa-bolt text-xs mr-2"></i> Apply Audit
+            </button>
+        </div>
+    </div>
+
+    <style>
+        .filter-btn { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); color: #64748b; }
+        .filter-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+        .filter-btn.active { background: #0ea5e9; border-color: #0ea5e9; color: #fff; box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3); }
+    </style>
+
+    <!-- Top Diversity Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-brand-500 relative overflow-hidden group">
+            <div class="absolute -right-4 -top-4 text-brand-500/10 text-7xl group-hover:scale-110 transition-transform"><i class="fa-solid fa-tags"></i></div>
+            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest relative z-10">Total Brands</p>
+            <h4 class="text-4xl font-extrabold text-white mt-1 relative z-10">{{ diversity.total_brands }}</h4>
+            <p class="text-xs text-slate-400 mt-2 relative z-10">Active manufacturers in ecosystem</p>
+        </div>
+        <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-purple-500 relative overflow-hidden group">
+            <div class="absolute -right-4 -top-4 text-purple-500/10 text-7xl group-hover:scale-110 transition-transform"><i class="fa-solid fa-folder-tree"></i></div>
+            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest relative z-10">Categories</p>
+            <h4 class="text-4xl font-extrabold text-white mt-1 relative z-10">{{ diversity.total_categories }}</h4>
+            <p class="text-xs text-slate-400 mt-2 relative z-10">Functional taxonomy groups</p>
+        </div>
+        <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-amber-500 relative overflow-hidden group">
+            <div class="absolute -right-4 -top-4 text-amber-500/10 text-7xl group-hover:scale-110 transition-transform"><i class="fa-solid fa-location-dot"></i></div>
+            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest relative z-10">Location Density</p>
+            <h4 class="text-4xl font-extrabold text-white mt-1 relative z-10">{{ loc_stats.occupied_locs or 0 }}<span class="text-lg text-slate-500 font-normal">/{{ loc_stats.total_locs or 0 }}</span></h4>
+            <p class="text-xs text-slate-400 mt-2 relative z-10">Active pickup points (Occupied)</p>
+        </div>
+        <div class="glass-panel p-6 rounded-2xl border-l-4 border-l-emerald-500 relative overflow-hidden group">
+            <div class="absolute -right-4 -top-4 text-emerald-500/10 text-7xl group-hover:scale-110 transition-transform"><i class="fa-solid fa-warehouse"></i></div>
+            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest relative z-10">Free Capacity</p>
+            <h4 class="text-4xl font-extrabold text-white mt-1 relative z-10">{{ loc_stats.free_locs if loc_stats.free_locs > 0 else 0 }}</h4>
+            <p class="text-xs text-slate-400 mt-2 relative z-10">Locations available for stock</p>
+        </div>
+    </div>
+
+    <div id="integrated-operations-reports" class="space-y-6">
+        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Integrated Operations</p>
+                <h2 class="mt-2 text-2xl font-extrabold tracking-tight text-white">Master Workstream Report</h2>
+                <p class="mt-2 max-w-3xl text-sm text-slate-400">A combined operating view of Task Center and Issue Tracker so leadership can see load, ownership gaps, and execution discipline in one place.</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-4">
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Work Items</p>
+                <h3 class="mt-3 text-4xl font-black text-white">{{ integration_report.summary.total_work_items }}</h3>
+                <p class="mt-2 text-xs text-slate-500">Tasks and issues managed through the operating system.</p>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Active Work</p>
+                <h3 class="mt-3 text-4xl font-black text-cyan-300">{{ integration_report.summary.active_work_items }}</h3>
+                <p class="mt-2 text-xs text-slate-500">Open, pending, and still-moving execution items.</p>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Accountability Gaps</p>
+                <h3 class="mt-3 text-4xl font-black text-amber-300">{{ integration_report.summary.accountability_gaps }}</h3>
+                <p class="mt-2 text-xs text-slate-500">Records missing a clear owner or responsible person.</p>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Missing Discipline Inputs</p>
+                <h3 class="mt-3 text-4xl font-black text-rose-300">{{ integration_report.summary.missing_resolution_inputs }}</h3>
+                <p class="mt-2 text-xs text-slate-500">Follow-up fields still required to manage risk professionally.</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-8 xl:grid-cols-3">
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">Source Mix</h3>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Task vs Issue</span>
+                </div>
+                <div class="h-72"><canvas id="integratedSourceChart"></canvas></div>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">Operational Risk</h3>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Priority & Blockers</span>
+                </div>
+                <div class="h-72"><canvas id="integratedRiskChart"></canvas></div>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">Resolution Discipline</h3>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Missing Inputs</span>
+                </div>
+                <div class="h-72"><canvas id="integratedDisciplineChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="task-center-reports" class="space-y-6">
+        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Task Center</p>
+                <h2 class="mt-2 text-2xl font-extrabold tracking-tight text-white">Task Command Center Reports</h2>
+                <p class="mt-2 max-w-3xl text-sm text-slate-400">Execution pressure, future scheduling discipline, and workload concentration across the task register.</p>
+            </div>
+            <div class="rounded-2xl border border-white/5 bg-white/[0.03] px-5 py-4 text-sm text-slate-300">
+                <div class="text-[10px] font-black uppercase tracking-widest text-slate-500">Top Owner</div>
+                <div class="mt-1 font-bold text-white">{{ task_report.executive.top_owner }}</div>
+                <div class="text-xs text-slate-500">{{ task_report.executive.top_owner_total }} task(s)</div>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-5">
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Tasks</p>
+                <h3 class="mt-3 text-4xl font-black text-white">{{ task_report.summary.total }}</h3>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Active</p>
+                <h3 class="mt-3 text-4xl font-black text-cyan-300">{{ task_report.summary.active }}</h3>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Future</p>
+                <h3 class="mt-3 text-4xl font-black text-sky-300">{{ task_report.summary.future }}</h3>
+                <p class="mt-2 text-xs text-slate-500">{{ task_report.summary.future_missing_time }} missing time</p>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Overdue</p>
+                <h3 class="mt-3 text-4xl font-black text-rose-300">{{ task_report.summary.overdue }}</h3>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Average Progress</p>
+                <h3 class="mt-3 text-4xl font-black text-emerald-300">{{ task_report.summary.average_progress }}%</h3>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-8 xl:grid-cols-2">
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">Task Status Mix</h3>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">All statuses</span>
+                </div>
+                <div class="h-80"><canvas id="masterTaskStatusChart"></canvas></div>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">Task Company Load</h3>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Top 8</span>
+                </div>
+                <div class="h-80"><canvas id="masterTaskCompanyChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="issue-tracker-reports" class="space-y-6">
+        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Issue Tracker</p>
+                <h2 class="mt-2 text-2xl font-extrabold tracking-tight text-white">Issue Tracker Reports</h2>
+                <p class="mt-2 max-w-3xl text-sm text-slate-400">Ownership weakness, missing root-cause work, and department concentration across the issue register.</p>
+            </div>
+            <div class="rounded-2xl border border-white/5 bg-white/[0.03] px-5 py-4 text-sm text-slate-300">
+                <div class="text-[10px] font-black uppercase tracking-widest text-slate-500">Top Department</div>
+                <div class="mt-1 font-bold text-white">{{ issue_report.executive.top_department }}</div>
+                <div class="text-xs text-slate-500">{{ issue_report.executive.top_department_total }} issue(s)</div>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-5">
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Issues</p>
+                <h3 class="mt-3 text-4xl font-black text-white">{{ issue_report.summary.total }}</h3>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">High Priority Open</p>
+                <h3 class="mt-3 text-4xl font-black text-rose-300">{{ issue_report.summary.high_priority_open }}</h3>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Unassigned Owner</p>
+                <h3 class="mt-3 text-4xl font-black text-amber-300">{{ issue_report.summary.unassigned_owner }}</h3>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Missing Root Cause</p>
+                <h3 class="mt-3 text-4xl font-black text-fuchsia-300">{{ issue_report.summary.missing_root_cause }}</h3>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Missing Target Date</p>
+                <h3 class="mt-3 text-4xl font-black text-cyan-300">{{ issue_report.summary.missing_target_date }}</h3>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-8 xl:grid-cols-2">
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">Issue Status Mix</h3>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Open / Pending / Closed</span>
+                </div>
+                <div class="h-80"><canvas id="masterIssueStatusChart"></canvas></div>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">Issue Department Hotspots</h3>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Top 8</span>
+                </div>
+                <div class="h-80"><canvas id="masterIssueDepartmentChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="google-workspace-reports" class="space-y-6">
+        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Google Workspace</p>
+                <h2 class="mt-2 text-2xl font-extrabold tracking-tight text-white">Google Workspace Reports</h2>
+                <p class="mt-2 max-w-3xl text-sm text-slate-400">Connection readiness, user adoption, and token health for Gmail, Drive, and Sheets across the dashboard.</p>
+            </div>
+            <div class="rounded-2xl border border-white/5 bg-white/[0.03] px-5 py-4 text-sm text-slate-300">
+                <div class="text-[10px] font-black uppercase tracking-widest text-slate-500">Current User</div>
+                <div class="mt-1 font-bold text-white">{{ workspace_report.summary.current_user_email or 'Not connected yet' }}</div>
+                <div class="text-xs text-slate-500">{{ 'Connected' if workspace_report.summary.current_user_connected else 'Waiting for authorization' }}</div>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-5">
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">OAuth Status</p>
+                <h3 class="mt-3 text-3xl font-black {% if workspace_report.summary.configured %}text-emerald-300{% else %}text-amber-300{% endif %}">
+                    {{ 'Configured' if workspace_report.summary.configured else 'Missing' }}
+                </h3>
+                <p class="mt-2 text-xs text-slate-500">{{ workspace_report.summary.configuration_source|replace('_', ' ')|title }}</p>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Connected Accounts</p>
+                <h3 class="mt-3 text-4xl font-black text-cyan-300">{{ workspace_report.summary.connected_accounts }}</h3>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Unlinked Users</p>
+                <h3 class="mt-3 text-4xl font-black text-slate-200">{{ workspace_report.summary.unlinked_users }}</h3>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Expiring Soon</p>
+                <h3 class="mt-3 text-4xl font-black text-amber-300">{{ workspace_report.summary.expiring_soon }}</h3>
+            </div>
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Redirect URI</p>
+                <p class="mt-3 break-all text-sm font-bold text-white">{{ workspace_report.summary.redirect_uri or '--' }}</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 gap-8 xl:grid-cols-[420px_minmax(0,1fr)]">
+            <div class="glass-panel rounded-3xl border border-white/5 p-6">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">Workspace Health Mix</h3>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Access readiness</span>
+                </div>
+                <div class="h-80"><canvas id="workspaceHealthChart"></canvas></div>
+            </div>
+            <div class="glass-panel overflow-hidden rounded-3xl border border-white/5">
+                <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                    <h3 class="text-lg font-bold text-white">Connected Accounts</h3>
+                    <p class="mt-1 text-xs text-slate-500">Recent Google Workspace connections stored in the dashboard.</p>
+                </div>
+                <div class="overflow-auto">
+                    <table class="min-w-full text-left text-sm">
+                        <thead class="bg-slate-900/60 text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                            <tr>
+                                <th class="px-4 py-4">User</th>
+                                <th class="px-4 py-4">Google Account</th>
+                                <th class="px-4 py-4">Updated</th>
+                                <th class="px-4 py-4">Token Health</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/5 bg-slate-900/10">
+                            {% for account in workspace_report.connected_accounts %}
+                            <tr class="hover:bg-white/[0.04] transition-colors">
+                                <td class="px-4 py-4 font-bold text-white">{{ account.username }}</td>
+                                <td class="px-4 py-4 text-slate-300">{{ account.email }}</td>
+                                <td class="px-4 py-4 text-slate-400">{{ account.updated_at or '--' }}</td>
+                                <td class="px-4 py-4">
+                                    <span class="rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-widest {% if account.token_health == 'Expiring Soon' %}border-amber-400/20 bg-amber-500/10 text-amber-200{% else %}border-emerald-400/20 bg-emerald-500/10 text-emerald-200{% endif %}">
+                                        {{ account.token_health }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="px-4 py-16 text-center text-xs font-black uppercase tracking-widest text-slate-500">No Google Workspace accounts have been connected yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        <!-- Quantity Distribution -->
+        <div class="glass-panel p-8 rounded-3xl">
+            <div class="flex items-center justify-between mb-8">
+                <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                    <span class="w-2 h-8 bg-brand-500 rounded-full"></span>
+                    Quantity Distribution (PCs)
+                </h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                <div class="relative h-64">
+                    <canvas id="qtyBySubChart"></canvas>
+                </div>
+                <div class="space-y-4">
+                    {% set total_q = qty_by_sub|sum(attribute='total') or 1 %}
+                    {% for row in qty_by_sub %}
+                    <div class="p-3 bg-white/5 rounded-xl border border-white/5 relative group overflow-hidden">
+                        <div class="flex justify-between items-start relative z-10">
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{{ row.name }}</p>
+                                <p class="text-xl font-extrabold text-white">{{ "{:,}".format(row.total) }} <span class="text-xs font-normal text-slate-500">PCs</span></p>
+                            </div>
+                            <div class="text-right">
+                                <span class="px-2 py-0.5 rounded-lg bg-brand-500/10 text-brand-400 text-[10px] font-black">{{ "%.1f"|format(row.total / total_q * 100) }}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Valuation Distribution -->
+        <div class="glass-panel p-8 rounded-3xl">
+            <div class="flex items-center justify-between mb-8">
+                <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                    <span class="w-2 h-8 bg-emerald-500 rounded-full"></span>
+                    Financial Valuation (AED)
+                </h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+                <div class="relative h-64">
+                    <canvas id="valBySubChart"></canvas>
+                </div>
+                <div class="space-y-4">
+                    {% set total_v = value_by_sub|sum(attribute='total_val') or 1 %}
+                    {% for row in value_by_sub %}
+                    <div class="p-3 bg-white/5 rounded-xl border border-white/5 relative group overflow-hidden">
+                        <div class="flex justify-between items-start relative z-10">
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{{ row.name }}</p>
+                                <p class="text-xl font-extrabold text-emerald-400">AED {{ "{:,.0f}".format(row.total_val) }}</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-black">{{ "%.1f"|format(row.total_val / total_v * 100) }}%</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Inventory Valuation by Category -->
+    <div class="glass-panel p-8 rounded-3xl">
+        <h3 class="text-lg font-bold text-white mb-8 flex items-center gap-3">
+            <span class="w-2 h-8 bg-emerald-600 rounded-full"></span>
+            Valuation by Category (Top ROI Groups)
+        </h3>
+        <div class="h-64">
+            <canvas id="valByCatChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Second Row: Brands Analysis -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Top Brands by Quantity -->
+        <div class="lg:col-span-2 glass-panel p-8 rounded-3xl">
+            <h3 class="text-lg font-bold text-white mb-8 flex items-center gap-3">
+                <span class="w-2 h-8 bg-amber-500 rounded-full"></span>
+                Top 10 Manufacturers by Volume
+            </h3>
+            <div class="h-80">
+                <canvas id="qtyByBrandChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Occupancy Gauge -->
+        <div class="glass-panel p-8 rounded-3xl flex flex-col items-center justify-center">
+            <h3 class="text-lg font-bold text-white mb-8">Warehouse Density</h3>
+            <div class="relative w-full aspect-square max-w-[200px]">
+                <canvas id="occupancyChart"></canvas>
+                <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    {% set occ_perc = ((loc_stats.occupied_locs or 0) / (loc_stats.total_locs or 1) * 100)|round(1) %}
+                    <span class="text-3xl font-black text-white">{{ occ_perc }}%</span>
+                    <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Occupied</span>
+                </div>
+            </div>
+            <div class="mt-8 grid grid-cols-2 gap-4 w-full">
+                <div class="text-center">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase">Occupied</p>
+                    <p class="text-lg font-bold text-amber-400">{{ loc_stats.occupied_locs or 0 }}</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase">Free</p>
+                    <p class="text-lg font-bold text-slate-300">{{ loc_stats.free_locs if loc_stats.free_locs > 0 else 0 }}</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Bottom Row: Category Performance Table & Chart -->
+    <div class="glass-panel p-8 rounded-3xl">
+        <h3 class="text-lg font-bold text-white mb-8 flex items-center gap-3">
+            <span class="w-2 h-8 bg-purple-500 rounded-full"></span>
+            Category Taxonomy Performance
+        </h3>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-500 font-bold border-b border-white/5">
+                            <th class="px-4 py-3 text-left">Category Name</th>
+                            <th class="px-4 py-3 text-right">Unique Items</th>
+                            <th class="px-4 py-3 text-right">Total Units (PCs)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+                        {% for cat in category_reports %}
+                        <tr class="hover:bg-white/5 transition-colors">
+                            <td class="px-4 py-4 font-bold text-slate-200">{{ cat.name }}</td>
+                            <td class="px-4 py-4 text-right text-brand-400 font-medium">{{ cat.part_count }}</td>
+                            <td class="px-4 py-4 text-right text-white font-extrabold">{{ "{:,}".format(cat.total_qty) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="h-80">
+                <canvas id="categoryStatsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Highest Staked Part Numbers -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Top by Valuation -->
+        <div class="glass-panel rounded-3xl overflow-hidden">
+            <div class="p-6 border-b border-white/5 bg-slate-800/20 flex justify-between items-center">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <i class="fa-solid fa-crown text-amber-400"></i>
+                        Highest Valuation Parts
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Inventory items with highest total capital value (AED)</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="{{ url_for('reports_valuation_details') }}" class="px-3 py-2 bg-slate-700/30 hover:bg-slate-700/50 text-slate-400 text-[10px] font-bold rounded-xl transition-all flex items-center gap-2 border border-white/5">
+                        <i class="fa-solid fa-eye text-brand-400"></i> View All
+                    </a>
+                    <a href="/reports/export?type=value" class="px-4 py-2 bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 text-xs font-bold rounded-xl transition-all flex items-center gap-2 border border-white/5">
+                        <i class="fa-solid fa-file-excel text-emerald-400"></i>
+                        Export
+                    </a>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="table-val">
+                    <thead>
+                        <tr class="bg-slate-800/30 text-[10px] uppercase tracking-widest text-slate-500 font-bold">
+                            <th class="px-4 py-4 w-12 text-center text-[8px]">#</th>
+                            <th class="px-6 py-4 cursor-pointer hover:text-brand-400 transition-colors" onclick="sortStaticTable('table-val', 1)">
+                                Part Number <i class="fa-solid fa-sort ml-1 opacity-30"></i>
+                            </th>
+                            <th class="px-6 py-4 text-right cursor-pointer hover:text-brand-400 transition-colors" onclick="sortStaticTable('table-val', 2, true)">
+                                Qty <i class="fa-solid fa-sort ml-1 opacity-30"></i>
+                            </th>
+                            <th class="px-6 py-4 text-right text-emerald-400 cursor-pointer hover:text-emerald-300 transition-colors" onclick="sortStaticTable('table-val', 3, true)">
+                                Total Value <i class="fa-solid fa-sort ml-1 opacity-30"></i>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+                        {% for part in top_parts_value %}
+                        <tr class="hover:bg-white/5 transition-colors">
+                            <td class="px-4 py-4 text-center text-[10px] font-bold text-slate-600 row-num"></td>
+                            <td class="px-6 py-4">
+                                <div class="text-sm font-bold text-white">{{ part.part_number }}</div>
+                                <div class="text-[10px] text-slate-500">{{ part.brand }} · {{ part.category }}</div>
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <div class="text-sm font-medium text-slate-300">{{ "{:,}".format(part.total_qty) }}</div>
+                                <span class="hidden">{{ part.total_qty }}</span>
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <div class="text-sm font-black text-brand-400">AED {{ "{:,.2f}".format(part.total_val) }}</div>
+                                <span class="hidden">{{ part.total_val }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Top by Quantity -->
+        <div class="glass-panel rounded-3xl overflow-hidden">
+            <div class="p-6 border-b border-white/5 bg-slate-800/20 flex justify-between items-center">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <i class="fa-solid fa-boxes-stacked text-blue-400"></i>
+                        Highest Volume Parts
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Inventory items with largest physical quantity in stock</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="{{ url_for('reports_volume_details') }}" class="px-3 py-2 bg-slate-700/30 hover:bg-slate-700/50 text-slate-400 text-[10px] font-bold rounded-xl transition-all flex items-center gap-2 border border-white/5">
+                        <i class="fa-solid fa-eye text-brand-400"></i> View All
+                    </a>
+                    <a href="/reports/export?type=qty" class="px-4 py-2 bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 text-xs font-bold rounded-xl transition-all flex items-center gap-2 border border-white/5">
+                        <i class="fa-solid fa-file-excel text-emerald-400"></i>
+                        Export
+                    </a>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="table-qty">
+                    <thead>
+                        <tr class="bg-slate-800/30 text-[10px] uppercase tracking-widest text-slate-500 font-bold">
+                            <th class="px-4 py-4 w-12 text-center text-[8px]">#</th>
+                            <th class="px-6 py-4 cursor-pointer hover:text-brand-400 transition-colors" onclick="sortStaticTable('table-qty', 1)">
+                                Part Number <i class="fa-solid fa-sort ml-1 opacity-30"></i>
+                            </th>
+                            <th class="px-6 py-4 text-right text-brand-400 cursor-pointer hover:text-brand-300 transition-colors" onclick="sortStaticTable('table-qty', 2, true)">
+                                Quantity <i class="fa-solid fa-sort ml-1 opacity-30"></i>
+                            </th>
+                            <th class="px-6 py-4 text-right cursor-pointer hover:text-brand-400 transition-colors" onclick="sortStaticTable('table-qty', 3, true)">
+                                Value (AED) <i class="fa-solid fa-sort ml-1 opacity-30"></i>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+                        {% for part in top_parts_qty %}
+                        <tr class="hover:bg-white/5 transition-colors">
+                            <td class="px-4 py-4 text-center text-[10px] font-bold text-slate-600 row-num"></td>
+                            <td class="px-6 py-4">
+                                <div class="text-sm font-bold text-white">{{ part.part_number }}</div>
+                                <div class="text-[10px] text-slate-500">{{ part.brand }} · {{ part.category }}</div>
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <div class="text-base font-black text-white">{{ "{:,}".format(part.total_qty) }} <span class="text-[10px] text-slate-500">PCs</span></div>
+                                <span class="hidden">{{ part.total_qty }}</span>
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <div class="text-sm font-medium text-slate-400">{{ "{:,.2f}".format(part.total_val) }}</div>
+                                <span class="hidden">{{ part.total_val }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- HS CODE REPORTS SECTION -->
+    <div class="space-y-6 mt-8">
+        <div class="flex items-center justify-between w-full">
+            <div class="flex items-center gap-4">
+                <div class="w-1.5 h-8 bg-cyan-500 rounded-full"></div>
+                <h2 class="text-xl font-extrabold text-white tracking-tight">HS Code Intelligence</h2>
+            </div>
+            <a href="{{ url_for('export_hs_reports') }}" class="px-5 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-xl text-xs font-black uppercase tracking-widest transition-all border border-emerald-500/20 shadow-xl">
+                <i class="fa-solid fa-file-excel mr-2"></i> Export HS Report
+            </a>
+        </div>
+
+        <!-- Cumulative HS Code Report -->
+        <div class="glass-panel rounded-3xl overflow-hidden border border-white/5 shadow-2xl">
+            <div class="p-5 border-b border-white/5 bg-white/[0.02]">
+                <h4 class="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
+                    <i class="fa-solid fa-barcode text-cyan-400"></i> Cumulative HS Code Summary
+                </h4>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="hsCodeTable">
+                    <thead>
+                        <tr class="bg-slate-800/50 text-[9px] uppercase tracking-[0.2em] text-slate-500 font-bold border-b border-white/5">
+                            <th class="px-5 py-4 cursor-pointer" onclick="sortStaticTable('hsCodeTable', 0)">HS Code <i class="fa-solid fa-sort ml-1 opacity-30"></i></th>
+                            <th class="px-5 py-4 text-center cursor-pointer" onclick="sortStaticTable('hsCodeTable', 1, true)">Parts <i class="fa-solid fa-sort ml-1 opacity-30"></i></th>
+                            <th class="px-5 py-4 text-center cursor-pointer" onclick="sortStaticTable('hsCodeTable', 2, true)">Total Qty <i class="fa-solid fa-sort ml-1 opacity-30"></i></th>
+                            <th class="px-5 py-4 text-right cursor-pointer" onclick="sortStaticTable('hsCodeTable', 3, true)">Total Value <i class="fa-solid fa-sort ml-1 opacity-30"></i></th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5 bg-slate-900/20">
+                        {% for h in hs_code_summary %}
+                        <tr class="hover:bg-white/5 transition-colors">
+                            <td class="px-5 py-3"><span class="text-xs font-mono font-bold text-cyan-300">{{ h.hs_code }}</span></td>
+                            <td class="px-5 py-3 text-center text-xs font-bold text-slate-300">{{ h.part_count }}</td>
+                            <td class="px-5 py-3 text-center text-sm font-black text-white">{{ h.total_qty or 0 }}</td>
+                            <td class="px-5 py-3 text-right text-xs font-bold text-emerald-400"><span class="hidden">{{ h.total_val or 0 }}</span>AED {{ "{:,.2f}".format(h.total_val or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center py-12 text-slate-500 text-xs">No HS Code data available</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- HS Code by Company -->
+        <div class="glass-panel rounded-3xl overflow-hidden border border-white/5 shadow-2xl">
+            <div class="p-5 border-b border-white/5 bg-white/[0.02]">
+                <h4 class="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
+                    <i class="fa-solid fa-building text-cyan-400"></i> HS Code Balance by Company
+                </h4>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="hsCompanyTable">
+                    <thead>
+                        <tr class="bg-slate-800/50 text-[9px] uppercase tracking-[0.2em] text-slate-500 font-bold border-b border-white/5">
+                            <th class="px-5 py-4">HS Code</th>
+                            <th class="px-5 py-4">Company</th>
+                            <th class="px-5 py-4 text-center">Quantity</th>
+                            <th class="px-5 py-4 text-right">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5 bg-slate-900/20">
+                        {% for h in hs_by_company %}
+                        <tr class="hover:bg-white/5 transition-colors">
+                            <td class="px-5 py-3"><span class="text-xs font-mono font-bold text-cyan-300">{{ h.hs_code }}</span></td>
+                            <td class="px-5 py-3 text-xs font-bold text-white">{{ h.company }}</td>
+                            <td class="px-5 py-3 text-center text-sm font-black text-white">{{ h.total_qty or 0 }}</td>
+                            <td class="px-5 py-3 text-right text-xs font-bold text-emerald-400">AED {{ "{:,.2f}".format(h.total_val or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center py-12 text-slate-500 text-xs">No data available</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- HS Code by Warehouse -->
+        <div class="glass-panel rounded-3xl overflow-hidden border border-white/5 shadow-2xl">
+            <div class="p-5 border-b border-white/5 bg-white/[0.02]">
+                <h4 class="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
+                    <i class="fa-solid fa-warehouse text-cyan-400"></i> HS Code Balance by Warehouse
+                </h4>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="hsWarehouseTable">
+                    <thead>
+                        <tr class="bg-slate-800/50 text-[9px] uppercase tracking-[0.2em] text-slate-500 font-bold border-b border-white/5">
+                            <th class="px-5 py-4">HS Code</th>
+                            <th class="px-5 py-4">Company</th>
+                            <th class="px-5 py-4">Warehouse</th>
+                            <th class="px-5 py-4 text-center">Quantity</th>
+                            <th class="px-5 py-4 text-right">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5 bg-slate-900/20">
+                        {% for h in hs_by_warehouse %}
+                        <tr class="hover:bg-white/5 transition-colors">
+                            <td class="px-5 py-3"><span class="text-xs font-mono font-bold text-cyan-300">{{ h.hs_code }}</span></td>
+                            <td class="px-5 py-3 text-xs font-bold text-white">{{ h.company }}</td>
+                            <td class="px-5 py-3 text-xs text-slate-300">{{ h.warehouse }}</td>
+                            <td class="px-5 py-3 text-center text-sm font-black text-white">{{ h.total_qty or 0 }}</td>
+                            <td class="px-5 py-3 text-right text-xs font-bold text-emerald-400">AED {{ "{:,.2f}".format(h.total_val or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center py-12 text-slate-500 text-xs">No data available</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const taskReportStatusChart = {{ task_report.status_chart|tojson|safe }};
+    const taskReportCompanyChart = {{ task_report.company_chart|tojson|safe }};
+    const issueReportStatusChart = {{ issue_report.status_chart|tojson|safe }};
+    const issueReportDepartmentChart = {{ issue_report.department_chart|tojson|safe }};
+    const integratedSourceChartData = {{ integration_report.source_chart|tojson|safe }};
+    const integratedRiskChartData = {{ integration_report.risk_chart|tojson|safe }};
+    const integratedDisciplineChartData = {{ integration_report.discipline_chart|tojson|safe }};
+    const workspaceReportHealthChart = {{ workspace_report.health_chart|tojson|safe }};
+
+    function buildReportDoughnutChart(canvasId, rows, palette) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || !rows.length) return;
+        new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: rows.map((item) => item.label),
+                datasets: [{
+                    data: rows.map((item) => item.total),
+                    backgroundColor: palette,
+                    borderWidth: 0,
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#cbd5e1', boxWidth: 12, padding: 18, font: { size: 11, weight: '700' } }
+                    }
+                },
+                cutout: '64%'
+            }
+        });
+    }
+
+    function buildReportBarChart(canvasId, rows, palette, axis = 'y') {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas || !rows.length) return;
+        new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: rows.map((item) => item.label),
+                datasets: [{
+                    data: rows.map((item) => item.total),
+                    borderRadius: 12,
+                    borderSkipped: false,
+                    backgroundColor: palette
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: axis,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: {
+                        ticks: { color: '#94a3b8', font: { size: 10, weight: '700' } },
+                        grid: { color: 'rgba(148, 163, 184, 0.08)' }
+                    },
+                    y: {
+                        ticks: { color: '#cbd5e1', font: { size: 10, weight: '700' } },
+                        grid: { color: 'rgba(148, 163, 184, 0.08)' }
+                    }
+                }
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        function initCharts() {
+            const brandColors = ['#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#f97316', '#6366f1', '#14b8a6'];
+            
+            // 1. Qty by Company (Donut)
+            if (document.getElementById('qtyBySubChart')) {
+                new Chart(document.getElementById('qtyBySubChart'), {
+                    type: 'doughnut',
+                    plugins: [ChartDataLabels],
+                    data: {
+                        labels: {{ qty_by_sub|map(attribute='name')|list|tojson|safe }},
+                        datasets: [{
+                            data: {{ qty_by_sub|map(attribute='total')|list|tojson|safe }},
+                            backgroundColor: ['#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6'],
+                            hoverOffset: 20,
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        plugins: { 
+                            legend: { display: false },
+                            datalabels: {
+                                color: '#fff',
+                                font: { weight: 'bold', size: 11 },
+                                formatter: (value, ctx) => ctx.chart.data.labels[ctx.dataIndex],
+                                anchor: 'center',
+                                align: 'center'
+                            }
+                        },
+                        cutout: '65%',
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+
+            // 2. Valuation by Company (Donut)
+            if (document.getElementById('valBySubChart')) {
+                new Chart(document.getElementById('valBySubChart'), {
+                    type: 'doughnut',
+                    plugins: [ChartDataLabels],
+                    data: {
+                        labels: {{ value_by_sub|map(attribute='name')|list|tojson|safe }},
+                        datasets: [{
+                            data: {{ value_by_sub|map(attribute='total_val')|list|tojson|safe }},
+                            backgroundColor: ['#0369a1', '#059669', '#d97706', '#7c3aed'],
+                            hoverOffset: 20,
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        plugins: { 
+                            legend: { display: false },
+                            datalabels: {
+                                color: '#fff',
+                                font: { weight: 'bold', size: 10 },
+                                formatter: (value, ctx) => ctx.chart.data.labels[ctx.dataIndex],
+                                anchor: 'center',
+                                align: 'center'
+                            }
+                        },
+                        cutout: '65%',
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            }
+
+            // 2.5 Valuation by Category (Horizontal Bar)
+            if (document.getElementById('valByCatChart')) {
+                new Chart(document.getElementById('valByCatChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: {{ value_by_category|map(attribute='name')|list|tojson|safe }},
+                        datasets: [{
+                            label: 'Value (AED)',
+                            data: {{ value_by_category|map(attribute='total_val')|list|tojson|safe }},
+                            backgroundColor: '#10b98190',
+                            borderColor: '#10b981',
+                            borderWidth: 2,
+                            borderRadius: 8
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false }, ticks: { color: '#64748b' } },
+                            y: { grid: { display: false }, border: { display: false }, ticks: { color: '#cbd5e1', font: { weight: 'bold' } } }
+                        }
+                    }
+                });
+            }
+
+            // 3. Qty by Brand (Horizontal Bar)
+            if (document.getElementById('qtyByBrandChart')) {
+                new Chart(document.getElementById('qtyByBrandChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: {{ qty_by_brand|map(attribute='name')|list|tojson|safe }},
+                        datasets: [{
+                            label: 'Stock Volume (PCs)',
+                            data: {{ qty_by_brand|map(attribute='total')|list|tojson|safe }},
+                            backgroundColor: '#f59e0b90',
+                            borderColor: '#f59e0b',
+                            borderWidth: 2,
+                            borderRadius: 8
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            x: { grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false }, ticks: { color: '#64748b' } },
+                            y: { grid: { display: false }, border: { display: false }, ticks: { color: '#cbd5e1', font: { weight: 'bold' } } }
+                        }
+                    }
+                });
+            }
+
+            // 4. Occupancy Gauge
+            if (document.getElementById('occupancyChart')) {
+                new Chart(document.getElementById('occupancyChart'), {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Occupied', 'Free'],
+                        datasets: [{
+                            data: [{{ loc_stats.occupied_locs or 0 }}, {{ loc_stats.free_locs if loc_stats.free_locs > 0 else 0 }}],
+                            backgroundColor: ['#f59e0b', '#1e293b'],
+                            borderWidth: 0
+                        }]
+                    },
+                    options: {
+                        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+                        cutout: '85%',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        circumference: 360,
+                        rotation: 0
+                    }
+                });
+            }
+
+            buildReportDoughnutChart('integratedSourceChart', integratedSourceChartData, ['#38bdf8', '#f97316']);
+            buildReportBarChart('integratedRiskChart', integratedRiskChartData, ['#fb7185', '#f59e0b', '#ef4444', '#fbbf24'], 'x');
+            buildReportBarChart('integratedDisciplineChart', integratedDisciplineChartData, ['#ef4444', '#a855f7', '#8b5cf6', '#06b6d4']);
+            buildReportDoughnutChart('masterTaskStatusChart', taskReportStatusChart, ['#64748b', '#0ea5e9', '#ef4444', '#8b5cf6', '#10b981']);
+            buildReportBarChart('masterTaskCompanyChart', taskReportCompanyChart, ['#38bdf8', '#22c55e', '#f59e0b', '#f97316', '#8b5cf6', '#14b8a6', '#ec4899', '#64748b']);
+            buildReportDoughnutChart('masterIssueStatusChart', issueReportStatusChart, ['#38bdf8', '#f59e0b', '#10b981']);
+            buildReportBarChart('masterIssueDepartmentChart', issueReportDepartmentChart, ['#0ea5e9', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b', '#22c55e']);
+            buildReportDoughnutChart('workspaceHealthChart', workspaceReportHealthChart, ['#38bdf8', '#64748b', '#f59e0b']);
+
+            // 5. Category Stats (Grouped Bar)
+            if (document.getElementById('categoryStatsChart')) {
+                new Chart(document.getElementById('categoryStatsChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: {{ category_reports|map(attribute='name')|list|tojson|safe }},
+                        datasets: [{
+                            label: 'Unique Part Models',
+                            data: {{ category_reports|map(attribute='part_count')|list|tojson|safe }},
+                            backgroundColor: '#38bdf890',
+                            borderColor: '#38bdf8',
+                            borderWidth: 2,
+                            borderRadius: 8,
+                            yAxisID: 'y'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: true, labels: { color: '#64748b', font: { size: 10 } } } },
+                        scales: {
+                            x: { grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false }, ticks: { color: '#64748b' } },
+                            y: { grid: { color: 'rgba(255,255,255,0.05)' }, border: { display: false }, ticks: { color: '#64748b' } }
+                        }
+                    }
+                });
+            }
+        }
+
+        setTimeout(() => {
+            initCharts();
+        }, 100);
+    });
+
+    function sortStaticTable(tableId, colIdx, isNumeric = false) {
+        const table = document.getElementById(tableId);
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const isAsc = table.dataset.sortIdx == colIdx && table.dataset.sortDir === 'asc';
+        const newDir = isAsc ? 'desc' : 'asc';
+        
+        rows.sort((a, b) => {
+            let cellA = a.cells[colIdx].innerText;
+            let cellB = b.cells[colIdx].innerText;
+            
+            // Handle hidden numeric spans for precise sorting
+            const spanA = a.cells[colIdx].querySelector('span.hidden');
+            const spanB = b.cells[colIdx].querySelector('span.hidden');
+            if (spanA && spanB) {
+                cellA = spanA.innerText;
+                cellB = spanB.innerText;
+            }
+
+            if (isNumeric) {
+                let valA = parseFloat(cellA.replace(/[^0-9.-]+/g, ""));
+                let valB = parseFloat(cellB.replace(/[^0-9.-]+/g, ""));
+                return newDir === 'asc' ? valA - valB : valB - valA;
+            } else {
+                return newDir === 'asc' ? cellA.localeCompare(cellB) : cellB.localeCompare(cellA);
+            }
+        });
+
+        table.dataset.sortIdx = colIdx;
+        table.dataset.sortDir = newDir;
+        
+        // Update icons
+        table.querySelectorAll('i.fa-solid.fa-sort').forEach(i => i.className = 'fa-solid fa-sort ml-1 opacity-30');
+        const currentIcon = table.querySelectorAll('th')[colIdx].querySelector('i');
+        currentIcon.className = `fa-solid fa-sort-${newDir === 'asc' ? 'up' : 'down'} ml-1 text-brand-400 opacity-100`;
+
+        rows.forEach(row => tbody.appendChild(row));
+    }
+
+    // Filtration Scripts
+    window.setFilterRange = function(range) {
+        const today = new Date();
+        let start = new Date();
+        let end = new Date();
+
+        if (range === 'today') {
+            // Today already set
+        } else if (range === 'week') {
+            start.setDate(today.getDate() - 7);
+        } else if (range === 'month') {
+            start.setMonth(today.getMonth() - 1);
+        } else if (range === 'year') {
+            start.setFullYear(today.getFullYear() - 1);
+        }
+
+        const startStr = start.toISOString().split('T')[0];
+        const endStr = end.toISOString().split('T')[0];
+        
+        window.location.href = `?start_date=${startStr}&end_date=${endStr}`;
+    };
+
+    window.applyManualFilter = function() {
+        const start = document.getElementById('filter-start').value;
+        const end = document.getElementById('filter-end').value;
+        if (start && end) {
+            window.location.href = `?start_date=${start}&end_date=${end}`;
+        } else {
+            window.toast("Surgical thresholds required", "error");
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const start = urlParams.get('start_date');
+        const end = urlParams.get('end_date');
+
+        if (start && end) {
+            // Export Links update
+            const qtyExp = document.querySelector('a[href*="/reports/export?type=qty"]');
+            if (qtyExp) qtyExp.href += `&start_date=${start}&end_date=${end}`;
+            
+            const valExp = document.querySelector('a[href*="/reports/export?type=value"]');
+            if (valExp) valExp.href += `&start_date=${start}&end_date=${end}`;
+            
+            // Highlight active btn
+            const todayStr = new Date().toISOString().split('T')[0];
+            if (start === todayStr && end === todayStr) document.getElementById('btn-today').classList.add('active');
+        }
+    });
+
+</script>
+{% endblock %}

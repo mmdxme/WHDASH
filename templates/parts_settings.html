@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white tracking-tight">Part Attributes</h1>
+            <p class="text-slate-400 text-sm mt-1">Manage specifications, physical dimensions, and inventory details for each part number.</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <!-- Select All Counter -->
+            <div id="selection-counter" class="flex items-center gap-3 px-4 py-2 bg-slate-800/40 border border-slate-700/50 rounded-xl transition-all">
+                <input type="checkbox" id="select-all" title="Select All Visible" class="w-4 h-4 rounded border-slate-600 bg-slate-900 text-brand-500 focus:ring-brand-500/50 cursor-pointer">
+                <div class="flex items-center gap-2">
+                    <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest"><span id="selected-count">0</span> Selected</span>
+                    <button type="button" id="clear-selection-btn" onclick="clearSelection()" class="hidden text-[10px] font-black text-amber-500 hover:text-amber-400 uppercase tracking-widest ml-2 border-l border-white/10 pl-3 transition-colors">Clear</button>
+                </div>
+            </div>
+
+            <!-- Export Button -->
+            <a href="{{ url_for('parts_export_excel') }}" class="inline-flex items-center px-4 py-2.5 bg-brand-500/10 hover:bg-brand-500 text-brand-400 hover:text-white rounded-xl text-xs font-bold transition-all duration-300 border border-brand-500/20 hover:border-brand-500">
+                <i class="fa-solid fa-file-export mr-2"></i> Export
+            </a>
+
+            <!-- Import Button -->
+            <button type="button" onclick="document.getElementById('import-panel').classList.toggle('hidden')" class="inline-flex items-center px-4 py-2.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded-xl text-xs font-bold transition-all duration-300 border border-emerald-500/20 hover:border-emerald-500">
+                <i class="fa-solid fa-file-import mr-2"></i> Import
+            </button>
+            <!-- Search Bar -->
+            <div class="relative w-full md:w-72">
+                <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-500">
+                    <i class="fa-solid fa-search"></i>
+                </div>
+                <input type="text" id="part-search" placeholder="Search part number..." class="w-full pl-11 pr-4 py-2.5 bg-slate-800/80 border border-slate-700/50 rounded-xl text-sm text-white focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all" autocomplete="off">
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Panel (hidden by default) -->
+    <div id="import-panel" class="hidden glass-panel rounded-2xl p-6 border border-emerald-500/10">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div class="flex-1">
+                <h3 class="text-sm font-bold text-white mb-1"><i class="fa-solid fa-file-excel text-emerald-400 mr-2"></i> Bulk Import Parts from Excel</h3>
+                <p class="text-[11px] text-slate-400">Upload an Excel file (.xlsx) matching the template format. Existing part numbers will be updated; new ones will be created.</p>
+                <a href="{{ url_for('parts_template') }}" class="inline-flex items-center mt-3 text-[11px] font-bold text-brand-400 hover:text-brand-300 transition-colors">
+                    <i class="fa-solid fa-download mr-1.5"></i> Download Template (.xlsx)
+                </a>
+            </div>
+            <form action="{{ url_for('parts_import') }}" method="POST" enctype="multipart/form-data" class="flex items-center gap-3 flex-shrink-0">
+                <label class="cursor-pointer px-4 py-2.5 bg-slate-800 border border-slate-700/50 rounded-xl text-xs text-slate-300 hover:bg-slate-700 transition-all">
+                    <i class="fa-solid fa-paperclip mr-1.5"></i> Choose File
+                    <input type="file" name="file" accept=".xlsx,.xls" class="hidden" onchange="this.closest('form').querySelector('.file-label').textContent = this.files[0]?.name || 'No file'" required>
+                </label>
+                <span class="file-label text-[10px] text-slate-500 max-w-[120px] truncate">No file chosen</span>
+                <button type="submit" class="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-500/20 transition-all transform hover:-translate-y-0.5">
+                    <i class="fa-solid fa-upload mr-1.5"></i> Import
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div id="parts-list" class="space-y-3">
+        {% for part in parts %}
+        <div class="part-card glass-panel rounded-2xl overflow-hidden" data-part="{{ part.part_number|lower }}">
+            <form action="{{ url_for('parts_settings') }}" method="POST">
+                <input type="hidden" name="part_id" value="{{ part.id }}">
+
+                <!-- Compact Header (always visible) -->
+                <div class="part-header flex items-center justify-between px-6 py-4 cursor-pointer hover:bg-slate-800/30 transition-colors select-none">
+                    <div class="flex items-center gap-4 flex-1 min-w-0">
+                        <!-- Multi-select Checkbox -->
+                        <div class="flex-shrink-0" onclick="event.stopPropagation()">
+                            <input type="checkbox" name="part_ids" value="{{ part.id }}" class="part-checkbox w-4 h-4 rounded border-slate-700 bg-slate-900 text-brand-500 focus:ring-brand-500/50 transition-all">
+                        </div>
+                        
+                        <div class="w-9 h-9 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400 border border-brand-500/20 flex-shrink-0" onclick="togglePart(this.closest('.part-header'))">
+                            <i class="fa-solid fa-microchip text-sm"></i>
+                        </div>
+                        <div class="min-w-0" onclick="togglePart(this.closest('.part-header'))">
+                            <h3 class="text-sm font-bold text-white tracking-wide">{{ part.part_number }}</h3>
+                            <p class="text-[10px] text-slate-500 truncate">{{ part.brand_name or 'No Brand' }} · {{ part.category_name or 'Uncategorized' }}{% if part.hs_code %} · <span class="text-cyan-400 font-mono">HS: {{ part.hs_code }}</span>{% endif %}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-6">
+                        <!-- Quick stats in header -->
+                        <div class="hidden sm:flex items-center gap-5 text-[10px]">
+                            {% if inventory_map.get(part.id) %}
+                                {% set total_qty = inventory_map[part.id]|map(attribute='qty')|sum %}
+                                <span class="text-slate-400"><i class="fa-solid fa-cubes text-emerald-400 mr-1"></i> {{ total_qty }} PCs</span>
+                            {% else %}
+                                <span class="text-slate-600">No stock</span>
+                            {% endif %}
+                            <span class="text-slate-500">{{ '%.2f'|format(part.weight or 0) }} kg</span>
+                            <span class="text-slate-500">AED {{ '%.2f'|format(part.cost_price or 0) }}</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-down text-slate-600 text-xs transition-transform duration-300 chevron-icon"></i>
+                    </div>
+                </div>
+
+                <!-- Expandable Detail Panel (hidden by default) -->
+                <div class="part-detail hidden">
+                    <div class="border-t border-white/5 p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Part Name</label>
+                                <input type="text" name="name" value="{{ part.name or '' }}" placeholder="e.g. Front Brake Disc" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:ring-brand-500 focus:border-brand-500 transition-all">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Brand</label>
+                                <select name="brand_id" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:ring-brand-500 focus:border-brand-500 transition-all">
+                                    <option value="">— Select —</option>
+                                    {% for b in brands %}
+                                        <option value="{{ b.id }}" {% if part.brand_id == b.id %}selected{% endif %}>{{ b.name }} ({{ b.type }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Vitality (Classification)</label>
+                                <select name="vitality_id" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:ring-brand-500 focus:border-brand-500 transition-all">
+                                    <option value="">— Select —</option>
+                                    {% for v in vitalities %}
+                                        <option value="{{ v.id }}" {% if part.vitality_id == v.id %}selected{% endif %}>{{ v.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Fitted On Vehicle</label>
+                                <input type="text" name="fitted_vehicle" value="{{ part.fitted_vehicle or '' }}" placeholder="e.g. Toyota Land Cruiser 2022" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:ring-brand-500 focus:border-brand-500 transition-all">
+                            </div>
+                            <div class="md:col-span-2">
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Description</label>
+                                <input type="text" name="description" value="{{ part.description or '' }}" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:ring-brand-500 focus:border-brand-500 transition-all">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Unit Price (AED)</label>
+                                <div class="relative">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[10px] font-bold">AED</span>
+                                    <input type="number" step="0.01" name="cost_price" value="{{ '%.2f'|format(part.cost_price or 0) }}" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg pl-11 pr-3 py-2 text-sm text-white focus:ring-brand-500 focus:border-brand-500 transition-all">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">HS Code</label>
+                                <div class="relative flex items-center gap-2">
+                                    <div class="relative flex-1">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-cyan-400 text-[10px]"><i class="fa-solid fa-barcode"></i></span>
+                                    <input type="text" name="hs_code" value="{{ part.hs_code or '' }}" placeholder="e.g. 8708.30" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg pl-9 pr-3 py-2 text-sm text-white font-mono focus:ring-cyan-500 focus:border-cyan-500 transition-all">
+                                    </div>
+                                    <button type="submit" name="action" value="clear_hs_code" class="px-3 py-2 text-[11px] font-bold rounded-lg border border-amber-500/25 bg-amber-500/10 text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition-all whitespace-nowrap" onclick="return confirm('Remove the HS Code from this part?');">
+                                        <i class="fa-solid fa-eraser mr-1.5"></i> Clear
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Notes -->
+                        <div class="mt-4">
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Notes</label>
+                            <textarea name="notes" rows="2" placeholder="Internal notes..." class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-3 py-2 text-sm text-white focus:ring-brand-500 focus:border-brand-500 transition-all resize-none">{{ part.notes or '' }}</textarea>
+                        </div>
+
+                        <!-- Physical Specs + Reorder Point (compact row) -->
+                        <div class="mt-4 pt-4 border-t border-white/5">
+                            <h4 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3"><i class="fa-solid fa-ruler-combined text-brand-400 mr-1"></i> Physical Specs & Reorder</h4>
+                            <div class="grid grid-cols-3 md:grid-cols-5 gap-3">
+                                <div>
+                                    <label class="block text-[9px] font-bold text-slate-600 uppercase mb-1">Weight (kg)</label>
+                                    <input type="number" step="0.01" name="weight" value="{{ '%.2f'|format(part.weight or 0) }}" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-2 py-1.5 text-xs text-center text-white focus:ring-brand-500 focus:border-brand-500 transition-all">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-bold text-slate-600 uppercase mb-1">L (cm)</label>
+                                    <input type="number" step="0.01" name="length" value="{{ '%.2f'|format(part.length or 0) }}" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-2 py-1.5 text-xs text-center text-white focus:ring-brand-500 focus:border-brand-500 transition-all">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-bold text-slate-600 uppercase mb-1">W (cm)</label>
+                                    <input type="number" step="0.01" name="width" value="{{ '%.2f'|format(part.width or 0) }}" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-2 py-1.5 text-xs text-center text-white focus:ring-brand-500 focus:border-brand-500 transition-all">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-bold text-slate-600 uppercase mb-1">H (cm)</label>
+                                    <input type="number" step="0.01" name="height" value="{{ '%.2f'|format(part.height or 0) }}" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-2 py-1.5 text-xs text-center text-white focus:ring-brand-500 focus:border-brand-500 transition-all">
+                                </div>
+                                <div>
+                                    <label class="block text-[9px] font-bold text-slate-600 uppercase mb-1">Reorder Pt</label>
+                                    <input type="number" name="reorder_point" value="{{ part.reorder_point or 0 }}" class="w-full bg-slate-900/50 border border-slate-700/50 rounded-lg px-2 py-1.5 text-xs text-center text-white focus:ring-brand-500 focus:border-brand-500 transition-all">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Warehouse Qty + Save -->
+                        <div class="mt-4 pt-4 border-t border-white/5 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                            <div>
+                                <h4 class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2"><i class="fa-solid fa-warehouse text-emerald-400 mr-1"></i> Stock by Warehouse</h4>
+                                <div class="flex flex-wrap gap-2">
+                                    {% if inventory_map.get(part.id) %}
+                                        {% for inv in inventory_map[part.id] %}
+                                        <div class="flex items-center gap-1.5 bg-slate-800/50 border border-slate-700/50 rounded-lg px-3 py-1.5">
+                                            <i class="fa-solid fa-building text-brand-400 text-[9px]"></i>
+                                            <span class="text-[10px] font-bold text-slate-400">{{ inv.warehouse }}:</span>
+                                            <span class="text-xs font-extrabold text-white">{{ inv.qty }}</span>
+                                        </div>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="text-xs text-slate-600 italic">No inventory</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="flex flex-wrap items-center justify-end gap-2">
+                                <button type="submit" name="action" value="delete_part" class="px-4 py-2.5 bg-red-500/10 hover:bg-red-500 text-red-300 hover:text-white rounded-xl text-xs font-bold transition-all duration-300 border border-red-500/20 hover:border-red-500 flex-shrink-0" onclick="return confirm('Delete this part number? This will also remove its linked inventory and movement history.');">
+                                    <i class="fa-solid fa-trash mr-1.5"></i> Delete Part Number
+                                </button>
+                                <button type="submit" name="action" value="update_part" class="px-6 py-2.5 bg-brand-500/10 hover:bg-brand-500 text-brand-400 hover:text-white rounded-xl text-xs font-bold transition-all duration-300 border border-brand-500/20 hover:border-brand-500 flex-shrink-0">
+                                    <i class="fa-solid fa-floppy-disk mr-1.5"></i> Save Changes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div id="no-results" class="hidden text-center py-16 text-slate-500">
+        <i class="fa-solid fa-magnifying-glass text-4xl mb-4 text-slate-600"></i>
+        <p class="text-lg font-medium text-slate-400">No parts match your search.</p>
+    </div>
+    <!-- Floating Bulk Actions Bar -->
+    <div id="bulk-actions-bar" class="fixed bottom-8 left-1/2 -translate-x-1/2 z-[100] hidden">
+        <div class="glass-panel px-8 py-5 rounded-[2rem] border border-brand-500/30 shadow-2xl bg-slate-900/90 backdrop-blur-xl flex items-center gap-8 min-w-[320px]">
+            <div class="flex flex-col">
+                <span class="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Operational Batch</span>
+                <span class="text-xs font-bold text-white"><span id="bulk-selected-count">0</span> Items Armed</span>
+            </div>
+            <div class="h-8 w-px bg-white/10"></div>
+            <div class="flex items-center gap-3">
+                <button onclick="bulkDelete()" class="px-6 py-2.5 bg-red-500 hover:bg-red-400 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-lg shadow-red-500/20 active:scale-95 flex items-center gap-2">
+                    <i class="fa-solid fa-trash-can"></i> Bulk Delete
+                </button>
+                <button onclick="clearSelection()" class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl text-xs font-bold transition-all">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Selection Logic
+    const selectAllBox = document.getElementById('select-all');
+    const partCheckboxes = () => document.querySelectorAll('.part-checkbox:not(.hidden)');
+    const bulkBar = document.getElementById('bulk-actions-bar');
+    const selectionCounter = document.getElementById('selection-counter');
+    const selectedCountSpan = document.getElementById('selected-count');
+    const bulkSelectedCountSpan = document.getElementById('bulk-selected-count');
+
+    function updateSelectionUI() {
+        const checkboxes = Array.from(document.querySelectorAll('.part-checkbox')).filter(cb => {
+            const card = cb.closest('.part-card');
+            return card && !card.classList.contains('hidden');
+        });
+        const checked = checkboxes.filter(cb => cb.checked);
+        const count = checked.length;
+        const totalVisible = checkboxes.length;
+
+        const clearBtn = document.getElementById('clear-selection-btn');
+        const countSpan = document.getElementById('selected-count');
+
+        if (count > 0) {
+            bulkBar.classList.remove('hidden');
+            bulkBar.classList.add('flex');
+            selectionCounter.classList.add('bg-brand-500/10', 'border-brand-500/20');
+            selectionCounter.classList.remove('bg-slate-800/40', 'border-slate-700/50');
+            countSpan.classList.add('text-brand-400');
+            countSpan.classList.remove('text-slate-500');
+            clearBtn.classList.remove('hidden');
+        } else {
+            bulkBar.classList.add('hidden');
+            bulkBar.classList.remove('flex');
+            selectionCounter.classList.remove('bg-brand-500/10', 'border-brand-500/20');
+            selectionCounter.classList.add('bg-slate-800/40', 'border-slate-700/50');
+            countSpan.classList.remove('text-brand-400');
+            countSpan.classList.add('text-slate-500');
+            clearBtn.classList.add('hidden');
+        }
+
+        countSpan.textContent = count;
+        bulkSelectedCountSpan.textContent = count;
+
+        selectAllBox.checked = totalVisible > 0 && count === totalVisible;
+        selectAllBox.indeterminate = count > 0 && count < totalVisible;
+    }
+
+    selectAllBox.addEventListener('change', function() {
+        const checkboxes = Array.from(document.querySelectorAll('.part-checkbox')).filter(cb => {
+            const card = cb.closest('.part-card');
+            return card && !card.classList.contains('hidden');
+        });
+        checkboxes.forEach(cb => cb.checked = this.checked);
+        updateSelectionUI();
+    });
+
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('part-checkbox')) {
+            updateSelectionUI();
+        }
+    });
+
+    function clearSelection() {
+        document.querySelectorAll('.part-checkbox').forEach(cb => cb.checked = false);
+        updateSelectionUI();
+    }
+
+    async function bulkDelete() {
+        const checked = Array.from(document.querySelectorAll('.part-checkbox:checked')).map(cb => cb.value);
+        if (checked.length === 0) return;
+
+        const result = await Swal.fire({
+            title: `Delete ${checked.length} Parts?`,
+            text: "This operation will permanently exile these part numbers and all linked logistics history.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#ef4444',
+            cancelButtonColor: '#334155',
+            confirmButtonText: 'Yes, Delete All',
+            background: '#1e293b',
+            color: '#fff'
+        });
+
+        if (result.isConfirmed) {
+            window.toast("Executing mass deletion...", "info");
+            const formData = new FormData();
+            checked.forEach(id => formData.append('ids[]', id));
+
+            try {
+                const resp = await fetch('/api/parts/bulk_delete', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                if (data.status === 'success') {
+                    window.toast(data.msg);
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    window.toast(data.msg, "error");
+                }
+            } catch (e) {
+                window.toast("Communication failure", "error");
+            }
+        }
+    }
+
+    // Toggle accordion
+    function togglePart(header) {
+        const card = header.closest('.part-card');
+        const detail = card.querySelector('.part-detail');
+        const chevron = header.querySelector('.chevron-icon');
+
+        // Close all other open cards
+        document.querySelectorAll('.part-card').forEach(other => {
+            if (other !== card) {
+                other.querySelector('.part-detail').classList.add('hidden');
+                other.querySelector('.chevron-icon').classList.remove('rotate-180');
+                other.querySelector('.part-header').classList.remove('bg-slate-800/30');
+            }
+        });
+
+        // Toggle current
+        detail.classList.toggle('hidden');
+        chevron.classList.toggle('rotate-180');
+        header.classList.toggle('bg-slate-800/30');
+    }
+
+    // Search filter
+    document.getElementById('part-search').addEventListener('input', function() {
+        const query = this.value.toLowerCase().trim();
+        const cards = document.querySelectorAll('.part-card');
+        let visible = 0;
+
+        cards.forEach(card => {
+            const partNum = card.getAttribute('data-part');
+            if (!query || partNum.includes(query)) {
+                card.classList.remove('hidden');
+                visible++;
+            } else {
+                card.classList.add('hidden');
+            }
+        });
+
+        document.getElementById('no-results').classList.toggle('hidden', visible > 0);
+        updateSelectionUI();
+    });
+</script>
+{% endblock %}

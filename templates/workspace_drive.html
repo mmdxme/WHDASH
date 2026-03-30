@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-8 fade-in">
+    <div class="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-300">Workspace Storage</p>
+            <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">Drive Vault</h1>
+            <p class="mt-2 max-w-3xl text-sm text-slate-400">Browse folders, inspect file metadata, and download both single files and full folder structures from Google Drive.</p>
+        </div>
+        <a href="{{ url_for('google_workspace.workspace_home') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Workspace Overview</a>
+    </div>
+
+    {% if not workspace_connection.configured %}
+    <div class="glass-panel rounded-3xl border border-amber-400/20 bg-amber-500/10 p-6 text-sm text-amber-100">
+        <div>Google OAuth configuration is still missing.</div>
+        <div class="mt-2">
+            {% if workspace_connection.can_manage_settings %}
+            Save the Google client credentials in Workspace Settings to enable Drive access.
+            {% else %}
+            An administrator needs to complete Google Workspace Settings before Drive can connect.
+            {% endif %}
+        </div>
+        {% if workspace_connection.can_manage_settings %}
+        <a href="{{ workspace_setup_url }}" class="mt-4 inline-flex rounded-xl bg-white px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-950 transition-all hover:bg-amber-100">{{ workspace_setup_label }}</a>
+        {% endif %}
+    </div>
+    {% elif not workspace_connection.connected %}
+    <div class="glass-panel rounded-3xl border border-cyan-400/20 bg-cyan-500/10 p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+            <h2 class="text-xl font-black text-white">Connect Drive</h2>
+            <p class="mt-2 text-sm text-cyan-100">Authorize Google Workspace once and this page will show your Drive contents immediately.</p>
+        </div>
+        <a href="{{ url_for('google_workspace.workspace_connect') }}" class="rounded-xl bg-white px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-950 transition-all hover:bg-cyan-100">Connect Google Workspace</a>
+    </div>
+    {% endif %}
+
+    <div class="glass-panel rounded-3xl border border-white/5 p-6">
+        <form method="GET" class="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_200px_200px]">
+            <input type="hidden" name="parent_id" value="{{ drive_parent_id }}">
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Search In Current Folder</label>
+                <input type="text" name="q" value="{{ drive_query }}" placeholder="file name, folder name..." class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+            </div>
+            <div class="flex items-end">
+                <button type="submit" class="w-full rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Apply Search</button>
+            </div>
+            <div class="flex items-end">
+                <a href="{{ url_for('google_workspace.workspace_drive', parent_id=drive_parent_id) }}" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-center text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Clear Search</a>
+            </div>
+        </form>
+        <div class="mt-5 flex flex-wrap items-center gap-3 text-xs">
+            {% for crumb in drive_breadcrumbs %}
+            <a href="{{ url_for('google_workspace.workspace_drive', parent_id=crumb.id) }}" class="rounded-full border border-white/10 bg-white/5 px-4 py-2 font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">{{ crumb.name }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="glass-panel overflow-hidden rounded-3xl border border-white/5">
+        <div class="border-b border-white/5 bg-white/[0.02] p-6 flex items-center justify-between gap-4">
+            <div>
+                <h2 class="text-lg font-black text-white">{{ drive_current_folder.name }}</h2>
+                <p class="mt-1 text-xs text-slate-500">Current Google Drive folder scope.</p>
+            </div>
+            {% if drive_current_folder.id != 'root' %}
+            <a href="{{ url_for('google_workspace.workspace_drive_folder_download', file_id=drive_current_folder.id) }}" class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-200 transition-all hover:bg-emerald-500 hover:text-slate-950">Download This Folder</a>
+            {% endif %}
+        </div>
+        <div class="overflow-auto max-h-[72vh]">
+            <table class="min-w-[1200px] w-full text-left text-sm">
+                <thead class="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-white/5">
+                    <tr class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <th class="px-4 py-4">Type</th>
+                        <th class="px-4 py-4">Name</th>
+                        <th class="px-4 py-4">Mime Type</th>
+                        <th class="px-4 py-4">Modified</th>
+                        <th class="px-4 py-4 text-right">Size</th>
+                        <th class="px-4 py-4 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/10">
+                    {% for item in drive_items %}
+                    <tr class="hover:bg-white/[0.04] transition-colors">
+                        <td class="px-4 py-4">
+                            <span class="inline-flex h-10 w-10 items-center justify-center rounded-2xl {% if item.is_folder %}bg-amber-500/10 text-amber-300{% elif item.is_google_file %}bg-cyan-500/10 text-cyan-200{% else %}bg-white/5 text-slate-200{% endif %}">
+                                <i class="fa-solid {% if item.is_folder %}fa-folder-tree{% elif item.mime_type == 'application/vnd.google-apps.spreadsheet' %}fa-table-cells-large{% else %}fa-file-arrow-down{% endif %}"></i>
+                            </span>
+                        </td>
+                        <td class="px-4 py-4 font-bold text-white">{{ item.name }}</td>
+                        <td class="px-4 py-4 text-slate-300">{{ item.mime_type }}</td>
+                        <td class="px-4 py-4 text-slate-300">{{ item.modified_time or '--' }}</td>
+                        <td class="px-4 py-4 text-right text-slate-300">{{ item.size or 0 }}</td>
+                        <td class="px-4 py-4">
+                            <div class="flex items-center justify-center gap-2">
+                                {% if item.is_folder %}
+                                <a href="{{ url_for('google_workspace.workspace_drive', parent_id=item.id) }}" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Open</a>
+                                <a href="{{ url_for('google_workspace.workspace_drive_folder_download', file_id=item.id) }}" class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-emerald-200 transition-all hover:bg-emerald-500 hover:text-slate-950">Zip</a>
+                                {% else %}
+                                <a href="{{ url_for('google_workspace.workspace_drive_download', file_id=item.id) }}" class="rounded-xl border border-brand-500/20 bg-brand-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-brand-200 transition-all hover:bg-brand-500 hover:text-white">Download</a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="px-4 py-16 text-center text-xs font-black uppercase tracking-widest text-slate-500">No files found in the current Drive scope.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
