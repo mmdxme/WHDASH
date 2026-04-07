@@ -1,0 +1,459 @@
+{% extends "bi/base_bi.html" %}
+
+{% block title %}Consolidated & Comparative Reports{% endblock %}
+
+{% block bi_content %}
+<!-- Reports Header -->
+<section class="executive-hero mb-4">
+    <h1>Consolidated & Comparative Reports</h1>
+    <div class="subtitle">Group-wide reports and cross-company comparisons</div>
+</section>
+
+<!-- Report Types -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Report Generator</h2>
+    </div>
+    
+    <form id="report-form" class="report-form">
+        <div class="form-grid">
+            <div class="form-group">
+                <label>Report Type</label>
+                <select name="report_type" id="report-type" onchange="updateReportOptions()">
+                    <option value="consolidated_summary">Consolidated Summary</option>
+                    <option value="company_comparison">Company Comparison</option>
+                    <option value="period_comparison">Period Comparison</option>
+                    <option value="detailed_transactions">Detailed Transactions</option>
+                    <option value="executive_summary">Executive Summary</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Date Range</label>
+                <select name="period" id="period-select">
+                    <option value="this_month">This Month</option>
+                    <option value="last_month">Last Month</option>
+                    <option value="this_quarter">This Quarter</option>
+                    <option value="last_quarter">Last Quarter</option>
+                    <option value="this_year">This Year</option>
+                    <option value="ytd">Year to Date</option>
+                    <option value="last_12_months">Last 12 Months</option>
+                    <option value="custom">Custom Range</option>
+                </select>
+            </div>
+            
+            <div class="form-group" id="custom-dates" style="display: none;">
+                <label>From Date</label>
+                <input type="date" name="date_from" id="date-from">
+            </div>
+            
+            <div class="form-group" id="custom-date-to" style="display: none;">
+                <label>To Date</label>
+                <input type="date" name="date_to" id="date-to">
+            </div>
+            
+            <div class="form-group" id="compare-period-group">
+                <label>Compare To</label>
+                <select name="compare_period">
+                    <option value="previous_period">Previous Period</option>
+                    <option value="same_period_last_year">Same Period Last Year</option>
+                    <option value="budget">Budget</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="button" class="bi-btn bi-btn-primary" onclick="generateReport()">Generate Report</button>
+            <button type="button" class="bi-btn bi-btn-secondary" onclick="exportReport('excel')">Export Excel</button>
+            <button type="button" class="bi-btn bi-btn-secondary" onclick="exportReport('csv')">Export CSV</button>
+            <button type="button" class="bi-btn bi-btn-secondary" onclick="exportReport('pdf')">Export PDF</button>
+        </div>
+    </form>
+</section>
+
+<!-- Report Output -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title" id="report-title">Report Results</h2>
+        <div class="bi-section-actions">
+            <button class="bi-btn bi-btn-secondary btn-sm" onclick="printReport()"><i class="fas fa-print"></i> Print</button>
+        </div>
+    </div>
+    
+    <div id="report-content">
+        <div class="empty-state">
+            <i class="fas fa-chart-bar" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+            <p>Select report options and click "Generate Report" to view results.</p>
+        </div>
+    </div>
+</section>
+
+<!-- Saved Reports -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Saved Reports</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Report Name</th>
+                    <th>Type</th>
+                    <th>Created</th>
+                    <th>Last Run</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="saved-reports">
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 2rem;">No saved reports</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function updateReportOptions() {
+    const reportType = document.getElementById('report-type').value;
+    const customDates = document.getElementById('custom-dates');
+    const customDateTo = document.getElementById('custom-date-to');
+    const compareGroup = document.getElementById('compare-period-group');
+    
+    // Show/hide custom dates
+    if (document.getElementById('period-select').value === 'custom') {
+        customDates.style.display = '';
+        customDateTo.style.display = '';
+    } else {
+        customDates.style.display = 'none';
+        customDateTo.style.display = 'none';
+    }
+    
+    // Show/hide comparison options for certain reports
+    if (reportType === 'detailed_transactions') {
+        compareGroup.style.display = 'none';
+    } else {
+        compareGroup.style.display = '';
+    }
+}
+
+async function generateReport() {
+    const form = document.getElementById('report-form');
+    const formData = new FormData(form);
+    const params = new URLSearchParams(formData);
+    params.set('format', 'json');
+    params.set('generate', 'true');
+    
+    const reportType = document.getElementById('report-type').value;
+    const reportTitle = document.getElementById('report-title');
+    
+    reportTitle.textContent = 'Generating report...';
+    document.getElementById('report-content').innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+    
+    try {
+        const response = await fetch(`/api/bi/reports/${reportType}?${params.toString()}`);
+        const data = await response.json();
+        
+        renderReport(reportType, data);
+        
+    } catch (error) {
+        console.error('Error generating report:', error);
+        document.getElementById('report-content').innerHTML = '<div class="error-state">Error generating report. Please try again.</div>';
+    }
+}
+
+function renderReport(reportType, data) {
+    const reportTitle = document.getElementById('report-title');
+    const content = document.getElementById('report-content');
+    
+    let html = '';
+    
+    switch(reportType) {
+        case 'consolidated_summary':
+            reportTitle.textContent = 'Consolidated Summary Report';
+            html = renderConsolidatedSummary(data);
+            break;
+        case 'company_comparison':
+            reportTitle.textContent = 'Company Comparison Report';
+            html = renderCompanyComparison(data);
+            break;
+        case 'period_comparison':
+            reportTitle.textContent = 'Period Comparison Report';
+            html = renderPeriodComparison(data);
+            break;
+        case 'executive_summary':
+            reportTitle.textContent = 'Executive Summary Report';
+            html = renderExecutiveSummary(data);
+            break;
+        default:
+            html = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+    }
+    
+    content.innerHTML = html;
+}
+
+function renderConsolidatedSummary(data) {
+    return `
+        <div class="bi-table-wrapper">
+            <table class="bi-table">
+                <thead>
+                    <tr>
+                        <th>Metric</th>
+                        <th>Current Period</th>
+                        <th>Previous Period</th>
+                        <th>Change</th>
+                        <th>% Change</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Total Revenue</strong></td>
+                        <td>${formatCurrency(data.revenue || 0)}</td>
+                        <td>${formatCurrency(data.revenue_prev || 0)}</td>
+                        <td class="${(data.revenue - data.revenue_prev) >= 0 ? 'text-success' : 'text-danger'}">${formatCurrency((data.revenue - data.revenue_prev) || 0)}</td>
+                        <td>${formatPercent(data.revenue_change_pct || 0)}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Total Orders</strong></td>
+                        <td>${formatNumber(data.orders || 0)}</td>
+                        <td>${formatNumber(data.orders_prev || 0)}</td>
+                        <td class="${(data.orders - data.orders_prev) >= 0 ? 'text-success' : 'text-danger'}">${formatNumber((data.orders - data.orders_prev) || 0)}</td>
+                        <td>${formatPercent(data.orders_change_pct || 0)}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Total Customers</strong></td>
+                        <td>${formatNumber(data.customers || 0)}</td>
+                        <td>${formatNumber(data.customers_prev || 0)}</td>
+                        <td class="${(data.customers - data.customers_prev) >= 0 ? 'text-success' : 'text-danger'}">${formatNumber((data.customers - data.customers_prev) || 0)}</td>
+                        <td>${formatPercent(data.customers_change_pct || 0)}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Inventory Value</strong></td>
+                        <td>${formatCurrency(data.inventory || 0)}</td>
+                        <td>${formatCurrency(data.inventory_prev || 0)}</td>
+                        <td class="${(data.inventory - data.inventory_prev) >= 0 ? 'text-success' : 'text-danger'}">${formatCurrency((data.inventory - data.inventory_prev) || 0)}</td>
+                        <td>${formatPercent(data.inventory_change_pct || 0)}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderCompanyComparison(data) {
+    const companies = data.companies || [];
+    return `
+        <div class="bi-table-wrapper">
+            <table class="bi-table">
+                <thead>
+                    <tr>
+                        <th>Company</th>
+                        <th>Revenue</th>
+                        <th>Orders</th>
+                        <th>Customers</th>
+                        <th>Avg Order</th>
+                        <th>Rank</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${companies.map((c, i) => `
+                        <tr>
+                            <td><strong>${c.name || 'Unknown'}</strong></td>
+                            <td class="font-bold">${formatCurrency(c.revenue || 0)}</td>
+                            <td>${formatNumber(c.orders || 0)}</td>
+                            <td>${formatNumber(c.customers || 0)}</td>
+                            <td>${formatCurrency(c.avg_order || 0)}</td>
+                            <td><span class="top-list-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderPeriodComparison(data) {
+    const periods = data.periods || [];
+    return `
+        <div class="bi-table-wrapper">
+            <table class="bi-table">
+                <thead>
+                    <tr>
+                        <th>Period</th>
+                        <th>Revenue</th>
+                        <th>Orders</th>
+                        <th>Customers</th>
+                        <th>AOV</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${periods.map(p => `
+                        <tr>
+                            <td><strong>${p.period_name || 'Unknown'}</strong></td>
+                            <td class="font-bold">${formatCurrency(p.revenue || 0)}</td>
+                            <td>${formatNumber(p.orders || 0)}</td>
+                            <td>${formatNumber(p.customers || 0)}</td>
+                            <td>${formatCurrency(p.aov || 0)}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function renderExecutiveSummary(data) {
+    return `
+        <div class="executive-summary">
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="summary-label">Revenue</div>
+                    <div class="summary-value">${formatCurrency(data.revenue || 0)}</div>
+                    <div class="summary-change ${(data.revenue_change || 0) >= 0 ? 'positive' : 'negative'}">
+                        ${(data.revenue_change || 0) >= 0 ? '+' : ''}${formatPercent(data.revenue_change || 0)} vs last period
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Orders</div>
+                    <div class="summary-value">${formatNumber(data.orders || 0)}</div>
+                    <div class="summary-change ${(data.orders_change || 0) >= 0 ? 'positive' : 'negative'}">
+                        ${(data.orders_change || 0) >= 0 ? '+' : ''}${formatPercent(data.orders_change || 0)} vs last period
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Customers</div>
+                    <div class="summary-value">${formatNumber(data.customers || 0)}</div>
+                    <div class="summary-change ${(data.customers_change || 0) >= 0 ? 'positive' : 'negative'}">
+                        ${(data.customers_change || 0) >= 0 ? '+' : ''}${formatPercent(data.customers_change || 0)} vs last period
+                    </div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Profit Margin</div>
+                    <div class="summary-value">${formatPercent(data.margin || 0)}</div>
+                    <div class="summary-change ${(data.margin_change || 0) >= 0 ? 'positive' : 'negative'}">
+                        ${(data.margin_change || 0) >= 0 ? '+' : ''}${formatPercent(data.margin_change || 0)} vs last period
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+async function exportReport(format) {
+    const form = document.getElementById('report-form');
+    const formData = new FormData(form);
+    const params = new URLSearchParams(formData);
+    params.set('export', format);
+    
+    window.open(`/api/bi/export/${document.getElementById('report-type').value}?${params.toString()}`, '_blank');
+}
+
+function printReport() {
+    window.print();
+}
+
+function formatNumber(num, decimals = 0) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function formatCurrency(num) {
+    if (num === null || num === undefined) return '-';
+    return 'AED ' + parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function formatPercent(num) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+</script>
+
+<style>
+.report-form {
+    background: var(--color-bg-secondary);
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--color-text-secondary);
+}
+
+.form-group select,
+.form-group input {
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-bg-primary);
+    color: var(--color-text);
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.loading {
+    text-align: center;
+    padding: 3rem;
+    color: var(--color-text-secondary);
+}
+
+.error-state {
+    text-align: center;
+    padding: 3rem;
+    color: var(--color-danger);
+}
+
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.summary-card {
+    background: var(--color-bg-secondary);
+    padding: 1.5rem;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.summary-label {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+.summary-value {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.summary-change {
+    font-size: 0.875rem;
+}
+
+.summary-change.positive { color: var(--color-success); }
+.summary-change.negative { color: var(--color-danger); }
+</style>
+{% endblock %}

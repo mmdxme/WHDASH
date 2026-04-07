@@ -1,0 +1,90 @@
+{% extends "procurement/base.html" %}
+
+{% block proc_content %}
+<div style="margin-bottom: 1.5rem;">
+    <h2 style="margin: 0 0 0.5rem 0;">Quotation Comparison: {{ rfq.rfq_number }}</h2>
+    <p style="color: #64748b; margin: 0;">Compare supplier quotations side by side</p>
+</div>
+
+{% if quotations and quotations|length > 0 %}
+<div class="proc-card">
+    <div class="proc-card-header"><h3 class="proc-card-title">Supplier Comparison</h3></div>
+    <div class="proc-card-body" style="padding: 0; overflow-x: auto;">
+        <table class="proc-table">
+            <thead>
+                <tr>
+                    <th>Supplier</th>
+                    <th>Country</th>
+                    <th>Lead Time</th>
+                    <th>MOQ</th>
+                    <th>Payment Terms</th>
+                    <th>Freight</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for q in quotations %}
+                <tr>
+                    <td style="font-weight: 600;">{{ q.supplier_name }}</td>
+                    <td>{{ q.country or '-' }}</td>
+                    <td>{{ q.lead_time_days or '-' }} days</td>
+                    <td>{{ q.moq or 1 }}</td>
+                    <td>{{ q.payment_terms or '-' }}</td>
+                    <td>{{ "%.2f"|format(q.freight_cost or 0) }}</td>
+                    <td style="font-weight: 700; font-size: 1.1rem;">{{ "%.2f"|format(q.total_amount or 0) }} {{ q.currency or 'AED' }}</td>
+                    <td>
+                        <span class="proc-badge proc-badge-{% if q.is_winner %}success{% elif q.status == 'SUBMITTED' %}info{% else %}gray{% endif %}">
+                            {% if q.is_winner %}WINNER{% else %}{{ q.status }}{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('procurement_quotations_view', quotation_id=q.id) }}" class="proc-btn proc-btn-sm proc-btn-secondary">View</a>
+                        <a href="{{ url_for('procurement_orders_new') }}?quotation_id={{ q.id }}" class="proc-btn proc-btn-sm proc-btn-primary">Create PO</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div style="margin-top: 1.5rem;">
+    <h3 style="margin-bottom: 1rem;">Line-by-Line Comparison</h3>
+    <div class="proc-card">
+        <table class="proc-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    {% for q in quotations %}
+                    <th>{{ q.supplier_name }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in quotations[0].lines if quotations %}
+                <tr>
+                    <td>{{ line.item_name }} ({{ line.item_code }})</td>
+                    {% for q in quotations %}
+                    <td>
+                        {% for l in q.lines if l.item_code == line.item_code %}
+                        {{ "%.2f"|format(l.final_unit_price or l.unit_price or 0) }}
+                        {% endfor %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="proc-card">
+    <div class="proc-card-body" style="text-align: center; padding: 3rem; color: #64748b;">
+        <i class="fa fa-inbox" style="font-size: 3rem; display: block; margin-bottom: 1rem;"></i>
+        No quotations received for this RFQ yet.
+    </div>
+</div>
+{% endif %}
+{% endblock %}

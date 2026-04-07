@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in pb-20">
+
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('ci_profiles') }}" class="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all">
+                <i class="fa-solid fa-arrow-left"></i>
+            </a>
+            <div>
+                <h2 class="text-3xl font-extrabold text-white tracking-tight">{{ customer.name }}</h2>
+                <div class="flex items-center gap-3 mt-1">
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full {% if customer.active %}bg-emerald-500/10 text-emerald-400{% else %}bg-red-500/10 text-red-400{% endif %}">
+                        {% if customer.active %}Active{% else %}Inactive{% endif %}
+                    </span>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 capitalize">{{ customer.location or 'Local' }}</span>
+                    <span class="text-slate-500 text-xs">{{ customer.city }}, {{ customer.country }}</span>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <form method="post" action="{{ url_for('ci_enrich_profile', customer_id=customer.id) }}" style="display:inline" onsubmit="return confirm('Re-enrich this customer profile?');">
+                <button type="submit" class="px-5 py-2.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-xl text-xs font-bold transition-all">
+                    <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Enrich Profile
+                </button>
+            </form>
+            <a href="{{ url_for('ci_dashboard') }}" class="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-xl text-xs font-bold transition-all">
+                <i class="fa-solid fa-arrow-left mr-1"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Metrics Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div class="glass-panel rounded-2xl p-4 border-l-4 border-l-brand-500">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Revenue</p>
+            <span class="text-2xl font-black text-white">{{ "{:,.0f}".format(metrics.total_orders) }}</span>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 border-l-4 border-l-emerald-500">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Payments</p>
+            <span class="text-2xl font-black text-white">{{ "{:,.0f}".format(metrics.total_payments) }}</span>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 border-l-4 border-l-red-500">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Outstanding Debt</p>
+            <span class="text-2xl font-black text-white">{{ "{:,.0f}".format(metrics.total_debt) }}</span>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 border-l-4 border-l-amber-500">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Credit Limit</p>
+            <span class="text-2xl font-black text-white">{{ "{:,.0f}".format(metrics.credit_limit) }}</span>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 border-l-4 border-l-purple-500">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Days Since Purchase</p>
+            <span class="text-2xl font-black text-white">{{ metrics.days_since_last_purchase }}</span>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 border-l-4 border-l-cyan-500">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Churn Risk</p>
+            <div class="flex items-center gap-2">
+                <span class="text-2xl font-black {% if metrics.churn_risk_score > 0.7 %}text-red-400{% elif metrics.churn_risk_score > 0.4 %}text-amber-400{% else %}text-emerald-400{% endif %}">
+                    {{ "%.0f"|format(metrics.churn_risk_score * 100) }}%
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="glass-panel rounded-2xl overflow-hidden border border-white/5">
+        <div class="flex overflow-x-auto border-b border-white/5 bg-slate-800/20">
+            <button onclick="showTab('overview')" class="tab-btn px-6 py-3 text-xs font-bold text-white border-b-2 border-brand-500 whitespace-nowrap" data-tab="overview">Overview</button>
+            <button onclick="showTab('financial')" class="tab-btn px-6 py-3 text-xs font-bold text-slate-400 hover:text-white whitespace-nowrap" data-tab="financial">Financial & Credit</button>
+            <button onclick="showTab('demand')" class="tab-btn px-6 py-3 text-xs font-bold text-slate-400 hover:text-white whitespace-nowrap" data-tab="demand">Demand History</button>
+            <button onclick="showTab('lost')" class="tab-btn px-6 py-3 text-xs font-bold text-slate-400 hover:text-white whitespace-nowrap" data-tab="lost">Lost Sales</button>
+            <button onclick="showTab('alerts')" class="tab-btn px-6 py-3 text-xs font-bold text-slate-400 hover:text-white whitespace-nowrap" data-tab="alerts">Alerts</button>
+            <button onclick="showTab('recommendations')" class="tab-btn px-6 py-3 text-xs font-bold text-slate-400 hover:text-white whitespace-nowrap" data-tab="recommendations">Recommendations</button>
+            <button onclick="showTab('segments')" class="tab-btn px-6 py-3 text-xs font-bold text-slate-400 hover:text-white whitespace-nowrap" data-tab="segments">Segments</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="tab-overview" class="tab-content p-6">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Basic Info -->
+                <div class="space-y-4">
+                    <h3 class="font-bold text-slate-200 text-sm border-b border-white/5 pb-2">Basic Information</h3>
+                    <div class="grid grid-cols-2 gap-3 text-xs">
+                        <div><span class="text-slate-500">Phone:</span> <span class="text-slate-300 ml-2">{{ customer.phone or '—' }}</span></div>
+                        <div><span class="text-slate-500">Email:</span> <span class="text-slate-300 ml-2">{{ customer.email or '—' }}</span></div>
+                        <div><span class="text-slate-500">City:</span> <span class="text-slate-300 ml-2">{{ customer.city or '—' }}</span></div>
+                        <div><span class="text-slate-500">Country:</span> <span class="text-slate-300 ml-2">{{ customer.country or '—' }}</span></div>
+                        <div><span class="text-slate-500">Market:</span> <span class="text-slate-300 ml-2 capitalize">{{ metrics.market or 'Local' }}</span></div>
+                        <div><span class="text-slate-500">Type:</span> <span class="text-slate-300 ml-2 capitalize">{{ metrics.customer_type }}</span></div>
+                        <div><span class="text-slate-500">Salesperson:</span> <span class="text-slate-300 ml-2">{{ customer.salesperson_name or '—' }}</span></div>
+                        <div><span class="text-slate-500">Brands:</span> <span class="text-slate-300 ml-2">{{ customer.brand_names or '—' }}</span></div>
+                        <div><span class="text-slate-500">Credit Status:</span> <span class="text-slate-300 ml-2">{{ customer.credit_status or 'N/A' }}</span></div>
+                        <div><span class="text-slate-500">Payment Method:</span> <span class="text-slate-300 ml-2">{{ customer.payment_method or '—' }}</span></div>
+                    </div>
+                </div>
+
+                <!-- Intelligence Scores -->
+                <div class="space-y-4">
+                    <h3 class="font-bold text-slate-200 text-sm border-b border-white/5 pb-2">Intelligence Scores</h3>
+                    <div class="space-y-3">
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-400">Churn Risk</span>
+                                <span class="{% if metrics.churn_risk_score > 0.7 %}text-red-400{% elif metrics.churn_risk_score > 0.4 %}text-amber-400{% else %}text-emerald-400{% endif %} font-bold">{{ "%.0f"|format(metrics.churn_risk_score * 100) }}%</span>
+                            </div>
+                            <div class="h-2 bg-slate-700 rounded-full overflow-hidden">
+                                <div class="h-full {% if metrics.churn_risk_score > 0.7 %}bg-red-500{% elif metrics.churn_risk_score > 0.4 %}bg-amber-500{% else %}bg-emerald-500{% endif %}" style="width: {{ metrics.churn_risk_score * 100 }}%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-400">Credit Utilization</span>
+                                <span class="{% if metrics.credit_utilization > 0.9 %}text-red-400{% elif metrics.credit_utilization > 0.7 %}text-amber-400{% else %}text-emerald-400{% endif %} font-bold">{{ "%.0f"|format(metrics.credit_utilization * 100) }}%</span>
+                            </div>
+                            <div class="h-2 bg-slate-700 rounded-full overflow-hidden">
+                                <div class="h-full {% if metrics.credit_utilization > 0.9 %}bg-red-500{% elif metrics.credit_utilization > 0.7 %}bg-amber-500{% else %}bg-brand-500{% endif %}" style="width: {{ metrics.credit_utilization * 100 }}%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-400">Payment Ratio</span>
+                                <span class="text-emerald-400 font-bold">{{ "%.0f"|format(metrics.payment_ratio * 100) }}%</span>
+                            </div>
+                            <div class="h-2 bg-slate-700 rounded-full overflow-hidden">
+                                <div class="h-full bg-emerald-500" style="width: {{ metrics.payment_ratio * 100 }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h3 class="font-bold text-slate-200 text-sm border-b border-white/5 pb-2 mt-4">Flags</h3>
+                    <div class="flex flex-wrap gap-2">
+                        {% if metrics.is_key %}<span class="text-[10px] font-bold px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">Key Account</span>{% endif %}
+                        {% if metrics.is_profitable %}<span class="text-[10px] font-bold px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Profitable</span>{% endif %}
+                        {% if metrics.is_export %}<span class="text-[10px] font-bold px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">Export</span>{% endif %}
+                        {% if metrics.churn_risk_score > 0.6 %}<span class="text-[10px] font-bold px-3 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">Churn Risk</span>{% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Financial Tab -->
+        <div id="tab-financial" class="tab-content p-6 hidden">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="glass-panel rounded-xl p-5 bg-slate-800/30">
+                    <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Total Revenue</p>
+                    <span class="text-3xl font-black text-emerald-400">{{ "{:,.0f}".format(metrics.total_orders) }}</span>
+                </div>
+                <div class="glass-panel rounded-xl p-5 bg-slate-800/30">
+                    <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Outstanding Debt</p>
+                    <span class="text-3xl font-black text-red-400">{{ "{:,.0f}".format(metrics.total_debt) }}</span>
+                </div>
+                <div class="glass-panel rounded-xl p-5 bg-slate-800/30">
+                    <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">Credit Limit</p>
+                    <span class="text-3xl font-black text-brand-400">{{ "{:,.0f}".format(metrics.credit_limit) }}</span>
+                </div>
+            </div>
+            {% if fin_profile %}
+            <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
+                <div><span class="text-slate-500">Margin:</span> <span class="text-slate-300 ml-2">{{ "%.1f"|format(fin_profile.customer_margin * 100) }}%</span></div>
+                <div><span class="text-slate-500">Discount:</span> <span class="text-slate-300 ml-2">{{ "%.1f"|format(fin_profile.discount_percentage_received) }}%</span></div>
+                <div><span class="text-slate-500">Avg Payment Delay:</span> <span class="text-slate-300 ml-2">{{ fin_profile.avg_payment_delay_days }} days</span></div>
+                <div><span class="text-slate-500">Collection Risk:</span> <span class="text-slate-300 ml-2">{{ "%.0f"|format(fin_profile.collection_risk_score * 100) }}%</span></div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Demand Tab -->
+        <div id="tab-demand" class="tab-content p-6 hidden">
+            {% if demand_history %}
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="text-slate-500 uppercase text-[10px]">
+                        <th class="text-left py-2">Date</th>
+                        <th class="text-right py-2">Requests</th>
+                        <th class="text-right py-2">Orders</th>
+                        <th class="text-right py-2">Amount</th>
+                        <th class="text-right py-2">Conversion</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for d in demand_history %}
+                    <tr class="hover:bg-white/5">
+                        <td class="py-2 text-slate-300">{{ d.record_date[:10] }}</td>
+                        <td class="py-2 text-right text-slate-400">{{ d.request_count }}</td>
+                        <td class="py-2 text-right text-slate-400">{{ d.purchase_count }}</td>
+                        <td class="py-2 text-right text-emerald-400 font-bold">{{ "{:,.0f}".format(d.purchase_amount or 0) }}</td>
+                        <td class="py-2 text-right"><span class="text-emerald-400">{{ "%.0f"|format(d.conversion_rate * 100) }}%</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="text-center py-12 text-slate-500">
+                <i class="fa-solid fa-chart-simple text-4xl mb-3"></i>
+                <p class="text-sm">No demand history available</p>
+                <p class="text-xs mt-1">Enrich the profile to generate demand analytics</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Lost Sales Tab -->
+        <div id="tab-lost" class="tab-content p-6 hidden">
+            {% if lost_sales %}
+            <table class="w-full text-xs">
+                <thead>
+                    <tr class="text-slate-500 uppercase text-[10px]">
+                        <th class="text-left py-2">Date</th>
+                        <th class="text-left py-2">Reason</th>
+                        <th class="text-left py-2">Item</th>
+                        <th class="text-right py-2">Amount Lost</th>
+                        <th class="text-left py-2">Competitor</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for l in lost_sales %}
+                    <tr class="hover:bg-white/5">
+                        <td class="py-2 text-slate-300">{{ l.lost_date[:10] }}</td>
+                        <td class="py-2 text-amber-400">{{ l.reason_category or l.reason }}</td>
+                        <td class="py-2 text-slate-300">{{ l.requested_item_name or '—' }}</td>
+                        <td class="py-2 text-right text-red-400 font-bold">{{ "{:,.0f}".format(l.lost_amount or 0) }}</td>
+                        <td class="py-2 text-slate-400">{{ l.competitor_name or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="text-center py-12 text-slate-500">
+                <i class="fa-solid fa-cart-arrow-down text-4xl mb-3"></i>
+                <p class="text-sm">No lost sales recorded</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Alerts Tab -->
+        <div id="tab-alerts" class="tab-content p-6 hidden">
+            {% if alerts %}
+            <div class="space-y-3">
+                {% for a in alerts %}
+                <div class="glass-panel rounded-xl p-4 border {% if a.alert_level == 'High' %}border-red-500/30 bg-red-500/5{% elif a.alert_level == 'Medium' %}border-amber-500/30 bg-amber-500/5{% else %}border-slate-500/20 bg-slate-500/5{% endif %}">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-black uppercase tracking-widest {% if a.alert_level == 'High' %}text-red-400{% elif a.alert_level == 'Medium' %}text-amber-400{% else %}text-slate-400{% endif %}">{{ a.alert_level }} - {{ a.alert_type.replace('_', ' ')|title }}</span>
+                        <span class="text-[10px] text-slate-500">{{ a.created_at[:10] }}</span>
+                    </div>
+                    <p class="text-sm text-slate-200 font-medium mb-1">{{ a.title }}</p>
+                    <p class="text-xs text-slate-400">{{ a.description }}</p>
+                    {% if a.recommended_action %}
+                    <p class="text-xs text-brand-400 mt-2"><i class="fa-solid fa-lightbulb mr-1"></i>{{ a.recommended_action }}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-slate-500">
+                <i class="fa-solid fa-check-circle text-4xl mb-3 text-emerald-500"></i>
+                <p class="text-sm">No active alerts for this customer</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Recommendations Tab -->
+        <div id="tab-recommendations" class="tab-content p-6 hidden">
+            {% if recommendations %}
+            <div class="space-y-3">
+                {% for r in recommendations %}
+                <div class="glass-panel rounded-xl p-4 border border-brand-500/20 bg-brand-500/5">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-brand-400">{{ r.recommendation_type.replace('_', ' ')|title }}</span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full {% if r.priority == 'High' %}bg-red-500/10 text-red-400{% elif r.priority == 'Medium' %}bg-amber-500/10 text-amber-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">{{ r.priority }}</span>
+                    </div>
+                    <p class="text-sm text-slate-200 font-medium mb-1">{{ r.title }}</p>
+                    <p class="text-xs text-slate-400">{{ r.description }}</p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-slate-500">
+                <i class="fa-solid fa-lightbulb text-4xl mb-3"></i>
+                <p class="text-sm">No recommendations available</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Segments Tab -->
+        <div id="tab-segments" class="tab-content p-6 hidden">
+            {% if segments %}
+            <div class="flex flex-wrap gap-2">
+                {% for s in segments %}
+                <span class="px-3 py-1.5 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 text-xs font-bold">{{ s.segment_name }}</span>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-slate-500">
+                <i class="fa-solid fa-layer-group text-4xl mb-3"></i>
+                <p class="text-sm">Not assigned to any segments</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(el => {
+        el.classList.remove('text-white', 'border-b-2', 'border-brand-500');
+        el.classList.add('text-slate-400');
+    });
+    document.getElementById('tab-' + tabName).classList.remove('hidden');
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('text-white', 'border-b-2', 'border-brand-500');
+    document.querySelector(`[data-tab="${tabName}"]`).classList.remove('text-slate-400');
+}
+</script>
+{% endblock %}

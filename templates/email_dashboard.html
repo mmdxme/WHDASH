@@ -1,0 +1,656 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    {# Header Section #}
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-brand-400">{{ t('app_name', 'MMDx') }}</p>
+            <h1 class="mt-2 text-2xl xl:text-3xl font-extrabold tracking-tight text-white">Email Management Center</h1>
+            <p class="mt-2 max-w-3xl text-xs xl:text-sm text-slate-400">Manage all your email accounts in one place. Connect Gmail or company email accounts, view inbox, sent messages, and send new emails.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            {% if email_accounts %}
+            <a href="{{ url_for('email_manager.email_all') }}"
+               class="rounded-xl border {% if 'email_all' in request.endpoint %}border-brand-500/50 bg-brand-500/15 text-brand-400{% else %}border-white/10 bg-white/5 text-slate-300{% endif %} px-4 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all hover:bg-white/10 hover:text-white">
+                <i class="fa-solid fa-layer-group mr-2"></i>All Emails
+            </a>
+            {% endif %}
+            <a href="{{ url_for('email_manager.email_settings') }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                <i class="fa-solid fa-gear mr-2"></i>Settings
+            </a>
+            <a href="{{ url_for('email_manager.email_compose') }}" class="rounded-xl bg-brand-600 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                <i class="fa-solid fa-plus mr-2"></i>Compose
+            </a>
+        </div>
+    </div>
+
+    {# No Accounts Empty State #}
+    {% if not email_accounts %}
+    <div class="glass-panel rounded-3xl border border-amber-400/20 bg-amber-500/10 p-6 xl:p-8">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 xl:gap-6">
+            <div class="w-14 h-14 xl:w-16 xl:h-16 rounded-2xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-envelope text-2xl xl:text-3xl text-amber-400"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <h2 class="text-lg font-black text-white">No Email Accounts Connected</h2>
+                <p class="mt-2 text-xs xl:text-sm text-amber-100 max-w-2xl">Connect your Gmail account or add your company email (SMTP/IMAP) to start managing emails from your dashboard.</p>
+                <div class="mt-4 xl:mt-6 flex flex-wrap gap-3 xl:gap-4">
+                    <a href="{{ url_for('email_manager.email_settings') }}" class="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-950 transition-all hover:bg-amber-100">
+                        <i class="fa-solid fa-plus"></i>Add Account
+                    </a>
+                    {% if gmail_configured and not gmail_connected %}
+                    <a href="{{ url_for('email_manager.email_connect_gmail') }}" class="inline-flex items-center gap-2 rounded-xl bg-[#4285F4] px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-[#3367D6]">
+                        <i class="fa-brands fa-google"></i>Connect Gmail
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Fetch Errors #}
+    {% if fetch_errors %}
+    <div class="glass-panel rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
+        <div class="flex items-start gap-3">
+            <i class="fa-solid fa-triangle-exclamation text-red-400 mt-0.5"></i>
+            <div>
+                <p class="text-sm font-bold text-red-400">Some accounts could not be reached</p>
+                <div class="mt-2 text-xs text-red-400/70 space-y-1">
+                    {% for error in fetch_errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if email_accounts %}
+    <div class="flex flex-col lg:flex-row gap-4 xl:gap-6">
+        {# Left Sidebar - Account List #}
+        <div class="lg:w-72 xl:w-80 shrink-0">
+            <div class="glass-panel rounded-2xl xl:rounded-3xl border border-white/5 p-4 xl:p-5">
+                <div class="flex items-center justify-between mb-4 xl:mb-5">
+                    <h3 class="text-xs xl:text-sm font-bold text-white">Email Accounts</h3>
+                    <a href="{{ url_for('email_manager.email_settings') }}" class="text-[10px] font-black uppercase tracking-widest text-brand-400 hover:text-brand-300">
+                        <i class="fa-solid fa-plus mr-1"></i>Add
+                    </a>
+                </div>
+                <div class="space-y-2">
+                    {% for acc in email_accounts %}
+                    <div class="group relative">
+                        <a href="{{ url_for('email_manager.email_dashboard', account_id=acc.id, folder=current_folder) }}"
+                           class="flex items-center gap-3 rounded-xl p-3 transition-all {% if current_account and current_account.id == acc.id %}bg-brand-500/15 border border-brand-500/30{% else %}hover:bg-white/5 border border-transparent{% endif %}">
+                            <div class="w-10 h-10 rounded-xl shrink-0 {% if acc.account_type == 'gmail' %}bg-gradient-to-br from-[#4285F4] to-[#34A853]{% else %}bg-gradient-to-br from-brand-600 to-purple-600{% endif %} flex items-center justify-center text-white text-sm">
+                                {% if acc.account_type == 'gmail' %}
+                                <i class="fa-brands fa-google"></i>
+                                {% else %}
+                                <i class="fa-solid fa-envelope"></i>
+                                {% endif %}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-xs font-bold text-white truncate">{{ acc.email_address }}</p>
+                                <p class="text-[10px] text-slate-500 uppercase tracking-wider truncate">
+                                    {% if acc.account_type == 'gmail' %}Gmail{% else %}SMTP/IMAP{% endif %}
+                                    {% if acc.is_default %}<span class="text-brand-400 ml-1">(Default)</span>{% endif %}
+                                </p>
+                            </div>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if gmail_configured and not gmail_connected %}
+                <div class="mt-4 pt-4 border-t border-white/5">
+                    <a href="{{ url_for('email_manager.email_connect_gmail') }}" class="flex items-center gap-3 rounded-xl p-3 bg-[#4285F4]/10 border border-[#4285F4]/20 hover:bg-[#4285F4]/20 transition-all">
+                        <div class="w-10 h-10 rounded-xl bg-[#4285F4]/20 flex items-center justify-center text-[#4285F4] shrink-0">
+                            <i class="fa-brands fa-google"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs font-bold text-white">Connect Gmail</p>
+                            <p class="text-[10px] text-slate-500">Add Google account</p>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-slate-500 text-xs"></i>
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Main Content Area #}
+        <div class="flex-1 min-w-0">
+            {% if current_account %}
+            <div class="glass-panel rounded-2xl xl:rounded-3xl border border-white/5 overflow-hidden">
+                {# Toolbar - Folder Tabs and Search #}
+                <div class="border-b border-white/5 bg-white/[0.02] p-3 xl:p-4">
+                    <div class="flex flex-col gap-3 sm:gap-4">
+                        {# Folder Tabs #}
+                        <div class="flex items-center gap-1 bg-white/5 rounded-xl p-1 overflow-x-auto">
+                            <a href="{{ url_for('email_manager.email_dashboard', account_id=current_account.id, folder='INBOX', q='', page=1) }}"
+                               class="px-3 xl:px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shrink-0 {% if current_folder == 'INBOX' %}bg-brand-500 text-white{% else %}text-slate-400 hover:text-white{% endif %}">
+                                <i class="fa-solid fa-inbox mr-1"></i>Inbox
+                            </a>
+                            <a href="{{ url_for('email_manager.email_dashboard', account_id=current_account.id, folder='SENT', q='', page=1) }}"
+                               class="px-3 xl:px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shrink-0 {% if current_folder == 'SENT' %}bg-brand-500 text-white{% else %}text-slate-400 hover:text-white{% endif %}">
+                                <i class="fa-solid fa-paper-plane mr-1"></i>Sent
+                            </a>
+                            <a href="{{ url_for('email_manager.email_dashboard', account_id=current_account.id, folder='DRAFT', q='', page=1) }}"
+                               class="px-3 xl:px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shrink-0 {% if current_folder == 'DRAFT' %}bg-brand-500 text-white{% else %}text-slate-400 hover:text-white{% endif %}">
+                                <i class="fa-solid fa-file mr-1"></i>Drafts
+                            </a>
+                        </div>
+
+                        {# Search and Filters #}
+                        <form method="GET" class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            <input type="hidden" name="account_id" value="{{ current_account.id }}">
+                            <input type="hidden" name="folder" value="{{ current_folder }}">
+                            <input type="hidden" name="page" value="1">
+                            <div class="relative flex-1">
+                                <input type="text" name="q" value="{{ email_query }}" placeholder="Search emails..."
+                                       class="w-full rounded-xl border border-white/10 bg-slate-900/70 pl-10 pr-4 py-2.5 text-sm text-white outline-none transition-all focus:border-brand-500">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                            </div>
+                            <button type="submit" class="rounded-xl bg-brand-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500 shrink-0">
+                                Search
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                {# Account Info Bar #}
+                <div class="px-4 py-2 bg-white/[0.02] border-b border-white/5 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                            <i class="fa-solid fa-server mr-1"></i>{{ current_account.email_address }}
+                        </span>
+                        <span class="text-[10px] text-slate-600">|</span>
+                        <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                            {{ current_folder }}
+                        </span>
+                    </div>
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        {{ email_messages|length }} message{% if email_messages|length != 1 %}s{% endif %}
+                    </span>
+                </div>
+
+                {# Message List #}
+                <div class="divide-y divide-white/5">
+                    {% if email_messages %}
+                    {% for message in email_messages %}
+                    <a href="{{ url_for('email_manager.email_dashboard', account_id=current_account.id if current_account.id else '', folder=current_folder, q=email_query, message_id=message.id, page=current_page) }}"
+                       class="block p-4 xl:p-5 transition-all hover:bg-white/[0.04] {% if selected_message and selected_message.id == message.id %}bg-brand-500/10 border-l-2 border-l-brand-500{% endif %}"
+                       data-message-id="{{ message.id }}">
+                        <div class="flex items-start justify-between gap-3 xl:gap-4">
+                            <div class="min-w-0 flex-1">
+                                {# From and Unread Indicator #}
+                                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500 truncate max-w-[180px] xl:max-w-[200px]">{{ message.from }}</span>
+                                    {% if message.label_ids and 'UNREAD' in message.label_ids %}
+                                    <span class="w-2 h-2 rounded-full bg-brand-500 shrink-0"></span>
+                                    {% endif %}
+                                    {% if message.has_attachments %}
+                                    <i class="fa-solid fa-paperclip text-slate-500 text-[10px]"></i>
+                                    {% endif %}
+                                </div>
+                                {# Email Address Column #}
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-[10px] font-black uppercase tracking-widest text-brand-400/70">Email:</span>
+                                    <span class="text-[10px] text-slate-400 truncate">{{ message.email_address or message.from }}</span>
+                                </div>
+                                {# Subject #}
+                                <h3 class="text-sm font-bold text-white truncate">{{ message.subject or '(No subject)' }}</h3>
+                                {# Snippet #}
+                                <p class="mt-1 line-clamp-2 text-xs text-slate-400">{{ message.snippet or message.body[:200] if message.body else '' }}</p>
+                                {# Account Badge (for unified view) #}
+                                {% if message.account_email %}
+                                <span class="mt-2 inline-flex items-center gap-1 rounded bg-white/5 px-2 py-0.5 text-[9px] text-slate-500">
+                                    <i class="fa-solid fa-at"></i>{{ message.account_email }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            <span class="shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-500 whitespace-nowrap">{{ message.date }}</span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                    {% else %}
+                    <div class="p-10 xl:p-16 text-center">
+                        <div class="w-16 h-16 xl:w-20 xl:h-20 rounded-2xl xl:rounded-3xl bg-white/5 flex items-center justify-center mx-auto mb-4">
+                            <i class="fa-solid fa-inbox text-2xl xl:text-3xl text-slate-600"></i>
+                        </div>
+                        <p class="text-sm font-bold text-slate-400">No messages found</p>
+                        <p class="text-xs text-slate-500 mt-1">Try a different search or folder</p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                {# Pagination #}
+                {% if total_messages > page_size %}
+                <div class="border-t border-white/5 px-4 py-3 bg-white/[0.02] flex items-center justify-between gap-4 flex-wrap">
+                    <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        Page {{ current_page }} of {{ ((total_messages / page_size)|round(0, 'ceil')|int) }}
+                    </span>
+                    <div class="flex items-center gap-2">
+                        {% if current_page > 1 %}
+                        <a href="{{ url_for('email_manager.email_dashboard', account_id=current_account.id if current_account.id else '', folder=current_folder, q=email_query, page=current_page - 1) }}"
+                           class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-400 text-xs hover:bg-white/10 transition-all">
+                            <i class="fa-solid fa-chevron-left mr-1"></i>Prev
+                        </a>
+                        {% endif %}
+                        {% if (current_page * page_size) < total_messages %}
+                        <a href="{{ url_for('email_manager.email_dashboard', account_id=current_account.id if current_account.id else '', folder=current_folder, q=email_query, page=current_page + 1) }}"
+                           class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-400 text-xs hover:bg-white/10 transition-all">
+                            Next<i class="fa-solid fa-chevron-right ml-1"></i>
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="glass-panel rounded-2xl xl:rounded-3xl border border-white/5 p-10 xl:p-16 text-center">
+                <div class="w-20 h-20 xl:w-24 xl:h-24 rounded-2xl xl:rounded-3xl bg-white/5 flex items-center justify-center mx-auto mb-6">
+                    <i class="fa-solid fa-envelope-open text-3xl xl:text-4xl text-slate-600"></i>
+                </div>
+                <h3 class="text-lg xl:text-xl font-bold text-white">Select an Email Account</h3>
+                <p class="mt-2 text-sm text-slate-400 max-w-md mx-auto">Choose an email account from the sidebar to view and manage your emails, or add a new account to get started.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        {# Right Panel - Message Details #}
+        {% if selected_message %}
+        <div class="lg:w-[380px] xl:w-[420px] shrink-0">
+            <div class="glass-panel rounded-2xl xl:rounded-3xl border border-white/5 overflow-hidden sticky top-20">
+                <div class="border-b border-white/5 bg-white/[0.02] p-3 xl:p-4">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-xs xl:text-sm font-bold text-white">Message Details</h3>
+                        <div class="flex items-center gap-1.5">
+                            {# Reply Button #}
+                            <a href="{{ url_for('email_manager.email_compose', reply_to=selected_message.from, subject='Re: ' + selected_message.subject, account_id=current_account.id if current_account.id else '') }}"
+                               class="p-2 rounded-lg bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 transition-all" title="Reply">
+                                <i class="fa-solid fa-reply text-xs xl:text-sm"></i>
+                            </a>
+                            {# Forward Button #}
+                            <a href="{{ url_for('email_manager.email_compose', to='', subject='Fwd: ' + selected_message.subject, account_id=current_account.id if current_account.id else '', message_id=selected_message.id, forward_attachments='1') }}"
+                               class="p-2 rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 transition-all" title="Forward">
+                                <i class="fa-solid fa-forward text-xs xl:text-sm"></i>
+                            </a>
+                            {# Close Button #}
+                            <a href="{{ url_for('email_manager.email_dashboard', account_id=current_account.id if current_account.id else '', folder=current_folder, q=email_query) }}"
+                               class="p-2 rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 transition-all" title="Close">
+                                <i class="fa-solid fa-xmark text-xs xl:text-sm"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="p-4 xl:p-5 space-y-4 max-h-[60vh] xl:max-h-[65vh] overflow-auto">
+                    {# Account Badge #}
+                    {% if selected_message.account_email %}
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Account</span>
+                        <span class="inline-flex items-center gap-1 rounded bg-brand-500/10 px-2 py-1 text-xs text-brand-400">
+                            <i class="fa-solid fa-at"></i>{{ selected_message.account_email }}
+                        </span>
+                    </div>
+                    {% endif %}
+
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">From</p>
+                        <p class="text-sm font-medium text-white break-all">{{ selected_message.from }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">To</p>
+                        <p class="text-sm font-medium text-white break-all">{{ selected_message.to }}</p>
+                    </div>
+                    {% if selected_message.cc %}
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">CC</p>
+                        <p class="text-sm font-medium text-white break-all">{{ selected_message.cc }}</p>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Subject</p>
+                        <p class="text-sm font-bold text-white">{{ selected_message.subject }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Date</p>
+                        <p class="text-sm text-slate-300">{{ selected_message.date }}</p>
+                    </div>
+
+                    {# Attachments Section #}
+                    {% if selected_message.attachments %}
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
+                            <i class="fa-solid fa-paperclip mr-1"></i>Attachments ({{ selected_message.attachments|length }})
+                        </p>
+                        <div class="flex flex-col gap-2">
+                            {% for att in selected_message.attachments %}
+                            <div class="flex items-center justify-between gap-3 rounded-lg bg-white/5 px-3 py-2">
+                                <div class="flex items-center gap-2 min-w-0 flex-1">
+                                    <i class="fa-solid fa-file text-slate-500 text-xs shrink-0"></i>
+                                    <span class="text-xs text-slate-300 truncate" title="{{ att.filename }}">{{ att.filename }}</span>
+                                    {% if att.size %}
+                                    <span class="text-[10px] text-slate-500 shrink-0">({{ (att.size / 1024)|round|int }}KB)</span>
+                                    {% endif %}
+                                </div>
+                                {% if current_account %}
+                                <a href="{{ url_for('email_manager.email_download_attachment', account_type=current_account.account_type, account_identifier=current_account.id, message_id=selected_message.id, part_id=att.part_id if att.part_id else loop.index0) }}"
+                                   class="shrink-0 p-1.5 rounded-lg bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 transition-all"
+                                   title="Download {{ att.filename }}">
+                                    <i class="fa-solid fa-download text-[10px]"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {# Message Body #}
+                    <div class="border-t border-white/5 pt-4">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">Message Body</p>
+                        <div class="rounded-xl border border-white/5 bg-white/[0.02] p-4 text-sm leading-7 text-slate-300 whitespace-pre-wrap max-h-[300px] overflow-auto">{{ selected_message.body }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Email Notification System
+let emailCheckInterval = null;
+let notificationPermission = Notification.permission;
+
+// Initialize notification system
+document.addEventListener('DOMContentLoaded', function() {
+    // Line clamp for snippets
+    document.querySelectorAll('.line-clamp-2').forEach(function(el) {
+        el.style.display = '-webkit-box';
+        el.style.webkitLineClamp = '2';
+        el.style.webkitBoxOrient = 'vertical';
+        el.style.overflow = 'hidden';
+    });
+
+    // Handle delete confirmation
+    document.querySelectorAll('.delete-message-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (confirm('Are you sure you want to delete this message?')) {
+                form.submit();
+            }
+        });
+    });
+
+    // Initialize notification system
+    initEmailNotifications();
+});
+
+// Email Notification System
+function initEmailNotifications() {
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/static/sw.js')
+            .then(reg => console.log('Service Worker registered'))
+            .catch(err => console.log('Service Worker registration failed:', err));
+    }
+
+    // Request permission if needed
+    if ('Notification' in window && Notification.permission === 'default') {
+        // Show permission banner after a delay
+        setTimeout(showNotificationPermissionBanner, 2000);
+    }
+
+    // Start checking for new emails
+    startEmailChecking();
+}
+
+function showNotificationPermissionBanner() {
+    // Create banner if not exists
+    if (document.getElementById('notif-permission-banner')) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'notif-permission-banner';
+    banner.className = 'fixed bottom-4 right-4 z-50 glass-panel rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 max-w-sm shadow-2xl';
+    banner.innerHTML = `
+        <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-bell text-amber-400"></i>
+            </div>
+            <div class="flex-1">
+                <p class="text-sm font-bold text-amber-400">Enable Email Notifications</p>
+                <p class="text-xs text-slate-400 mt-1">Get notified when new emails arrive.</p>
+                <div class="flex gap-2 mt-3">
+                    <button onclick="requestNotifPermission()" class="rounded-lg bg-amber-500 px-3 py-1.5 text-[10px] font-bold text-slate-950 hover:bg-amber-400 transition-all">
+                        Enable
+                    </button>
+                    <button onclick="dismissNotifBanner()" class="rounded-lg bg-white/10 px-3 py-1.5 text-[10px] font-bold text-slate-300 hover:bg-white/20 transition-all">
+                        Later
+                    </button>
+                </div>
+            </div>
+            <button onclick="dismissNotifBanner()" class="p-1 text-slate-500 hover:text-white">
+                <i class="fa-solid fa-xmark text-sm"></i>
+            </button>
+        </div>
+    `;
+    document.body.appendChild(banner);
+}
+
+function dismissNotifBanner() {
+    const banner = document.getElementById('notif-permission-banner');
+    if (banner) banner.remove();
+}
+
+async function requestNotifPermission() {
+    dismissNotifBanner();
+    if (!('Notification' in window)) {
+        showToast('Your browser does not support notifications', 'warning');
+        return;
+    }
+
+    const permission = await Notification.requestPermission();
+    notificationPermission = permission;
+
+    if (permission === 'granted') {
+        showToast('Notifications enabled! You will be alerted for new emails.', 'success');
+        startEmailChecking();
+    } else if (permission === 'denied') {
+        showToast('Notifications blocked. Enable them in your browser settings.', 'error');
+    }
+}
+
+function startEmailChecking() {
+    // Check immediately
+    checkForNewEmails();
+
+    // Then check every 30 seconds
+    if (emailCheckInterval) clearInterval(emailCheckInterval);
+    emailCheckInterval = setInterval(checkForNewEmails, 30000);
+}
+
+function stopEmailChecking() {
+    if (emailCheckInterval) {
+        clearInterval(emailCheckInterval);
+        emailCheckInterval = null;
+    }
+}
+
+async function checkForNewEmails() {
+    if (notificationPermission !== 'granted') return;
+
+    try {
+        const response = await fetch('/email/notifications/check-new');
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (data.new_messages && data.new_messages.length > 0) {
+            showEmailNotifications(data.new_messages);
+        }
+    } catch (error) {
+        console.log('Error checking new emails:', error);
+    }
+}
+
+async function showEmailNotifications(messages) {
+    for (const msg of messages) {
+        // Show browser notification
+        if (notificationPermission === 'granted') {
+            const notificationOptions = {
+                body: `${msg.from}\n${msg.snippet || msg.subject}`,
+                icon: '/static/icon-notify.png',
+                badge: '/static/badge.png',
+                tag: `email-${msg.id}`,
+                requireInteraction: false,
+                silent: !msg.play_sound,
+                data: {
+                    url: `/email?account_id=${msg.account_id}&message_id=${msg.id}&folder=INBOX`,
+                    emailId: msg.id,
+                    accountId: msg.account_id
+                }
+            };
+
+            try {
+                new Notification(`New Email: ${truncate(msg.subject, 50)}`, notificationOptions);
+            } catch (e) {
+                // Fallback to service worker notification
+                if (navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({
+                        type: 'SHOW_NOTIFICATION',
+                        payload: {
+                            title: `New Email: ${truncate(msg.subject, 50)}`,
+                            body: `${msg.from}\n${msg.snippet || ''}`,
+                            url: notificationOptions.data.url,
+                            emailId: msg.id,
+                            accountId: msg.account_id,
+                            silent: !msg.play_sound
+                        }
+                    });
+                }
+            }
+        }
+
+        // Show in-app toast notification
+        showEmailToast(msg);
+    }
+}
+
+function showEmailToast(message) {
+    // Create toast container if not exists
+    let container = document.getElementById('email-toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'email-toast-container';
+        container.className = 'fixed top-20 right-4 z-50 flex flex-col gap-2';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = 'glass-panel rounded-xl border border-brand-500/20 bg-brand-500/10 p-4 max-w-sm shadow-2xl animate-slide-in';
+    toast.innerHTML = `
+        <div class="flex items-start gap-3">
+            <div class="w-8 h-8 rounded-lg bg-brand-500/20 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-envelope text-brand-400 text-sm"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <p class="text-xs font-bold text-brand-400 truncate">${escapeHtml(truncate(message.subject, 40))}</p>
+                <p class="text-[10px] text-slate-400 mt-0.5">${escapeHtml(message.from)}</p>
+                <p class="text-[10px] text-slate-500 mt-1 line-clamp-2">${escapeHtml(truncate(message.snippet || '', 80))}</p>
+            </div>
+            <a href="/email?account_id=${message.account_id}&message_id=${message.id}&folder=INBOX"
+               class="shrink-0 p-1.5 rounded-lg bg-brand-500/20 text-brand-400 hover:bg-brand-500/30 transition-all">
+                <i class="fa-solid fa-arrow-right text-xs"></i>
+            </a>
+        </div>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(100%)';
+        toast.style.transition = 'all 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
+function truncate(str, len) {
+    if (!str) return '';
+    return str.length > len ? str.substring(0, len) + '...' : str;
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showToast(message, type = 'info') {
+    if (typeof Swal !== 'undefined') {
+        const icon = type === 'success' ? 'success' : type === 'error' ? 'error' : type === 'warning' ? 'warning' : 'info';
+        Swal.fire({
+            icon,
+            title: message,
+            background: '#1e293b',
+            color: '#fff',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000
+        });
+    }
+}
+
+// Theme-aware attachment download
+function downloadAttachment(url) {
+    fetch(url)
+        .then(response => {
+            if (!response.ok) throw new Error('Download failed');
+            return response.blob();
+        })
+        .then(blob => {
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = 'attachment';
+            if (contentDisposition) {
+                const match = contentDisposition.match(/filename="?([^"]+)"?/);
+                if (match) filename = match[1];
+            }
+            const downloadUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(downloadUrl);
+        })
+        .catch(error => {
+            console.error('Download error:', error);
+            window.toast('Failed to download attachment', 'error');
+        });
+}
+</script>
+<style>
+@keyframes slide-in {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+.animate-slide-in {
+    animation: slide-in 0.3s ease;
+}
+</style>
+{% endblock %}

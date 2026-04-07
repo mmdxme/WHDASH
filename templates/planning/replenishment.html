@@ -1,0 +1,125 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">Replenishment Planning</h2>
+        <p class="text-slate-400 text-sm">Stock replenishment recommendations and actions</p>
+    </div>
+    <div class="flex gap-3">
+        <form action="{{ url_for('replenishment_generate') }}" method="POST" class="inline">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+                <i class="fas fa-play mr-2"></i>Generate Recommendations
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="glass-panel rounded-xl p-4 mb-6 filter-bar">
+    <form method="GET" class="flex flex-wrap gap-4 items-end">
+        <div>
+            <label class="block text-slate-400 text-xs mb-1">Status</label>
+            <select name="status" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                <option value="OPEN" {% if status_filter == 'OPEN' %}selected{% endif %}>Open</option>
+                <option value="APPROVED" {% if status_filter == 'APPROVED' %}selected{% endif %}>Approved</option>
+                <option value="DISMISSED" {% if status_filter == 'DISMISSED' %}selected{% endif %}>Dismissed</option>
+                <option value="ALL" {% if status_filter == 'ALL' %}selected{% endif %}>All</option>
+            </select>
+        </div>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+            <i class="fas fa-filter mr-2"></i>Filter
+        </button>
+    </form>
+</div>
+
+<!-- Recommendations Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <table class="w-full text-sm" id="replenishmentTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Item</th>
+                    <th class="text-center py-3 px-2">Priority</th>
+                    <th class="text-left py-3 px-3">Action</th>
+                    <th class="text-right py-3 px-3">Current</th>
+                    <th class="text-right py-3 px-3">Forecast</th>
+                    <th class="text-right py-3 px-3">Open Demand</th>
+                    <th class="text-right py-3 px-3">In-Transit</th>
+                    <th class="text-right py-3 px-3">Recommended Qty</th>
+                    <th class="text-left py-3 px-3">Suggested Date</th>
+                    <th class="text-left py-3 px-3">Supplier</th>
+                    <th class="text-left py-3 px-3">Status</th>
+                    <th class="text-center py-3 px-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rec in recommendations %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ rec.item_code }}</div>
+                        <div class="text-slate-400 text-xs">{{ rec.item_name }}</div>
+                    </td>
+                    <td class="py-3 px-2 text-center">
+                        {% if rec.priority >= 80 %}
+                        <span class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs font-bold">CRITICAL</span>
+                        {% elif rec.priority >= 60 %}
+                        <span class="px-2 py-1 rounded bg-orange-500/20 text-orange-400 text-xs font-bold">HIGH</span>
+                        {% elif rec.priority >= 40 %}
+                        <span class="px-2 py-1 rounded bg-yellow-500/20 text-yellow-400 text-xs font-bold">MED</span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded bg-slate-500/20 text-slate-400 text-xs">LOW</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-3">
+                        <span class="px-2 py-1 rounded bg-sky-500/20 text-sky-400 text-xs font-medium">{{ rec.action }}</span>
+                    </td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ rec.current_stock|default(0)|int }}</td>
+                    <td class="py-3 px-3 text-right text-sky-400">{{ "{:.0f}".format(rec.forecasted_demand|default(0)) }}</td>
+                    <td class="py-3 px-3 text-right text-yellow-400">{{ "{:.0f}".format(rec.open_demand|default(0)) }}</td>
+                    <td class="py-3 px-3 text-right text-purple-400">{{ "{:.0f}".format(rec.open_supply|default(0)) }}</td>
+                    <td class="py-3 px-3 text-right text-emerald-400 font-bold">{{ rec.recommended_quantity|default(0)|int }}</td>
+                    <td class="py-3 px-3 text-slate-300 text-sm">{{ rec.recommended_date|default('-') }}</td>
+                    <td class="py-3 px-3 text-slate-300 text-sm">{{ rec.supplier_name|default('-') }}</td>
+                    <td class="py-3 px-3">
+                        {% if rec.status == 'OPEN' %}
+                        <span class="status-badge status-open">Open</span>
+                        {% elif rec.status == 'APPROVED' %}
+                        <span class="status-badge status-approved">Approved</span>
+                        {% elif rec.status == 'DISMISSED' %}
+                        <span class="status-badge status-dismissed">Dismissed</span>
+                        {% else %}
+                        <span class="status-badge">{{ rec.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-3 text-center">
+                        {% if rec.status == 'OPEN' %}
+                        <div class="flex gap-1 justify-center">
+                            <form action="{{ url_for('replenishment_approve', rec_id=rec.id) }}" method="POST" class="inline">
+                                <button type="submit" class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs hover:bg-green-500/30">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                            </form>
+                            <form action="{{ url_for('replenishment_dismiss', rec_id=rec.id) }}" method="POST" class="inline">
+                                <button type="submit" class="px-2 py-1 rounded bg-slate-500/20 text-slate-400 text-xs hover:bg-slate-500/30">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </form>
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not recommendations %}
+                <tr>
+                    <td colspan="12" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-clipboard-list text-4xl mb-3 text-slate-600"></i>
+                        <p>No replenishment recommendations. Click "Generate Recommendations" to create.</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

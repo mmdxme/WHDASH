@@ -1,0 +1,231 @@
+{% extends "bi/base_bi.html" %}
+
+{% block title %}Holding Dashboard{% endblock %}
+
+{% block bi_content %}
+<!-- Holding Header -->
+<section class="executive-hero mb-4">
+    <h1>Holding Dashboard</h1>
+    <div class="subtitle">Consolidated view across all companies in the group</div>
+    
+    <div class="hero-kpi-grid">
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="holding-revenue">AED 0</div>
+            <div class="hero-kpi-label">Group Revenue</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="holding-orders">0</div>
+            <div class="hero-kpi-label">Group Orders</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="holding-customers">0</div>
+            <div class="hero-kpi-label">Total Customers</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="holding-headcount">0</div>
+            <div class="hero-kpi-label">Total Headcount</div>
+        </div>
+    </div>
+</section>
+
+<!-- Company Comparison Table -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Company Performance Comparison</h2>
+        <div class="bi-section-actions">
+            <form method="GET" style="display: inline-flex; gap: 0.5rem;">
+                <input type="checkbox" name="eliminate_intercompany" value="true" 
+                       {% if eliminate_intercompany %}checked{% endif %}>
+                <label style="font-size: 0.875rem;">Eliminate intercompany</label>
+                <button type="submit" class="bi-btn bi-btn-secondary">Apply</button>
+            </form>
+        </div>
+    </div>
+    
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Company</th>
+                    <th>Revenue</th>
+                    <th>Contribution</th>
+                    <th>Orders</th>
+                    <th>Customers</th>
+                    <th>Inventory</th>
+                    <th>Receivables</th>
+                    <th>Headcount</th>
+                    <th>Sales/Employee</th>
+                    <th>Trend</th>
+                </tr>
+            </thead>
+            <tbody id="holding-table">
+                <tr>
+                    <td colspan="11" style="text-align: center; padding: 3rem;">
+                        <i class="fas fa-spinner fa-spin"></i> Loading...
+                    </td>
+                </tr>
+            </tbody>
+            <tfoot id="holding-totals" style="background: var(--color-bg-tertiary); font-weight: 700;">
+                <tr>
+                    <td colspan="2">GROUP TOTAL</td>
+                    <td id="total-revenue">-</td>
+                    <td>100%</td>
+                    <td id="total-orders">-</td>
+                    <td id="total-customers">-</td>
+                    <td id="total-inventory">-</td>
+                    <td id="total-receivables">-</td>
+                    <td id="total-headcount">-</td>
+                    <td id="avg-sales-employee">-</td>
+                    <td>-</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</section>
+
+<!-- Charts Row -->
+<section class="bi-grid-2">
+    <div class="bi-section">
+        <div class="bi-section-header">
+            <h2 class="bi-section-title">Revenue Contribution</h2>
+        </div>
+        <div class="bi-chart">
+            <canvas id="revenue-chart"></canvas>
+        </div>
+    </div>
+    
+    <div class="bi-section">
+        <div class="bi-section-header">
+            <h2 class="bi-section-title">Company Ranking</h2>
+        </div>
+        <div class="bi-table-wrapper">
+            <table class="bi-table">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Company</th>
+                        <th>Revenue</th>
+                        <th>Performance</th>
+                    </tr>
+                </thead>
+                <tbody id="ranking-table"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadHoldingData();
+});
+
+async function loadHoldingData() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        params.set('format', 'json');
+        
+        const response = await fetch(`{{ url_for('holding_dashboard') }}?${params.toString()}`);
+        const data = await response.json();
+        
+        updateHoldingKPIs(data);
+        updateHoldingTable(data.by_company || []);
+        updateTotals(data.group_totals || {});
+        updateCharts(data.by_company || []);
+        
+    } catch (error) {
+        console.error('Error loading holding data:', error);
+    }
+}
+
+function updateHoldingKPIs(data) {
+    const totals = data.group_totals || {};
+    document.getElementById('holding-revenue').textContent = formatCurrency(totals.total_sales || 0);
+    document.getElementById('holding-orders').textContent = formatNumber(totals.total_orders || 0);
+    document.getElementById('holding-customers').textContent = formatNumber(totals.total_customers || 0);
+    document.getElementById('holding-headcount').textContent = formatNumber(totals.total_headcount || 0);
+}
+
+function updateHoldingTable(companies) {
+    const tbody = document.getElementById('holding-table');
+    
+    if (!companies || companies.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align: center; padding: 2rem;">No company data available</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = companies.map((company, index) => `
+        <tr>
+            <td><span class="top-list-rank ${index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : ''}">${index + 1}</span></td>
+            <td><strong>${company.company_name || 'Unknown'}</strong></td>
+            <td class="font-bold">${formatCurrency(company.total_sales || 0)}</td>
+            <td>
+                ${formatPercent(company.sales_contribution_pct || 0)}
+                <div class="performance-bar">
+                    <div class="performance-bar-fill ${(company.sales_contribution_pct || 0) > 30 ? 'good' : (company.sales_contribution_pct || 0) > 15 ? 'warning' : 'danger'}" 
+                         style="width: ${company.sales_contribution_pct || 0}%"></div>
+                </div>
+            </td>
+            <td>${formatNumber(company.order_count || 0)}</td>
+            <td>${formatNumber(company.customer_count || 0)}</td>
+            <td>${formatCurrency(company.inventory_value || 0)}</td>
+            <td>${formatCurrency(company.receivables || 0)}</td>
+            <td>${formatNumber(company.headcount || 0)}</td>
+            <td>${formatCurrency(company.sales_per_employee || 0)}</td>
+            <td>
+                ${(company.sales_change_pct || 0) >= 0 
+                    ? '<span class="trend-indicator up"><i class="fas fa-arrow-up"></i> ' + formatPercent(company.sales_change_pct || 0) + '</span>'
+                    : '<span class="trend-indicator down"><i class="fas fa-arrow-down"></i> ' + formatPercent(Math.abs(company.sales_change_pct || 0)) + '</span>'
+                }
+            </td>
+        </tr>
+    `).join('');
+}
+
+function updateTotals(totals) {
+    document.getElementById('total-revenue').textContent = formatCurrency(totals.total_sales || 0);
+    document.getElementById('total-orders').textContent = formatNumber(totals.total_orders || 0);
+    document.getElementById('total-customers').textContent = formatNumber(totals.total_customers || 0);
+    document.getElementById('total-inventory').textContent = formatCurrency(totals.total_inventory || 0);
+    document.getElementById('total-receivables').textContent = formatCurrency(totals.total_receivables || 0);
+    document.getElementById('total-headcount').textContent = formatNumber(totals.total_headcount || 0);
+    document.getElementById('avg-sales-employee').textContent = formatCurrency(totals.avg_sales_per_employee || 0);
+}
+
+function updateCharts(companies) {
+    // Simple table-based ranking
+    const rankingBody = document.getElementById('ranking-table');
+    rankingBody.innerHTML = companies.slice(0, 5).map((company, index) => `
+        <tr>
+            <td><span class="top-list-rank ${index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : ''}">${index + 1}</span></td>
+            <td><strong>${company.company_name || 'Unknown'}</strong></td>
+            <td class="font-bold">${formatCurrency(company.total_sales || 0)}</td>
+            <td>
+                <div class="performance-bar" style="width: 150px;">
+                    <div class="performance-bar-fill ${(company.sales_contribution_pct || 0) > 30 ? 'good' : (company.sales_contribution_pct || 0) > 15 ? 'warning' : 'danger'}" 
+                         style="width: ${company.sales_contribution_pct || 0}%"></div>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function formatNumber(num, decimals = 0) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function formatCurrency(num) {
+    if (num === null || num === undefined) return '-';
+    return 'AED ' + parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function formatPercent(num) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+</script>
+{% endblock %}

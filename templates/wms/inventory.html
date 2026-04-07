@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ total_count }} {{ t('records_found', 'records found') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('wms_export_inventory') }}?warehouse_id={{ warehouse_id }}" class="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 hover:bg-emerald-500/20 text-sm font-medium">
+                <i class="fa-solid fa-file-excel mr-2"></i>Export
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    {% if summary %}
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div class="glass-panel rounded-xl p-4 text-center">
+            <p class="text-xs text-slate-400 mb-1">Total Qty</p>
+            <p class="text-xl font-extrabold text-white">{{ (summary.total_qty or 0)|int|abs }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4 text-center">
+            <p class="text-xs text-slate-400 mb-1">Available</p>
+            <p class="text-xl font-extrabold text-emerald-400">{{ (summary.available or 0)|int|abs }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4 text-center">
+            <p class="text-xs text-slate-400 mb-1">Reserved</p>
+            <p class="text-xl font-extrabold text-amber-400">{{ (summary.reserved or 0)|int|abs }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4 text-center">
+            <p class="text-xs text-slate-400 mb-1">Allocated</p>
+            <p class="text-xl font-extrabold text-cyan-400">{{ (summary.allocated or 0)|int|abs }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4 text-center">
+            <p class="text-xs text-slate-400 mb-1">Blocked</p>
+            <p class="text-xl font-extrabold text-red-400">{{ (summary.blocked or 0)|int|abs }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4 text-center">
+            <p class="text-xs text-slate-400 mb-1">SKUs</p>
+            <p class="text-xl font-extrabold text-brand-400">{{ summary.sku_count }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4 text-center">
+            <p class="text-xs text-slate-400 mb-1">Warehouses</p>
+            <p class="text-xl font-extrabold text-purple-400">{{ summary.warehouse_count }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-5">
+        <form method="GET" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
+            <div class="lg:col-span-2">
+                <input type="text" name="search" value="{{ search }}" placeholder="Item code, name, barcode..." class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+            </div>
+            <div>
+                <select name="warehouse_id" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <option value="">All Warehouses</option>
+                    {% for wh in warehouses %}
+                    <option value="{{ wh.id }}" {% if warehouse_id|int == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="category_id" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}" {% if category_id|int == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <select name="status" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <option value="">All Status</option>
+                    <option value="AVAILABLE" {% if status=='AVAILABLE' %}selected{% endif %}>Available</option>
+                    <option value="RESERVED" {% if status=='RESERVED' %}selected{% endif %}>Reserved</option>
+                    <option value="BLOCKED" {% if status=='BLOCKED' %}selected{% endif %}>Blocked</option>
+                    <option value="QUARANTINE" {% if status=='QUARANTINE' %}selected{% endif %}>Quarantine</option>
+                    <option value="DAMAGED" {% if status=='DAMAGED' %}selected{% endif %}>Damaged</option>
+                </select>
+            </div>
+            <div>
+                <select name="stock_filter" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <option value="">All Stock</option>
+                    <option value="available_only" {% if stock_filter=='available_only' %}selected{% endif %}>Available Only</option>
+                    <option value="reserved" {% if stock_filter=='reserved' %}selected{% endif %}>Has Reserved</option>
+                    <option value="zero" {% if stock_filter=='zero' %}selected{% endif %}>Zero Stock</option>
+                    <option value="negative" {% if stock_filter=='negative' %}selected{% endif %}>Negative</option>
+                    <option value="low" {% if stock_filter=='low' %}selected{% endif %}>Below Min Stock</option>
+                    <option value="below_reorder" {% if stock_filter=='below_reorder' %}selected{% endif %}>Below Reorder Point</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="flex-1 px-4 py-2.5 bg-brand-500 text-white rounded-xl text-sm font-medium hover:bg-brand-400"><i class="fa-solid fa-filter mr-2"></i>Filter</button>
+                <a href="{{ url_for('wms_inventory') }}" class="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-slate-400"><i class="fa-solid fa-xmark"></i></a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="text-left py-3 px-4 font-semibold">Item</th>
+                        <th class="text-left py-3 px-4 font-semibold">Warehouse</th>
+                        <th class="text-left py-3 px-4 font-semibold">Location</th>
+                        <th class="text-left py-3 px-4 font-semibold">Lot</th>
+                        <th class="text-center py-3 px-4 font-semibold">Expiry</th>
+                        <th class="text-right py-3 px-4 font-semibold">Available</th>
+                        <th class="text-right py-3 px-4 font-semibold">Reserved</th>
+                        <th class="text-right py-3 px-4 font-semibold">Allocated</th>
+                        <th class="text-left py-3 px-4 font-semibold">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for inv in inventory %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-4">
+                            <a href="{{ url_for('wms_item_detail', item_id=inv.item_id) }}" class="text-brand-400 hover:text-brand-300 font-medium">{{ inv.item_code }}</a>
+                            <p class="text-xs text-slate-500">{{ inv.item_name[:35] }}</p>
+                        </td>
+                        <td class="py-3 px-4 text-slate-300">{{ inv.warehouse_name }}</td>
+                        <td class="py-3 px-4 text-slate-400">{{ inv.location_code or '-' }}</td>
+                        <td class="py-3 px-4 text-slate-400">{{ inv.lot_number or '-' }}</td>
+                        <td class="py-3 px-4 text-center text-slate-400">{{ inv.expiry_date[:10] if inv.expiry_date else '-' }}</td>
+                        <td class="py-3 px-4 text-right font-bold tabular-nums {% if inv.quantity < 0 %}text-red-400{% else %}text-emerald-400{% endif %}">{{ inv.quantity|int|abs }}</td>
+                        <td class="py-3 px-4 text-right text-amber-400 tabular-nums">{{ inv.reserved_quantity|default(0)|int|abs }}</td>
+                        <td class="py-3 px-4 text-right text-cyan-400 tabular-nums">{{ inv.allocated_quantity|default(0)|int|abs }}</td>
+                        <td class="py-3 px-4">
+                            <span class="px-2 py-1 rounded text-xs font-bold uppercase tracking-wider
+                                {% if inv.status == 'AVAILABLE' %}bg-emerald-500/10 text-emerald-400
+                                {% elif inv.status == 'RESERVED' %}bg-amber-500/10 text-amber-400
+                                {% elif inv.status == 'BLOCKED' %}bg-red-500/10 text-red-400
+                                {% elif inv.status == 'QUARANTINE' %}bg-orange-500/10 text-orange-400
+                                {% elif inv.status == 'DAMAGED' %}bg-rose-500/10 text-rose-400
+                                {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ inv.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="py-16 text-center text-slate-500">
+                            <i class="fa-solid fa-boxes-stacked text-5xl mb-4 block opacity-20"></i>
+                            <p class="text-lg font-medium">No inventory records found</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if total_pages > 1 %}
+        <div class="flex items-center justify-between px-6 py-4 border-t border-white/5">
+            <p class="text-sm text-slate-400">Showing {{ (page-1)*per_page+1 }} to {{ [page*per_page, total_count]|min }} of {{ total_count }}</p>
+            <div class="flex items-center gap-2">
+                {% if page > 1 %}
+                <a href="?page={{ page-1 }}&warehouse_id={{ warehouse_id }}&search={{ search }}&status={{ status }}&stock_filter={{ stock_filter }}" class="px-3 py-2 rounded-lg bg-white/5 text-slate-400 text-sm"><i class="fa-solid fa-chevron-left"></i></a>
+                {% endif %}
+                <span class="px-4 py-2 bg-brand-500/10 text-brand-400 rounded-lg text-sm font-medium">Page {{ page }}/{{ total_pages }}</span>
+                {% if page < total_pages %}
+                <a href="?page={{ page+1 }}&warehouse_id={{ warehouse_id }}&search={{ search }}&status={{ status }}&stock_filter={{ stock_filter }}" class="px-3 py-2 rounded-lg bg-white/5 text-slate-400 text-sm"><i class="fa-solid fa-chevron-right"></i></a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

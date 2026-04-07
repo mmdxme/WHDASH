@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ t('leave_management', 'Leave Management') }}</h1>
+            <p class="text-slate-400 mt-1">{{ requests|length }} {{ t('leave_requests', 'leave requests') }}</p>
+        </div>
+        <a href="{{ url_for('hr.leave_new') }}" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+            <i class="fa-solid fa-plus"></i>
+            {{ t('request_leave', 'Request Leave') }}
+        </a>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-6">
+        <form method="GET" class="flex flex-wrap gap-4 items-end">
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('status', 'Status') }}</label>
+                <select name="status" class="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white">
+                    <option value="">{{ t('all', 'All') }}</option>
+                    <option value="Pending" {% if status == 'Pending' %}selected{% endif %}>{{ t('pending', 'Pending') }}</option>
+                    <option value="Approved" {% if status == 'Approved' %}selected{% endif %}>{{ t('approved', 'Approved') }}</option>
+                    <option value="Rejected" {% if status == 'Rejected' %}selected{% endif %}>{{ t('rejected', 'Rejected') }}</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('leave_type', 'Leave Type') }}</label>
+                <select name="leave_type" class="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white">
+                    <option value="">{{ t('all', 'All') }}</option>
+                    {% for lt in leave_types %}
+                    <option value="{{ lt.id }}" {% if leave_type|int == lt.id %}selected{% endif %}>{{ lt.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all">
+                <i class="fa-solid fa-search mr-2"></i>{{ t('filter', 'Filter') }}
+            </button>
+        </form>
+    </div>
+
+    <!-- Leave Requests Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-white/10">
+                    <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('employee', 'Employee') }}</th>
+                    <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('type', 'Type') }}</th>
+                    <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('from', 'From') }}</th>
+                    <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('to', 'To') }}</th>
+                    <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('days', 'Days') }}</th>
+                    <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('status', 'Status') }}</th>
+                    <th class="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase">{{ t('actions', 'Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5">
+                {% for req in requests %}
+                <tr class="hover:bg-white/5 transition-all">
+                    <td class="px-6 py-4">
+                        <div class="text-white font-medium">{{ req.first_name }} {{ req.last_name }}</div>
+                        <div class="text-sm text-slate-400">{{ req.employee_code }}</div>
+                    </td>
+                    <td class="px-6 py-4 text-slate-300">{{ req.leave_type_name }}</td>
+                    <td class="px-6 py-4 text-slate-300">{{ req.start_date }}</td>
+                    <td class="px-6 py-4 text-slate-300">{{ req.end_date }}</td>
+                    <td class="px-6 py-4 text-slate-300">{{ req.total_days }}</td>
+                    <td class="px-6 py-4">
+                        {% if req.status == 'Approved' %}
+                        <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ t('approved', 'Approved') }}</span>
+                        {% elif req.status == 'Pending' %}
+                        <span class="px-2.5 py-1 bg-amber-500/10 text-amber-400 text-xs font-bold rounded-full">{{ t('pending', 'Pending') }}</span>
+                        {% else %}
+                        <span class="px-2.5 py-1 bg-red-500/10 text-red-400 text-xs font-bold rounded-full">{{ t('rejected', 'Rejected') }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4">
+                        {% if req.status == 'Pending' %}
+                        <div class="flex items-center justify-end gap-2">
+                            <button onclick="approveLeave({{ req.id }})" class="p-2 hover:bg-emerald-500/10 rounded-lg text-emerald-400 transition-all" title="{{ t('approve', 'Approve') }}">
+                                <i class="fa-solid fa-check"></i>
+                            </button>
+                            <button onclick="rejectLeave({{ req.id }})" class="p-2 hover:bg-red-500/10 rounded-lg text-red-400 transition-all" title="{{ t('reject', 'Reject') }}">
+                                <i class="fa-solid fa-times"></i>
+                            </button>
+                        </div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="px-6 py-12 text-center text-slate-500">
+                        <i class="fa-solid fa-calendar-times text-4xl mb-4 block opacity-50"></i>
+                        {{ t('no_leave_requests', 'No leave requests found') }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+async function approveLeave(id) {
+    if (confirm('Approve this leave request?')) {
+        const response = await fetch(`/hr/leave/approve/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'approve' })
+        });
+        const result = await response.json();
+        if (result.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + result.error);
+        }
+    }
+}
+
+async function rejectLeave(id) {
+    const reason = prompt('Reason for rejection:');
+    if (reason !== null) {
+        const response = await fetch(`/hr/leave/approve/${id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'reject', remarks: reason })
+        });
+        const result = await response.json();
+        if (result.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + result.error);
+        }
+    }
+}
+</script>
+{% endblock %}

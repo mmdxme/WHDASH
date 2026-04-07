@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ t('employees', 'Employees') }}</h1>
+            <p class="text-slate-400 mt-1">{{ total }} {{ t('employees_found', 'employees found') }}</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('hr.sync_employees') }}" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-sync"></i>
+                {{ t('sync_from_panel', 'Sync from Panel') }}
+            </a>
+            <a href="{{ url_for('hr.employees_new') }}" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-plus"></i>
+                {{ t('add_employee', 'Add Employee') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-6">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('search', 'Search') }}</label>
+                <input type="text" name="search" value="{{ search }}" placeholder="{{ t('search_placeholder', 'Name, code, email...') }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/50">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('status', 'Status') }}</label>
+                <select name="status" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white">
+                    <option value="">{{ t('all', 'All') }}</option>
+                    <option value="Active" {% if status == 'Active' %}selected{% endif %}>{{ t('active', 'Active') }}</option>
+                    <option value="On Leave" {% if status == 'On Leave' %}selected{% endif %}>{{ t('on_leave', 'On Leave') }}</option>
+                    <option value="Probation" {% if status == 'Probation' %}selected{% endif %}>{{ t('probation', 'Probation') }}</option>
+                    <option value="Terminated" {% if status == 'Terminated' %}selected{% endif %}>{{ t('terminated', 'Terminated') }}</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('department', 'Department') }}</label>
+                <select name="department" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white">
+                    <option value="">{{ t('all_departments', 'All Departments') }}</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}" {% if department|int == dept.id %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all">
+                    <i class="fa-solid fa-search mr-2"></i>{{ t('filter', 'Filter') }}
+                </button>
+                <a href="{{ url_for('hr.employees_list') }}" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all">
+                    <i class="fa-solid fa-times"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Employee Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/10">
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('employee', 'Employee') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('code', 'Code') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('department', 'Department') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('position', 'Position') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('status', 'Status') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('hire_date', 'Hire Date') }}</th>
+                        <th class="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for emp in employees %}
+                    <tr class="hover:bg-white/5 transition-all">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-brand-500/20 flex items-center justify-center">
+                                    <span class="text-brand-400 font-bold">{{ emp.first_name[0] }}{{ emp.last_name[0] }}</span>
+                                </div>
+                                <div>
+                                    <div class="text-white font-medium">{{ emp.first_name }} {{ emp.last_name }}</div>
+                                    <div class="text-sm text-slate-400">{{ emp.email or '' }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-slate-300">{{ emp.employee_code or '-' }}</td>
+                        <td class="px-6 py-4 text-slate-300">{{ emp.department_name or '-' }}</td>
+                        <td class="px-6 py-4 text-slate-300">{{ emp.position_title or '-' }}</td>
+                        <td class="px-6 py-4">
+                            {% if emp.status == 'Active' %}
+                            <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ t('active', 'Active') }}</span>
+                            {% elif emp.status == 'On Leave' %}
+                            <span class="px-2.5 py-1 bg-amber-500/10 text-amber-400 text-xs font-bold rounded-full">{{ t('on_leave', 'On Leave') }}</span>
+                            {% elif emp.status == 'Probation' %}
+                            <span class="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full">{{ t('probation', 'Probation') }}</span>
+                            {% else %}
+                            <span class="px-2.5 py-1 bg-slate-500/10 text-slate-400 text-xs font-bold rounded-full">{{ t('inactive', 'Inactive') }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-slate-300">{{ emp.hire_date or '-' }}</td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center justify-end gap-2">
+                                <a href="{{ url_for('hr.employees_view', id=emp.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="{{ t('view', 'View') }}">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                                <a href="{{ url_for('hr.employees_edit', id=emp.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="{{ t('edit', 'Edit') }}">
+                                    <i class="fa-solid fa-edit"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-6 py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-users text-4xl mb-4 block opacity-50"></i>
+                            {{ t('no_employees', 'No employees found') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="px-6 py-4 border-t border-white/10 flex items-center justify-between">
+            <div class="text-sm text-slate-400">
+                {{ t('page', 'Page') }} {{ page }} {{ t('of', 'of') }} {{ total_pages }}
+            </div>
+            <div class="flex items-center gap-2">
+                {% if page > 1 %}
+                <a href="?page={{ page - 1 }}&search={{ search }}&status={{ status }}&department={{ department }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </a>
+                {% endif %}
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p >= page - 2 and p <= page + 2 %}
+                <a href="?page={{ p }}&search={{ search }}&status={{ status }}&department={{ department }}" class="px-3 py-1.5 {% if p == page %}bg-brand-600{% else %}bg-white/5 hover:bg-white/10{% endif %} text-white rounded-lg transition-all">{{ p }}</a>
+                    {% endif %}
+                {% endfor %}
+                {% if page < total_pages %}
+                <a href="?page={{ page + 1 }}&search={{ search }}&status={{ status }}&department={{ department }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

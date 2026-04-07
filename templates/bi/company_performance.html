@@ -1,0 +1,202 @@
+{% extends "bi/base_bi.html" %}
+
+{% block title %}Company Performance Dashboard{% endblock %}
+
+{% block bi_content %}
+<!-- Company Performance Header -->
+<section class="executive-hero mb-4">
+    <h1>Company Performance Dashboard</h1>
+    <div class="subtitle">Side-by-side comparison of all companies</div>
+    
+    <div class="hero-kpi-grid">
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="total-revenue">AED 0</div>
+            <div class="hero-kpi-label">Total Revenue</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="total-orders">0</div>
+            <div class="hero-kpi-label">Total Orders</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="avg-margin">0%</div>
+            <div class="hero-kpi-label">Avg Margin</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="top-company">-</div>
+            <div class="hero-kpi-label">Top Performer</div>
+        </div>
+    </div>
+</section>
+
+<!-- Company Comparison Table -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Company Comparison Matrix</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Company</th>
+                    <th>Revenue</th>
+                    <th>Orders</th>
+                    <th>Customers</th>
+                    <th>AOV</th>
+                    <th>Sales/Employee</th>
+                    <th>GPM</th>
+                    <th>Rank</th>
+                </tr>
+            </thead>
+            <tbody id="company-table">
+                <tr>
+                    <td colspan="8" style="text-align: center; padding: 3rem;">
+                        <i class="fas fa-spinner fa-spin"></i> Loading...
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Performance Metrics -->
+<section class="bi-grid-2">
+    <div class="bi-section">
+        <div class="bi-section-header">
+            <h2 class="bi-section-title">Revenue by Company</h2>
+        </div>
+        <div class="bi-chart" style="height: 300px;">
+            <canvas id="revenue-chart"></canvas>
+        </div>
+    </div>
+    
+    <div class="bi-section">
+        <div class="bi-section-header">
+            <h2 class="bi-section-title">Orders by Company</h2>
+        </div>
+        <div class="bi-chart" style="height: 300px;">
+            <canvas id="orders-chart"></canvas>
+        </div>
+    </div>
+</section>
+
+<!-- Detailed Metrics -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Detailed Metrics</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Company</th>
+                    <th>Inventory Value</th>
+                    <th>Receivables</th>
+                    <th>Payables</th>
+                    <th>Cash Flow</th>
+                    <th>Headcount</th>
+                    <th>Avg Salary</th>
+                </tr>
+            </thead>
+            <tbody id="detailed-table"></tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadCompanyData();
+});
+
+let revenueChart = null;
+let ordersChart = null;
+
+async function loadCompanyData() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        params.set('format', 'json');
+        
+        const response = await fetch(`/api/bi/company-comparison?${params.toString()}`);
+        const data = await response.json();
+        
+        updateKPIs(data);
+        updateCompanyTable(data.companies || []);
+        updateDetailedTable(data.companies || []);
+        updateCharts(data.companies || []);
+        
+    } catch (error) {
+        console.error('Error loading company data:', error);
+    }
+}
+
+function updateKPIs(data) {
+    document.getElementById('total-revenue').textContent = formatCurrency(data.total_revenue || 0);
+    document.getElementById('total-orders').textContent = formatNumber(data.total_orders || 0);
+    document.getElementById('avg-margin').textContent = formatPercent(data.avg_margin || 0);
+    document.getElementById('top-company').textContent = data.top_performer || '-';
+}
+
+function updateCompanyTable(companies) {
+    const tbody = document.getElementById('company-table');
+    
+    if (!companies || companies.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem;">No company data available</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = companies.map((company, index) => `
+        <tr>
+            <td><strong>${company.name || 'Unknown'}</strong></td>
+            <td class="font-bold">${formatCurrency(company.revenue || 0)}</td>
+            <td>${formatNumber(company.orders || 0)}</td>
+            <td>${formatNumber(company.customers || 0)}</td>
+            <td>${formatCurrency(company.avg_order_value || 0)}</td>
+            <td>${formatCurrency(company.sales_per_employee || 0)}</td>
+            <td>
+                <span class="${(company.gross_margin || 0) >= 20 ? 'text-success' : (company.gross_margin || 0) >= 10 ? 'text-warning' : 'text-danger'}">
+                    ${formatPercent(company.gross_margin || 0)}
+                </span>
+            </td>
+            <td><span class="top-list-rank ${index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : ''}">${index + 1}</span></td>
+        </tr>
+    `).join('');
+}
+
+function updateDetailedTable(companies) {
+    const tbody = document.getElementById('detailed-table');
+    tbody.innerHTML = companies.map(company => `
+        <tr>
+            <td><strong>${company.name || 'Unknown'}</strong></td>
+            <td>${formatCurrency(company.inventory_value || 0)}</td>
+            <td class="${(company.receivables || 0) > 0 ? 'text-warning' : ''}">${formatCurrency(company.receivables || 0)}</td>
+            <td>${formatCurrency(company.payables || 0)}</td>
+            <td class="${(company.cash_flow || 0) >= 0 ? 'text-success' : 'text-danger'}">${formatCurrency(company.cash_flow || 0)}</td>
+            <td>${formatNumber(company.headcount || 0)}</td>
+            <td>${formatCurrency(company.avg_salary || 0)}</td>
+        </tr>
+    `).join('');
+}
+
+function updateCharts(companies) {
+    // Simple ranking table instead of charts for now
+    // Charts would require chart.js integration
+}
+
+function formatNumber(num, decimals = 0) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function formatCurrency(num) {
+    if (num === null || num === undefined) return '-';
+    return 'AED ' + parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function formatPercent(num) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+</script>
+{% endblock %}

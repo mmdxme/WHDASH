@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6 fade-in pb-20">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-3xl font-extrabold text-white tracking-tight">Recommendations &amp; Action Center</h2>
+            <p class="text-slate-500 font-medium mt-1 text-xs uppercase tracking-widest">Business-Ready Suggestions &amp; Actionable Insights</p>
+        </div>
+        <a href="{{ url_for('ci_dashboard') }}" class="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-xl text-xs font-bold transition-all">
+            <i class="fa-solid fa-arrow-left mr-1"></i> Back
+        </a>
+    </div>
+
+    <!-- Summary -->
+    <div class="grid grid-cols-3 gap-4">
+        <div class="glass-panel rounded-2xl p-5 text-center border-l-4 border-l-brand-500">
+            <p class="text-3xl font-black text-white">{{ summary.open }}</p>
+            <p class="text-[10px] text-slate-500 uppercase tracking-widest">Open</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center border-l-4 border-l-amber-500">
+            <p class="text-3xl font-black text-amber-400">{{ summary.approved }}</p>
+            <p class="text-[10px] text-slate-500 uppercase tracking-widest">Approved</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center border-l-4 border-l-emerald-500">
+            <p class="text-3xl font-black text-emerald-400">{{ summary.implemented }}</p>
+            <p class="text-[10px] text-slate-500 uppercase tracking-widest">Implemented</p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-4 border border-white/5">
+        <form method="get" class="flex flex-wrap gap-3 items-center">
+            <select name="status" onchange="this.form.submit()" class="bg-slate-900/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white">
+                <option value="Open" {% if filters.status == 'Open' %}selected{% endif %}>Open</option>
+                <option value="Approved" {% if filters.status == 'Approved' %}selected{% endif %}>Approved</option>
+                <option value="Implemented" {% if filters.status == 'Implemented' %}selected{% endif %}>Implemented</option>
+            </select>
+            <select name="priority" onchange="this.form.submit()" class="bg-slate-900/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white">
+                <option value="">All Priorities</option>
+                <option value="High" {% if filters.priority == 'High' %}selected{% endif %}>High</option>
+                <option value="Medium" {% if filters.priority == 'Medium' %}selected{% endif %}>Medium</option>
+                <option value="Low" {% if filters.priority == 'Low' %}selected{% endif %}>Low</option>
+            </select>
+            <a href="{{ url_for('ci_recommendations') }}" class="px-3 py-2 bg-white/5 text-slate-400 rounded-xl text-xs font-bold">Clear</a>
+        </form>
+    </div>
+
+    <!-- Recommendations List -->
+    <div class="space-y-3">
+        {% for r in recommendations %}
+        <div class="glass-panel rounded-2xl p-5 border border-brand-500/20 bg-brand-500/5">
+            <div class="flex items-start justify-between gap-4">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-[10px] font-black uppercase tracking-widest text-brand-400">{{ r.recommendation_type.replace('_', ' ')|title }}</span>
+                        <span class="text-[10px] text-slate-500">—</span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full {% if r.priority == 'High' %}bg-red-500/10 text-red-400{% elif r.priority == 'Medium' %}bg-amber-500/10 text-amber-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">{{ r.priority }}</span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full {% if r.status == 'Open' %}bg-slate-500/10 text-slate-400{% elif r.status == 'Approved' %}bg-amber-500/10 text-amber-400{% else %}bg-emerald-500/10 text-emerald-400{% endif %}">{{ r.status }}</span>
+                    </div>
+                    <h4 class="font-bold text-white text-sm mb-1">{{ r.title }}</h4>
+                    <p class="text-xs text-slate-400 mb-2">{{ r.description }}</p>
+                    <div class="flex items-center gap-4 text-[10px] text-slate-500">
+                        <span><i class="fa-solid fa-user mr-1"></i>{{ r.customer_name or 'N/A' }}</span>
+                        {% if r.target_date %}<span><i class="fa-solid fa-calendar mr-1"></i>{{ r.target_date[:10] }}</span>{% endif %}
+                        <span><i class="fa-solid fa-clock mr-1"></i>{{ r.created_at[:10] }}</span>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-2">
+                    {% if not r.is_approved and r.status == 'Open' %}
+                    <form method="post" action="{{ url_for('ci_rec_approve', rec_id=r.id) }}">
+                        <button type="submit" class="px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-xl text-xs font-bold transition-all">
+                            <i class="fa-solid fa-check mr-1"></i> Approve
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% if r.is_approved and not r.is_implemented %}
+                    <form method="post" action="{{ url_for('ci_rec_implement', rec_id=r.id) }}">
+                        <textarea name="implementation_notes" placeholder="Implementation notes..." class="w-full bg-slate-900/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white mb-2" rows="2"></textarea>
+                        <button type="submit" class="w-full px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-bold transition-all">
+                            <i class="fa-solid fa-check mr-1"></i> Mark Implemented
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="glass-panel rounded-2xl p-12 text-center text-slate-500">
+            <i class="fa-solid fa-lightbulb text-5xl mb-4 text-brand-500"></i>
+            <p class="text-lg font-bold text-white">No recommendations found</p>
+            <p class="text-sm mt-1">Recommendations will appear here based on customer analysis</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

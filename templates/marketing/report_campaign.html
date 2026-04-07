@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white">{{ t('campaign_report', 'Campaign Report') }}</h1>
+            <p class="text-slate-400 mt-1">{{ t('campaign_report_desc', 'Comprehensive campaign performance analysis') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <form method="get" class="flex items-center gap-2">
+                <input type="date" name="date_from" value="{{ date_from }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm">
+                <span class="text-slate-500">{{ t('to', 'to') }}</span>
+                <input type="date" name="date_to" value="{{ date_to }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm">
+                <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold transition-all">{{ t('filter', 'Filter') }}</button>
+            </form>
+            <a href="{{ url_for('marketing.reports_export', report_type='campaigns') }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-download mr-2"></i>{{ t('export', 'Export') }}
+            </a>
+        </div>
+    </div>
+
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-4 px-6">{{ t('campaign', 'Campaign') }}</th>
+                        <th class="text-left py-4 px-6">{{ t('owner', 'Owner') }}</th>
+                        <th class="text-left py-4 px-6">{{ t('type', 'Type') }}</th>
+                        <th class="text-center py-4 px-6">{{ t('period', 'Period') }}</th>
+                        <th class="text-right py-4 px-6">{{ t('budget', 'Budget') }}</th>
+                        <th class="text-right py-4 px-6">{{ t('cost', 'Cost') }}</th>
+                        <th class="text-right py-4 px-6">{{ t('leads', 'Leads') }}</th>
+                        <th class="text-right py-4 px-6">{{ t('sales', 'Sales') }}</th>
+                        <th class="text-center py-4 px-6">{{ t('roi', 'ROI') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for camp in campaigns %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-4 px-6">
+                            <a href="{{ url_for('marketing.campaigns_view', id=camp.id) }}" class="text-brand-400 hover:text-brand-300 font-semibold">{{ camp.name }}</a>
+                            <div class="text-xs text-slate-500">{{ camp.code }}</div>
+                        </td>
+                        <td class="py-4 px-6 text-slate-300">{{ camp.owner_name or '-' }}</td>
+                        <td class="py-4 px-6 text-slate-300">{{ camp.campaign_type }}</td>
+                        <td class="py-4 px-6 text-center text-slate-400">
+                            {{ camp.start_date[:10] if camp.start_date else '-' }}
+                            {% if camp.end_date %}<br><span class="text-xs">to {{ camp.end_date[:10] }}</span>{% endif %}
+                        </td>
+                        <td class="py-4 px-6 text-right text-white">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(camp.budget or 0) }}</td>
+                        <td class="py-4 px-6 text-right text-amber-400">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(camp.actual_cost or 0) }}</td>
+                        <td class="py-4 px-6 text-right text-cyan-400">{{ camp.leads_generated or 0 }}</td>
+                        <td class="py-4 px-6 text-right text-emerald-400">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(camp.sales_generated or 0) }}</td>
+                        <td class="py-4 px-6 text-center">
+                            {% if camp.actual_cost > 0 %}
+                            <span class="font-bold {% if (camp.sales_generated - camp.actual_cost) / camp.actual_cost * 100 > 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">
+                                {{ "%.1f"|format((camp.sales_generated - camp.actual_cost) / camp.actual_cost * 100) }}%
+                            </span>
+                            {% else %}--{% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="py-16 text-center text-slate-500">{{ t('no_campaigns', 'No campaigns found for this period') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

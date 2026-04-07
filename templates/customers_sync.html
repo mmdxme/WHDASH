@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3"><i class="bi bi-people-fill"></i> SDAD Customers Sync</h1>
+        <div>
+            <a href="{{ url_for('customers_reports') }}" class="btn btn-outline-info me-2">
+                <i class="bi bi-graph-up"></i> Reports
+            </a>
+            <form method="POST" action="{{ url_for('customers_sync') }}" class="d-inline">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-arrow-repeat"></i> Sync Now
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ 'success' if category == 'success' else 'warning' }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-2">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">{{ summary.total_customers or 0 }}</h5>
+                    <p class="card-text">Total Customers</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">{{ summary.active_customers or 0 }}</h5>
+                    <p class="card-text">Active</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">{{ summary.export_customers or 0 }}</h5>
+                    <p class="card-text">Export</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h5 class="card-title">{{ "{:,.0f}".format(summary.total_orders or 0) }}</h5>
+                    <p class="card-text">Total Orders</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h5 class="card-title">{{ "{:,.0f}".format(summary.total_debt or 0) }}</h5>
+                    <p class="card-text">Total Debt</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card bg-secondary text-white">
+                <div class="card-body">
+                    <h5 class="card-title">{{ summary.inactive_customers or 0 }}</h5>
+                    <p class="card-text">Inactive</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- By Country -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-globe"></i> By Country</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Country</th>
+                                    <th>Count</th>
+                                    <th>Outstanding</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c in summary.by_country %}
+                                <tr>
+                                    <td>{{ c.country }}</td>
+                                    <td>{{ c.cnt }}</td>
+                                    <td>{{ "{:,.0f}".format(c.outstanding or 0) }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">No data</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- By Type -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-tags"></i> By Type</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Count</th>
+                                    <th>Outstanding</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for t in summary.by_location %}
+                                <tr>
+                                    <td><span class="badge bg-secondary">{{ t.location or 'Unknown' }}</span></td>
+                                    <td>{{ t.cnt }}</td>
+                                    <td>{{ "{:,.0f}".format(t.outstanding or 0) }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">No data</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- By Salesperson -->
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-person-badge"></i> By Salesperson</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Salesperson</th>
+                                    <th>Customers</th>
+                                    <th>Total Sales</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for s in summary.by_salesperson %}
+                                <tr>
+                                    <td>{{ s.salesperson_name }}</td>
+                                    <td>{{ s.customers }}</td>
+                                    <td>{{ "{:,.0f}".format(s.total_sales or 0) }}</td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted">No data</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Customers -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-list-ul"></i> Recent Customers</h5>
+            <a href="{{ url_for('customers_reports', report_type='all') }}" class="btn btn-sm btn-outline-primary">View All</a>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Country</th>
+                            <th>City</th>
+                            <th>Locale</th>
+                            <th>Type</th>
+                            <th>Export</th>
+                            <th>Total Purchases</th>
+                            <th>Outstanding</th>
+                            <th>Last Purchase</th>
+                            <th>Salesperson</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in customers[:50] %}
+                        <tr>
+                            <td><code>{{ c.customer_id }}</code></td>
+                            <td>{{ c.name }}</td>
+                            <td>{{ c.country }}</td>
+                            <td>{{ c.city }}</td>
+                            <td>{{ c.location or '' }}</td>
+                            <td><span class="badge bg-secondary">{{ c.location or '' }}</span></td>
+                            <td>
+                                {% if c.location == 'export' %}
+                                <span class="badge bg-success">Yes</span>
+                                {% else %}
+                                <span class="badge bg-light text-dark">No</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ "{:,.0f}".format(c.total_orders or 0) }}</td>
+                            <td class="{% if c.total_debt > 0 %}text-danger{% endif %}">
+                                {{ "{:,.0f}".format(c.total_debt or 0) }}
+                            </td>
+                            <td>{{ c.last_purchase_date }}</td>
+                            <td>{{ c.salesperson_name }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="11" class="text-center text-muted py-4">
+                                No customers synced yet. Click "Sync Now" to fetch from SDAD Panel.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync Logs -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-clock-history"></i> Sync History</h5>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Customers Synced</th>
+                            <th>Started</th>
+                            <th>Completed</th>
+                            <th>Errors</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in sync_logs %}
+                        <tr>
+                            <td>{{ log.id }}</td>
+                            <td>{{ log.sync_type }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if log.status == 'completed' else 'warning' if log.status == 'running' else 'danger' }}">
+                                    {{ log.status }}
+                                </span>
+                            </td>
+                            <td>{{ log.customers_synced }}</td>
+                            <td>{{ log.started_at }}</td>
+                            <td>{{ log.completed_at or '-' }}</td>
+                            <td>{{ log.errors or '-' }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted">No sync history</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

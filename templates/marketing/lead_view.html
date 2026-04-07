@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1400px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="flex items-center justify-between mb-8">
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('marketing.leads_list') }}" class="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+                <i class="fa-solid fa-arrow-left text-slate-400"></i>
+            </a>
+            <div>
+                <h1 class="text-3xl font-extrabold text-white">{{ lead.lead_name }}</h1>
+                <p class="text-slate-400 mt-1">{{ lead.industry or lead.trade_type or '-' }}</p>
+            </div>
+            <span class="px-4 py-2 rounded-full text-sm font-bold {% if lead.lead_status == 'Converted to Customer' %}bg-emerald-400/20 text-emerald-400{% elif lead.lead_status == 'Lost' %}bg-rose-400/20 text-rose-400{% elif lead.lead_status == 'New' %}bg-blue-400/20 text-blue-400{% else %}bg-amber-400/20 text-amber-400{% endif %}">
+                {{ lead.lead_status }}
+            </span>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('marketing.leads_edit', id=lead.id) }}" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-pen mr-2"></i>{{ t('edit_lead', 'Edit Lead') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Lead Info Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="text-sm text-slate-400 mb-1">{{ t('estimated_value', 'Estimated Value') }}</div>
+            <div class="text-2xl font-extrabold text-white">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(lead.estimated_value or 0) }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="text-sm text-slate-400 mb-1">{{ t('probability', 'Probability') }}</div>
+            <div class="text-2xl font-extrabold text-cyan-400">{{ lead.conversion_probability or 0 }}%</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="text-sm text-slate-400 mb-1">{{ t('source', 'Source') }}</div>
+            <div class="text-xl font-bold text-white">{{ lead.source_name or '-' }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="text-sm text-slate-400 mb-1">{{ t('importance', 'Importance') }}</div>
+            <div class="text-xl font-bold {% if lead.importance_level == 'High' %}text-rose-400{% elif lead.importance_level == 'Medium' %}text-amber-400{% else %}text-slate-400{% endif %}">{{ lead.importance_level }}</div>
+        </div>
+    </div>
+
+    <!-- Details Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('contact_info', 'Contact Information') }}</h3>
+            <div class="space-y-3">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-phone text-slate-400 w-5"></i>
+                    <span class="text-white">{{ lead.phone or '-' }}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <i class="fa-brands fa-whatsapp text-slate-400 w-5"></i>
+                    <span class="text-white">{{ lead.whatsapp or '-' }}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-envelope text-slate-400 w-5"></i>
+                    <span class="text-white">{{ lead.email or '-' }}</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-location-dot text-slate-400 w-5"></i>
+                    <span class="text-white">{{ [lead.city, lead.country] | select('truthy') | join(', ') or '-' }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('assignment', 'Assignment & Follow-up') }}</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-slate-400">{{ t('assigned_to', 'Assigned To') }}</span>
+                    <span class="text-white">{{ lead.assigned_name or '-' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">{{ t('follow_up_date', 'Follow-up Date') }}</span>
+                    <span class="text-white">{{ lead.follow_up_date[:10] if lead.follow_up_date else '-' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">{{ t('campaign', 'Related Campaign') }}</span>
+                    <span class="text-white">{{ lead.campaign_name or '-' }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Follow-up Notes -->
+    {% if lead.follow_up_notes %}
+    <div class="glass-panel rounded-2xl p-6 mb-8">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('follow_up_notes', 'Follow-up Notes') }}</h3>
+        <p class="text-slate-300">{{ lead.follow_up_notes }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Funnel History -->
+    <div class="glass-panel rounded-2xl p-6 mb-8">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('funnel_history', 'Funnel History') }}</h3>
+        {% if funnel_history %}
+        <div class="space-y-3">
+            {% for record in funnel_history %}
+            <div class="flex items-center gap-4 p-3 bg-white/5 rounded-xl">
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-brand-500/20 text-brand-400">{{ record.stage_name }}</span>
+                <span class="text-slate-400 text-sm">{{ record.entering_date[:16] if record.entering_date else '-' }}</span>
+                {% if record.avg_hours %}
+                <span class="text-slate-500 text-sm">{{ "%.1f"|format(record.avg_hours) }}h</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center text-slate-500 py-8">{{ t('no_funnel_history', 'No funnel history recorded') }}</div>
+        {% endif %}
+    </div>
+
+    <!-- Activity Log -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('activity_log', 'Activity Log') }}</h3>
+        {% if activities %}
+        <div class="space-y-3">
+            {% for activity in activities %}
+            <div class="flex items-start gap-4 p-3 bg-white/5 rounded-xl">
+                <div class="w-2 h-2 rounded-full bg-brand-400 mt-2"></div>
+                <div>
+                    <div class="text-white font-medium">{{ activity.action_type }} - {{ activity.field_name or 'General' }}</div>
+                    {% if activity.old_value or activity.new_value %}
+                    <div class="text-sm text-slate-400 mt-1">
+                        {% if activity.old_value %}{{ activity.old_value }} → {% endif %}{{ activity.new_value or '' }}
+                    </div>
+                    {% endif %}
+                    <div class="text-xs text-slate-500 mt-1">{{ activity.created_at[:16] if activity.created_at else '-' }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center text-slate-500 py-8">{{ t('no_activities', 'No activities recorded') }}</div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}

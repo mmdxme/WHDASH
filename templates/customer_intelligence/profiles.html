@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in pb-20">
+
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-3xl font-extrabold text-white tracking-tight">Customer Profiles</h2>
+            <p class="text-slate-500 font-medium mt-1 text-xs uppercase tracking-widest">Intelligence-Enriched Customer Master</p>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <a href="{{ url_for('ci_sync_all') }}" onclick="return confirm('Sync all customers to CI?');" class="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-arrows-rotate text-blue-400"></i> Sync All to CI
+            </a>
+            <a href="{{ url_for('ci_dashboard') }}" class="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-xl text-xs font-bold transition-all">
+                <i class="fa-solid fa-arrow-left mr-1"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-5 border border-white/5">
+        <form method="get" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <div>
+                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Search</label>
+                <input type="text" name="search" value="{{ filters.search }}" placeholder="Name, code, phone..." class="w-full bg-slate-900/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-brand-500">
+            </div>
+            <div>
+                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Type</label>
+                <select name="type" class="w-full bg-slate-900/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500">
+                    <option value="">All Types</option>
+                    <option value="wholesale" {% if filters.type == 'wholesale' %}selected{% endif %}>Wholesale</option>
+                    <option value="retail" {% if filters.type == 'retail' %}selected{% endif %}>Retail</option>
+                    <option value="export" {% if filters.type == 'export' %}selected{% endif %}>Export</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Market</label>
+                <select name="market" class="w-full bg-slate-900/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500">
+                    <option value="">All Markets</option>
+                    <option value="local" {% if filters.market == 'local' %}selected{% endif %}>Local</option>
+                    <option value="export" {% if filters.market == 'export' %}selected{% endif %}>Export</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Salesperson</label>
+                <select name="salesperson" class="w-full bg-slate-900/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500">
+                    <option value="">All</option>
+                    {% for sp in salespersons %}
+                    <option value="{{ sp }}" {% if filters.salesperson == sp %}selected{% endif %}>{{ sp }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Status</label>
+                <select name="active" class="w-full bg-slate-900/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500">
+                    <option value="">All</option>
+                    <option value="active" {% if filters.active == 'active' %}selected{% endif %}>Active</option>
+                    <option value="inactive" {% if filters.active == 'inactive' %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Sort</label>
+                <select name="sort" class="w-full bg-slate-900/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-500">
+                    <option value="total_orders" {% if filters.sort == 'total_orders' %}selected{% endif %}>Revenue</option>
+                    <option value="name" {% if filters.sort == 'name' %}selected{% endif %}>Name</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="px-4 py-2 bg-brand-500/20 hover:bg-brand-500/30 text-brand-400 border border-brand-500/30 rounded-xl text-xs font-bold transition-all">
+                    <i class="fa-solid fa-filter mr-1"></i> Filter
+                </button>
+                <a href="{{ url_for('ci_profiles') }}" class="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-400 border border-white/10 rounded-xl text-xs font-bold transition-all">
+                    <i class="fa-solid fa-xmark"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Customer Table -->
+    <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/5">
+        <div class="p-4 border-b border-white/5 bg-slate-800/20 flex items-center justify-between">
+            <p class="text-xs font-bold text-slate-400">
+                Showing {{ customers|length }} of {{ pagination.total }} customers
+            </p>
+            <div class="flex items-center gap-2">
+                {% if pagination.pages > 1 %}
+                {% for p in range(1, pagination.pages + 1) %}
+                <a href="{{ url_for('ci_profiles', page=p, **filters) }}" 
+                   class="px-3 py-1 rounded-lg text-xs font-bold {% if p == pagination.page %}bg-brand-500/20 text-brand-400{% else %}bg-white/5 text-slate-400 hover:bg-white/10{% endif %}">
+                    {{ p }}
+                </a>
+                {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="bg-slate-900/40">
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Customer</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Location</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Salesperson</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Revenue</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Payments</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Debt</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Credit Limit</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Credit Status</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Last Purchase</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for c in customers %}
+                    <tr class="hover:bg-brand-500/[0.02] transition-all group">
+                        <td class="px-5 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500/10 to-purple-500/10 flex items-center justify-center text-brand-400 shrink-0">
+                                    <i class="fa-solid fa-building text-sm"></i>
+                                </div>
+                                <div class="min-w-0">
+                                    <a href="{{ url_for('ci_profile_detail', customer_id=c.id) }}" class="font-bold text-white text-sm hover:text-brand-400 truncate block">{{ c.name }}</a>
+                                    <div class="flex items-center gap-2 mt-0.5">
+                                        <span class="text-[9px] font-bold px-2 py-0.5 rounded-full {% if c.active %}bg-emerald-500/10 text-emerald-400{% else %}bg-red-500/10 text-red-400{% endif %}">
+                                            {% if c.active %}Active{% else %}Inactive{% endif %}
+                                        </span>
+                                        {% if c.location == 'export' %}
+                                        <span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400">Export</span>
+                                        {% endif %}
+                                        <span class="text-[9px] text-slate-600 font-mono">{{ c.customer_code or c.id }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-5 py-4">
+                            <div class="text-xs text-slate-300">{{ [c.city, c.country]|join(', ') if c.city or c.country else '—' }}</div>
+                            <div class="text-[10px] text-slate-500 capitalize">{{ c.location or 'Local' }}</div>
+                        </td>
+                        <td class="px-5 py-4">
+                            <div class="text-xs text-slate-300">{{ c.salesperson_name or '—' }}</div>
+                        </td>
+                        <td class="px-5 py-4 text-right">
+                            <span class="text-sm font-bold text-emerald-400">{{ "{:,.0f}".format(c.total_orders or 0) }}</span>
+                        </td>
+                        <td class="px-5 py-4 text-right">
+                            <span class="text-sm font-bold text-blue-400">{{ "{:,.0f}".format(c.total_payments or 0) }}</span>
+                        </td>
+                        <td class="px-5 py-4 text-right">
+                            <span class="text-sm font-bold {% if (c.total_debt or 0) > 0 %}text-red-400{% else %}text-slate-500{% endif %}">
+                                {{ "{:,.0f}".format(c.total_debt or 0) }}
+                            </span>
+                        </td>
+                        <td class="px-5 py-4 text-right">
+                            <span class="text-xs text-slate-300">{{ "{:,.0f}".format(c.credit_limit or 0) }}</span>
+                        </td>
+                        <td class="px-5 py-4">
+                            <span class="text-[10px] font-bold px-2 py-1 rounded-full {% if c.credit_status == 'Good' %}bg-emerald-500/10 text-emerald-400{% elif c.credit_status == 'Risky' %}bg-amber-500/10 text-amber-400{% else %}bg-red-500/10 text-red-400{% endif %}">
+                                {{ c.credit_status or 'N/A' }}
+                            </span>
+                        </td>
+                        <td class="px-5 py-4">
+                            <span class="text-xs text-slate-400">{{ c.last_purchase_date[:10] if c.last_purchase_date else 'Never' }}</span>
+                        </td>
+                        <td class="px-5 py-4">
+                            <div class="flex items-center gap-2">
+                                <a href="{{ url_for('ci_profile_detail', customer_id=c.id) }}" class="px-3 py-1.5 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 rounded-lg text-[10px] font-bold transition-all">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                                <form method="post" action="{{ url_for('ci_enrich_profile', customer_id=c.id) }}" style="display:inline">
+                                    <button type="submit" class="px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 rounded-lg text-[10px] font-bold transition-all" onclick="return confirm('Enrich this customer profile?');">
+                                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

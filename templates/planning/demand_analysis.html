@@ -1,0 +1,104 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">Demand Analysis</h2>
+        <p class="text-slate-400 text-sm">Historical demand patterns and consumption analytics</p>
+    </div>
+    <div class="flex gap-3">
+        <form action="{{ url_for('aggregate_demand') }}" method="POST" class="inline">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+                <i class="fas fa-sync mr-2"></i>Refresh Demand Data
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="glass-panel rounded-xl p-4 mb-6 filter-bar">
+    <form method="GET" class="flex flex-wrap gap-4 items-end">
+        <div>
+            <label class="block text-slate-400 text-xs mb-1">Item</label>
+            <select name="item_id" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                <option value="">All Items</option>
+                {% for item in all_items %}
+                <option value="{{ item.id }}" {% if selected_item == item.id %}selected{% endif %}>{{ item.item_code }} - {{ item.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-slate-400 text-xs mb-1">Warehouse</label>
+            <select name="warehouse_id" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                <option value="">All</option>
+                {% for wh in warehouse_list %}
+                <option value="{{ wh.id }}" {% if selected_warehouse == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-slate-400 text-xs mb-1">History Period</label>
+            <select name="months" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                <option value="3" {% if selected_months == 3 %}selected{% endif %}>3 Months</option>
+                <option value="6" {% if selected_months == 6 %}selected{% endif %}>6 Months</option>
+                <option value="12" {% if selected_months == 12 %}selected{% endif %}>12 Months</option>
+                <option value="24" {% if selected_months == 24 %}selected{% endif %}>24 Months</option>
+            </select>
+        </div>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+            <i class="fas fa-filter mr-2"></i>Apply
+        </button>
+    </form>
+</div>
+
+<!-- Demand Summary Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+        <table class="w-full text-sm" id="demandTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Item</th>
+                    <th class="text-right py-3 px-4">Total Demand</th>
+                    <th class="text-right py-3 px-4">Avg Demand</th>
+                    <th class="text-right py-3 px-4">Max Demand</th>
+                    <th class="text-right py-3 px-4">Min Demand</th>
+                    <th class="text-right py-3 px-4">Orders</th>
+                    <th class="text-center py-3 px-4">Trend</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for d in demand_summary %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ d.item_code }}</div>
+                        <div class="text-slate-400 text-xs">{{ d.item_name }}</div>
+                    </td>
+                    <td class="py-3 px-4 text-right text-sky-400 font-bold">{{ "{:,.0f}".format(d.total_demand) }}</td>
+                    <td class="py-3 px-4 text-right text-slate-300">{{ "{:.1f}".format(d.avg_demand) }}</td>
+                    <td class="py-3 px-4 text-right text-emerald-400">{{ "{:.0f}".format(d.max_demand) }}</td>
+                    <td class="py-3 px-4 text-right text-red-400">{{ "{:.0f}".format(d.min_demand|default(0)) }}</td>
+                    <td class="py-3 px-4 text-right text-slate-300">{{ d.total_orders|default(0) }}</td>
+                    <td class="py-3 px-4 text-center">
+                        {% if d.total_demand > demand_summary[0].total_demand * 0.8 %}
+                        <i class="fas fa-arrow-up text-emerald-400"></i>
+                        {% elif d.total_demand < demand_summary[0].total_demand * 0.3 %}
+                        <i class="fas fa-arrow-down text-red-400"></i>
+                        {% else %}
+                        <i class="fas fa-minus text-slate-400"></i>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not demand_summary %}
+                <tr>
+                    <td colspan="7" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-chart-bar text-4xl mb-3 text-slate-600"></i>
+                        <p>No demand data available. Click "Refresh Demand Data" to aggregate from movement history.</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

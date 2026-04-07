@@ -1,0 +1,184 @@
+{% extends "social_media/base_social.html" %}
+
+{% block page_content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Info -->
+    <div class="lg:col-span-2">
+        <div class="glass-panel rounded-xl p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-white">{{ lead.lead_name }}</h2>
+                    {% if lead.country %}<p class="text-slate-400">{{ lead.country }} {{ lead.city or '' }}</p>{% endif %}
+                </div>
+                <a href="{{ url_for('social_media.leads_edit', id=lead.id) }}" class="btn-social btn-social-secondary">
+                    <i class="fa-solid fa-pen"></i> Edit
+                </a>
+            </div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="content-card text-center">
+                    <div class="text-xs text-slate-400 mb-1">Status</div>
+                    <span class="status-badge status-{{ lead.lead_status.lower() if lead.lead_status else 'new' }}">{{ lead.lead_status or 'New' }}</span>
+                </div>
+                <div class="content-card text-center">
+                    <div class="text-xs text-slate-400 mb-1">Funnel Stage</div>
+                    <div class="font-semibold text-white">{{ lead.funnel_stage or 'Message' }}</div>
+                </div>
+                <div class="content-card text-center">
+                    <div class="text-xs text-slate-400 mb-1">Estimated Value</div>
+                    <div class="font-semibold text-green-400">AED {{ "%.0f"|format(lead.estimated_value or 0) }}</div>
+                </div>
+                <div class="content-card text-center">
+                    <div class="text-xs text-slate-400 mb-1">Source</div>
+                    {% if lead.source_platform %}
+                    <span class="platform-badge platform-{{ lead.source_platform.lower() }}">{{ lead.source_platform }}</span>
+                    {% else %}-{% endif %}
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                {% if lead.phone %}
+                <div>
+                    <div class="text-xs text-slate-400 mb-1">Phone</div>
+                    <div class="text-white">{{ lead.phone }}</div>
+                </div>
+                {% endif %}
+                {% if lead.whatsapp %}
+                <div>
+                    <div class="text-xs text-slate-400 mb-1">WhatsApp</div>
+                    <div class="text-white">{{ lead.whatsapp }}</div>
+                </div>
+                {% endif %}
+                {% if lead.email %}
+                <div>
+                    <div class="text-xs text-slate-400 mb-1">Email</div>
+                    <div class="text-white">{{ lead.email }}</div>
+                </div>
+                {% endif %}
+                <div>
+                    <div class="text-xs text-slate-400 mb-1">Assigned To</div>
+                    <div class="text-white">{{ lead.assigned_to_name or 'Unassigned' }}</div>
+                </div>
+            </div>
+            
+            {% if lead.notes %}
+            <div class="border-t border-white/10 pt-4">
+                <h3 class="text-sm font-semibold text-slate-400 mb-2">Notes</h3>
+                <p class="text-white">{{ lead.notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Follow-ups -->
+        <div class="glass-panel rounded-xl p-6 mt-6">
+            <h3 class="text-lg font-bold text-white mb-4">Follow-up History</h3>
+            
+            {% if followups %}
+            <div class="space-y-3">
+                {% for f in followups %}
+                <div class="content-card">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm font-semibold text-brand-400">{{ f.followup_date.strftime('%Y-%m-%d %H:%M') if f.followup_date else '' }}</span>
+                        {% if f.followup_result %}
+                        <span class="status-badge status-active">Completed</span>
+                        {% endif %}
+                    </div>
+                    <div class="text-sm text-white mb-1">{{ f.followup_type or 'General' }} - {{ f.followup_method or 'Phone' }}</div>
+                    {% if f.followup_notes %}
+                    <div class="text-xs text-slate-400">{{ f.followup_notes }}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state py-4">
+                <p>No follow-ups recorded yet</p>
+            </div>
+            {% endif %}
+            
+            <!-- Add Follow-up Form -->
+            <form method="POST" action="{{ url_for('social_media.leads_followup', id=lead.id) }}" class="mt-4 pt-4 border-t border-white/10">
+                <h4 class="text-sm font-semibold text-white mb-3">Add Follow-up</h4>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <select name="followup_type" class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+                            <option value="Call">Call</option>
+                            <option value="Email">Email</option>
+                            <option value="WhatsApp">WhatsApp</option>
+                            <option value="Meeting">Meeting</option>
+                            <option value="Visit">Visit</option>
+                        </select>
+                    </div>
+                    <div>
+                        <select name="followup_method" class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+                            <option value="Phone">Phone</option>
+                            <option value="Video">Video</option>
+                            <option value="In Person">In Person</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <textarea name="followup_notes" rows="2" placeholder="Notes..." 
+                              class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm"></textarea>
+                </div>
+                <div class="mt-3">
+                    <select name="followup_result" class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+                        <option value="">Select Result</option>
+                        <option value="Interested">Interested</option>
+                        <option value="Not Interested">Not Interested</option>
+                        <option value="Needs Follow-up">Needs Follow-up</option>
+                        <option value="Ready to Buy">Ready to Buy</option>
+                        <option value="Not Available">Not Available</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-social btn-social-primary mt-3">
+                    <i class="fa-solid fa-plus"></i> Add Follow-up
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="space-y-6">
+        <div class="glass-panel rounded-xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">Lead Details</h3>
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-400">Customer Type</span>
+                    <span class="text-white">{{ lead.customer_type or '-' }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-400">Urgency</span>
+                    <span class="text-white">{{ lead.urgency_level or 'Medium' }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-400">Follow-ups</span>
+                    <span class="text-white">{{ lead.followup_count or 0 }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-400">Created</span>
+                    <span class="text-white">{{ lead.created_at.strftime('%Y-%m-%d') if lead.created_at else '-' }}</span>
+                </div>
+            </div>
+        </div>
+        
+        {% if lead.brand_interest or lead.product_interest %}
+        <div class="glass-panel rounded-xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">Interests</h3>
+            {% if lead.brand_interest %}
+            <div class="mb-2">
+                <span class="text-xs text-slate-400">Brand</span>
+                <div class="text-white">{{ lead.brand_interest }}</div>
+            </div>
+            {% endif %}
+            {% if lead.product_interest %}
+            <div>
+                <span class="text-xs text-slate-400">Product</span>
+                <div class="text-white">{{ lead.product_interest }}</div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

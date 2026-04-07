@@ -1,0 +1,726 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .task-grid-row-hidden { display: none; }
+    .priority-critical { color: #ef4444; }
+    .priority-high { color: #f97316; }
+    .priority-medium { color: #eab308; }
+    .priority-low { color: #22c55e; }
+    .status-pending { color: #64748b; }
+    .status-in_progress { color: #3b82f6; }
+    .status-completed { color: #22c55e; }
+    .status-canceled { color: #f97316; }
+    .status-open { color: #94a3b8; }
+    .status-review { color: #a855f7; }
+    .subtask-row:hover { background-color: rgba(255,255,255,0.03); }
+</style>
+
+<div class="space-y-6 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">Task List</h1>
+            <p class="mt-1 text-sm text-slate-400">View, manage and track all your tasks and subtasks.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <button type="button" onclick="openTaskModal()" class="rounded-xl bg-brand-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                <i class="fa-solid fa-plus mr-2"></i>New Task
+            </button>
+            <button type="button" onclick="openSubtaskModal()" class="rounded-xl bg-purple-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-purple-500">
+                <i class="fa-solid fa-list-check mr-2"></i>New Subtask
+            </button>
+        </div>
+    </div>
+
+    <!-- Search & Filter Bar -->
+    <div class="glass-panel rounded-3xl border border-white/5 p-6">
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div class="xl:col-span-2">
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Search</label>
+                <div class="relative">
+                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                    <input type="text" id="search-input" placeholder="Search tasks, subtasks..."
+                           class="w-full rounded-xl border border-white/10 bg-slate-900/70 pl-10 pr-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+            </div>
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                <select id="filter-status" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    <option value="">All Statuses</option>
+                    {% for status in task_statuses %}
+                    <option value="{{ status }}">{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
+                <select id="filter-priority" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    <option value="">All Priorities</option>
+                    {% for priority in task_priorities %}
+                    <option value="{{ priority }}">{{ priority }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-slate-500">Showing <span id="visible-count" class="font-bold text-white">0</span> items</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="openColumnModal()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                    <i class="fa-solid fa-columns mr-2"></i>Columns
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tasks Table -->
+    <div class="glass-panel overflow-hidden rounded-3xl border border-white/5">
+        <div class="border-b border-white/5 bg-white/[0.02] p-6">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Tasks & Subtasks</h3>
+            </div>
+        </div>
+        <div class="overflow-x-auto max-h-[60vh] overflow-y-auto">
+            <table class="min-w-[1400px] w-full text-left">
+                <thead class="sticky top-0 z-20 bg-slate-800/90 backdrop-blur-sm">
+                    <tr class="border-b border-white/5 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <th class="px-4 py-4 w-12 text-center">#</th>
+                        <th class="px-4 py-4" data-column="type">Type</th>
+                        <th class="px-4 py-4" data-column="title">Title</th>
+                        <th class="px-4 py-4" data-column="parent">Parent Task</th>
+                        <th class="px-4 py-4" data-column="assigned">Assigned To</th>
+                        <th class="px-4 py-4" data-column="priority">Priority</th>
+                        <th class="px-4 py-4" data-column="status">Status</th>
+                        <th class="px-4 py-4" data-column="progress">Progress</th>
+                        <th class="px-4 py-4" data-column="due">Due Date</th>
+                        <th class="px-4 py-4 w-32 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="task-list-body" class="divide-y divide-white/5 bg-slate-900/10">
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Task Modal -->
+<div id="task-modal" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="absolute left-1/2 top-1/2 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 p-6">
+        <div class="glass-panel overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <h3 id="task-modal-title" class="text-lg font-black uppercase tracking-widest text-white">Create Task</h3>
+            </div>
+            <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                <input type="hidden" id="task-id">
+                <div class="md:col-span-2">
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Task Title *</label>
+                    <input id="task-title" type="text" required class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
+                    <select id="task-priority" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        {% for priority in task_priorities %}
+                        <option value="{{ priority }}">{{ priority }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                    <select id="task-status" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        {% for status in task_statuses %}
+                        <option value="{{ status }}">{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Assigned To</label>
+                    <select id="task-assigned" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">Unassigned</option>
+                        {% for user in task_users %}
+                        <option value="{{ user.id }}">{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Due Date</label>
+                    <input id="task-due" type="datetime-local" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Remind Before (days)</label>
+                    <input id="task-reminder-days" type="number" min="0" max="30" value="0" placeholder="0" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Remind Before (hours)</label>
+                    <input id="task-reminder-hours" type="number" min="0" max="23" value="0" placeholder="0" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div class="md:col-span-2">
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Description</label>
+                    <textarea id="task-desc" rows="3" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"></textarea>
+                </div>
+            </div>
+            <div class="flex gap-3 border-t border-white/5 bg-white/[0.02] p-6">
+                <button type="button" onclick="closeTaskModal()" class="flex-1 rounded-xl bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-white/10 hover:text-white">Cancel</button>
+                <button type="button" onclick="saveTask()" class="flex-1 rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Save Task</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Subtask Modal -->
+<div id="subtask-modal" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="absolute left-1/2 top-1/2 w-full max-w-2xl -translate-x-1/2 -translate-y-1/2 p-6">
+        <div class="glass-panel overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <h3 id="subtask-modal-title" class="text-lg font-black uppercase tracking-widest text-white">Create Subtask</h3>
+            </div>
+            <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                <input type="hidden" id="subtask-id">
+                <div class="md:col-span-2">
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Parent Task *</label>
+                    <select id="subtask-parent" required class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">-- Select Parent Task --</option>
+                        {% for task in tasks %}
+                        <option value="{{ task.id }}">{{ task.task_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Subtask Title *</label>
+                    <input id="subtask-title" type="text" required class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
+                    <select id="subtask-priority" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        {% for priority in subtask_priorities %}
+                        <option value="{{ priority }}">{{ priority }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                    <select id="subtask-status" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        {% for status in subtask_statuses %}
+                        <option value="{{ status }}">{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Assigned To</label>
+                    <select id="subtask-assigned" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">Unassigned</option>
+                        {% for user in task_users %}
+                        <option value="{{ user.id }}">{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Due Date</label>
+                    <input id="subtask-due" type="datetime-local" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Remind Before (days)</label>
+                    <input id="subtask-reminder-days" type="number" min="0" max="30" value="0" placeholder="0" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Remind Before (hours)</label>
+                    <input id="subtask-reminder-hours" type="number" min="0" max="23" value="0" placeholder="0" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                </div>
+                <div class="md:col-span-2">
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Description</label>
+                    <textarea id="subtask-desc" rows="2" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"></textarea>
+                </div>
+            </div>
+            <div class="flex gap-3 border-t border-white/5 bg-white/[0.02] p-6">
+                <button type="button" onclick="closeSubtaskModal()" class="flex-1 rounded-xl bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-400 transition-all hover:bg-white/10 hover:text-white">Cancel</button>
+                <button type="button" onclick="saveSubtask()" class="flex-1 rounded-xl bg-purple-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-purple-500">Save Subtask</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Column Visibility Modal -->
+<div id="column-modal" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+    <div class="absolute left-1/2 top-1/2 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 p-6">
+        <div class="glass-panel overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-lg font-black uppercase tracking-widest text-white">Column Visibility</h3>
+                        <p class="mt-1 text-xs text-slate-500">Select which columns to show. Your selection is saved automatically.</p>
+                    </div>
+                    <button type="button" onclick="closeColumnModal()" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">Close</button>
+                </div>
+            </div>
+            <div class="max-h-[50vh] overflow-y-auto p-6">
+                <div class="grid grid-cols-1 gap-3">
+                    {% for col in column_options %}
+                    <label class="flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-sm text-slate-200 cursor-pointer hover:bg-white/5 transition-colors">
+                        <input type="checkbox" class="column-toggle h-4 w-4 rounded border-white/10 bg-slate-800 text-brand-500 focus:ring-brand-500" value="{{ col.key }}" {% if col.key in visible_columns %}checked{% endif %}>
+                        <span class="font-semibold text-white">{{ col.label }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="border-t border-white/5 bg-white/[0.02] p-6">
+                <button type="button" onclick="saveColumnPreferences()" class="w-full rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">Save Preferences</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const COLUMN_OPTIONS = {{ column_options|tojson }};
+const COLUMN_KEYS = {{ column_keys|tojson }};
+const DEFAULT_COLUMNS = {{ default_columns|tojson }};
+let currentVisibleColumns = new Set({{ visible_columns|tojson }});
+let allTasks = {{ tasks|tojson }};
+let allSubtasks = {{ subtasks|tojson }};
+const TASK_USERS = {{ task_users|tojson }};
+const SUBTASK_PRIORITIES = {{ subtask_priorities|tojson }};
+const SUBTASK_STATUSES = {{ subtask_statuses|tojson }};
+const TASK_PRIORITIES = {{ task_priorities|tojson }};
+const TASK_STATUSES = {{ task_statuses|tojson }};
+
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    const div = document.createElement('div');
+    div.textContent = String(text);
+    return div.innerHTML;
+}
+
+function getUsername(userId) {
+    if (!userId) return 'Unassigned';
+    const user = TASK_USERS.find(u => u.id === userId);
+    return user ? user.username : 'Unassigned';
+}
+
+function getPriorityClass(priority) {
+    const map = { 'Critical': 'priority-critical', 'High': 'priority-high', 'Medium': 'priority-medium', 'Low': 'priority-low' };
+    return map[priority] || '';
+}
+
+function getStatusClass(status) {
+    return 'status-' + (status || 'pending').toLowerCase().replace(' ', '_');
+}
+
+function renderRows() {
+    const tbody = document.getElementById('task-list-body');
+    const search = document.getElementById('search-input').value.toLowerCase();
+    const statusFilter = document.getElementById('filter-status').value;
+    const priorityFilter = document.getElementById('filter-priority').value;
+
+    // Build combined list
+    const rows = [];
+
+    // Add tasks
+    allTasks.forEach(task => {
+        const searchText = `${task.task_name || ''} ${task.description || ''} ${task.latest_note || ''}`.toLowerCase();
+        const matchesSearch = !search || searchText.includes(search);
+        const matchesStatus = !statusFilter || task.status === statusFilter;
+        const matchesPriority = !priorityFilter || task.priority === priorityFilter;
+
+        if (matchesSearch && matchesStatus && matchesPriority) {
+            rows.push({
+                type: 'task',
+                id: task.id,
+                title: task.task_name,
+                parent: null,
+                parentTitle: null,
+                description: task.description,
+                assigned: task.assigned_to_name || task.assigned_to,
+                priority: task.priority,
+                status: task.status,
+                progress: task.progress || 0,
+                due: task.due_at,
+                data: task
+            });
+        }
+    });
+
+    // Add subtasks
+    allSubtasks.forEach(st => {
+        const parentTask = allTasks.find(t => t.id === st.parent_task_id);
+        const searchText = `${st.subtask_title || ''} ${st.description || ''}`.toLowerCase();
+        const matchesSearch = !search || searchText.includes(search);
+        const matchesStatus = !statusFilter || st.status === statusFilter;
+        const matchesPriority = !priorityFilter || st.priority === priorityFilter;
+
+        if (matchesSearch && matchesStatus && matchesPriority) {
+            rows.push({
+                type: 'subtask',
+                id: st.id,
+                title: st.subtask_title,
+                parent: st.parent_task_id,
+                parentTitle: parentTask ? parentTask.task_name : '-',
+                description: st.description,
+                assigned: st.assigned_to_name || getUsername(st.assigned_to_user_id),
+                priority: st.priority,
+                status: st.status,
+                progress: st.progress || 0,
+                due: st.due_at,
+                data: st
+            });
+        }
+    });
+
+    document.getElementById('visible-count').textContent = rows.length;
+
+    if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" class="px-4 py-16 text-center text-xs font-black uppercase tracking-widest text-slate-500">No items match your search.</td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = rows.map((row, idx) => {
+        const priorityClass = getPriorityClass(row.priority);
+        const statusClass = getStatusClass(row.status);
+        const isTask = row.type === 'task';
+        const typeBadge = isTask
+            ? '<span class="inline-flex items-center rounded-full border border-brand-400/20 bg-brand-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-brand-300">Task</span>'
+            : '<span class="inline-flex items-center rounded-full border border-purple-400/20 bg-purple-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-purple-300">Subtask</span>';
+        const dueDisplay = row.due ? new Date(row.due).toLocaleDateString() : '-';
+        const actions = isTask
+            ? `<div class="flex items-center justify-center gap-1">
+                <button onclick="editTask(${row.id})" class="rounded-lg bg-blue-600/20 p-2 text-blue-400 hover:bg-blue-600/40 transition-colors" title="Edit"><i class="fa-solid fa-pen text-xs"></i></button>
+                <button onclick="toggleComplete(${row.id}, 'task')" class="rounded-lg bg-emerald-600/20 p-2 text-emerald-400 hover:bg-emerald-600/40 transition-colors" title="Complete"><i class="fa-solid fa-check text-xs"></i></button>
+                <button onclick="deleteTask(${row.id})" class="rounded-lg bg-red-600/20 p-2 text-red-400 hover:bg-red-600/40 transition-colors" title="Delete"><i class="fa-solid fa-trash text-xs"></i></button>
+               </div>`
+            : `<div class="flex items-center justify-center gap-1">
+                <button onclick="editSubtask(${row.id})" class="rounded-lg bg-blue-600/20 p-2 text-blue-400 hover:bg-blue-600/40 transition-colors" title="Edit"><i class="fa-solid fa-pen text-xs"></i></button>
+                <button onclick="toggleComplete(${row.id}, 'subtask')" class="rounded-lg bg-emerald-600/20 p-2 text-emerald-400 hover:bg-emerald-600/40 transition-colors" title="Complete"><i class="fa-solid fa-check text-xs"></i></button>
+                <button onclick="deleteSubtask(${row.id})" class="rounded-lg bg-red-600/20 p-2 text-red-400 hover:bg-red-600/40 transition-colors" title="Delete"><i class="fa-solid fa-trash text-xs"></i></button>
+               </div>`;
+
+        return `<tr class="hover:bg-white/5 transition-colors" data-type="${row.type}" data-id="${row.id}">
+            <td class="px-4 py-4 text-center text-[10px] font-black text-slate-600">${idx + 1}</td>
+            <td class="px-4 py-4" data-col="type">${typeBadge}</td>
+            <td class="px-4 py-4" data-col="title">
+                <div class="font-bold text-white">${escapeHtml(row.title)}</div>
+                <div class="mt-1 text-xs text-slate-500 line-clamp-1">${escapeHtml(row.description || 'No description')}</div>
+            </td>
+            <td class="px-4 py-4 text-sm text-slate-400" data-col="parent">${row.parentTitle || '-'}</td>
+            <td class="px-4 py-4 text-sm text-slate-300" data-col="assigned">${escapeHtml(row.assigned)}</td>
+            <td class="px-4 py-4 text-sm ${priorityClass}" data-col="priority">${row.priority || 'Medium'}</td>
+            <td class="px-4 py-4" data-col="status">
+                <select onchange="updateTaskStatus('${row.type}', ${row.id}, this.value)"
+                        class="cursor-pointer rounded-lg border border-white/10 bg-transparent px-2 py-1 text-xs font-semibold outline-none transition-all ${statusClass} hover:border-brand-500 focus:border-brand-500">
+                    ${(row.type === 'task' ? TASK_STATUSES : SUBTASK_STATUSES).map(s =>
+                        `<option value="${s}" ${s === row.status ? 'selected' : ''}>${s}</option>`
+                    ).join('')}
+                </select>
+            </td>
+            <td class="px-4 py-4" data-col="progress">
+                <div class="flex items-center gap-2">
+                    <div class="h-2 w-16 overflow-hidden rounded-full bg-slate-700">
+                        <div class="h-full rounded-full ${row.progress >= 100 ? 'bg-emerald-500' : row.progress >= 50 ? 'bg-brand-500' : row.progress > 0 ? 'bg-amber-500' : 'bg-slate-600'}" style="width: ${row.progress}%;"></div>
+                    </div>
+                    <span class="text-xs text-slate-400">${row.progress}%</span>
+                </div>
+            </td>
+            <td class="px-4 py-4 text-sm text-slate-300" data-col="due">${dueDisplay}</td>
+            <td class="px-4 py-4 text-center">${actions}</td>
+        </tr>`;
+    }).join('');
+}
+
+function applyColumnVisibility() {
+    COLUMN_KEYS.forEach(key => {
+        const visible = currentVisibleColumns.has(key);
+        document.querySelectorAll(`[data-col="${key}"]`).forEach(el => {
+            el.classList.toggle('hidden', !visible);
+        });
+    });
+}
+
+// Search & Filter handlers
+document.getElementById('search-input').addEventListener('input', renderRows);
+document.getElementById('filter-status').addEventListener('change', renderRows);
+document.getElementById('filter-priority').addEventListener('change', renderRows);
+
+// Task Modal
+function openTaskModal(task) {
+    document.getElementById('task-modal-title').textContent = task ? 'Edit Task' : 'Create Task';
+    document.getElementById('task-id').value = task ? task.id : '';
+    document.getElementById('task-title').value = task ? (task.task_name || '') : '';
+    document.getElementById('task-priority').value = task ? (task.priority || 'Medium') : 'Medium';
+    document.getElementById('task-status').value = task ? (task.status || 'Open') : 'Open';
+    document.getElementById('task-assigned').value = task ? (task.assigned_to_user_id || '') : '';
+    document.getElementById('task-due').value = task && task.due_at ? task.due_at.slice(0, 16) : '';
+    document.getElementById('task-reminder-days').value = task ? (task.reminder_days || 0) : 0;
+    document.getElementById('task-reminder-hours').value = task ? (task.reminder_hours || 0) : 0;
+    document.getElementById('task-desc').value = task ? (task.description || '') : '';
+    document.getElementById('task-modal').classList.remove('hidden');
+}
+
+function closeTaskModal() {
+    document.getElementById('task-modal').classList.add('hidden');
+}
+
+function editTask(taskId) {
+    const task = allTasks.find(t => t.id === taskId);
+    if (task) openTaskModal(task);
+}
+
+async function saveTask() {
+    const taskId = document.getElementById('task-id').value;
+    const payload = {
+        task_id: taskId || null,
+        task_name: document.getElementById('task-title').value.trim(),
+        priority: document.getElementById('task-priority').value,
+        status: document.getElementById('task-status').value,
+        assigned_to_user_id: document.getElementById('task-assigned').value || null,
+        due_at: document.getElementById('task-due').value || null,
+        description: document.getElementById('task-desc').value.trim(),
+        reminder_days: parseInt(document.getElementById('task-reminder-days').value) || 0,
+        reminder_hours: parseInt(document.getElementById('task-reminder-hours').value) || 0
+    };
+
+    if (!payload.task_name) {
+        Swal.fire('Error', 'Task title is required.', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/tasks/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Failed to save task');
+        closeTaskModal();
+        window.toast('Task saved successfully.');
+        setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        Swal.fire('Error', error.message, 'error');
+    }
+}
+
+async function deleteTask(taskId) {
+    const confirmation = await Swal.fire({
+        title: 'Delete Task?',
+        text: 'This will also delete all subtasks. This cannot be undone.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#475569'
+    });
+    if (!confirmation.isConfirmed) return;
+
+    try {
+        const response = await fetch('/tasks/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task_id: taskId })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message);
+        window.toast('Task deleted.');
+        setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        Swal.fire('Error', error.message, 'error');
+    }
+}
+
+async function toggleComplete(id, type) {
+    const endpoint = type === 'task' ? '/tasks/toggle_complete' : '/subtasks/toggle_complete';
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task_id: id })
+        });
+        const result = await response.json();
+        if (result.success) {
+            window.toast(type === 'task' ? 'Task updated.' : 'Subtask updated.');
+            setTimeout(() => window.location.reload(), 500);
+        }
+    } catch (error) {
+        Swal.fire('Error', error.message, 'error');
+    }
+}
+
+async function updateTaskStatus(type, id, newStatus) {
+    try {
+        let response;
+        if (type === 'task') {
+            response = await fetch('/tasks/bulk_action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'status', task_ids: [id], status: newStatus })
+            });
+        } else {
+            response = await fetch('/subtasks/bulk_action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'status', subtask_ids: [id], status: newStatus })
+            });
+        }
+        const result = await response.json();
+        if (result.success) {
+            window.toast('Status updated successfully.');
+            setTimeout(() => window.location.reload(), 600);
+        } else {
+            Swal.fire('Error', result.message || 'Failed to update status.', 'error');
+        }
+    } catch (error) {
+        Swal.fire('Error', error.message, 'error');
+    }
+}
+
+// Subtask Modal
+function openSubtaskModal(subtask) {
+    document.getElementById('subtask-modal-title').textContent = subtask ? 'Edit Subtask' : 'Create Subtask';
+    document.getElementById('subtask-id').value = subtask ? subtask.id : '';
+    document.getElementById('subtask-parent').value = subtask ? (subtask.parent_task_id || '') : '';
+    document.getElementById('subtask-title').value = subtask ? (subtask.subtask_title || '') : '';
+    document.getElementById('subtask-priority').value = subtask ? (subtask.priority || 'Medium') : 'Medium';
+    document.getElementById('subtask-status').value = subtask ? (subtask.status || 'Pending') : 'Pending';
+    document.getElementById('subtask-assigned').value = subtask ? (subtask.assigned_to_user_id || '') : '';
+    document.getElementById('subtask-due').value = subtask && subtask.due_at ? subtask.due_at.slice(0, 16) : '';
+    document.getElementById('subtask-reminder-days').value = subtask ? (subtask.reminder_days || 0) : 0;
+    document.getElementById('subtask-reminder-hours').value = subtask ? (subtask.reminder_hours || 0) : 0;
+    document.getElementById('subtask-desc').value = subtask ? (subtask.description || '') : '';
+    document.getElementById('subtask-modal').classList.remove('hidden');
+}
+
+function closeSubtaskModal() {
+    document.getElementById('subtask-modal').classList.add('hidden');
+}
+
+function editSubtask(subtaskId) {
+    const subtask = allSubtasks.find(s => s.id === subtaskId);
+    if (subtask) openSubtaskModal(subtask);
+}
+
+async function saveSubtask() {
+    const subtaskId = document.getElementById('subtask-id').value;
+    const payload = {
+        id: subtaskId || null,
+        parent_task_id: parseInt(document.getElementById('subtask-parent').value),
+        subtask_title: document.getElementById('subtask-title').value.trim(),
+        priority: document.getElementById('subtask-priority').value,
+        status: document.getElementById('subtask-status').value,
+        assigned_to_user_id: document.getElementById('subtask-assigned').value || null,
+        due_at: document.getElementById('subtask-due').value || null,
+        description: document.getElementById('subtask-desc').value.trim(),
+        reminder_days: parseInt(document.getElementById('subtask-reminder-days').value) || 0,
+        reminder_hours: parseInt(document.getElementById('subtask-reminder-hours').value) || 0
+    };
+
+    if (!payload.parent_task_id || !payload.subtask_title) {
+        Swal.fire('Error', 'Parent task and subtask title are required.', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/subtasks/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message || 'Failed to save subtask');
+        closeSubtaskModal();
+        window.toast('Subtask saved successfully.');
+        setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        Swal.fire('Error', error.message, 'error');
+    }
+}
+
+async function deleteSubtask(subtaskId) {
+    const confirmation = await Swal.fire({
+        title: 'Delete Subtask?',
+        text: 'This cannot be undone.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#475569'
+    });
+    if (!confirmation.isConfirmed) return;
+
+    try {
+        const response = await fetch('/subtasks/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: subtaskId })
+        });
+        const result = await response.json();
+        if (!result.success) throw new Error(result.message);
+        window.toast('Subtask deleted.');
+        setTimeout(() => window.location.reload(), 800);
+    } catch (error) {
+        Swal.fire('Error', error.message, 'error');
+    }
+}
+
+// Column Modal
+function openColumnModal() {
+    document.getElementById('column-modal').classList.remove('hidden');
+}
+
+function closeColumnModal() {
+    document.getElementById('column-modal').classList.add('hidden');
+}
+
+async function saveColumnPreferences() {
+    const selected = Array.from(document.querySelectorAll('.column-toggle:checked')).map(cb => cb.value);
+    if (selected.length === 0) {
+        Swal.fire('Error', 'Select at least one column.', 'error');
+        return;
+    }
+
+    currentVisibleColumns = new Set(selected);
+    applyColumnVisibility();
+
+    try {
+        const response = await fetch('/task-list/columns', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visible_columns: selected })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message);
+        closeColumnModal();
+        window.toast('Column preferences saved.');
+    } catch (error) {
+        Swal.fire('Error', error.message, 'error');
+    }
+}
+
+// Modal click-outside to close
+['task-modal', 'subtask-modal', 'column-modal'].forEach(id => {
+    const modal = document.getElementById(id);
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal || e.target.classList.contains('absolute')) {
+                modal.classList.add('hidden');
+            }
+        });
+    }
+});
+
+// ESC to close
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeTaskModal();
+        closeSubtaskModal();
+        closeColumnModal();
+    }
+});
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+    applyColumnVisibility();
+    renderRows();
+});
+</script>
+{% endblock %}

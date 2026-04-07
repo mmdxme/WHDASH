@@ -1,0 +1,138 @@
+{% extends "social_media/base_social.html" %}
+
+{% block page_actions %}
+<a href="{{ url_for('social_media.accounts_new') }}" class="btn-social btn-social-primary">
+    <i class="fa-solid fa-plus"></i> Add Account
+</a>
+{% endblock %}
+
+{% block page_content %}
+<!-- Filters -->
+<div class="filter-bar flex flex-wrap gap-4 items-center">
+    <div class="flex-1 min-w-[200px]">
+        <input type="text" id="search" placeholder="Search accounts..." 
+               value="{{ search }}" 
+               class="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:ring-2 focus:ring-brand-500/50">
+    </div>
+    <select name="platform" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
+        <option value="">All Platforms</option>
+        {% for p in platforms %}
+        <option value="{{ p }}" {% if platform_filter == p %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+    </select>
+    <select name="status" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
+        <option value="">All Status</option>
+        <option value="Active" {% if status_filter == 'Active' %}selected{% endif %}>Active</option>
+        <option value="Inactive" {% if status_filter == 'Inactive' %}selected{% endif %}>Inactive</option>
+        <option value="Archived" {% if status_filter == 'Archived' %}selected{% endif %}>Archived</option>
+    </select>
+    <button onclick="applyFilters()" class="btn-social btn-social-secondary">
+        <i class="fa-solid fa-filter"></i> Apply
+    </button>
+</div>
+
+<!-- Accounts Table -->
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Platform</th>
+                <th>Account Name</th>
+                <th>Username</th>
+                <th>Target Market</th>
+                <th>Language</th>
+                <th>Status</th>
+                <th>Security</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for account in accounts %}
+            <tr>
+                <td>
+                    <span class="platform-badge platform-{{ account.platform.lower() }}">
+                        <i class="fa-brands fa-{{ account.platform.lower() }}"></i>
+                        {{ account.platform }}
+                    </span>
+                </td>
+                <td>
+                    <div class="font-semibold text-white">{{ account.account_name }}</div>
+                    <div class="text-xs text-slate-400">{{ account.account_type }}</div>
+                </td>
+                <td>
+                    <span class="text-brand-400">{{ account.username or '-' }}</span>
+                </td>
+                <td>{{ account.target_market or '-' }}</td>
+                <td>{{ account.primary_language or 'en' }}</td>
+                <td>
+                    <span class="status-badge status-{{ account.account_status.lower() }}">
+                        {{ account.account_status }}
+                    </span>
+                </td>
+                <td>
+                    {% if account.two_factor_enabled %}
+                    <span class="text-green-400 text-xs"><i class="fa-solid fa-shield-halved"></i> 2FA</span>
+                    {% else %}
+                    <span class="text-yellow-400 text-xs"><i class="fa-solid fa-exclamation-triangle"></i> No 2FA</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="flex items-center gap-2">
+                        <a href="{{ url_for('social_media.accounts_view', id=account.id) }}" class="p-2 hover:bg-white/10 rounded-lg" title="View">
+                            <i class="fa-solid fa-eye text-brand-400"></i>
+                        </a>
+                        <a href="{{ url_for('social_media.accounts_edit', id=account.id) }}" class="p-2 hover:bg-white/10 rounded-lg" title="Edit">
+                            <i class="fa-solid fa-pen text-slate-400"></i>
+                        </a>
+                        <form action="{{ url_for('social_media.accounts_delete', id=account.id) }}" method="POST" class="inline" onsubmit="return confirm('Archive this account?')">
+                            <button type="submit" class="p-2 hover:bg-white/10 rounded-lg" title="Archive">
+                                <i class="fa-solid fa-archive text-red-400"></i>
+                            </button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="8" class="text-center py-8 text-slate-400">
+                    <div class="empty-state-icon"><i class="fa-solid fa-users"></i></div>
+                    <p>No social accounts found</p>
+                    <a href="{{ url_for('social_media.accounts_new') }}" class="btn-social btn-social-primary mt-4">Add First Account</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Pagination -->
+{% if total > per_page %}
+<div class="flex items-center justify-between mt-4">
+    <div class="text-sm text-slate-400">
+        Showing {{ (page-1)*per_page + 1 }} to {{ [page*per_page, total]|min }} of {{ total }} accounts
+    </div>
+    <div class="flex items-center gap-2">
+        {% if page > 1 %}
+        <a href="?page={{ page-1 }}&search={{ search }}&platform={{ platform_filter }}&status={{ status_filter }}" class="btn-social btn-social-secondary">Previous</a>
+        {% endif %}
+        <span class="text-white px-4">Page {{ page }}</span>
+        {% if page * per_page < total %}
+        <a href="?page={{ page+1 }}&search={{ search }}&platform={{ platform_filter }}&status={{ status_filter }}" class="btn-social btn-social-secondary">Next</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<script>
+function applyFilters() {
+    const search = document.getElementById('search').value;
+    const platform = document.querySelector('select[name="platform"]').value;
+    const status = document.querySelector('select[name="status"]').value;
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (platform) params.set('platform', platform);
+    if (status) params.set('status', status);
+    window.location.href = '{{ url_for("social_media.accounts_list") }}?' + params.toString();
+}
+</script>
+{% endblock %}

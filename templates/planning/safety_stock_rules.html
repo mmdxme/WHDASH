@@ -1,0 +1,222 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">Safety Stock & Reorder Rules</h2>
+        <p class="text-slate-400 text-sm">Configure planning parameters per item</p>
+    </div>
+</div>
+
+<!-- Safety Stock Profiles Table -->
+<div class="glass-panel rounded-xl overflow-hidden mb-6">
+    <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+        <table class="w-full text-sm" id="profilesTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Item</th>
+                    <th class="text-center py-3 px-2">ABC</th>
+                    <th class="text-center py-3 px-2">XYZ</th>
+                    <th class="text-center py-3 px-2">Critical</th>
+                    <th class="text-right py-3 px-3">Lead Time</th>
+                    <th class="text-right py-3 px-3">Safety Stock</th>
+                    <th class="text-right py-3 px-3">Reorder Point</th>
+                    <th class="text-right py-3 px-3">Min Order</th>
+                    <th class="text-left py-3 px-3">Planning Method</th>
+                    <th class="text-left py-3 px-3">Forecast Method</th>
+                    <th class="text-center py-3 px-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for profile in profiles %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ profile.item_code }}</div>
+                        <div class="text-slate-400 text-xs">{{ profile.item_name }}</div>
+                    </td>
+                    <td class="py-3 px-2 text-center">
+                        <span class="px-2 py-0.5 rounded text-xs font-bold {% if profile.abc_class == 'A' %}bg-emerald-500/20 text-emerald-400{% else %}bg-slate-500/20 text-slate-400{% endif %}">{{ profile.abc_class|default('-') }}</span>
+                    </td>
+                    <td class="py-3 px-2 text-center">
+                        <span class="px-2 py-0.5 rounded text-xs font-bold {% if profile.xyz_class == 'X' %}bg-sky-500/20 text-sky-400{% else %}bg-slate-500/20 text-slate-400{% endif %}">{{ profile.xyz_class|default('-') }}</span>
+                    </td>
+                    <td class="py-3 px-2 text-center">
+                        {% if profile.criticality_level == 'HIGH' %}<i class="fas fa-fire text-red-400"></i>
+                        {% elif profile.criticality_level == 'MEDIUM' %}<i class="fas fa-warning text-yellow-400"></i>
+                        {% else %}<i class="fas fa-minus text-slate-500"></i>{% endif %}
+                    </td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ profile.lead_time_days|default(7) }}d</td>
+                    <td class="py-3 px-3 text-right text-orange-400">{{ profile.safety_stock_days|default(0) }}</td>
+                    <td class="py-3 px-3 text-right text-yellow-400">{{ profile.reorder_point|default(0) }}</td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ profile.min_order_quantity|default(0) }}</td>
+                    <td class="py-3 px-3 text-slate-300 text-sm">{{ profile.planning_method|default('AUTO') }}</td>
+                    <td class="py-3 px-3 text-slate-300 text-sm">{{ profile.forecast_method|default('MOVING_AVERAGE') }}</td>
+                    <td class="py-3 px-3 text-center">
+                        <button onclick="editProfile({{ profile.item_id }}, {{ profile.safety_stock_days|default(0) }}, {{ profile.lead_time_days|default(7) }}, {{ profile.min_order_quantity|default(0) }}, {{ profile.order_multiple|default(1) }}, {{ profile.service_level_target|default(0.95) }}, '{{ profile.planning_method|default('AUTO') }}', '{{ profile.forecast_method|default('MOVING_AVERAGE') }}')"
+                                class="px-3 py-1 rounded bg-sky-500/20 text-sky-400 text-xs hover:bg-sky-500/30">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not profiles %}
+                <tr>
+                    <td colspan="11" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-shield-alt text-4xl mb-3 text-slate-600"></i>
+                        <p>No item profiles configured. Edit an item to set planning parameters.</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Calculate Safety Stock Section -->
+<div class="glass-panel rounded-xl p-5">
+    <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+        <i class="fas fa-calculator text-sky-400"></i> Calculate Recommended Safety Stock
+    </h3>
+    <form id="calcForm" class="flex flex-wrap gap-4 items-end">
+        <div>
+            <label class="block text-slate-400 text-xs mb-1">Item</label>
+            <select id="calc_item_id" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm" required>
+                <option value="">Select item...</option>
+                {% for item in all_items|default([]) %}
+                <option value="{{ item.id }}">{{ item.item_code }} - {{ item.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="block text-slate-400 text-xs mb-1">Method</label>
+            <select id="calc_method" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                <option value="FORMULA">Statistical Formula</option>
+                <option value="DAYS_BASED">Days-Based</option>
+            </select>
+        </div>
+        <button type="button" onclick="calculateSafetyStock()" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+            <i class="fas fa-calculator mr-2"></i>Calculate
+        </button>
+    </form>
+    <div id="calcResult" class="mt-4 hidden">
+        <div class="grid grid-cols-2 gap-4">
+            <div class="bg-slate-800/50 rounded-lg p-4 text-center">
+                <p class="text-slate-400 text-xs mb-1">Recommended Safety Stock</p>
+                <p id="recSS" class="text-2xl font-bold text-orange-400">-</p>
+            </div>
+            <div class="bg-slate-800/50 rounded-lg p-4 text-center">
+                <p class="text-slate-400 text-xs mb-1">Recommended Reorder Point</p>
+                <p id="recROP" class="text-2xl font-bold text-yellow-400">-</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function editProfile(itemId, ssDays, ltDays, moq, multiple, svcLevel, planMethod, fcMethod) {
+    document.getElementById('edit_item_id').value = itemId;
+    document.getElementById('edit_safety_stock').value = ssDays;
+    document.getElementById('edit_lead_time').value = ltDays;
+    document.getElementById('edit_moq').value = moq;
+    document.getElementById('edit_multiple').value = multiple;
+    document.getElementById('edit_svc_level').value = svcLevel;
+    document.getElementById('edit_planning_method').value = planMethod;
+    document.getElementById('edit_forecast_method').value = fcMethod;
+    document.getElementById('editModal').classList.remove('hidden');
+}
+
+function calculateSafetyStock() {
+    const itemId = document.getElementById('calc_item_id').value;
+    const method = document.getElementById('calc_method').value;
+    if (!itemId) return;
+    
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{{ url_for("safety_stock_calculate") }}';
+    form.innerHTML = `
+        <input type="hidden" name="item_id" value="${itemId}">
+        <input type="hidden" name="method" value="${method}">
+    `;
+    document.body.appendChild(form);
+    
+    fetch('{{ url_for("safety_stock_calculate") }}', {
+        method: 'POST',
+        body: new URLSearchParams({ item_id: itemId, method: method })
+    })
+    .then(r => r.json())
+    .then(data => {
+        document.getElementById('recSS').textContent = data.recommended_safety_stock || 0;
+        document.getElementById('recROP').textContent = data.recommended_reorder_point || 0;
+        document.getElementById('calcResult').classList.remove('hidden');
+    });
+}
+</script>
+
+<!-- Edit Profile Modal -->
+<div id="editModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+    <div class="glass-panel rounded-xl p-6 w-full max-w-lg mx-4">
+        <h3 class="text-lg font-semibold text-white mb-4">Edit Planning Profile</h3>
+        <form action="{{ url_for('safety_stock_save') }}" method="POST">
+            <input type="hidden" name="item_id" id="edit_item_id">
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Safety Stock (days)</label>
+                        <input type="number" name="safety_stock" id="edit_safety_stock" min="0"
+                               class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Lead Time (days)</label>
+                        <input type="number" name="lead_time_days" id="edit_lead_time" min="1"
+                               class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Min Order Qty</label>
+                        <input type="number" name="min_order_quantity" id="edit_moq" min="0" step="0.01"
+                               class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Order Multiple</label>
+                        <input type="number" name="order_multiple" id="edit_multiple" min="1" step="0.01"
+                               class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Service Level Target</label>
+                    <input type="number" name="service_level_target" id="edit_svc_level" min="0" max="1" step="0.01"
+                           class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Planning Method</label>
+                        <select name="planning_method" id="edit_planning_method"
+                                class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                            <option value="AUTO">Auto</option>
+                            <option value="MANUAL">Manual</option>
+                            <option value="ROP">Reorder Point</option>
+                            <option value="FORECAST">Forecast Based</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Forecast Method</label>
+                        <select name="forecast_method" id="edit_forecast_method"
+                                class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                            <option value="MOVING_AVERAGE">Moving Average</option>
+                            <option value="WEIGHTED_MA">Weighted MA</option>
+                            <option value="SEASONAL">Seasonal</option>
+                            <option value="TREND">Trend</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button type="button" onclick="document.getElementById('editModal').classList.add('hidden')"
+                        class="flex-1 px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm hover:bg-slate-600">Cancel</button>
+                <button type="submit" class="flex-1 px-4 py-2 rounded-lg bg-sky-500 text-white text-sm font-medium hover:bg-sky-600">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

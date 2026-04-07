@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <h1 class="text-2xl font-bold text-white">{{ title }}</h1>
+
+    <!-- Tabs -->
+    <div class="flex items-center gap-1 border-b border-white/10 pb-px overflow-x-auto">
+        {% for t in ['general', 'inventory', 'receiving', 'picking', 'transfer', 'alerts', 'permissions'] %}
+        <a href="?tab={{ t }}" class="px-5 py-3 text-sm font-medium transition-all whitespace-nowrap rounded-t-xl
+            {% if tab == t %}bg-brand-500/10 text-brand-400 border-b-2 border-brand-500{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+            {{ t|capitalize }}
+        </a>
+        {% endfor %}
+    </div>
+
+    {% if tab == 'general' %}
+    <form method="POST" action="{{ url_for('wms_settings_save') }}">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">General Settings</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {% for setting in settings_by_category.get('general', []) %}
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2">{{ setting.setting_key }}</label>
+                    {% if setting.setting_type == 'boolean' %}
+                    <select name="setting_{{ setting.setting_key }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                        <option value="1" {% if setting.setting_value == '1' %}selected{% endif %}>Enabled</option>
+                        <option value="0" {% if setting.setting_value == '0' %}selected{% endif %}>Disabled</option>
+                    </select>
+                    {% else %}
+                    <input type="text" name="setting_{{ setting.setting_key }}" value="{{ setting.setting_value }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    {% endif %}
+                    <p class="text-xs text-slate-500 mt-1">{{ setting.description or '' }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="flex justify-end mt-4">
+            <button type="submit" class="px-6 py-3 bg-brand-500 text-white rounded-xl hover:bg-brand-400 text-sm font-medium">
+                <i class="fa-solid fa-save mr-2"></i>Save Settings
+            </button>
+        </div>
+    </form>
+    {% endif %}
+
+    {% if tab == 'inventory' %}
+    <form method="POST" action="{{ url_for('wms_settings_save') }}">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">Inventory Settings</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {% for setting in settings_by_category.get('inventory', []) %}
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2">{{ setting.setting_key }}</label>
+                    {% if setting.setting_type == 'boolean' %}
+                    <select name="setting_{{ setting.setting_key }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                        <option value="1" {% if setting.setting_value == '1' %}selected{% endif %}>Enabled</option>
+                        <option value="0" {% if setting.setting_value == '0' %}selected{% endif %}>Disabled</option>
+                    </select>
+                    {% else %}
+                    <input type="text" name="setting_{{ setting.setting_key }}" value="{{ setting.setting_value }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    {% endif %}
+                    <p class="text-xs text-slate-500 mt-1">{{ setting.description or '' }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="flex justify-end mt-4">
+            <button type="submit" class="px-6 py-3 bg-brand-500 text-white rounded-xl hover:bg-brand-400 text-sm font-medium">
+                <i class="fa-solid fa-save mr-2"></i>Save Settings
+            </button>
+        </div>
+    </form>
+    {% endif %}
+
+    {% if tab == 'permissions' %}
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">User Permissions</h3>
+        <p class="text-sm text-slate-400 mb-4">Manage WMS permissions per user. Users with Global Admin role have all permissions automatically.</p>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="text-left py-3 px-4 font-semibold">User</th>
+                        <th class="text-left py-3 px-4 font-semibold">Current Permissions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr class="border-b border-white/5">
+                        <td class="py-3 px-4 text-white font-medium">{{ u.username }}</td>
+                        <td class="py-3 px-4">
+                            {% set perms = user_permissions.get(u.id, []) %}
+                            {% if 'all' in perms %}
+                            <span class="px-3 py-1 rounded-lg text-xs bg-brand-500/10 text-brand-400 font-bold">All Permissions</span>
+                            {% else %}
+                            <div class="flex flex-wrap gap-2">
+                                {% for p in perms %}
+                                <span class="px-2 py-1 rounded text-xs bg-emerald-500/10 text-emerald-400">{{ p }}</span>
+                                {% endfor %}
+                                {% if not perms %}
+                                <span class="text-slate-500 text-xs">No specific permissions</span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if tab in ['receiving', 'picking', 'transfer', 'alerts'] %}
+    <form method="POST" action="{{ url_for('wms_settings_save') }}">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4 capitalize">{{ tab }} Settings</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {% for setting in settings_by_category.get(tab, []) + settings_by_category.get('transfer', []) + settings_by_category.get('return', []) %}
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2">{{ setting.setting_key }}</label>
+                    {% if setting.setting_type == 'boolean' %}
+                    <select name="setting_{{ setting.setting_key }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                        <option value="1" {% if setting.setting_value == '1' %}selected{% endif %}>Enabled</option>
+                        <option value="0" {% if setting.setting_value == '0' %}selected{% endif %}>Disabled</option>
+                    </select>
+                    {% else %}
+                    <input type="text" name="setting_{{ setting.setting_key }}" value="{{ setting.setting_value }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    {% endif %}
+                    <p class="text-xs text-slate-500 mt-1">{{ setting.description or '' }}</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="flex justify-end mt-4">
+            <button type="submit" class="px-6 py-3 bg-brand-500 text-white rounded-xl hover:bg-brand-400 text-sm font-medium">
+                <i class="fa-solid fa-save mr-2"></i>Save Settings
+            </button>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}

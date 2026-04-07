@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white">{{ t('campaigns', 'Campaigns') }}</h1>
+            <p class="text-slate-400 mt-1">{{ t('campaigns_desc', 'Plan, execute, and track marketing campaigns') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <form method="get" class="flex items-center gap-2">
+                <input type="text" name="search" value="{{ search }}" placeholder="{{ t('search_campaigns', 'Search...') }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm w-40">
+                <select name="campaign_type" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm">
+                    <option value="">{{ t('all_types', 'All Types') }}</option>
+                    {% for ct in campaign_types %}
+                    <option value="{{ ct }}" {% if campaign_type == ct %}selected{% endif %}>{{ ct }}</option>
+                    {% endfor %}
+                </select>
+                <select name="status" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm">
+                    <option value="">{{ t('all_statuses', 'All Statuses') }}</option>
+                    <option value="Draft" {% if status == 'Draft' %}selected{% endif %}>Draft</option>
+                    <option value="Active" {% if status == 'Active' %}selected{% endif %}>Active</option>
+                    <option value="Paused" {% if status == 'Paused' %}selected{% endif %}>Paused</option>
+                    <option value="Completed" {% if status == 'Completed' %}selected{% endif %}>Completed</option>
+                </select>
+                <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold transition-all">{{ t('filter', 'Filter') }}</button>
+            </form>
+            <a href="{{ url_for('marketing.campaigns_new') }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-plus mr-2"></i>{{ t('new_campaign', 'New Campaign') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Campaigns Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('campaign', 'Campaign') }}</th>
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('type', 'Type') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('period', 'Period') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('status', 'Status') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('budget', 'Budget') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('leads', 'Leads') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('sales', 'Sales') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for camp in campaigns %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-all">
+                        <td class="py-4 px-6">
+                            <a href="{{ url_for('marketing.campaigns_view', id=camp.id) }}" class="text-brand-400 hover:text-brand-300 font-semibold">
+                                {{ camp.name }}
+                            </a>
+                            <div class="text-xs text-slate-500 mt-1">{{ camp.code }}</div>
+                        </td>
+                        <td class="py-4 px-6 text-slate-300">{{ camp.campaign_type }}</td>
+                        <td class="py-4 px-6 text-center text-slate-400">
+                            {% if camp.start_date %}
+                                {{ camp.start_date[:10] }}
+                                {% if camp.end_date %}
+                                    <span class="text-slate-600">- {{ camp.end_date[:10] }}</span>
+                                {% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-6 text-center">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {% if camp.status == 'Active' %}bg-emerald-400/20 text-emerald-400{% elif camp.status == 'Completed' %}bg-blue-400/20 text-blue-400{% elif camp.status == 'Paused' %}bg-amber-400/20 text-amber-400{% else %}bg-slate-400/20 text-slate-400{% endif %}">
+                                {{ camp.status }}
+                            </span>
+                            {% if camp.approval_state == 'Pending' %}
+                            <span class="block text-xs text-amber-400 mt-1">{{ t('awaiting_approval', 'Awaiting Approval') }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-6 text-right text-white font-semibold">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(camp.budget or 0) }}</td>
+                        <td class="py-4 px-6 text-right text-cyan-400">{{ camp.leads_generated or 0 }}</td>
+                        <td class="py-4 px-6 text-right text-emerald-400 font-semibold">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(camp.sales_generated or 0) }}</td>
+                        <td class="py-4 px-6 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <a href="{{ url_for('marketing.campaigns_view', id=camp.id) }}" class="p-2 hover:bg-white/10 rounded-lg transition-all" title="{{ t('view', 'View') }}">
+                                    <i class="fa-solid fa-eye text-brand-400"></i>
+                                </a>
+                                <a href="{{ url_for('marketing.campaigns_edit', id=camp.id) }}" class="p-2 hover:bg-white/10 rounded-lg transition-all" title="{{ t('edit', 'Edit') }}">
+                                    <i class="fa-solid fa-pen text-amber-400"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="py-16 text-center text-slate-500">
+                            <i class="fa-solid fa-bullhorn text-5xl mb-4 text-slate-600"></i>
+                            <p class="text-lg">{{ t('no_campaigns', 'No campaigns found') }}</p>
+                            <a href="{{ url_for('marketing.campaigns_new') }}" class="mt-4 inline-block px-4 py-2 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold transition-all">
+                                {{ t('create_first_campaign', 'Create your first campaign') }}
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

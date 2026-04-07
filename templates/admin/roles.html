@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - {{ get_setting('platform_name', 'WHDASH') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        {% include 'theme_variables.html' %}
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+
+{% include 'admin_sidebar.html' %}
+
+<div class="ml-64 min-h-screen">
+    {% include 'admin_header.html' %}
+
+    <main class="p-6">
+        <!-- Page Header -->
+        <div class="mb-8 flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
+                <p class="text-slate-600 dark:text-slate-400 mt-1">Manage roles, permissions, and access control</p>
+            </div>
+            <button onclick="openCreateModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                <i class="fas fa-plus mr-2"></i>Create Role
+            </button>
+        </div>
+
+        <!-- Roles Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for role in roles %}
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 bg-indigo-100 dark:bg-indigo-900 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-shield-alt text-indigo-600 dark:text-indigo-400 text-xl"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold text-slate-800 dark:text-white">{{ role.role_name }}</h3>
+                            <p class="text-sm text-slate-500">{{ role.description or 'No description' }}</p>
+                        </div>
+                    </div>
+                    {% if role.is_system %}
+                    <span class="px-2 py-1 bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 rounded-full text-xs font-medium">System</span>
+                    {% endif %}
+                </div>
+
+                <div class="flex items-center gap-4 mb-4 text-sm text-slate-500">
+                    <span><i class="fas fa-users mr-1"></i> {{ role.user_count }} users</span>
+                    <span><i class="fas fa-key mr-1"></i> {{ role.permission_count }} permissions</span>
+                </div>
+
+                {% if role.is_system %}
+                <div class="flex gap-2">
+                    <button onclick="viewRolePermissions({{ role.id }})" class="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-sm transition-colors">
+                        <i class="fas fa-eye mr-1"></i> View
+                    </button>
+                    <button disabled class="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-700 rounded-lg text-sm opacity-50 cursor-not-allowed">
+                        <i class="fas fa-edit mr-1"></i> Edit
+                    </button>
+                </div>
+                {% else %}
+                <div class="flex gap-2">
+                    <button onclick="openEditModal({{ role.id }})" class="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg text-sm transition-colors">
+                        <i class="fas fa-edit mr-1"></i> Edit
+                    </button>
+                    <button onclick="openPermissionsModal({{ role.id }})" class="flex-1 px-3 py-2 bg-blue-100 dark:bg-blue-900 hover:bg-blue-200 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-lg text-sm transition-colors">
+                        <i class="fas fa-key mr-1"></i> Permissions
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="col-span-full text-center py-12 text-slate-500">
+                <i class="fas fa-shield-alt text-4xl mb-3"></i>
+                <p>No roles found. Create your first role to get started.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </main>
+</div>
+
+<!-- Create/Edit Role Modal -->
+<div id="roleModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto m-4">
+        <div class="p-6 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h2 id="roleModalTitle" class="text-xl font-semibold text-slate-800 dark:text-white">Create Role</h2>
+            <button onclick="closeRoleModal()" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+                <i class="fas fa-times text-slate-600 dark:text-slate-400"></i>
+            </button>
+        </div>
+        <form method="post" class="p-6 space-y-4">
+            <input type="hidden" name="action" id="roleFormAction" value="create">
+            <input type="hidden" name="role_id" id="roleId" value="">
+
+            <div>
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Role Name *</label>
+                <input type="text" name="role_name" id="roleName" required
+                       class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Description</label>
+                <textarea name="description" id="roleDescription" rows="3"
+                          class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white"></textarea>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Company</label>
+                <select name="company_id" id="roleCompany"
+                        class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                    <option value="">All Companies (Global)</option>
+                    {% for company in companies %}
+                    <option value="{{ company.id }}">{{ company.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <button type="button" onclick="closeRoleModal()" class="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition-colors">
+                    Cancel
+                </button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                    Save Role
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Permissions Matrix Modal -->
+<div id="permissionsModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-6xl max-h-[90vh] overflow-hidden m-4 flex flex-col">
+        <div class="p-6 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <div>
+                <h2 class="text-xl font-semibold text-slate-800 dark:text-white">Permission Matrix</h2>
+                <p id="permissionsRoleName" class="text-sm text-slate-500"></p>
+            </div>
+            <button onclick="closePermissionsModal()" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+                <i class="fas fa-times text-slate-600 dark:text-slate-400"></i>
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-auto p-6">
+            <div class="mb-4 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="selectAllView" onchange="toggleAllView()" class="w-4 h-4 text-blue-600 rounded">
+                        <span class="text-sm">Select All View</span>
+                    </label>
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="selectAllEdit" onchange="toggleAllEdit()" class="w-4 h-4 text-blue-600 rounded">
+                        <span class="text-sm">Select All Edit</span>
+                    </label>
+                    <label class="flex items-center gap-2">
+                        <input type="checkbox" id="selectAllDelete" onchange="toggleAllDelete()" class="w-4 h-4 text-blue-600 rounded">
+                        <span class="text-sm">Select All Delete</span>
+                    </label>
+                </div>
+                <button onclick="savePermissions()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                    <i class="fas fa-save mr-2"></i> Save Permissions
+                </button>
+            </div>
+
+            <form id="permissionsForm" method="post">
+                <input type="hidden" name="action" value="update_permissions">
+                <input type="hidden" name="role_id" id="permissionsRoleId" value="">
+
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 dark:bg-slate-700/50">
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider sticky left-0 bg-slate-50 dark:bg-slate-700/50">Module</th>
+                                <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Resource</th>
+                                <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">View</th>
+                                <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Create</th>
+                                <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Edit</th>
+                                <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Delete</th>
+                                <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Approve</th>
+                                <th class="px-4 py-3 text-center text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Export</th>
+                            </tr>
+                        </thead>
+                        <tbody id="permissionsMatrixBody" class="divide-y divide-slate-200 dark:divide-slate-700">
+                            <!-- Permissions loaded dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- View Permissions Modal (for system roles) -->
+<div id="viewPermissionsModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
+        <div class="p-6 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h2 class="text-xl font-semibold text-slate-800 dark:text-white">Role Permissions</h2>
+            <button onclick="closeViewPermissionsModal()" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+                <i class="fas fa-times text-slate-600 dark:text-slate-400"></i>
+            </button>
+        </div>
+        <div class="p-6">
+            <div id="viewPermissionsList" class="space-y-2">
+                <!-- Permissions loaded dynamically -->
+            </div>
+        </div>
+    </div>
+</div>
+
+{% include 'admin_scripts.html' %}
+
+<script>
+let currentPermissions = {};
+let modules = {{ modules|tojson }};
+
+function openCreateModal() {
+    document.getElementById('roleModalTitle').textContent = 'Create Role';
+    document.getElementById('roleFormAction').value = 'create';
+    document.getElementById('roleId').value = '';
+    document.getElementById('roleName').value = '';
+    document.getElementById('roleDescription').value = '';
+    document.getElementById('roleCompany').value = '';
+    document.getElementById('roleModal').classList.remove('hidden');
+    document.getElementById('roleModal').classList.add('flex');
+}
+
+function openEditModal(roleId) {
+    document.getElementById('roleModalTitle').textContent = 'Edit Role';
+    document.getElementById('roleFormAction').value = 'edit';
+    document.getElementById('roleId').value = roleId;
+
+    // Fetch role data
+    fetch(`/admin/api/roles/${roleId}`)
+        .then(r => r.json())
+        .then(role => {
+            document.getElementById('roleName').value = role.role_name || '';
+            document.getElementById('roleDescription').value = role.description || '';
+            document.getElementById('roleCompany').value = role.company_id || '';
+        });
+
+    document.getElementById('roleModal').classList.remove('hidden');
+    document.getElementById('roleModal').classList.add('flex');
+}
+
+function closeRoleModal() {
+    document.getElementById('roleModal').classList.add('hidden');
+    document.getElementById('roleModal').classList.remove('flex');
+}
+
+function openPermissionsModal(roleId) {
+    document.getElementById('permissionsRoleId').value = roleId;
+
+    // Fetch role name and permissions
+    Promise.all([
+        fetch(`/admin/api/roles/${roleId}`).then(r => r.json()),
+        fetch(`/admin/api/roles/${roleId}/permissions`).then(r => r.json())
+    ]).then(([role, data]) => {
+        document.getElementById('permissionsRoleName').textContent = role.role_name;
+        currentPermissions = data.permissions || {};
+        buildPermissionsMatrix();
+    });
+
+    document.getElementById('permissionsModal').classList.remove('hidden');
+    document.getElementById('permissionsModal').classList.add('flex');
+}
+
+function closePermissionsModal() {
+    document.getElementById('permissionsModal').classList.add('hidden');
+    document.getElementById('permissionsModal').classList.remove('flex');
+}
+
+function viewRolePermissions(roleId) {
+    fetch(`/admin/api/roles/${roleId}/permissions`)
+        .then(r => r.json())
+        .then(data => {
+            const list = document.getElementById('viewPermissionsList');
+            const perms = data.permissions || [];
+            if (perms.length > 0) {
+                list.innerHTML = perms.map(p => `
+                    <div class="flex items-center gap-2 p-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                        <i class="fas fa-check-circle text-green-600"></i>
+                        <span class="text-slate-800 dark:text-white">${p}</span>
+                    </div>
+                `).join('');
+            } else {
+                list.innerHTML = '<p class="text-slate-500">No permissions assigned.</p>';
+            }
+        });
+
+    document.getElementById('viewPermissionsModal').classList.remove('hidden');
+    document.getElementById('viewPermissionsModal').classList.add('flex');
+}
+
+function closeViewPermissionsModal() {
+    document.getElementById('viewPermissionsModal').classList.add('hidden');
+    document.getElementById('viewPermissionsModal').classList.remove('flex');
+}
+
+function buildPermissionsMatrix() {
+    const tbody = document.getElementById('permissionsMatrixBody');
+    let html = '';
+
+    const actionColumns = ['view', 'create', 'edit', 'delete', 'approve', 'export'];
+
+    for (const [moduleKey, module] of Object.entries(modules)) {
+        const resources = module.resources || {};
+        for (const [resourceKey, actions] of Object.entries(resources)) {
+            const rowPerms = currentPermissions[`${moduleKey}.${resourceKey}`] || [];
+            html += `<tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">`;
+            html += `<td class="px-4 py-3 font-medium text-slate-800 dark:text-white sticky left-0 bg-white dark:bg-slate-800">${module.label}</td>`;
+            html += `<td class="px-4 py-3 text-slate-600 dark:text-slate-400">${resourceKey.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</td>`;
+
+            for (const action of actionColumns) {
+                const hasAction = actions.includes(action);
+                const isChecked = rowPerms.includes(action);
+                const disabled = !hasAction ? 'disabled' : '';
+                const checked = isChecked ? 'checked' : '';
+                const opacity = !hasAction ? 'opacity-50' : '';
+
+                html += `<td class="px-4 py-3 text-center">
+                    <input type="checkbox"
+                           name="perm_${moduleKey}_${resourceKey}_${action}"
+                           value="1"
+                           ${checked} ${disabled}
+                           class="w-4 h-4 text-blue-600 rounded border-slate-300 perm-checkbox ${opacity}">
+                </td>`;
+            }
+            html += `</tr>`;
+        }
+    }
+
+    tbody.innerHTML = html;
+}
+
+function toggleAllView() {
+    const checked = document.getElementById('selectAllView').checked;
+    document.querySelectorAll('input[name$="_view"]').forEach(cb => cb.checked = checked);
+}
+
+function toggleAllEdit() {
+    const checked = document.getElementById('selectAllEdit').checked;
+    document.querySelectorAll('input[name$="_edit"]').forEach(cb => cb.checked = checked);
+}
+
+function toggleAllDelete() {
+    const checked = document.getElementById('selectAllDelete').checked;
+    document.querySelectorAll('input[name$="_delete"]').forEach(cb => cb.checked = checked);
+}
+
+function savePermissions() {
+    const form = document.getElementById('permissionsForm');
+    const formData = new FormData(form);
+
+    // Convert form data to permissions array
+    const permissions = [];
+    for (const [key, value] of formData.entries()) {
+        if (key.startsWith('perm_') && value === '1') {
+            const parts = key.split('_');
+            if (parts.length >= 4) {
+                const module = parts[1];
+                const resource = parts[2];
+                const action = parts.slice(3).join('_');
+                permissions.push(`${module}.${resource}.${action}`);
+            }
+        }
+    }
+
+    // Submit via fetch
+    fetch('/admin/api/roles/update-permissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            role_id: document.getElementById('permissionsRoleId').value,
+            permissions: permissions
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            alert('Permissions saved successfully!');
+            closePermissionsModal();
+        } else {
+            alert('Error saving permissions: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(err => {
+        alert('Error saving permissions: ' + err.message);
+    });
+}
+
+// Close modals on escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeRoleModal();
+        closePermissionsModal();
+        closeViewPermissionsModal();
+    }
+});
+</script>
+</body>
+</html>

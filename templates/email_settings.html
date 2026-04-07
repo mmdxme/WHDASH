@@ -1,0 +1,645 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-6 fade-in max-w-5xl mx-auto">
+    {# Header #}
+    <div class="flex items-center gap-4">
+        <a href="{{ url_for('email_manager.email_dashboard') }}" class="p-2.5 xl:p-3 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-brand-400">Email Management</p>
+            <h1 class="mt-1 text-xl xl:text-2xl font-extrabold tracking-tight text-white">Email Account Settings</h1>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 xl:gap-8">
+        {# Connected Accounts Section #}
+        <div class="glass-panel rounded-2xl xl:rounded-3xl border border-white/5 p-5 xl:p-6">
+            <h2 class="text-base xl:text-lg font-bold text-white mb-1">
+                <i class="fa-solid fa-user-check mr-2 text-emerald-400"></i>Connected Email Accounts
+            </h2>
+            <p class="text-xs text-slate-500 mb-5 xl:mb-6">Manage your connected email accounts. Set a default account for sending emails.</p>
+
+            {% if email_accounts %}
+            <div class="space-y-3">
+                {% for acc in email_accounts %}
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:border-white/10 transition-all gap-4">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-2xl shrink-0 {% if acc.account_type == 'gmail' %}bg-gradient-to-br from-[#4285F4] to-[#34A853]{% else %}bg-gradient-to-br from-brand-600 to-purple-600{% endif %} flex items-center justify-center text-white">
+                            {% if acc.account_type == 'gmail' %}
+                            <i class="fa-brands fa-google text-xl"></i>
+                            {% else %}
+                            <i class="fa-solid fa-envelope text-xl"></i>
+                            {% endif %}
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <p class="text-sm font-bold text-white truncate">{{ acc.email_address }}</p>
+                                {% if acc.is_default %}
+                                <span class="rounded-full bg-brand-500/20 border border-brand-500/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-brand-400">Default</span>
+                                {% endif %}
+                            </div>
+                            <p class="text-xs text-slate-500 mt-0.5">
+                                {% if acc.account_type == 'gmail' %}Google Gmail Account{% else %}SMTP/IMAP Account{% endif %}
+                                • Updated {{ acc.updated_at if acc.updated_at else 'Never' }}
+                            </p>
+                            {# SMTP/IMAP Info for SMTP accounts #}
+                            {% if acc.account_type == 'smtp' %}
+                            <p class="text-[10px] text-slate-600 mt-1">
+                                <i class="fa-solid fa-server mr-1"></i>{{ acc.smtp_host }}:{{ acc.smtp_port }}
+                                {% if acc.use_tls %}<span class="text-emerald-500 ml-1"><i class="fa-solid fa-lock"></i> TLS</span>{% endif %}
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                        {# Test Connection Button #}
+                        {% if acc.account_type == 'smtp' %}
+                        <button type="button" onclick="testAccountConnection({{ acc.id }})"
+                                class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                            <i class="fa-solid fa-wifi mr-1"></i>Test
+                        </button>
+                        {% endif %}
+                        {# Set Default Button #}
+                        {% if not acc.is_default %}
+                        <form method="POST" action="{{ url_for('email_manager.email_set_default', account_id=acc.id) }}" class="inline">
+                            <button type="submit" class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                                <i class="fa-solid fa-star mr-1"></i>Set Default
+                            </button>
+                        </form>
+                        {% endif %}
+                        {# Disconnect/Delete Button #}
+                        {% if acc.account_type == 'gmail' %}
+                        <form method="POST" action="{{ url_for('email_manager.email_disconnect_gmail') }}" class="inline" onsubmit="return confirm('Disconnect this Gmail account?');">
+                            <button type="submit" class="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-400 transition-all hover:bg-red-500/20">
+                                <i class="fa-solid fa-unlink mr-1"></i>Disconnect
+                            </button>
+                        </form>
+                        {% else %}
+                        <form method="POST" action="{{ url_for('email_manager.email_delete_account', account_id=acc.id) }}" class="inline" onsubmit="return confirm('Delete this email account?');">
+                            <button type="submit" class="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-red-400 transition-all hover:bg-red-500/20">
+                                <i class="fa-solid fa-trash mr-1"></i>Delete
+                            </button>
+                        </form>
+                        {% endif %}
+                        {# Notification Settings Button #}
+                        <button type="button" onclick="openNotificationSettings({{ acc.id }}, '{{ acc.email_address }}')"
+                                class="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-amber-400 transition-all hover:bg-amber-500/20">
+                            <i class="fa-solid fa-bell mr-1"></i>Notifications
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-10 xl:py-12 border border-dashed border-white/10 rounded-2xl">
+                <div class="w-14 h-14 xl:w-16 xl:h-16 rounded-2xl bg-white/5 flex items-center justify-center mx-auto mb-4">
+                    <i class="fa-solid fa-inbox text-2xl text-slate-600"></i>
+                </div>
+                <p class="text-sm font-bold text-slate-400">No email accounts connected</p>
+                <p class="text-xs text-slate-500 mt-1">Add a Gmail or SMTP account below</p>
+            </div>
+            {% endif %}
+        </div>
+
+        {# Account Types Grid #}
+        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            {# Gmail OAuth Section #}
+            <div class="glass-panel rounded-2xl xl:rounded-3xl border border-white/5 p-5 xl:p-6">
+                <h2 class="text-base xl:text-lg font-bold text-white mb-1">
+                    <i class="fa-brands fa-google mr-2 text-[#4285F4]"></i>Connect Gmail Account
+                </h2>
+                <p class="text-xs text-slate-500 mb-5 xl:mb-6">Sign in with Google OAuth to connect your Gmail account securely.</p>
+
+                {% if gmail_connected %}
+                <div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-center">
+                    <i class="fa-solid fa-circle-check text-3xl text-emerald-400 mb-2"></i>
+                    <p class="text-sm font-bold text-emerald-400">Gmail Connected</p>
+                    <p class="text-xs text-emerald-400/70 mt-1">Your Gmail account is linked and ready to use.</p>
+                    <form method="POST" action="{{ url_for('email_manager.email_disconnect_gmail') }}" class="mt-4" onsubmit="return confirm('Disconnect Gmail account?');">
+                        <button type="submit" class="rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-red-400 transition-all hover:bg-red-500/20">
+                            <i class="fa-solid fa-unlink mr-1"></i>Disconnect Gmail
+                        </button>
+                    </form>
+                </div>
+                {% elif not gmail_configured %}
+                <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20">
+                    <div class="flex items-start gap-3">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-400 mt-0.5"></i>
+                        <div>
+                            <p class="text-sm font-bold text-amber-400">Gmail OAuth Not Configured</p>
+                            <p class="text-xs text-amber-400/70 mt-1">An administrator needs to configure Gmail OAuth settings before you can connect.</p>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="space-y-4">
+                    <div class="p-4 rounded-2xl bg-[#4285F4]/10 border border-[#4285F4]/20">
+                        <p class="text-xs text-slate-300">
+                            <i class="fa-solid fa-info-circle text-[#4285F4] mr-1"></i>
+                            Click below to authorize with your Google account. You'll be redirected to Google's consent screen.
+                        </p>
+                    </div>
+                    <a href="{{ url_for('email_manager.email_connect_gmail') }}" class="flex items-center justify-center gap-3 rounded-xl bg-[#4285F4] px-6 py-4 text-sm font-bold text-white transition-all hover:bg-[#3367D6]">
+                        <i class="fa-brands fa-google text-xl"></i>
+                        Connect Google Account
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+
+            {# SMTP/IMAP Account Section #}
+            <div class="glass-panel rounded-2xl xl:rounded-3xl border border-white/5 p-5 xl:p-6">
+                <h2 class="text-base xl:text-lg font-bold text-white mb-1">
+                    <i class="fa-solid fa-server mr-2 text-purple-400"></i>Add SMTP/IMAP Account
+                </h2>
+                <p class="text-xs text-slate-500 mb-5 xl:mb-6">Connect your company email server using SMTP and IMAP protocols.</p>
+
+                <form method="POST" action="{{ url_for('email_manager.email_add_smtp') }}" class="space-y-4" id="smtp-form">
+                    <div>
+                        <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Email Address</label>
+                        <input type="email" name="email_address" required
+                               class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                               placeholder="your.email@company.com">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">SMTP Host</label>
+                            <input type="text" name="smtp_host" required
+                                   class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                                   placeholder="smtp.company.com">
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">SMTP Port</label>
+                            <input type="number" name="smtp_port" required value="587"
+                                   class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                                   placeholder="587">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Username</label>
+                            <input type="text" name="smtp_username" required
+                                   class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                                   placeholder="your.email@company.com">
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Password</label>
+                            <input type="password" name="smtp_password" required
+                                   class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                                   placeholder="App password or email password">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">IMAP Host <span class="text-slate-600">(Optional)</span></label>
+                            <input type="text" name="imap_host"
+                                   class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                                   placeholder="imap.company.com">
+                        </div>
+                        <div>
+                            <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">IMAP Port <span class="text-slate-600">(Optional)</span></label>
+                            <input type="number" name="imap_port" value="993"
+                                   class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                                   placeholder="993">
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" name="use_tls" id="use_tls" value="1" checked
+                               class="h-5 w-5 rounded border-white/20 bg-slate-900/70 text-brand-500 outline-none focus:ring-2 focus:ring-brand-500/30">
+                        <label for="use_tls" class="text-xs font-medium text-slate-300">Use TLS/SSL encryption (recommended)</label>
+                    </div>
+
+                    {# Test Connection Button #}
+                    <div class="flex items-center gap-3 pt-2">
+                        <button type="button" onclick="testNewAccountConnection()"
+                                class="rounded-xl border border-brand-500/30 bg-brand-500/10 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-brand-400 transition-all hover:bg-brand-500/20">
+                            <i class="fa-solid fa-wifi mr-1"></i>Test Connection
+                        </button>
+                        <span class="text-[10px] text-slate-500" id="test-result"></span>
+                    </div>
+
+                    <div class="pt-2">
+                        <button type="submit" class="w-full rounded-xl bg-brand-600 px-6 py-3.5 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                            <i class="fa-solid fa-plus mr-2"></i>Add SMTP Account
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {# Gmail OAuth Configuration (Admin Only) #}
+        {% if can_manage_settings %}
+        <div class="glass-panel rounded-2xl xl:rounded-3xl border border-white/5 p-5 xl:p-6">
+            <h2 class="text-base xl:text-lg font-bold text-white mb-1">
+                <i class="fa-solid fa-shield-halved mr-2 text-amber-400"></i>Gmail OAuth Configuration
+            </h2>
+            <p class="text-xs text-slate-500 mb-5 xl:mb-6">Administrator settings for Gmail OAuth. These are required to enable Gmail connectivity.</p>
+
+            <form method="POST" action="{{ url_for('email_manager.email_settings_save') }}" class="space-y-4">
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                        <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Gmail Client ID</label>
+                        <input type="text" name="gmail_client_id" value="{{ email_settings.gmail_client_id or '' }}"
+                               class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                               placeholder="123456789-abcdefghijklmnop.apps.googleusercontent.com">
+                    </div>
+                    <div>
+                        <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">Gmail Client Secret</label>
+                        <input type="password" name="gmail_client_secret" value=""
+                               class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                               placeholder="Leave empty to keep current">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-slate-500">OAuth Redirect URI</label>
+                    <input type="text" name="gmail_redirect_uri" value="{{ email_settings.gmail_redirect_uri or '' }}"
+                           class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                           placeholder="https://your-domain.com/email/oauth/callback">
+                    <p class="mt-1.5 text-[10px] text-slate-500">
+                        <i class="fa-solid fa-info-circle mr-1"></i>
+                        The redirect URI must be: <code class="text-brand-400">{{ request.url_root }}email/oauth/callback</code>
+                    </p>
+                </div>
+
+                <div class="flex items-center justify-between pt-4 border-t border-white/5">
+                    <p class="text-[10px] text-slate-500">
+                        <i class="fa-solid fa-clock mr-1"></i>Last updated: {{ email_settings.updated_at or 'Never' }}
+                    </p>
+                    <button type="submit" class="rounded-xl bg-brand-600 px-8 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                        <i class="fa-solid fa-floppy-disk mr-2"></i>Save OAuth Settings
+                    </button>
+                </div>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Notification Settings Modal -->
+<div id="notification-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeNotificationSettings()"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg glass-panel rounded-2xl border border-white/10 p-6">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h3 class="text-lg font-bold text-white">
+                    <i class="fa-solid fa-bell mr-2 text-amber-400"></i>Email Notifications
+                </h3>
+                <p class="text-xs text-slate-500 mt-1" id="notif-account-email"></p>
+            </div>
+            <button onclick="closeNotificationSettings()" class="p-2 rounded-xl hover:bg-white/10 text-slate-400 hover:text-white transition-all">
+                <i class="fa-solid fa-xmark text-lg"></i>
+            </button>
+        </div>
+
+        <div class="space-y-5">
+            <!-- Enable Notifications Toggle -->
+            <div class="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/5">
+                <div>
+                    <p class="text-sm font-bold text-white">Enable Notifications</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Get alerts for new emails</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="notif_enabled" class="sr-only peer" onchange="updateNotificationFormState()">
+                    <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-500"></div>
+                </label>
+            </div>
+
+            <!-- Notification Sound -->
+            <div class="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/5 notif-field">
+                <div>
+                    <p class="text-sm font-bold text-white">Notification Sound</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Play sound for new emails</p>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="notif_sound_enabled" class="sr-only peer">
+                    <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-brand-500"></div>
+                </label>
+            </div>
+
+            <!-- Filter by Sender -->
+            <div class="notif-field">
+                <label class="mb-2 block text-xs font-black uppercase tracking-widest text-slate-500">
+                    <i class="fa-solid fa-user mr-1"></i>Notify from Senders (comma-separated)
+                </label>
+                <input type="text" id="notif_from_senders"
+                       class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                       placeholder="john@example.com, boss@company.com">
+                <p class="mt-1.5 text-[10px] text-slate-600">Leave empty to notify for all senders</p>
+            </div>
+
+            <!-- Filter by Subject Keywords -->
+            <div class="notif-field">
+                <label class="mb-2 block text-xs font-black uppercase tracking-widest text-slate-500">
+                    <i class="fa-solid fa-tag mr-1"></i>Subject Keywords (comma-separated)
+                </label>
+                <input type="text" id="notif_subject_keywords"
+                       class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"
+                       placeholder="urgent, invoice, meeting">
+                <p class="mt-1.5 text-[10px] text-slate-600">Only notify if subject contains these words</p>
+            </div>
+
+            <!-- Browser Permission -->
+            <div class="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
+                    <div>
+                        <p class="text-xs font-bold text-amber-400">Browser Permission Required</p>
+                        <p class="text-[10px] text-amber-400/70 mt-0.5">Make sure to enable notifications in your browser settings.</p>
+                    </div>
+                    <button type="button" onclick="requestNotificationPermission()" class="ml-auto rounded-lg bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 text-[10px] font-bold text-amber-400 hover:bg-amber-500/30 transition-all">
+                        <i class="fa-solid fa-desktop mr-1"></i>Enable
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-3 mt-6 pt-4 border-t border-white/5">
+            <button onclick="closeNotificationSettings()" class="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-xs font-bold text-slate-300 transition-all hover:bg-white/10">
+                Cancel
+            </button>
+            <button onclick="saveNotificationSettings()" class="flex-1 rounded-xl bg-brand-600 px-4 py-3 text-xs font-bold text-white transition-all hover:bg-brand-500">
+                <i class="fa-solid fa-floppy-disk mr-2"></i>Save Settings
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// Test connection for existing SMTP account
+async function testAccountConnection(accountId) {
+    const resultEl = document.getElementById('test-result') || createTestResultElement();
+
+    try {
+        resultEl.textContent = 'Testing connection...';
+        resultEl.className = 'text-[10px] text-slate-400';
+
+        const response = await fetch('{{ url_for("email_manager.email_test_connection") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'account_id=' + accountId
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            resultEl.innerHTML = '<i class="fa-solid fa-check text-emerald-400 mr-1"></i>' + data.message;
+            resultEl.className = 'text-[10px] text-emerald-400';
+            Swal.fire({
+                icon: 'success',
+                title: 'Connection Successful',
+                text: data.message,
+                background: '#1e293b',
+                color: '#fff',
+            });
+        } else {
+            resultEl.innerHTML = '<i class="fa-solid fa-times text-red-400 mr-1"></i>Failed';
+            resultEl.className = 'text-[10px] text-red-400';
+            Swal.fire({
+                icon: 'error',
+                title: 'Connection Failed',
+                text: data.message || 'Could not connect to email server.',
+                background: '#1e293b',
+                color: '#fff',
+            });
+        }
+    } catch (error) {
+        resultEl.innerHTML = '<i class="fa-solid fa-times text-red-400 mr-1"></i>Error';
+        resultEl.className = 'text-[10px] text-red-400';
+        Swal.fire({
+            icon: 'error',
+            title: 'Test Error',
+            text: 'An unexpected error occurred while testing the connection.',
+            background: '#1e293b',
+            color: '#fff',
+        });
+    }
+}
+
+// Test connection for new account (before saving)
+async function testNewAccountConnection() {
+    const form = document.getElementById('smtp-form');
+    const resultEl = document.getElementById('test-result') || createTestResultElement();
+
+    const emailAddress = form.querySelector('[name="email_address"]').value;
+    const smtpHost = form.querySelector('[name="smtp_host"]').value;
+    const smtpPort = form.querySelector('[name="smtp_port"]').value;
+    const smtpUsername = form.querySelector('[name="smtp_username"]').value;
+    const smtpPassword = form.querySelector('[name="smtp_password"]').value;
+    const imapHost = form.querySelector('[name="imap_host"]').value;
+    const imapPort = form.querySelector('[name="imap_port"]').value;
+    const useTls = form.querySelector('[name="use_tls"]').checked ? '1' : '0';
+
+    if (!smtpHost || !smtpPort || !smtpUsername || !smtpPassword) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Missing Fields',
+            text: 'Please fill in all required fields before testing.',
+            background: '#1e293b',
+            color: '#fff',
+        });
+        return;
+    }
+
+    try {
+        resultEl.textContent = 'Testing connection...';
+        resultEl.className = 'text-[10px] text-slate-400';
+
+        const formData = new URLSearchParams();
+        formData.append('email_address', emailAddress);
+        formData.append('smtp_host', smtpHost);
+        formData.append('smtp_port', smtpPort);
+        formData.append('smtp_username', smtpUsername);
+        formData.append('smtp_password', smtpPassword);
+        formData.append('imap_host', imapHost);
+        formData.append('imap_port', imapPort);
+        formData.append('use_tls', useTls);
+
+        const response = await fetch('{{ url_for("email_manager.email_test_connection") }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formData.toString()
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            resultEl.innerHTML = '<i class="fa-solid fa-check text-emerald-400 mr-1"></i>' + data.message;
+            resultEl.className = 'text-[10px] text-emerald-400';
+            Swal.fire({
+                icon: 'success',
+                title: 'Connection Successful',
+                text: data.message,
+                background: '#1e293b',
+                color: '#fff',
+            });
+        } else {
+            resultEl.innerHTML = '<i class="fa-solid fa-times text-red-400 mr-1"></i>Failed';
+            resultEl.className = 'text-[10px] text-red-400';
+            Swal.fire({
+                icon: 'error',
+                title: 'Connection Failed',
+                text: data.message || 'Could not connect to email server.',
+                background: '#1e293b',
+                color: '#fff',
+            });
+        }
+    } catch (error) {
+        resultEl.innerHTML = '<i class="fa-solid fa-times text-red-400 mr-1"></i>Error';
+        resultEl.className = 'text-[10px] text-red-400';
+        Swal.fire({
+            icon: 'error',
+            title: 'Test Error',
+            text: 'An unexpected error occurred while testing the connection.',
+            background: '#1e293b',
+            color: '#fff',
+        });
+    }
+}
+
+function createTestResultElement() {
+    const form = document.getElementById('smtp-form');
+    const resultEl = document.createElement('span');
+    resultEl.id = 'test-result';
+    resultEl.className = 'text-[10px] text-slate-500';
+    form.appendChild(resultEl);
+    return resultEl;
+}
+
+// Notification Settings Functions
+let currentNotificationAccountId = null;
+
+async function openNotificationSettings(accountId, emailAddress) {
+    currentNotificationAccountId = accountId;
+
+    // Fetch current settings
+    try {
+        const response = await fetch(`/email/notifications/settings/${accountId}`);
+        const data = await response.json();
+
+        document.getElementById('notif-account-email').textContent = emailAddress;
+        document.getElementById('notif_enabled').checked = data.notifications_enabled != 0;
+        document.getElementById('notif_from_senders').value = data.notify_from_senders || '';
+        document.getElementById('notif_subject_keywords').value = data.notify_subject_keywords || '';
+        document.getElementById('notif_sound_enabled').checked = data.notify_sound_enabled != 0;
+
+        updateNotificationFormState();
+    } catch (error) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Could not load notification settings.',
+            background: '#1e293b',
+            color: '#fff',
+        });
+        return;
+    }
+
+    document.getElementById('notification-modal').classList.remove('hidden');
+}
+
+function closeNotificationSettings() {
+    document.getElementById('notification-modal').classList.add('hidden');
+    currentNotificationAccountId = null;
+}
+
+function updateNotificationFormState() {
+    const enabled = document.getElementById('notif_enabled').checked;
+    const formFields = document.querySelectorAll('#notification-modal .notif-field');
+    formFields.forEach(el => {
+        el.style.opacity = enabled ? '1' : '0.5';
+        el.style.pointerEvents = enabled ? 'auto' : 'none';
+    });
+}
+
+async function saveNotificationSettings() {
+    if (!currentNotificationAccountId) return;
+
+    const formData = new URLSearchParams();
+    formData.append('notifications_enabled', document.getElementById('notif_enabled').checked ? '1' : '0');
+    formData.append('notify_from_senders', document.getElementById('notif_from_senders').value);
+    formData.append('notify_subject_keywords', document.getElementById('notif_subject_keywords').value);
+    formData.append('notify_sound_enabled', document.getElementById('notif_sound_enabled').checked ? '1' : '0');
+
+    try {
+        const response = await fetch(`/email/notifications/settings/${currentNotificationAccountId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData.toString()
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Saved',
+                text: 'Notification settings have been saved.',
+                background: '#1e293b',
+                color: '#fff',
+                timer: 1500,
+                showConfirmButton: false
+            });
+            closeNotificationSettings();
+        }
+    } catch (error) {
+        Swal.fire({
+            icon: 'error',
+            title: 'Error',
+            text: 'Failed to save notification settings.',
+            background: '#1e293b',
+            color: '#fff',
+        });
+    }
+}
+
+// Request browser notification permission
+async function requestNotificationPermission() {
+    if (!('Notification' in window)) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Not Supported',
+            text: 'Your browser does not support notifications.',
+            background: '#1e293b',
+            color: '#fff',
+        });
+        return;
+    }
+
+    if (Notification.permission === 'granted') {
+        return;
+    }
+
+    if (Notification.permission === 'denied') {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Permission Denied',
+            text: 'Notifications are blocked. Please enable them in your browser settings.',
+            background: '#1e293b',
+            color: '#fff',
+        });
+        return;
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+        Swal.fire({
+            icon: 'success',
+            title: 'Notifications Enabled',
+            text: 'You will now receive browser notifications for new emails.',
+            background: '#1e293b',
+            color: '#fff',
+        });
+    }
+}
+</script>
+{% endblock %}

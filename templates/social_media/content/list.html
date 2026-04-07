@@ -1,0 +1,107 @@
+{% extends "social_media/base_social.html" %}
+
+{% block page_actions %}
+<a href="{{ url_for('social_media.content_new') }}" class="btn-social btn-social-primary">
+    <i class="fa-solid fa-plus"></i> New Content
+</a>
+{% endblock %}
+
+{% block page_content %}
+<!-- Filters -->
+<div class="filter-bar flex flex-wrap gap-4 items-center">
+    <div class="flex-1 min-w-[200px]">
+        <input type="text" id="search" placeholder="Search content..." value="{{ search }}" 
+               class="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
+    </div>
+    <select name="status" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
+        <option value="">All Status</option>
+        <option value="Idea" {% if status_filter == 'Idea' %}selected{% endif %}>Idea</option>
+        <option value="In Production" {% if status_filter == 'In Production' %}selected{% endif %}>In Production</option>
+        <option value="Ready for Review" {% if status_filter == 'Ready for Review' %}selected{% endif %}>Ready for Review</option>
+        <option value="Approved" {% if status_filter == 'Approved' %}selected{% endif %}>Approved</option>
+        <option value="Published" {% if status_filter == 'Published' %}selected{% endif %}>Published</option>
+    </select>
+    <a href="{{ url_for('social_media.content_calendar') }}" class="btn-social btn-social-secondary">
+        <i class="fa-solid fa-calendar"></i> Calendar
+    </a>
+</div>
+
+<!-- Content Table -->
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Title</th>
+                <th>Platform</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in content_items %}
+            <tr>
+                <td><code class="text-brand-400 text-xs">{{ item.content_code }}</code></td>
+                <td>
+                    <div class="font-semibold text-white">{{ item.internal_title[:40] }}</div>
+                    {% if item.display_title %}<div class="text-xs text-slate-400">{{ item.display_title[:30] }}</div>{% endif %}
+                </td>
+                <td>
+                    <span class="platform-badge platform-{{ item.target_platform.lower() if item.target_platform else 'general' }}">
+                        {{ item.target_platform or '-' }}
+                    </span>
+                </td>
+                <td>{{ item.content_type or '-' }}</td>
+                <td>
+                    <span class="status-badge status-{{ item.production_status.lower().replace(' ', '-') if item.production_status else 'draft' }}">
+                        {{ item.production_status or 'Draft' }}
+                    </span>
+                </td>
+                <td>
+                    <span class="px-2 py-1 rounded text-xs font-bold {% if item.priority == 1 %}bg-red-500/20 text-red-400{% elif item.priority == 2 %}bg-orange-500/20 text-orange-400{% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                        P{{ item.priority }}
+                    </span>
+                </td>
+                <td>{{ item.created_at.strftime('%Y-%m-%d') if item.created_at else '-' }}</td>
+                <td>
+                    <div class="flex items-center gap-2">
+                        <a href="{{ url_for('social_media.content_view', id=item.id) }}" class="p-2 hover:bg-white/10 rounded-lg" title="View">
+                            <i class="fa-solid fa-eye text-brand-400"></i>
+                        </a>
+                        <a href="{{ url_for('social_media.content_edit', id=item.id) }}" class="p-2 hover:bg-white/10 rounded-lg" title="Edit">
+                            <i class="fa-solid fa-pen text-slate-400"></i>
+                        </a>
+                    </div>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="8" class="text-center py-8 text-slate-400">
+                    <div class="empty-state-icon"><i class="fa-solid fa-file-alt"></i></div>
+                    <p>No content items found</p>
+                    <a href="{{ url_for('social_media.content_new') }}" class="btn-social btn-social-primary mt-4">Create First Content</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if total > per_page %}
+<div class="flex items-center justify-between mt-4">
+    <div class="text-sm text-slate-400">Showing {{ (page-1)*per_page + 1 }} to {{ [page*per_page, total]|min }} of {{ total }}</div>
+    <div class="flex items-center gap-2">
+        {% if page > 1 %}
+        <a href="?page={{ page-1 }}&search={{ search }}&status={{ status_filter }}" class="btn-social btn-social-secondary">Previous</a>
+        {% endif %}
+        <span class="text-white px-4">Page {{ page }}</span>
+        {% if page * per_page < total %}
+        <a href="?page={{ page+1 }}&search={{ search }}&status={{ status_filter }}" class="btn-social btn-social-secondary">Next</a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

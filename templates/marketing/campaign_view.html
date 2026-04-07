@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1400px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="flex items-center justify-between mb-8">
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('marketing.campaigns_list') }}" class="p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+                <i class="fa-solid fa-arrow-left text-slate-400"></i>
+            </a>
+            <div>
+                <h1 class="text-3xl font-extrabold text-white">{{ campaign.name }}</h1>
+                <p class="text-slate-400 mt-1">{{ campaign.code }} | {{ campaign.campaign_type }}</p>
+            </div>
+            <span class="px-4 py-2 rounded-full text-sm font-bold {% if campaign.status == 'Active' %}bg-emerald-400/20 text-emerald-400{% elif campaign.status == 'Completed' %}bg-blue-400/20 text-blue-400{% elif campaign.status == 'Paused' %}bg-amber-400/20 text-amber-400{% else %}bg-slate-400/20 text-slate-400{% endif %}">
+                {{ campaign.status }}
+            </span>
+        </div>
+        <div class="flex items-center gap-3">
+            {% if campaign.approval_state == 'Pending' %}
+            <form method="POST" action="{{ url_for('marketing.campaigns_approve', id=campaign.id) }}">
+                <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold transition-all">
+                    <i class="fa-solid fa-check mr-2"></i>{{ t('approve_campaign', 'Approve Campaign') }}
+                </button>
+            </form>
+            {% endif %}
+            <a href="{{ url_for('marketing.campaigns_edit', id=campaign.id) }}" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-pen mr-2"></i>{{ t('edit_campaign', 'Edit Campaign') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Campaign KPI Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-8">
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-white">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(campaign.budget or 0) }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('budget', 'Budget') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-white">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(campaign.actual_cost or 0) }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('actual_cost', 'Actual Cost') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-cyan-400">{{ campaign.leads_generated or 0 }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('leads', 'Leads') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-amber-400">{{ campaign.inquiries_generated or 0 }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('inquiries', 'Inquiries') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-emerald-400">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(campaign.sales_generated or 0) }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('sales', 'Sales') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-purple-400">{{ campaign.new_customers_acquired or 0 }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('new_customers', 'New Customers') }}</div>
+        </div>
+    </div>
+
+    <!-- Campaign Details Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('campaign_details', 'Campaign Details') }}</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-slate-400">{{ t('period', 'Period') }}</span>
+                    <span class="text-white">{{ campaign.start_date[:10] if campaign.start_date else '-' }} - {{ campaign.end_date[:10] if campaign.end_date else '-' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">{{ t('owner', 'Owner') }}</span>
+                    <span class="text-white">{{ campaign.owner_name or '-' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">{{ t('target_market', 'Target Market') }}</span>
+                    <span class="text-white">{{ campaign.target_market or '-' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">{{ t('brand', 'Brand') }}</span>
+                    <span class="text-white">{{ campaign.brand_name or '-' }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('performance_metrics', 'Performance Metrics') }}</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-slate-400">{{ t('roi', 'ROI') }}</span>
+                    <span class="text-emerald-400 font-bold">
+                        {% if campaign.actual_cost > 0 %}
+                            {{ "%.1f"|format((campaign.sales_generated - campaign.actual_cost) / campaign.actual_cost * 100) }}%
+                        {% else %}0%{% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">{{ t('cost_per_lead', 'Cost/Lead') }}</span>
+                    <span class="text-cyan-400 font-bold">
+                        {% if campaign.leads_generated > 0 %}
+                            {{ user_preferences.currency_symbol or '$' }}{{ "%.2f"|format(campaign.actual_cost / campaign.leads_generated) }}
+                        {% else %}{{ user_preferences.currency_symbol or '$' }}0{% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">{{ t('conversion_rate', 'Conversion Rate') }}</span>
+                    <span class="text-amber-400 font-bold">
+                        {% if campaign.leads_generated > 0 and campaign.new_customers_acquired > 0 %}
+                            {{ "%.1f"|format(campaign.new_customers_acquired / campaign.leads_generated * 100) }}%
+                        {% else %}0%{% endif %}
+                    </span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">{{ t('profit', 'Profit') }}</span>
+                    <span class="text-emerald-400 font-bold">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(campaign.profit_generated or 0) }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('channels', 'Channels') }}</h3>
+            {% if camp_channels %}
+            <div class="space-y-2">
+                {% for ch in camp_channels %}
+                <div class="flex items-center justify-between p-2 bg-white/5 rounded-xl">
+                    <span class="text-white">{{ ch.channel_name }}</span>
+                    <span class="text-slate-400 text-sm">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(ch.budget_allocated or 0) }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center text-slate-500 py-8">{{ t('no_channels', 'No channels assigned') }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Main Message & Notes -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('main_message', 'Main Message') }}</h3>
+            <p class="text-slate-300">{{ campaign.main_message or '-' }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('notes', 'Notes') }}</h3>
+            <p class="text-slate-300">{{ campaign.notes or '-' }}</p>
+        </div>
+    </div>
+
+    <!-- Content Linked to Campaign -->
+    {% if content %}
+    <div class="glass-panel rounded-2xl p-6 mb-8">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('linked_content', 'Linked Content') }}</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-3 px-4">{{ t('topic', 'Topic') }}</th>
+                        <th class="text-left py-3 px-4">{{ t('format', 'Format') }}</th>
+                        <th class="text-left py-3 px-4">{{ t('status', 'Status') }}</th>
+                        <th class="text-left py-3 px-4">{{ t('publish_date', 'Publish Date') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in content %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-3 px-4 text-white">{{ item.topic }}</td>
+                        <td class="py-3 px-4 text-slate-300">{{ item.content_format or '-' }}</td>
+                        <td class="py-3 px-4"><span class="px-2 py-1 rounded-full text-xs font-bold bg-blue-400/20 text-blue-400">{{ item.status }}</span></td>
+                        <td class="py-3 px-4 text-slate-300">{{ item.publish_date or '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

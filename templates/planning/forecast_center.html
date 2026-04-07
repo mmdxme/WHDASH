@@ -1,0 +1,163 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<!-- Header -->
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">Forecast Center</h2>
+        <p class="text-slate-400 text-sm">Generate, review, and manage demand forecasts</p>
+    </div>
+    <div class="flex gap-3">
+        <button onclick="document.getElementById('generateModal').classList.remove('hidden')"
+                class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+            <i class="fas fa-plus mr-2"></i>New Forecast
+        </button>
+    </div>
+</div>
+
+<!-- Forecast Runs Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm" id="forecastTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Run Name</th>
+                    <th class="text-left py-3 px-4">Method</th>
+                    <th class="text-left py-3 px-4">Horizon</th>
+                    <th class="text-right py-3 px-4">Items</th>
+                    <th class="text-right py-3 px-4">Total Demand</th>
+                    <th class="text-left py-3 px-4">Status</th>
+                    <th class="text-left py-3 px-4">Created</th>
+                    <th class="text-left py-3 px-4">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                    <td class="py-3 px-4">
+                        <a href="{{ url_for('forecast_detail', run_id=run.id) }}" class="text-sky-400 hover:underline font-medium">
+                            {{ run.run_name or 'Unnamed Forecast' }}
+                        </a>
+                    </td>
+                    <td class="py-3 px-4 text-slate-300">{{ run.method }}</td>
+                    <td class="py-3 px-4 text-slate-300">{{ run.horizon_days }} days</td>
+                    <td class="py-3 px-4 text-right text-white">{{ run.total_items|default(0) }}</td>
+                    <td class="py-3 px-4 text-right text-slate-300">{{ "{:,.0f}".format(run.total_demand|default(0)) }}</td>
+                    <td class="py-3 px-4">
+                        {% if run.status == 'APPROVED' %}
+                        <span class="status-badge status-approved">Approved</span>
+                        {% elif run.status == 'DRAFT' %}
+                        <span class="status-badge status-draft">Draft</span>
+                        {% else %}
+                        <span class="status-badge status-dismissed">{{ run.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-4 text-slate-400 text-xs">{{ run.created_at }}</td>
+                    <td class="py-3 px-4">
+                        <div class="flex gap-2">
+                            <a href="{{ url_for('forecast_detail', run_id=run.id) }}"
+                               class="px-3 py-1 rounded bg-sky-500/20 text-sky-400 text-xs hover:bg-sky-500/30">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            {% if run.status == 'DRAFT' %}
+                            <form action="{{ url_for('forecast_approve', run_id=run.id) }}" method="POST" class="inline">
+                                <button type="submit"
+                                        class="px-3 py-1 rounded bg-green-500/20 text-green-400 text-xs hover:bg-green-500/30">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not runs %}
+                <tr>
+                    <td colspan="8" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-chart-area text-4xl mb-3 text-slate-600"></i>
+                        <p>No forecast runs yet. Create your first forecast.</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Generate Forecast Modal -->
+<div id="generateModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+    <div class="glass-panel rounded-xl p-6 w-full max-w-lg mx-4">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-semibold text-white">Generate New Forecast</h3>
+            <button onclick="document.getElementById('generateModal').classList.add('hidden')"
+                    class="text-slate-400 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form action="{{ url_for('forecast_generate') }}" method="POST">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Run Name</label>
+                    <input type="text" name="run_name"
+                           value="Forecast {{ now.strftime('%Y-%m-%d %H:%M') }}"
+                           class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Forecast Method</label>
+                        <select name="method" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                            <option value="MOVING_AVERAGE">Moving Average</option>
+                            <option value="WEIGHTED_MA">Weighted Moving Avg</option>
+                            <option value="SEASONAL">Seasonal Forecast</option>
+                            <option value="TREND">Trend-based</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Period Type</label>
+                        <select name="period_type" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                            <option value="daily">Daily</option>
+                            <option value="weekly">Weekly</option>
+                            <option value="monthly">Monthly</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Horizon (Days)</label>
+                    <input type="number" name="horizon_days" value="30" min="7" max="365"
+                           class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Warehouse (Optional)</label>
+                        <select name="warehouse_id" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                            <option value="">All Warehouses</option>
+                            {% for wh in warehouse_list|default([]) %}
+                            <option value="{{ wh.id }}">{{ wh.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Company (Optional)</label>
+                        <select name="company_id" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                            <option value="">All Companies</option>
+                            {% for co in company_list|default([]) %}
+                            <option value="{{ co.id }}">{{ co.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button type="button" onclick="document.getElementById('generateModal').classList.add('hidden')"
+                        class="flex-1 px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm hover:bg-slate-600 transition">
+                    Cancel
+                </button>
+                <button type="submit"
+                        class="flex-1 px-4 py-2 rounded-lg bg-sky-500 text-white text-sm font-medium hover:bg-sky-600 transition">
+                    <i class="fas fa-play mr-2"></i>Generate
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

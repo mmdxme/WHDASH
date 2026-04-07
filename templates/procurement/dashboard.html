@@ -1,0 +1,256 @@
+{% extends "procurement/base.html" %}
+
+{% block proc_content %}
+<!-- KPI Cards Row -->
+<div class="proc-grid-4" style="margin-bottom: 1.5rem;">
+    <div class="proc-stat-card">
+        <div class="proc-stat-label">Open Requisitions</div>
+        <div class="proc-stat-value">{{ stats.open_requisitions or 0 }}</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">
+            {{ stats.pending_approval_requisitions or 0 }} pending approval
+        </div>
+    </div>
+
+    <div class="proc-stat-card info">
+        <div class="proc-stat-label">RFQs In Progress</div>
+        <div class="proc-stat-value">{{ stats.rfqs_in_progress or 0 }}</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">
+            {{ stats.quotations_pending_comparison or 0 }} quotations to compare
+        </div>
+    </div>
+
+    <div class="proc-stat-card warning">
+        <div class="proc-stat-label">Open POs</div>
+        <div class="proc-stat-value">{{ stats.open_pos or 0 }}</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">
+            {{ stats.delayed_pos or 0 }} delayed
+        </div>
+    </div>
+
+    <div class="proc-stat-card success">
+        <div class="proc-stat-label">Expected This Week</div>
+        <div class="proc-stat-value">{{ stats.expected_receipts_this_week or 0 }}</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">
+            {{ stats.overdue_receipts or 0 }} overdue
+        </div>
+    </div>
+</div>
+
+<!-- Second Row -->
+<div class="proc-grid-4" style="margin-bottom: 1.5rem;">
+    <div class="proc-stat-card">
+        <div class="proc-stat-label">Spend Today</div>
+        <div class="proc-stat-value" style="font-size: 1.25rem;">
+            {{ (stats.spend_today or 0) | round | int | default(0) }} {{ get_setting('default_currency', 'AED') }}
+        </div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">
+            {{ (stats.spend_this_month or 0) | round | int | default(0) }} this month
+        </div>
+    </div>
+
+    <div class="proc-stat-card warning">
+        <div class="proc-stat-label">Open Claims</div>
+        <div class="proc-stat-value">{{ stats.open_claims or 0 }}</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">
+            {{ stats.open_returns or 0 }} returns pending
+        </div>
+    </div>
+
+    <div class="proc-stat-card success">
+        <div class="proc-stat-label">Active Contracts</div>
+        <div class="proc-stat-value">{{ stats.active_contracts or 0 }}</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">
+            {{ stats.expiring_contracts_30_days or 0 }} expiring in 30 days
+        </div>
+    </div>
+
+    <div class="proc-stat-card info">
+        <div class="proc-stat-label">Suppliers</div>
+        <div class="proc-stat-value">{{ stats.total_suppliers or 0 }}</div>
+        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.5rem;">
+            {{ stats.preferred_suppliers or 0 }} preferred
+        </div>
+    </div>
+</div>
+
+<!-- Main Content Grid -->
+<div class="proc-grid-2">
+    <!-- Alerts Section -->
+    <div class="proc-card">
+        <div class="proc-card-header">
+            <h3 class="proc-card-title">
+                <i class="fa fa-bell" style="margin-right: 0.5rem;"></i>
+                Recent Alerts
+            </h3>
+            <a href="{{ url_for('procurement_claims') }}" class="proc-btn proc-btn-sm proc-btn-secondary">
+                View All
+            </a>
+        </div>
+        <div class="proc-card-body" style="padding: 0;">
+            {% if alerts %}
+                {% for alert in alerts %}
+                <div class="proc-alert proc-alert-{% if alert.severity == 'HIGH' or alert.severity == 'CRITICAL' %}danger{% elif alert.severity == 'MEDIUM' %}warning{% else %}info{% endif %}"
+                     style="margin: 0; border-radius: 0;">
+                    <div class="proc-alert-content">
+                        <div class="proc-alert-title">{{ alert.title }}</div>
+                        <div style="font-size: 0.875rem; color: #64748b;">{{ alert.message }}</div>
+                        <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                            {{ alert.created_at[:16] if alert.created_at else '' }}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="padding: 2rem; text-align: center; color: #64748b;">
+                    <i class="fa fa-check-circle" style="font-size: 2rem; margin-bottom: 0.5rem; display: block;"></i>
+                    No active alerts
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="proc-card">
+        <div class="proc-card-header">
+            <h3 class="proc-card-title">
+                <i class="fa fa-bolt" style="margin-right: 0.5rem;"></i>
+                Quick Actions
+            </h3>
+        </div>
+        <div class="proc-card-body">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem;">
+                <a href="{{ url_for('procurement_suppliers_new') }}" class="proc-btn proc-btn-secondary" style="justify-content: center;">
+                    <i class="fa fa-plus"></i> New Supplier
+                </a>
+                <a href="{{ url_for('procurement_requisitions_new') }}" class="proc-btn proc-btn-secondary" style="justify-content: center;">
+                    <i class="fa fa-file-alt"></i> New Requisition
+                </a>
+                <a href="{{ url_for('procurement_rfqs_new') }}" class="proc-btn proc-btn-secondary" style="justify-content: center;">
+                    <i class="fa fa-paper-plane"></i> New RFQ
+                </a>
+                <a href="{{ url_for('procurement_orders_new') }}" class="proc-btn proc-btn-secondary" style="justify-content: center;">
+                    <i class="fa fa-shopping-cart"></i> New PO
+                </a>
+                <a href="{{ url_for('procurement_claims_new') }}" class="proc-btn proc-btn-secondary" style="justify-content: center;">
+                    <i class="fa fa-exclamation-triangle"></i> New Claim
+                </a>
+                <a href="{{ url_for('procurement_contracts_new') }}" class="proc-btn proc-btn-secondary" style="justify-content: center;">
+                    <i class="fa fa-file-contract"></i> New Contract
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity Section -->
+<div style="margin-top: 1.5rem;">
+    <div class="proc-tabs">
+        <a href="#" class="proc-tab active">Recent Purchase Orders</a>
+    </div>
+
+    <table class="proc-table">
+        <thead>
+            <tr>
+                <th>PO Number</th>
+                <th>Date</th>
+                <th>Supplier</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Expected Delivery</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if recent_pos %}
+                {% for po in recent_pos %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('procurement_orders_view', po_id=po.id) }}" style="font-weight: 600; color: #3b82f6;">
+                            {{ po.po_number }}
+                        </a>
+                    </td>
+                    <td>{{ po.po_date[:10] if po.po_date else '-' }}</td>
+                    <td>{{ po.supplier_name or '-' }}</td>
+                    <td style="font-weight: 600;">{{ "%.2f"|format(po.total_amount or 0) }} {{ po.currency or 'AED' }}</td>
+                    <td>
+                        <span class="proc-badge proc-badge-{% if po.status == 'APPROVED' %}success{% elif po.status == 'DRAFT' %}gray{% elif po.status == 'RECEIVED' %}primary{% else %}warning{% endif %}">
+                            {{ po.status }}
+                        </span>
+                    </td>
+                    <td>{{ po.expected_delivery_date[:10] if po.expected_delivery_date else '-' }}</td>
+                    <td>
+                        <a href="{{ url_for('procurement_orders_view', po_id=po.id) }}" class="proc-btn proc-btn-sm proc-btn-secondary">
+                            View
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center; color: #64748b; padding: 2rem;">
+                        No recent purchase orders
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Recent Requisitions -->
+<div style="margin-top: 1.5rem;">
+    <div class="proc-tabs">
+        <a href="#" class="proc-tab active">Recent Requisitions</a>
+    </div>
+
+    <table class="proc-table">
+        <thead>
+            <tr>
+                <th>Req Number</th>
+                <th>Date</th>
+                <th>Requester</th>
+                <th>Department</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if recent_requisitions %}
+                {% for req in recent_requisitions %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('procurement_requisitions_view', requisition_id=req.id) }}" style="font-weight: 600; color: #3b82f6;">
+                            {{ req.requisition_number }}
+                        </a>
+                    </td>
+                    <td>{{ req.requisition_date[:10] if req.requisition_date else '-' }}</td>
+                    <td>{{ req.requester_name or '-' }}</td>
+                    <td>{{ req.department or '-' }}</td>
+                    <td>
+                        <span class="proc-badge proc-badge-{% if req.priority == 'HIGH' %}danger{% elif req.priority == 'MEDIUM' %}warning{% else %}gray{% endif %}">
+                            {{ req.priority }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="proc-badge proc-badge-{% if req.status == 'APPROVED' %}success{% elif req.status == 'REJECTED' %}danger{% elif req.status == 'PENDING_APPROVAL' %}warning{% else %}gray{% endif %}">
+                            {{ req.status }}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="{{ url_for('procurement_requisitions_view', requisition_id=req.id) }}" class="proc-btn proc-btn-sm proc-btn-secondary">
+                            View
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="7" style="text-align: center; color: #64748b; padding: 2rem;">
+                        No recent requisitions
+                    </td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

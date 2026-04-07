@@ -1,0 +1,479 @@
+{% extends "bi/base_bi.html" %}
+
+{% block title %}Comparative Reports{% endblock %}
+
+{% block bi_content %}
+<!-- Comparative Reports Header -->
+<section class="executive-hero mb-4">
+    <h1>Comparative Reports</h1>
+    <div class="subtitle">Compare performance across companies, periods, and dimensions</div>
+</section>
+
+<!-- Comparison Type Selection -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Comparison Type</h2>
+    </div>
+    
+    <div class="comparison-tabs">
+        <button class="comparison-tab active" data-type="company" onclick="setComparisonType('company')">
+            <i class="fas fa-building"></i>
+            Company vs Company
+        </button>
+        <button class="comparison-tab" data-type="period" onclick="setComparisonType('period')">
+            <i class="fas fa-calendar"></i>
+            Period over Period
+        </button>
+        <button class="comparison-tab" data-type="branch" onclick="setComparisonType('branch')">
+            <i class="fas fa-code-branch"></i>
+            Branch Comparison
+        </button>
+    </div>
+</section>
+
+<!-- Company Comparison View -->
+<section class="bi-section" id="company-comparison-view">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Company Comparison</h2>
+    </div>
+    
+    <form class="comparison-form">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Select Companies</label>
+                <div class="company-checkboxes" id="company-checkboxes">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Metrics</label>
+                <select name="metrics" multiple size="5">
+                    <option value="revenue" selected>Revenue</option>
+                    <option value="orders">Orders</option>
+                    <option value="customers">Customers</option>
+                    <option value="aov">Average Order Value</option>
+                    <option value="margin">Gross Margin</option>
+                    <option value="inventory">Inventory</option>
+                    <option value="receivables">Receivables</option>
+                </select>
+            </div>
+        </div>
+        <button type="button" class="bi-btn bi-btn-primary" onclick="runCompanyComparison()">Compare</button>
+    </form>
+    
+    <div class="bi-table-wrapper mt-4">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th id="company-col-1">Company 1</th>
+                    <th id="company-col-2">Company 2</th>
+                    <th>Difference</th>
+                    <th>% Change</th>
+                </tr>
+            </thead>
+            <tbody id="comparison-results">
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 2rem;">Select companies and click Compare</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Period Comparison View -->
+<section class="bi-section hidden" id="period-comparison-view">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Period over Period Comparison</h2>
+    </div>
+    
+    <form class="comparison-form">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Current Period</label>
+                <select name="current_period" id="current-period">
+                    <option value="this_month">This Month</option>
+                    <option value="last_month">Last Month</option>
+                    <option value="this_quarter">This Quarter</option>
+                    <option value="ytd">Year to Date</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Comparison Period</label>
+                <select name="compare_period" id="compare-period">
+                    <option value="previous_period">Previous Period</option>
+                    <option value="same_period_last_year">Same Period Last Year</option>
+                </select>
+            </div>
+        </div>
+        <button type="button" class="bi-btn bi-btn-primary" onclick="runPeriodComparison()">Compare</button>
+    </form>
+    
+    <div class="bi-table-wrapper mt-4">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Current Period</th>
+                    <th>Previous Period</th>
+                    <th>Change</th>
+                    <th>% Change</th>
+                    <th>Trend</th>
+                </tr>
+            </thead>
+            <tbody id="period-results">
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 2rem;">Select periods and click Compare</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Branch Comparison View -->
+<section class="bi-section hidden" id="branch-comparison-view">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Branch Comparison</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Branch</th>
+                    <th>Company</th>
+                    <th>Revenue</th>
+                    <th>Orders</th>
+                    <th>Customers</th>
+                    <th>Performance</th>
+                </tr>
+            </thead>
+            <tbody id="branch-results">
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 2rem;">No branch data available</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentComparisonType = 'company';
+
+function setComparisonType(type) {
+    currentComparisonType = type;
+    
+    // Update tab states
+    document.querySelectorAll('.comparison-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.type === type);
+    });
+    
+    // Show/hide views
+    document.getElementById('company-comparison-view').classList.toggle('hidden', type !== 'company');
+    document.getElementById('period-comparison-view').classList.toggle('hidden', type !== 'period');
+    document.getElementById('branch-comparison-view').classList.toggle('hidden', type !== 'branch');
+    
+    // Load data for the selected type
+    if (type === 'company') {
+        loadCompanyCheckboxes();
+    } else if (type === 'branch') {
+        loadBranchData();
+    }
+}
+
+async function loadCompanyCheckboxes() {
+    try {
+        const response = await fetch('/api/bi/company-comparison?format=json');
+        const data = await response.json();
+        
+        const container = document.getElementById('company-checkboxes');
+        const companies = data.companies || [];
+        
+        container.innerHTML = companies.map(c => `
+            <label class="checkbox-label">
+                <input type="checkbox" name="companies" value="${c.id || c.name}" 
+                       ${companies.indexOf(c) < 2 ? 'checked' : ''}>
+                ${c.name || 'Unknown'}
+            </label>
+        `).join('');
+        
+    } catch (error) {
+        console.error('Error loading companies:', error);
+    }
+}
+
+async function loadBranchData() {
+    try {
+        const response = await fetch('/api/bi/company-comparison?format=json&include_branches=true');
+        const data = await response.json();
+        
+        const tbody = document.getElementById('branch-results');
+        const branches = data.branches || [];
+        
+        if (branches.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem;">No branch data available</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = branches.map(branch => `
+            <tr>
+                <td><strong>${branch.name || 'Unknown'}</strong></td>
+                <td>${branch.company_name || '-'}</td>
+                <td class="font-bold">${formatCurrency(branch.revenue || 0)}</td>
+                <td>${formatNumber(branch.orders || 0)}</td>
+                <td>${formatNumber(branch.customers || 0)}</td>
+                <td>
+                    <div class="performance-bar" style="width: 100px;">
+                        <div class="performance-bar-fill ${branch.performance >= 80 ? 'good' : branch.performance >= 50 ? 'warning' : 'danger'}" 
+                             style="width: ${branch.performance || 0}%"></div>
+                    </div>
+                    ${formatPercent(branch.performance || 0)}
+                </td>
+            </tr>
+        `).join('');
+        
+    } catch (error) {
+        console.error('Error loading branch data:', error);
+    }
+}
+
+async function runCompanyComparison() {
+    const selected = Array.from(document.querySelectorAll('input[name="companies"]:checked')).map(c => c.value);
+    
+    if (selected.length < 2) {
+        alert('Please select at least 2 companies to compare');
+        return;
+    }
+    
+    try {
+        const params = new URLSearchParams();
+        params.set('format', 'json');
+        params.set('compare', 'company');
+        selected.forEach(c => params.append('company_ids', c));
+        
+        const response = await fetch(`/api/bi/company-comparison?${params.toString()}`);
+        const data = await response.json();
+        
+        // Update column headers
+        document.getElementById('company-col-1').textContent = selected[0];
+        document.getElementById('company-col-2').textContent = selected[1];
+        
+        // Update results table
+        const tbody = document.getElementById('comparison-results');
+        const companies = data.companies || [];
+        const c1 = companies.find(c => c.name === selected[0]) || {};
+        const c2 = companies.find(c => c.name === selected[1]) || {};
+        
+        const metrics = [
+            { key: 'revenue', label: 'Revenue', format: 'currency' },
+            { key: 'orders', label: 'Orders', format: 'number' },
+            { key: 'customers', label: 'Customers', format: 'number' },
+            { key: 'avg_order_value', label: 'Avg Order Value', format: 'currency' },
+            { key: 'gross_margin', label: 'Gross Margin', format: 'percent' },
+            { key: 'inventory_value', label: 'Inventory', format: 'currency' },
+            { key: 'receivables', label: 'Receivables', format: 'currency' }
+        ];
+        
+        tbody.innerHTML = metrics.map(m => {
+            const v1 = c1[m.key] || 0;
+            const v2 = c2[m.key] || 0;
+            const diff = v1 - v2;
+            const pctChange = v2 !== 0 ? ((v1 - v2) / v2) * 100 : 0;
+            
+            return `
+                <tr>
+                    <td><strong>${m.label}</strong></td>
+                    <td>${formatValue(v1, m.format)}</td>
+                    <td>${formatValue(v2, m.format)}</td>
+                    <td class="${diff >= 0 ? 'text-success' : 'text-danger'}">${formatValue(diff, m.format)}</td>
+                    <td class="${pctChange >= 0 ? 'text-success' : 'text-danger'}">${formatPercent(pctChange)}</td>
+                </tr>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Error running comparison:', error);
+    }
+}
+
+async function runPeriodComparison() {
+    const currentPeriod = document.getElementById('current-period').value;
+    const comparePeriod = document.getElementById('compare-period').value;
+    
+    try {
+        const params = new URLSearchParams();
+        params.set('format', 'json');
+        params.set('compare', 'period');
+        params.set('current_period', currentPeriod);
+        params.set('compare_period', comparePeriod);
+        
+        const response = await fetch(`/reports/comparative?${params.toString()}`);
+        const data = await response.json();
+        
+        const tbody = document.getElementById('period-results');
+        const periods = data.periods || [];
+        
+        tbody.innerHTML = periods.map(period => `
+            <tr>
+                <td><strong>${period.period_name || 'Unknown'}</strong></td>
+                <td class="font-bold">${formatCurrency(period.current_value || 0)}</td>
+                <td>${formatCurrency(period.previous_value || 0)}</td>
+                <td class="${period.change >= 0 ? 'text-success' : 'text-danger'}">${formatCurrency(period.change || 0)}</td>
+                <td class="${period.pct_change >= 0 ? 'text-success' : 'text-danger'}">${formatPercent(period.pct_change || 0)}</td>
+                <td>
+                    ${period.pct_change >= 0 
+                        ? '<span class="trend-indicator up"><i class="fas fa-arrow-up"></i></span>'
+                        : '<span class="trend-indicator down"><i class="fas fa-arrow-down"></i></span>'}
+                </td>
+            </tr>
+        `).join('');
+        
+    } catch (error) {
+        console.error('Error running period comparison:', error);
+    }
+}
+
+function formatValue(num, format) {
+    switch(format) {
+        case 'currency': return formatCurrency(num);
+        case 'number': return formatNumber(num);
+        case 'percent': return formatPercent(num);
+        default: return num;
+    }
+}
+
+function formatNumber(num, decimals = 0) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function formatCurrency(num) {
+    if (num === null || num === undefined) return '-';
+    return 'AED ' + parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function formatPercent(num) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    setComparisonType('company');
+});
+</script>
+
+<style>
+.comparison-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.comparison-tab {
+    flex: 1;
+    padding: 1rem;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.875rem;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+.comparison-tab:hover {
+    background: var(--color-bg-tertiary);
+}
+
+.comparison-tab.active {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+}
+
+.comparison-tab i {
+    display: block;
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.comparison-form {
+    background: var(--color-bg-secondary);
+    padding: 1.5rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--color-text-secondary);
+}
+
+.company-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: var(--color-bg-tertiary);
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.checkbox-label:hover {
+    background: var(--color-bg-primary);
+}
+
+.hidden {
+    display: none;
+}
+
+select[name="metrics"] {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    background: var(--color-bg-primary);
+}
+
+.mt-4 {
+    margin-top: 1.5rem;
+}
+
+.trend-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+}
+
+.trend-indicator.up {
+    background: rgba(40, 167, 69, 0.1);
+    color: var(--color-success);
+}
+
+.trend-indicator.down {
+    background: rgba(220, 53, 69, 0.1);
+    color: var(--color-danger);
+}
+</style>
+{% endblock %}

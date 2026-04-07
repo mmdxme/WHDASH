@@ -1,0 +1,155 @@
+<!-- Company Relationships -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-link mr-2"></i> {{ company.name }} - Relationships
+        </h1>
+        <a href="{{ url_for('company.company_detail', company_id=company.id) }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left mr-1"></i> Back
+        </a>
+    </div>
+
+    <!-- Relationships Table -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-list mr-1"></i> Company Relationships ({{ relationships|length }})
+            </h6>
+            <button type="button" class="btn btn-sm btn-primary" data-toggle="modal" data-target="#addRelationshipModal">
+                <i class="fas fa-plus mr-1"></i> Add Relationship
+            </button>
+        </div>
+        <div class="card-body">
+            {% if relationships %}
+            <div class="table-responsive">
+                <table class="table table-bordered" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Related Company</th>
+                            <th>Type</th>
+                            <th>Subtype</th>
+                            <th>Trade Terms</th>
+                            <th>Credit Limit</th>
+                            <th>Approval Required</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rel in relationships %}
+                        <tr>
+                            <td><strong>{{ rel.related_company_name }}</strong></td>
+                            <td>{{ rel.relationship_type }}</td>
+                            <td>{{ rel.relationship_subtype or '-' }}</td>
+                            <td>{{ rel.trade_terms or '-' }}</td>
+                            <td>{{ (rel.credit_limit or 0) | round(2) }}</td>
+                            <td>
+                                {% if rel.approval_required %}
+                                <span class="badge badge-warning">Yes</span>
+                                {% else %}
+                                <span class="badge badge-secondary">No</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if rel.is_active %}
+                                <span class="badge badge-success">Active</span>
+                                {% else %}
+                                <span class="badge badge-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-link fa-4x text-muted mb-3"></i>
+                <h5 class="text-muted">No relationships defined</h5>
+                <p class="text-muted mb-3">Define relationships with other companies for intercompany workflows.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Relationship Modal -->
+<div class="modal fade" id="addRelationshipModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <form action="{{ url_for('company.relationship_create', company_id=company.id) }}" method="POST">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Company Relationship</h5>
+                    <button type="button" class="close" data-dismiss="modal">
+                        <span>&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="related_company_id">Related Company <span class="text-danger">*</span></label>
+                        <select class="form-control" id="related_company_id" name="related_company_id" required>
+                            <option value="">-- Select Company --</option>
+                            {% for comp in companies %}
+                            <option value="{{ comp.id }}">{{ comp.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="relationship_type">Relationship Type <span class="text-danger">*</span></label>
+                        <select class="form-control" id="relationship_type" name="relationship_type" required>
+                            <option value="">-- Select Type --</option>
+                            <option value="parent_subsidiary">Parent/Subsidiary</option>
+                            <option value="sister">Sister Company</option>
+                            <option value="supplier">Supplier</option>
+                            <option value="customer">Customer</option>
+                            <option value="partner">Business Partner</option>
+                            <option value="shared_service">Shared Service</option>
+                            <option value="trade">Trade Relationship</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="relationship_subtype">Subtype</label>
+                        <input type="text" class="form-control" id="relationship_subtype" name="relationship_subtype">
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="trade_terms">Trade Terms</label>
+                                <input type="text" class="form-control" id="trade_terms" name="trade_terms">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="credit_limit">Credit Limit</label>
+                                <input type="number" class="form-control" id="credit_limit" name="credit_limit" step="0.01">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="payment_terms">Payment Terms</label>
+                        <input type="text" class="form-control" id="payment_terms" name="payment_terms">
+                    </div>
+
+                    <div class="form-group">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="approval_required" name="approval_required" value="1">
+                            <label class="custom-control-label" for="approval_required">Approval Required for Transactions</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Relationship</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

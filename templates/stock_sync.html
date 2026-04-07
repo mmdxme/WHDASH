@@ -1,0 +1,692 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Summary Cards -->
+<div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+    <div class="glass-panel p-5 rounded-2xl border border-white/5 cursor-pointer hover:border-brand-500/40 transition-all" onclick="setStockTab('all')">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-400 text-xs font-medium uppercase tracking-wider">All Products</p>
+                <p class="text-3xl font-bold text-white mt-1">{{ summary.total_products }}</p>
+            </div>
+            <div class="w-12 h-12 bg-brand-500/20 rounded-xl flex items-center justify-center">
+                <i class="fa-solid fa-boxes-stacked text-brand-400 text-lg"></i>
+            </div>
+        </div>
+    </div>
+    <div class="glass-panel p-5 rounded-2xl border border-white/5 cursor-pointer hover:border-red-500/40 transition-all" onclick="setStockTab('out')">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-400 text-xs font-medium uppercase tracking-wider">Out of Stock</p>
+                <p class="text-3xl font-bold text-red-400 mt-1">{{ summary.out_of_stock }}</p>
+            </div>
+            <div class="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
+                <i class="fa-solid fa-circle-xmark text-red-400 text-lg"></i>
+            </div>
+        </div>
+    </div>
+    <div class="glass-panel p-5 rounded-2xl border border-white/5 cursor-pointer hover:border-yellow-500/40 transition-all" onclick="setStockTab('low')">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-400 text-xs font-medium uppercase tracking-wider">Low Stock</p>
+                <p class="text-3xl font-bold text-yellow-400 mt-1">{{ summary.low_stock }}</p>
+            </div>
+            <div class="w-12 h-12 bg-yellow-500/20 rounded-xl flex items-center justify-center">
+                <i class="fa-solid fa-triangle-exclamation text-yellow-400 text-lg"></i>
+            </div>
+        </div>
+    </div>
+    <div class="glass-panel p-5 rounded-2xl border border-white/5 cursor-pointer hover:border-emerald-500/40 transition-all" onclick="setStockTab('active')">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-400 text-xs font-medium uppercase tracking-wider">Active</p>
+                <p class="text-3xl font-bold text-emerald-400 mt-1">{{ summary.active_products|default(summary.total_products - summary.out_of_stock) }}</p>
+            </div>
+            <div class="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                <i class="fa-solid fa-check-circle text-emerald-400 text-lg"></i>
+            </div>
+        </div>
+    </div>
+    <div class="glass-panel p-5 rounded-2xl border border-white/5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-400 text-xs font-medium uppercase tracking-wider">Stock Value</p>
+                <p class="text-2xl font-bold text-purple-400 mt-1">${{ "%.2f"|format(summary.total_stock_value|default(0)) }}</p>
+            </div>
+            <div class="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
+                <i class="fa-solid fa-dollar-sign text-purple-400 text-lg"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Last Sync Info -->
+<div class="flex items-center justify-between mb-4">
+    <div class="text-slate-400 text-sm">
+        {% if summary.last_sync_at %}
+        Last synced: {{ summary.last_sync_at[:19]|default('') }}
+        {% else %}
+        Never synced
+        {% endif %}
+    </div>
+    <div class="flex items-center gap-3">
+        <span class="text-slate-400 text-xs">
+            <span id="filteredCount">{{ products|length }}</span> items
+            <span id="outOfStockBadge" class="{% if not exclude_out_of_stock %}hidden{% endif %}">
+                (<span id="outOfStockCount">{{ summary.out_of_stock }}</span> out of stock hidden)
+            </span>
+        </span>
+        <button id="toggleOutOfStockBtn" onclick="toggleOutOfStock()" 
+           class="px-3 py-1 rounded-lg text-xs font-bold transition-all {% if exclude_out_of_stock %}bg-slate-700 text-slate-300 hover:bg-slate-600{% else %}bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-500/30{% endif %}">
+            <i class="fa-solid fa-eye-slash mr-1"></i>
+            {% if exclude_out_of_stock %}Show Out of Stock{% else %}Hide Out of Stock{% endif %}
+        </button>
+    </div>
+</div>
+
+<!-- Tab Bar -->
+<div class="flex items-center gap-2 mb-4">
+    <button onclick="setStockTab('all')" class="stock-tab-btn px-4 py-2 rounded-lg text-xs font-bold transition-all bg-brand-600 text-white" data-tab="all">All Products</button>
+    <button onclick="setStockTab('out')" class="stock-tab-btn px-4 py-2 rounded-lg text-xs font-bold transition-all bg-slate-700 text-slate-400" data-tab="out">Out of Stock</button>
+    <button onclick="setStockTab('low')" class="stock-tab-btn px-4 py-2 rounded-lg text-xs font-bold transition-all bg-slate-700 text-slate-400" data-tab="low">Low Stock</button>
+    <button onclick="setStockTab('active')" class="stock-tab-btn px-4 py-2 rounded-lg text-xs font-bold transition-all bg-slate-700 text-slate-400" data-tab="active">Active</button>
+</div>
+
+<!-- Main Stock Table -->
+<div class="glass-panel p-6 rounded-3xl border border-white/5">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+            <h2 class="text-xl font-bold text-white">Live Stock from Peyvast</h2>
+            <p class="text-slate-400 text-sm mt-1">Real-time inventory synchronized from source system</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Import Button -->
+            <button onclick="showImportModal()" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-lg transition-all">
+                <i class="fa-solid fa-file-import mr-2"></i> Import
+            </button>
+            <!-- Search -->
+            <div class="relative">
+                <input type="text" id="searchInput" placeholder="Search Part Number, Description..."
+                    class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg pl-9 pr-3 py-2 focus:border-brand-500 outline-none w-64">
+                <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            </div>
+            <!-- Filter by Warehouse -->
+            <select id="warehouseFilter" onchange="filterTable()" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-3 py-2 focus:border-brand-500 outline-none">
+                <option value="">All Warehouses</option>
+                {% for wh in warehouses %}
+                <option value="{{ wh.name }}">{{ wh.name }}</option>
+                {% endfor %}
+            </select>
+            <!-- Filter by Category -->
+            <select id="categoryFilter" onchange="filterTable()" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-3 py-2 focus:border-brand-500 outline-none">
+                <option value="">All Categories</option>
+                {% for cat in categories %}
+                <option value="{{ cat.name }}">{{ cat.name }}</option>
+                {% endfor %}
+            </select>
+            <!-- Filter by Brand -->
+            <select id="brandFilter" onchange="filterTable()" class="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-3 py-2 focus:border-brand-500 outline-none">
+                <option value="">All Brands</option>
+                {% for brand in brands %}
+                <option value="{{ brand }}">{{ brand }}</option>
+                {% endfor %}
+            </select>
+            <!-- Sync Button -->
+            <button type="button" onclick="triggerSync()" id="syncBtn" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-lg transition-all">
+                <i class="fa-solid fa-rotate mr-2"></i> Sync Now
+            </button>
+            <!-- Export Button -->
+            <button onclick="exportTable()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-all">
+                <i class="fa-solid fa-file-export mr-2"></i> Export
+            </button>
+        </div>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="w-full text-left" id="stockTable">
+            <thead>
+                <tr class="text-slate-400 text-[10px] font-bold uppercase tracking-[0.15em] border-b border-slate-700/50">
+                    <th class="px-2 py-2 w-12">#</th>
+                    <th class="px-2 py-2">
+                        <div class="flex flex-col gap-1">
+                            <span class="cursor-pointer hover:text-white" onclick="sortTable('part_number')">Part Number <i class="fa-solid fa-sort text-slate-600"></i></span>
+                            <input type="text" placeholder="Search..." onkeyup="filterColumn('part_number', this.value)" class="bg-slate-800 border border-slate-700 text-white text-[10px] rounded px-2 py-1 w-full focus:border-brand-500 outline-none">
+                        </div>
+                    </th>
+                    <th class="px-2 py-2">
+                        <div class="flex flex-col gap-1">
+                            <span class="cursor-pointer hover:text-white" onclick="sortTable('description')">Description <i class="fa-solid fa-sort text-slate-600"></i></span>
+                            <input type="text" placeholder="Search..." onkeyup="filterColumn('description', this.value)" class="bg-slate-800 border border-slate-700 text-white text-[10px] rounded px-2 py-1 w-full focus:border-brand-500 outline-none">
+                        </div>
+                    </th>
+                    <th class="px-2 py-2">
+                        <div class="flex flex-col gap-1">
+                            <span class="cursor-pointer hover:text-white" onclick="sortTable('brand')">Brand <i class="fa-solid fa-sort text-slate-600"></i></span>
+                            <input type="text" placeholder="Search..." onkeyup="filterColumn('brand', this.value)" class="bg-slate-800 border border-slate-700 text-white text-[10px] rounded px-2 py-1 w-full focus:border-brand-500 outline-none">
+                        </div>
+                    </th>
+                    <th class="px-2 py-2">
+                        <div class="flex flex-col gap-1">
+                            <span class="cursor-pointer hover:text-white" onclick="sortTable('warehouse_name')">Warehouse <i class="fa-solid fa-sort text-slate-600"></i></span>
+                            <input type="text" placeholder="Search..." onkeyup="filterColumn('warehouse_name', this.value)" class="bg-slate-800 border border-slate-700 text-white text-[10px] rounded px-2 py-1 w-full focus:border-brand-500 outline-none">
+                        </div>
+                    </th>
+                    <th class="px-2 py-2 text-right">
+                        <div class="flex flex-col gap-1">
+                            <span class="cursor-pointer hover:text-white" onclick="sortTable('current_stock')" data-col="current_stock">Stock <i class="fa-solid fa-sort-down text-white"></i></span>
+                            <input type="text" placeholder="Search..." onkeyup="filterColumn('current_stock', this.value)" class="bg-slate-800 border border-slate-700 text-white text-[10px] rounded px-2 py-1 w-20 text-right focus:border-brand-500 outline-none">
+                        </div>
+                    </th>
+                    <th class="px-2 py-2 text-right">Min</th>
+                    <th class="px-2 py-2 text-right">Max</th>
+                    <th class="px-2 py-2 text-right">
+                        <div class="flex flex-col gap-1">
+                            <span class="cursor-pointer hover:text-white" onclick="sortTable('last_purchase_price')" data-col="last_purchase_price">Price <i class="fa-solid fa-sort text-slate-600"></i></span>
+                            <input type="text" placeholder="Search..." onkeyup="filterColumn('last_purchase_price', this.value)" class="bg-slate-800 border border-slate-700 text-white text-[10px] rounded px-2 py-1 w-20 text-right focus:border-brand-500 outline-none">
+                        </div>
+                    </th>
+                    <th class="px-2 py-2 text-right">
+                        <div class="flex flex-col gap-1">
+                            <span class="cursor-pointer hover:text-white" onclick="sortTable('avg_unit_cost')" data-col="avg_unit_cost">Cost <i class="fa-solid fa-sort text-slate-600"></i></span>
+                            <input type="text" placeholder="Search..." onkeyup="filterColumn('avg_unit_cost', this.value)" class="bg-slate-800 border border-slate-700 text-white text-[10px] rounded px-2 py-1 w-20 text-right focus:border-brand-500 outline-none">
+                        </div>
+                    </th>
+                    <th class="px-2 py-2 text-center">Status</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5" id="tableBody">
+                {% for product in products %}
+                <tr class="hover:bg-slate-800/40 transition-colors stock-row"
+                    data-warehouse="{{ product.warehouse_name|default('') }}"
+                    data-category="{{ product.category|default('') }}"
+                    data-brand="{{ product.brand|default('') }}"
+                    data-stock="{% if product.current_stock == 0 %}out{% elif product.current_stock <= product.min_stock %}low{% else %}active{% endif %}"
+                    data-search="{{ product.part_number|lower }} {{ product.barcode|lower }} {{ product.description|lower }} {{ product.product_code|lower }}">
+                    <td class="px-3 py-3.5 text-slate-500 text-xs">{{ loop.index }}</td>
+                    <td class="px-3 py-3.5 text-white font-mono text-sm font-bold">{{ product.part_number|default(product.barcode|default('')) }}</td>
+                    <td class="px-3 py-3.5 text-slate-200 text-sm max-w-xs truncate" title="{{ product.description|default('') }}">{{ product.description|default(product.product_name|default('')) }}</td>
+                    <td class="px-3 py-3.5">
+                        <span class="px-2 py-1 bg-blue-500/20 text-blue-300 rounded text-xs">{{ product.brand|default('N/A') }}</span>
+                    </td>
+                    <td class="px-3 py-3.5">
+                        <span class="px-2 py-1 bg-brand-500/20 text-brand-300 rounded text-xs">{{ product.warehouse_name|default('Peyvast') }}</span>
+                    </td>
+                    <td class="px-3 py-3.5 text-right">
+                        {% if product.current_stock == 0 %}
+                        <span class="text-red-400 font-bold">{{ product.current_stock }}</span>
+                        {% elif product.current_stock <= product.min_stock %}
+                        <span class="text-yellow-400 font-bold">{{ product.current_stock }}</span>
+                        {% else %}
+                        <span class="text-emerald-400 font-bold">{{ product.current_stock }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-3 py-3.5 text-right text-slate-400">{{ product.min_stock|default(0) }}</td>
+                    <td class="px-3 py-3.5 text-right text-slate-400">{{ product.max_stock|default(0) }}</td>
+                    <td class="px-3 py-3.5 text-right text-slate-300">${{ "%.2f"|format(product.last_purchase_price|default(0)) }}</td>
+                    <td class="px-3 py-3.5 text-right text-slate-300">${{ "%.2f"|format(product.avg_unit_cost|default(0)) }}</td>
+                    <td class="px-3 py-3.5 text-center">
+                        {% if product.current_stock == 0 %}
+                        <span class="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs">Out</span>
+                        {% elif product.current_stock <= product.min_stock %}
+                        <span class="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs">Low</span>
+                        {% elif product.current_stock >= product.max_stock %}
+                        <span class="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs">Over</span>
+                        {% else %}
+                        <span class="px-2 py-1 bg-slate-500/20 text-slate-400 rounded text-xs">OK</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="13" class="px-3 py-10 text-center text-slate-500 text-sm">
+                        <div class="flex flex-col items-center gap-3">
+                            <i class="fa-solid fa-box-open text-4xl text-slate-600"></i>
+                            <p>No products synced yet. Click "Sync Now" to fetch data from Peyvast Panel.</p>
+                            <p class="text-xs text-slate-600">Make sure PEYVAST_USERNAME and PEYVAST_PASSWORD are set in environment.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Items Count -->
+    <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-700/50" id="paginationInfo">
+        <div class="text-slate-400 text-sm">
+            Showing <span id="showingCount">{{ products|length }}</span> of <span id="totalCount">{{ all_products_count }}</span> items
+        </div>
+        <div class="text-slate-500 text-xs">
+            Sorted by <span class="text-white font-medium">Stock (High to Low)</span> by default
+        </div>
+    </div>
+</div>
+
+<!-- Detail Modal -->
+<div id="detailModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+    <div class="glass-panel rounded-2xl border border-white/10 max-w-2xl w-full max-h-[90vh] overflow-auto">
+        <div class="p-6 border-b border-slate-700/50 flex items-center justify-between">
+            <h3 class="text-xl font-bold text-white" id="modalTitle">Part Details</h3>
+            <button onclick="closeModal()" class="text-slate-400 hover:text-white transition-colors">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+        </div>
+        <div class="p-6" id="modalContent">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+</div>
+
+<script>
+let currentSort = { column: 'current_stock', direction: 'desc' };
+let showOutOfStock = false;
+let currentStockTab = 'all';
+let columnFilters = {
+    part_number: '',
+    description: '',
+    brand: '',
+    warehouse_name: '',
+    current_stock: '',
+    last_purchase_price: '',
+    avg_unit_cost: ''
+};
+
+function sortTable(column) {
+    if (currentSort.column === column) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSort.column = column;
+        currentSort.direction = 'desc';
+    }
+    updateSortIcons();
+    renderTable();
+}
+
+function updateSortIcons() {
+    const headers = document.querySelectorAll('th');
+    headers.forEach(th => {
+        const icon = th.querySelector('i');
+        if (icon && icon.classList.contains('fa-sort')) {
+            const col = th.querySelector('span')?.onclick?.toString()?.match(/'(\w+)'/)?.[1] || th.dataset.col;
+            if (col === currentSort.column) {
+                icon.className = currentSort.direction === 'asc' ? 'fa-solid fa-sort-up text-white' : 'fa-solid fa-sort-down text-white';
+            } else {
+                icon.className = 'fa-solid fa-sort text-slate-600';
+            }
+        }
+    });
+}
+
+function filterColumn(column, value) {
+    columnFilters[column] = value.toLowerCase();
+    renderTable();
+}
+
+function filterTable() {
+    renderTable();
+}
+
+function setStockTab(tab) {
+    currentStockTab = tab;
+    document.querySelectorAll('.stock-tab-btn').forEach(btn => {
+        btn.classList.toggle('bg-brand-600', btn.dataset.tab === tab);
+        btn.classList.toggle('text-white', btn.dataset.tab === tab);
+        btn.classList.toggle('bg-slate-700', btn.dataset.tab !== tab);
+        btn.classList.toggle('text-slate-400', btn.dataset.tab !== tab);
+    });
+    filterTable();
+}
+
+function toggleOutOfStock() {
+    showOutOfStock = !showOutOfStock;
+    const btn = document.getElementById('toggleOutOfStockBtn');
+    const badge = document.getElementById('outOfStockBadge');
+    
+    if (showOutOfStock) {
+        btn.className = 'px-3 py-1 rounded-lg text-xs font-bold transition-all bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-500/30';
+        btn.innerHTML = '<i class="fa-solid fa-eye-slash mr-1"></i>Hide Out of Stock';
+        badge.classList.add('hidden');
+    } else {
+        btn.className = 'px-3 py-1 rounded-lg text-xs font-bold transition-all bg-slate-700 text-slate-300 hover:bg-slate-600';
+        btn.innerHTML = '<i class="fa-solid fa-eye mr-1"></i>Show Out of Stock';
+        badge.classList.remove('hidden');
+    }
+    filterTable();
+}
+
+function renderTable() {
+    const warehouse = document.getElementById('warehouseFilter').value;
+    const category = document.getElementById('categoryFilter').value;
+    const brand = document.getElementById('brandFilter').value;
+    const search = document.getElementById('searchInput').value.toLowerCase();
+
+    const rows = document.querySelectorAll('.stock-row');
+    let visibleRows = [];
+
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        const rowWarehouse = row.getAttribute('data-warehouse');
+        const rowCategory = row.getAttribute('data-category');
+        const rowBrand = row.getAttribute('data-brand');
+        const rowSearch = row.getAttribute('data-search');
+        const rowStock = row.getAttribute('data-stock');
+
+        const showWarehouse = warehouse === '' || rowWarehouse === warehouse;
+        const showCategory = category === '' || rowCategory === category;
+        const showBrand = brand === '' || rowBrand === brand;
+        const showSearch = search === '' || rowSearch.includes(search);
+        const showStock = currentStockTab === 'all' || rowStock === currentStockTab;
+        const showOutStock = showOutOfStock || rowStock !== 'out';
+
+        // Column-specific filters
+        const partNumCell = cells[1].textContent.toLowerCase();
+        const descCell = cells[2].textContent.toLowerCase();
+        const brandCell = cells[3].textContent.toLowerCase();
+        const warehouseCell = cells[4].textContent.toLowerCase();
+        const stockCell = cells[5].textContent;
+        const priceCell = cells[8].textContent.replace('$', '');
+        const costCell = cells[9].textContent.replace('$', '');
+
+        const matchPartNum = columnFilters.part_number === '' || partNumCell.includes(columnFilters.part_number);
+        const matchDesc = columnFilters.description === '' || descCell.includes(columnFilters.description);
+        const matchBrand = columnFilters.brand === '' || brandCell.includes(columnFilters.brand);
+        const matchWarehouse = columnFilters.warehouse_name === '' || warehouseCell.includes(columnFilters.warehouse_name);
+        const matchStock = columnFilters.current_stock === '' || stockCell.includes(columnFilters.current_stock);
+        const matchPrice = columnFilters.last_purchase_price === '' || priceCell.includes(columnFilters.last_purchase_price);
+        const matchCost = columnFilters.avg_unit_cost === '' || costCell.includes(columnFilters.avg_unit_cost);
+
+        if (showWarehouse && showCategory && showBrand && showSearch && showStock && showOutStock &&
+            matchPartNum && matchDesc && matchBrand && matchWarehouse && matchStock && matchPrice && matchCost) {
+            row.style.display = '';
+            visibleRows.push(row);
+        } else {
+            row.style.display = 'none';
+        }
+    });
+
+    // Sort visible rows
+    if (currentSort.column) {
+        visibleRows.sort((a, b) => {
+            const cellsA = a.querySelectorAll('td');
+            const cellsB = b.querySelectorAll('td');
+            let aVal, bVal;
+
+            if (currentSort.column === 'part_number') {
+                aVal = cellsA[1].textContent.trim().toLowerCase();
+                bVal = cellsB[1].textContent.trim().toLowerCase();
+                return currentSort.direction === 'asc' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
+            } else if (currentSort.column === 'description') {
+                aVal = cellsA[2].textContent.trim().toLowerCase();
+                bVal = cellsB[2].textContent.trim().toLowerCase();
+                return currentSort.direction === 'asc' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
+            } else if (currentSort.column === 'brand') {
+                aVal = cellsA[3].textContent.trim().toLowerCase();
+                bVal = cellsB[3].textContent.trim().toLowerCase();
+                return currentSort.direction === 'asc' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
+            } else if (currentSort.column === 'warehouse_name') {
+                aVal = cellsA[4].textContent.trim().toLowerCase();
+                bVal = cellsB[4].textContent.trim().toLowerCase();
+                return currentSort.direction === 'asc' ? (aVal > bVal ? 1 : -1) : (aVal < bVal ? 1 : -1);
+            } else if (currentSort.column === 'current_stock') {
+                aVal = parseInt(cellsA[5].textContent) || 0;
+                bVal = parseInt(cellsB[5].textContent) || 0;
+                return currentSort.direction === 'asc' ? aVal - bVal : bVal - aVal;
+            } else if (currentSort.column === 'last_purchase_price') {
+                aVal = parseFloat(cellsA[8].textContent.replace('$', '')) || 0;
+                bVal = parseFloat(cellsB[8].textContent.replace('$', '')) || 0;
+                return currentSort.direction === 'asc' ? aVal - bVal : bVal - aVal;
+            } else if (currentSort.column === 'avg_unit_cost') {
+                aVal = parseFloat(cellsA[9].textContent.replace('$', '')) || 0;
+                bVal = parseFloat(cellsB[9].textContent.replace('$', '')) || 0;
+                return currentSort.direction === 'asc' ? aVal - bVal : bVal - aVal;
+            }
+            return 0;
+        });
+
+        const tbody = document.getElementById('tableBody');
+        visibleRows.forEach((row, idx) => {
+            row.dataset.rowNum = idx + 1;
+            tbody.appendChild(row);
+        });
+    }
+
+    updateCounts(visibleRows.length);
+}
+
+function updateCounts(totalItems) {
+    const outOfStockCount = document.querySelectorAll('.stock-row[data-stock="out"]').length;
+    document.getElementById('filteredCount').textContent = totalItems;
+    document.getElementById('totalCount').textContent = totalItems;
+    document.getElementById('showingCount').textContent = totalItems;
+    document.getElementById('outOfStockCount').textContent = outOfStockCount;
+}
+
+function showDetail(partNumber) {
+    const row = document.querySelector(`tr[data-search*="${partNumber.toLowerCase()}"]`);
+    if (!row) return;
+
+    const cells = row.querySelectorAll('td');
+    document.getElementById('modalTitle').textContent = `Part: ${partNumber}`;
+    document.getElementById('modalContent').innerHTML = `
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label class="text-slate-400 text-xs">Part Number</label>
+                <p class="text-white font-mono">${cells[1].textContent}</p>
+            </div>
+            <div>
+                <label class="text-slate-400 text-xs">Description</label>
+                <p class="text-white">${cells[2].textContent}</p>
+            </div>
+            <div>
+                <label class="text-slate-400 text-xs">Brand</label>
+                <p class="text-white">${cells[4].textContent}</p>
+            </div>
+            <div>
+                <label class="text-slate-400 text-xs">Warehouse</label>
+                <p class="text-white">${cells[6].textContent}</p>
+            </div>
+            <div>
+                <label class="text-slate-400 text-xs">Current Stock</label>
+                <p class="text-white font-bold">${cells[5].textContent}</p>
+            </div>
+            <div>
+                <label class="text-slate-400 text-xs">Last Purchase Price</label>
+                <p class="text-white">${cells[8].textContent}</p>
+            </div>
+            <div>
+                <label class="text-slate-400 text-xs">Avg Unit Cost</label>
+                <p class="text-white">${cells[9].textContent}</p>
+            </div>
+        </div>
+    `;
+    document.getElementById('detailModal').classList.remove('hidden');
+}
+
+function closeModal() {
+    document.getElementById('detailModal').classList.add('hidden');
+}
+
+function exportTable() {
+    const rows = document.querySelectorAll('.stock-row:not([style*="none"])');
+    let csv = 'Part Number,Description,Brand,Warehouse,Current Stock,Min Stock,Max Stock,Last Purchase Price,Avg Unit Cost\n';
+
+    rows.forEach(row => {
+        const cells = row.querySelectorAll('td');
+        csv += `${cells[1].textContent},"${cells[2].textContent}",${cells[3].textContent},${cells[4].textContent},${cells[5].textContent},${cells[6].textContent},${cells[7].textContent},${cells[8].textContent},${cells[9].textContent}\n`;
+    });
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `stock_export_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// Add click handler to rows
+document.querySelectorAll('.stock-row').forEach(row => {
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', (e) => {
+        const cells = row.querySelectorAll('td');
+        const partNumber = cells[1].textContent;
+        showDetail(partNumber);
+    });
+});
+
+// Search input handler
+document.getElementById('searchInput').addEventListener('input', filterTable);
+
+// Close modal on escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeModal();
+        closeImportModal();
+    }
+});
+
+// Initial render
+renderTable();
+
+// Auto-sync on page load (handled server-side now, but triggerSync kept for manual use)
+function triggerSync() {
+    const syncBtn = document.getElementById('syncBtn');
+    if (syncBtn) {
+        syncBtn.disabled = true;
+        syncBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Syncing...';
+    }
+
+    fetch('/api/sync/trigger', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            console.log('Sync successful:', result.items_synced, 'items synced');
+            // Reload page to show new data
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            console.log('Sync failed:', result.errors);
+            if (syncBtn) {
+                syncBtn.disabled = false;
+                syncBtn.innerHTML = '<i class="fa-solid fa-rotate mr-2"></i> Sync Now';
+            }
+            alert('Sync failed: ' + (result.errors || []).join(', '));
+        }
+    })
+    .catch(err => {
+        console.error('Sync failed:', err);
+        if (syncBtn) {
+            syncBtn.disabled = false;
+            syncBtn.innerHTML = '<i class="fa-solid fa-rotate mr-2"></i> Sync Now';
+        }
+        alert('Sync failed: ' + err.message);
+    });
+}
+
+// Page fully rendered - sync is handled server-side on every load
+
+// Import Modal Functions
+function showImportModal() {
+    document.getElementById('importModal').classList.remove('hidden');
+}
+
+function closeImportModal() {
+    document.getElementById('importModal').classList.add('hidden');
+    document.getElementById('importForm').reset();
+}
+
+async function handleImport(event) {
+    event.preventDefault();
+    const form = event.target;
+    const formData = new FormData(form);
+    const importType = formData.get('import_type');
+    const fileInput = document.getElementById('importFile');
+    const statusDiv = document.getElementById('importStatus');
+
+    if (!fileInput.files.length) {
+        statusDiv.innerHTML = '<p class="text-red-400">Please select a file</p>';
+        return;
+    }
+
+    const endpoint = importType === 'csv' ? '/api/sync/import-csv' : '/api/sync/import-excel';
+
+    statusDiv.innerHTML = '<p class="text-yellow-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Importing...</p>';
+
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            statusDiv.innerHTML = `
+                <div class="text-emerald-400">
+                    <p><i class="fa-solid fa-check mr-2"></i>Import completed!</p>
+                    <p class="text-sm mt-2">Total rows: ${result.total_rows}</p>
+                    <p class="text-sm">Imported: ${result.imported}</p>
+                    <p class="text-sm">Skipped: ${result.skipped}</p>
+                    ${result.errors.length ? `<p class="text-red-400 text-sm mt-2">Errors: ${result.errors.length}</p>` : ''}
+                </div>
+            `;
+            // Refresh page after 2 seconds
+            setTimeout(() => window.location.reload(), 2000);
+        } else {
+            statusDiv.innerHTML = `<p class="text-red-400"><i class="fa-solid fa-xmark mr-2"></i>${result.message || 'Import failed'}</p>`;
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `<p class="text-red-400"><i class="fa-solid fa-xmark mr-2"></i>Error: ${error.message}</p>`;
+    }
+}
+</script>
+
+<!-- Import Modal -->
+<div id="importModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+    <div class="glass-panel rounded-2xl border border-white/10 max-w-lg w-full">
+        <div class="p-6 border-b border-slate-700/50 flex items-center justify-between">
+            <h3 class="text-xl font-bold text-white">Import Stock Data</h3>
+            <button onclick="closeImportModal()" class="text-slate-400 hover:text-white">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+        </div>
+        <div class="p-6">
+            <form id="importForm" onsubmit="handleImport(event)" enctype="multipart/form-data">
+                <div class="mb-4">
+                    <label class="block text-slate-400 text-sm mb-2">Import Type</label>
+                    <select name="import_type" class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2">
+                        <option value="csv">CSV File</option>
+                        <option value="excel">Excel File (.xlsx, .xls)</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-slate-400 text-sm mb-2">Select File</label>
+                    <input type="file" id="importFile" name="file" accept=".csv,.xlsx,.xls"
+                        class="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2">
+                </div>
+                <div class="mb-4">
+                    <p class="text-slate-500 text-xs">
+                        Expected CSV columns: part_number, barcode, product_code, description, category, brand,
+                        warehouse_name, current_stock, min_stock, max_stock, last_purchase_price, avg_unit_cost
+                    </p>
+                </div>
+                <div id="importStatus" class="mb-4"></div>
+                <div class="flex justify-end gap-3">
+                    <button type="button" onclick="closeImportModal()"
+                        class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                        class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-sm">
+                        <i class="fa-solid fa-file-import mr-2"></i> Import
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

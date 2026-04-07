@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">{{ 'Edit Quotation' if form_action == 'edit' else 'New Quotation' }}</h1>
+    </div>
+
+    <form method="post" class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="p-6 space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Quotation Date</label>
+                    <input type="date" name="quotation_date" value="{{ quotation.quotation_date or '' }}" required
+                           class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Valid Until</label>
+                    <input type="date" name="valid_until" value="{{ quotation.valid_until or '' }}"
+                           class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Currency</label>
+                    <select name="currency" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                        <option value="AED" {{ 'selected' if quotation.currency == 'AED' else '' }}>AED</option>
+                        <option value="USD" {{ 'selected' if quotation.currency == 'USD' else '' }}>USD</option>
+                        <option value="EUR" {{ 'selected' if quotation.currency == 'EUR' else '' }}>EUR</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Customer</label>
+                    <select name="customer_id" id="customerSelect" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                        <option value="">-- Select Customer --</option>
+                        {% for c in customers %}
+                        <option value="{{ c.id }}" {{ 'selected' if quotation.customer_id == c.id else '' }}>{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Salesperson</label>
+                    <select name="assigned_salesperson_id" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                        {% for s in salespersons %}
+                        <option value="{{ s.id }}" {{ 'selected' if quotation.assigned_salesperson_id == s.id else '' }}>{{ s.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Payment Terms</label>
+                    <input type="text" name="payment_terms" value="{{ quotation.payment_terms or '' }}"
+                           class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Delivery Terms</label>
+                    <input type="text" name="delivery_terms" value="{{ quotation.delivery_terms or '' }}"
+                           class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                </div>
+            </div>
+
+            <!-- Line Items -->
+            <div>
+                <h3 class="text-lg font-semibold text-gray-800 dark:text-white mb-4 border-b pb-2">Line Items</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm" id="linesTable">
+                        <thead class="bg-gray-50 dark:bg-gray-700">
+                            <tr>
+                                <th class="px-2 py-2 text-left text-xs">Part #</th>
+                                <th class="px-2 py-2 text-left text-xs">Brand</th>
+                                <th class="px-2 py-2 text-left text-xs">Description</th>
+                                <th class="px-2 py-2 text-right text-xs">Qty</th>
+                                <th class="px-2 py-2 text-right text-xs">Unit Price</th>
+                                <th class="px-2 py-2 text-right text-xs">Discount %</th>
+                                <th class="px-2 py-2 text-right text-xs">Final Price</th>
+                            </tr>
+                        </thead>
+                        <tbody id="linesBody">
+                            {% if quotation and quotation.lines %}
+                                {% for line in quotation.lines %}
+                            <tr>
+                                <td class="px-2 py-2"><input type="text" name="part_number" value="{{ line.part_number }}" class="w-full px-2 py-1 border rounded"></td>
+                                <td class="px-2 py-2"><input type="text" name="brand" value="{{ line.brand }}" class="w-full px-2 py-1 border rounded"></td>
+                                <td class="px-2 py-2"><input type="text" name="description" value="{{ line.description }}" class="w-full px-2 py-1 border rounded"></td>
+                                <td class="px-2 py-2"><input type="number" name="requested_quantity" value="{{ line.requested_quantity }}" class="w-20 px-2 py-1 border rounded text-right"></td>
+                                <td class="px-2 py-2"><input type="number" step="0.01" name="unit_price" value="{{ line.unit_price }}" class="w-24 px-2 py-1 border rounded text-right"></td>
+                                <td class="px-2 py-2"><input type="number" step="0.01" name="discount_percent" value="{{ line.discount_percent or 0 }}" class="w-20 px-2 py-1 border rounded text-right"></td>
+                                <td class="px-2 py-2"><input type="number" step="0.01" name="final_price" value="{{ line.final_price }}" class="w-24 px-2 py-1 border rounded text-right"></td>
+                            </tr>
+                                {% endfor %}
+                            {% else %}
+                            <tr>
+                                <td class="px-2 py-2"><input type="text" name="part_number" placeholder="Part #" class="w-full px-2 py-1 border rounded"></td>
+                                <td class="px-2 py-2"><input type="text" name="brand" placeholder="Brand" class="w-full px-2 py-1 border rounded"></td>
+                                <td class="px-2 py-2"><input type="text" name="description" placeholder="Description" class="w-full px-2 py-1 border rounded"></td>
+                                <td class="px-2 py-2"><input type="number" name="requested_quantity" placeholder="0" class="w-20 px-2 py-1 border rounded text-right"></td>
+                                <td class="px-2 py-2"><input type="number" step="0.01" name="unit_price" placeholder="0.00" class="w-24 px-2 py-1 border rounded text-right"></td>
+                                <td class="px-2 py-2"><input type="number" step="0.01" name="discount_percent" value="0" class="w-20 px-2 py-1 border rounded text-right"></td>
+                                <td class="px-2 py-2"><input type="number" step="0.01" name="final_price" placeholder="0.00" class="w-24 px-2 py-1 border rounded text-right"></td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                    <button type="button" onclick="addLine()" class="mt-2 px-3 py-1 bg-gray-200 dark:bg-gray-600 rounded text-sm hover:bg-gray-300">
+                        <i class="fas fa-plus mr-1"></i> Add Line
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Notes</label>
+                    <textarea name="notes" rows="3" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">{{ quotation.notes or '' }}</textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Discount %</label>
+                    <input type="number" step="0.01" name="discount_percent" value="{{ quotation.discount_percent or 0 }}"
+                           class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 mb-2">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tax %</label>
+                    <input type="number" step="0.01" name="tax_percent" value="{{ quotation.tax_percent or 0 }}"
+                           class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600">
+                </div>
+            </div>
+        </div>
+
+        <div class="px-6 py-4 bg-gray-50 dark:bg-gray-700 rounded-b-lg flex justify-end gap-3">
+            <a href="{{ url_for('sales_quotations') }}" class="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg">Cancel</a>
+            <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <i class="fas fa-save mr-2"></i> {{ 'Update' if form_action == 'edit' else 'Create' }} Quotation
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+function addLine() {
+    const tbody = document.getElementById('linesBody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td class="px-2 py-2"><input type="text" name="part_number" placeholder="Part #" class="w-full px-2 py-1 border rounded"></td>
+        <td class="px-2 py-2"><input type="text" name="brand" placeholder="Brand" class="w-full px-2 py-1 border rounded"></td>
+        <td class="px-2 py-2"><input type="text" name="description" placeholder="Description" class="w-full px-2 py-1 border rounded"></td>
+        <td class="px-2 py-2"><input type="number" name="requested_quantity" placeholder="0" class="w-20 px-2 py-1 border rounded text-right"></td>
+        <td class="px-2 py-2"><input type="number" step="0.01" name="unit_price" placeholder="0.00" class="w-24 px-2 py-1 border rounded text-right"></td>
+        <td class="px-2 py-2"><input type="number" step="0.01" name="discount_percent" value="0" class="w-20 px-2 py-1 border rounded text-right"></td>
+        <td class="px-2 py-2"><input type="number" step="0.01" name="final_price" placeholder="0.00" class="w-24 px-2 py-1 border rounded text-right"></td>
+    `;
+    tbody.appendChild(tr);
+}
+</script>
+{% endblock %}

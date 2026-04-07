@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}" class="{{ 'dark' if user_preferences.is_dark else 'light' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white">{{ t('marketing_dashboard', 'Marketing Dashboard') }}</h1>
+            <p class="text-slate-400 mt-1">{{ t('marketing_dashboard_desc', 'Overview of marketing performance and key metrics') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <form method="get" class="flex items-center gap-2">
+                <input type="date" name="date_from" value="{{ date_from }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/50">
+                <span class="text-slate-500">{{ t('to', 'to') }}</span>
+                <input type="date" name="date_to" value="{{ date_to }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm focus:ring-2 focus:ring-brand-500/50">
+                <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold transition-all">
+                    {{ t('filter', 'Filter') }}
+                </button>
+            </form>
+            <a href="{{ url_for('marketing.campaigns_new') }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-plus mr-2"></i>{{ t('new_campaign', 'New Campaign') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards Row -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
+        <!-- Total Campaigns -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center">
+                    <i class="fa-solid fa-bullhorn text-white text-lg"></i>
+                </div>
+                <span class="text-xs font-bold text-purple-400 bg-purple-400/10 px-3 py-1 rounded-full">
+                    {{ t('total', 'Total') }}
+                </span>
+            </div>
+            <div class="text-3xl font-extrabold text-white mb-1">
+                {{ dash_data.campaign_stats.total_campaigns or 0 }}
+            </div>
+            <div class="text-sm text-slate-400">{{ t('campaigns', 'Campaigns') }}</div>
+            <div class="mt-3 flex gap-3 text-xs">
+                <span class="text-emerald-400"><i class="fa-solid fa-circle text-[6px] mr-1"></i>{{ t('active', 'Active') }}: {{ dash_data.campaign_stats.active_campaigns or 0 }}</span>
+                <span class="text-amber-400"><i class="fa-solid fa-circle text-[6px] mr-1"></i>{{ t('paused', 'Paused') }}: {{ dash_data.campaign_stats.paused_campaigns or 0 }}</span>
+            </div>
+        </div>
+
+        <!-- Total Leads -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
+                    <i class="fa-solid fa-users text-white text-lg"></i>
+                </div>
+                <span class="text-xs font-bold text-blue-400 bg-blue-400/10 px-3 py-1 rounded-full">
+                    {{ t('leads', 'Leads') }}
+                </span>
+            </div>
+            <div class="text-3xl font-extrabold text-white mb-1">
+                {{ dash_data.lead_stats.total_leads or 0 }}
+            </div>
+            <div class="text-sm text-slate-400">{{ t('total_leads', 'Total Leads') }}</div>
+            <div class="mt-3 flex gap-3 text-xs">
+                <span class="text-emerald-400"><i class="fa-solid fa-circle text-[6px] mr-1"></i>{{ t('qualified', 'Qualified') }}: {{ dash_data.lead_stats.converted or 0 }}</span>
+                <span class="text-rose-400"><i class="fa-solid fa-circle text-[6px] mr-1"></i>{{ t('lost', 'Lost') }}: {{ dash_data.lead_stats.lost_leads or 0 }}</span>
+            </div>
+        </div>
+
+        <!-- Total Sales Generated -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
+                    <i class="fa-solid fa-dollar-sign text-white text-lg"></i>
+                </div>
+                <span class="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-3 py-1 rounded-full">
+                    {{ t('sales', 'Sales') }}
+                </span>
+            </div>
+            <div class="text-3xl font-extrabold text-white mb-1">
+                {{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(dash_data.campaign_stats.total_sales or 0) }}
+            </div>
+            <div class="text-sm text-slate-400">{{ t('from_campaigns', 'From Campaigns') }}</div>
+            <div class="mt-3 flex gap-3 text-xs">
+                <span class="text-emerald-400"><i class="fa-solid fa-circle text-[6px] mr-1"></i>{{ t('profit', 'Profit') }}: {{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(dash_data.campaign_stats.profit_generated or 0) }}</span>
+            </div>
+        </div>
+
+        <!-- Conversion Rate -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center">
+                    <i class="fa-solid fa-chart-line text-white text-lg"></i>
+                </div>
+                <span class="text-xs font-bold text-amber-400 bg-amber-400/10 px-3 py-1 rounded-full">
+                    {{ t('rate', 'Rate') }}
+                </span>
+            </div>
+            <div class="text-3xl font-extrabold text-white mb-1">
+                {% if dash_data.lead_stats.total_leads and dash_data.lead_stats.total_leads > 0 %}
+                    {{ "%.1f"|format((dash_data.lead_stats.converted or 0) / dash_data.lead_stats.total_leads * 100) }}%
+                {% else %}
+                    0%
+                {% endif %}
+            </div>
+            <div class="text-sm text-slate-400">{{ t('lead_to_customer', 'Lead to Customer') }}</div>
+            <div class="mt-3 flex gap-3 text-xs">
+                <span class="text-cyan-400"><i class="fa-solid fa-circle text-[6px] mr-1"></i>{{ t('inquiries', 'Inquiries') }}: {{ dash_data.campaign_stats.total_inquiries or 0 }}</span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Second Row: More Stats -->
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-white">{{ dash_data.campaign_stats.new_customers or 0 }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('new_customers', 'New Customers') }}</div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-white">{{ dash_data.campaign_stats.reactivated_customers or 0 }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('reactivated', 'Reactivated') }}</div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-white">{{ dash_data.campaign_stats.total_purchases or 0 }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('purchases', 'Purchases') }}</div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-white">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(dash_data.campaign_stats.total_cost or 0) }}</div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('total_spend', 'Total Spend') }}</div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-cyan-400">
+                {% if dash_data.campaign_stats.total_leads and dash_data.campaign_stats.total_leads > 0 %}
+                    {{ user_preferences.currency_symbol or '$' }}{{ "%.2f"|format(dash_data.campaign_stats.total_cost / dash_data.campaign_stats.total_leads) }}
+                {% else %}
+                    {{ user_preferences.currency_symbol or '$' }}0
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('cost_per_lead', 'Cost/Lead') }}</div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-4 text-center">
+            <div class="text-2xl font-extrabold text-emerald-400">
+                {% if dash_data.campaign_stats.total_cost and dash_data.campaign_stats.total_cost > 0 and dash_data.campaign_stats.total_sales %}
+                    {{ "%.1f"|format((dash_data.campaign_stats.total_sales - dash_data.campaign_stats.total_cost) / dash_data.campaign_stats.total_cost * 100) }}%
+                {% else %}
+                    0%
+                {% endif %}
+            </div>
+            <div class="text-xs text-slate-400 mt-1">{{ t('roi', 'ROI') }}</div>
+        </div>
+
+    </div>
+
+    <!-- Third Row: Charts and Tables -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+
+        <!-- Channel Performance Chart -->
+        <div class="glass-panel rounded-2xl p-6 lg:col-span-2">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('channel_performance', 'Channel Performance') }}</h3>
+            <div class="h-[300px]">
+                <canvas id="channelChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Top Campaigns -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white">{{ t('top_campaigns', 'Top Campaigns') }}</h3>
+                <a href="{{ url_for('marketing.campaigns_list') }}" class="text-sm text-brand-400 hover:text-brand-300">{{ t('view_all', 'View All') }}</a>
+            </div>
+            <div class="space-y-3 max-h-[300px] overflow-y-auto">
+                {% for camp in dash_data.top_campaigns[:5] %}
+                <div class="bg-white/5 rounded-xl p-3">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="font-semibold text-sm text-white truncate">{{ camp.name }}</span>
+                        <span class="text-xs font-bold {% if camp.roi > 0 %}text-emerald-400{% else %}text-rose-400{% endif %}">
+                            {% if camp.roi > 0 %}+{% endif %}{{ "%.1f"|format(camp.roi) }}%
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between text-xs text-slate-400">
+                        <span>{{ camp.campaign_type }}</span>
+                        <span>{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(camp.sales_generated) }} {{ t('sales', 'sales') }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center text-slate-500 py-8">{{ t('no_campaigns', 'No campaigns yet') }}</div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Fourth Row: Recent Activity -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+
+        <!-- Recent Campaigns -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white">{{ t('recent_campaigns', 'Recent Campaigns') }}</h3>
+                <a href="{{ url_for('marketing.campaigns_list') }}" class="text-sm text-brand-400 hover:text-brand-300">{{ t('view_all', 'View All') }}</a>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-white/10">
+                            <th class="text-left py-2 px-3">{{ t('name', 'Name') }}</th>
+                            <th class="text-left py-2 px-3">{{ t('type', 'Type') }}</th>
+                            <th class="text-left py-2 px-3">{{ t('status', 'Status') }}</th>
+                            <th class="text-right py-2 px-3">{{ t('leads', 'Leads') }}</th>
+                            <th class="text-right py-2 px-3">{{ t('sales', 'Sales') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for camp in recent_campaigns %}
+                        <tr class="border-b border-white/5 hover:bg-white/5">
+                            <td class="py-3 px-3">
+                                <a href="{{ url_for('marketing.campaigns_view', id=camp.id) }}" class="text-brand-400 hover:text-brand-300 font-medium">
+                                    {{ camp.name }}
+                                </a>
+                            </td>
+                            <td class="py-3 px-3 text-slate-300">{{ camp.campaign_type }}</td>
+                            <td class="py-3 px-3">
+                                <span class="px-2 py-1 rounded-full text-xs font-bold
+                                    {% if camp.status == 'Active' %}bg-emerald-400/20 text-emerald-400
+                                    {% elif camp.status == 'Completed' %}bg-blue-400/20 text-blue-400
+                                    {% elif camp.status == 'Paused' %}bg-amber-400/20 text-amber-400
+                                    {% else %}bg-slate-400/20 text-slate-400{% endif %}">
+                                    {{ camp.status }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-3 text-right text-slate-300">{{ camp.leads_generated or 0 }}</td>
+                            <td class="py-3 px-3 text-right text-emerald-400 font-semibold">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(camp.sales_generated or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="py-8 text-center text-slate-500">{{ t('no_campaigns', 'No campaigns yet') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Recent Leads -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white">{{ t('recent_leads', 'Recent Leads') }}</h3>
+                <a href="{{ url_for('marketing.leads_list') }}" class="text-sm text-brand-400 hover:text-brand-300">{{ t('view_all', 'View All') }}</a>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-white/10">
+                            <th class="text-left py-2 px-3">{{ t('name', 'Name') }}</th>
+                            <th class="text-left py-2 px-3">{{ t('source', 'Source') }}</th>
+                            <th class="text-left py-2 px-3">{{ t('status', 'Status') }}</th>
+                            <th class="text-right py-2 px-3">{{ t('probability', 'Prob.') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lead in recent_leads %}
+                        <tr class="border-b border-white/5 hover:bg-white/5">
+                            <td class="py-3 px-3">
+                                <a href="{{ url_for('marketing.leads_view', id=lead.id) }}" class="text-brand-400 hover:text-brand-300 font-medium">
+                                    {{ lead.lead_name }}
+                                </a>
+                            </td>
+                            <td class="py-3 px-3 text-slate-300">{{ lead.source_name or '-' }}</td>
+                            <td class="py-3 px-3">
+                                <span class="px-2 py-1 rounded-full text-xs font-bold
+                                    {% if lead.lead_status == 'Converted to Customer' %}bg-emerald-400/20 text-emerald-400
+                                    {% elif lead.lead_status == 'Lost' %}bg-rose-400/20 text-rose-400
+                                    {% elif lead.lead_status == 'New' %}bg-blue-400/20 text-blue-400
+                                    {% else %}bg-amber-400/20 text-amber-400{% endif %}">
+                                    {{ lead.lead_status }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-3 text-right text-cyan-400 font-semibold">{{ lead.conversion_probability or 0 }}%</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="py-8 text-center text-slate-500">{{ t('no_leads', 'No leads yet') }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Fifth Row: Quick Actions and Alerts -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Quick Actions -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('quick_actions', 'Quick Actions') }}</h3>
+            <div class="space-y-3">
+                <a href="{{ url_for('marketing.campaigns_new') }}" class="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+                    <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-bullhorn text-purple-400"></i>
+                    </div>
+                    <div>
+                        <div class="font-semibold text-white">{{ t('create_campaign', 'Create Campaign') }}</div>
+                        <div class="text-xs text-slate-400">{{ t('create_campaign_desc', 'Start a new marketing campaign') }}</div>
+                    </div>
+                </a>
+                <a href="{{ url_for('marketing.leads_new') }}" class="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+                    <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-user-plus text-blue-400"></i>
+                    </div>
+                    <div>
+                        <div class="font-semibold text-white">{{ t('add_lead', 'Add Lead') }}</div>
+                        <div class="text-xs text-slate-400">{{ t('add_lead_desc', 'Capture a new lead') }}</div>
+                    </div>
+                </a>
+                <a href="{{ url_for('marketing.advertisements_new') }}" class="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+                    <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-ad text-amber-400"></i>
+                    </div>
+                    <div>
+                        <div class="font-semibold text-white">{{ t('create_ad', 'Create Ad') }}</div>
+                        <div class="text-xs text-slate-400">{{ t('create_ad_desc', 'Design a new advertisement') }}</div>
+                    </div>
+                </a>
+                <a href="{{ url_for('marketing.content_new') }}" class="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+                    <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-pen-nib text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <div class="font-semibold text-white">{{ t('create_content', 'Create Content') }}</div>
+                        <div class="text-xs text-slate-400">{{ t('create_content_desc', 'Plan new content') }}</div>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <!-- Open Alerts -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white">{{ t('open_alerts', 'Open Alerts') }}</h3>
+                <span class="px-2 py-1 bg-rose-500/20 text-rose-400 rounded-lg text-sm font-bold">{{ open_alerts }}</span>
+            </div>
+            <div class="space-y-2 max-h-[250px] overflow-y-auto">
+                {% for alert in dash_data.recent_alerts %}
+                <div class="p-3 bg-white/5 rounded-xl">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="font-semibold text-sm text-white">{{ alert.alert_title }}</span>
+                        <span class="px-2 py-0.5 rounded text-xs font-bold
+                            {% if alert.severity == 'Critical' %}bg-rose-500/20 text-rose-400
+                            {% elif alert.severity == 'High' %}bg-amber-500/20 text-amber-400
+                            {% else %}bg-blue-500/20 text-blue-400{% endif %}">
+                            {{ alert.severity }}
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-400">{{ alert.entity_name or alert.alert_type }}</div>
+                </div>
+                {% else %}
+                <div class="text-center text-slate-500 py-8">
+                    <i class="fa-solid fa-check-circle text-4xl text-emerald-400 mb-2"></i>
+                    <div>{{ t('no_alerts', 'No open alerts') }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Open Recommendations -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white">{{ t('recommendations', 'Recommendations') }}</h3>
+                <span class="px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded-lg text-sm font-bold">{{ open_recommendations }}</span>
+            </div>
+            <div class="space-y-2 max-h-[250px] overflow-y-auto">
+                {% for rec in [] %}
+                <div class="p-3 bg-white/5 rounded-xl">
+                    <div class="font-semibold text-sm text-white">{{ rec.recommendation_title }}</div>
+                    <div class="text-xs text-slate-400 mt-1">{{ rec.recommendation_text }}</div>
+                </div>
+                {% else %}
+                <div class="text-center text-slate-500 py-8">
+                    <i class="fa-solid fa-lightbulb text-4xl text-cyan-400 mb-2"></i>
+                    <div>{{ t('no_recommendations', 'No recommendations yet') }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Channel Performance Chart
+    const channelData = {{ dash_data.channel_performance | tojson }};
+    const channelLabels = channelData.map(c => c.name);
+    const channelLeads = channelData.map(c => c.leads_generated || 0);
+    const channelSales = channelData.map(c => c.sales_generated || 0);
+
+    const ctx = document.getElementById('channelChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: channelLabels.length > 0 ? channelLabels : ['No Data'],
+            datasets: [
+                {
+                    label: '{{ t("leads", "Leads") }}',
+                    data: channelLeads.length > 0 ? channelLeads : [0],
+                    backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                    borderRadius: 8
+                },
+                {
+                    label: '{{ t("sales", "Sales") }} / 1000',
+                    data: channelSales.length > 0 ? channelSales.map(s => s / 1000) : [0],
+                    backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                    borderRadius: 8
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { color: '#94a3b8', font: { family: 'Outfit' } }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#94a3b8', font: { family: 'Outfit' } }
+                },
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.05)' },
+                    ticks: { color: '#94a3b8', font: { family: 'Outfit' } }
+                }
+            }
+        }
+    });
+});
+</script>
+
+{% endblock %}

@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - {{ get_setting('platform_name', 'WHDASH') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        {% include 'theme_variables.html' %}
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+
+{% include 'admin_sidebar.html' %}
+
+<div class="ml-64 min-h-screen">
+    {% include 'admin_header.html' %}
+
+    <main class="p-6">
+        <!-- Page Header -->
+        <div class="mb-8 flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
+                <p class="text-slate-600 dark:text-slate-400 mt-1">Manage companies, branches, departments, and organizational hierarchy</p>
+            </div>
+            <button onclick="openCreateModal('company')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                <i class="fas fa-plus mr-2"></i>Add Company
+            </button>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-slate-500 dark:text-slate-400">Companies</p>
+                        <p class="text-3xl font-bold text-slate-800 dark:text-white">{{ stats.companies }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-building text-blue-600 dark:text-blue-400 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-slate-500 dark:text-slate-400">Branches</p>
+                        <p class="text-3xl font-bold text-slate-800 dark:text-white">{{ stats.branches }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-sitemap text-green-600 dark:text-green-400 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-slate-500 dark:text-slate-400">Warehouses</p>
+                        <p class="text-3xl font-bold text-slate-800 dark:text-white">{{ stats.warehouses }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-warehouse text-purple-600 dark:text-purple-400 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl p-6 shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-slate-500 dark:text-slate-400">Departments</p>
+                        <p class="text-3xl font-bold text-slate-800 dark:text-white">{{ stats.departments }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-orange-100 dark:bg-orange-900 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-users text-orange-600 dark:text-orange-400 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="border-b border-slate-200 dark:border-slate-700 mb-6">
+            <nav class="flex gap-4">
+                <button onclick="showTab('companies')" id="tab-companies" class="px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-medium">
+                    <i class="fas fa-building mr-2"></i>Companies
+                </button>
+                <button onclick="showTab('branches')" id="tab-branches" class="px-4 py-2 border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white">
+                    <i class="fas fa-sitemap mr-2"></i>Branches
+                </button>
+                <button onclick="showTab('departments')" id="tab-departments" class="px-4 py-2 border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white">
+                    <i class="fas fa-users mr-2"></i>Departments
+                </button>
+            </nav>
+        </div>
+
+        <!-- Companies Tab -->
+        <div id="content-companies" class="tab-content">
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <table class="w-full">
+                    <thead class="bg-slate-50 dark:bg-slate-700/50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Code</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Name</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Type</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Branches</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                        {% for company in companies %}
+                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                            <td class="px-4 py-3 font-mono text-sm">{{ company.code }}</td>
+                            <td class="px-4 py-3 font-medium text-slate-800 dark:text-white">{{ company.name }}</td>
+                            <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ company.company_type or 'N/A' }}</td>
+                            <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ company.branch_count or 0 }}</td>
+                            <td class="px-4 py-3">
+                                {% if company.is_active %}
+                                <span class="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full text-xs font-medium">Active</span>
+                                {% else %}
+                                <span class="px-2 py-1 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-full text-xs font-medium">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3">
+                                <button onclick="openEditModal('company', {{ company.id }})" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Edit">
+                                    <i class="fas fa-edit text-slate-600 dark:text-slate-400"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center text-slate-500">
+                                <i class="fas fa-building text-4xl mb-3"></i>
+                                <p>No companies found</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Branches Tab -->
+        <div id="content-branches" class="tab-content hidden">
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-end">
+                    <button onclick="openCreateModal('branch')" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors">
+                        <i class="fas fa-plus mr-1"></i> Add Branch
+                    </button>
+                </div>
+                <table class="w-full">
+                    <thead class="bg-slate-50 dark:bg-slate-700/50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Code</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Name</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Company</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Type</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                        {% for branch in branches %}
+                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                            <td class="px-4 py-3 font-mono text-sm">{{ branch.code }}</td>
+                            <td class="px-4 py-3 font-medium text-slate-800 dark:text-white">{{ branch.name }}</td>
+                            <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ branch.company_name or 'N/A' }}</td>
+                            <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ branch.branch_type or 'N/A' }}</td>
+                            <td class="px-4 py-3">
+                                {% if branch.is_active %}
+                                <span class="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full text-xs font-medium">Active</span>
+                                {% else %}
+                                <span class="px-2 py-1 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-full text-xs font-medium">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3">
+                                <button onclick="openEditModal('branch', {{ branch.id }})" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Edit">
+                                    <i class="fas fa-edit text-slate-600 dark:text-slate-400"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="px-4 py-8 text-center text-slate-500">
+                                <i class="fas fa-sitemap text-4xl mb-3"></i>
+                                <p>No branches found</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Departments Tab -->
+        <div id="content-departments" class="tab-content hidden">
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-end">
+                    <button onclick="openCreateModal('department')" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-colors">
+                        <i class="fas fa-plus mr-1"></i> Add Department
+                    </button>
+                </div>
+                <table class="w-full">
+                    <thead class="bg-slate-50 dark:bg-slate-700/50">
+                        <tr>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Code</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Name</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Company</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Status</th>
+                            <th class="px-4 py-3 text-left text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                        {% for dept in departments %}
+                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                            <td class="px-4 py-3 font-mono text-sm">{{ dept.code }}</td>
+                            <td class="px-4 py-3 font-medium text-slate-800 dark:text-white">{{ dept.name }}</td>
+                            <td class="px-4 py-3 text-slate-600 dark:text-slate-400">{{ dept.company_name or 'N/A' }}</td>
+                            <td class="px-4 py-3">
+                                {% if dept.is_active %}
+                                <span class="px-2 py-1 bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300 rounded-full text-xs font-medium">Active</span>
+                                {% else %}
+                                <span class="px-2 py-1 bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-300 rounded-full text-xs font-medium">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-3">
+                                <button onclick="openEditModal('department', {{ dept.id }})" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" title="Edit">
+                                    <i class="fas fa-edit text-slate-600 dark:text-slate-400"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="px-4 py-8 text-center text-slate-500">
+                                <i class="fas fa-users text-4xl mb-3"></i>
+                                <p>No departments found</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Create/Edit Modal -->
+<div id="entityModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto m-4">
+        <div class="p-6 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h2 id="modalTitle" class="text-xl font-semibold text-slate-800 dark:text-white">Add Company</h2>
+            <button onclick="closeModal()" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+                <i class="fas fa-times text-slate-600 dark:text-slate-400"></i>
+            </button>
+        </div>
+        <form method="post" class="p-6 space-y-4">
+            <input type="hidden" name="action" id="formAction" value="create_company">
+            <input type="hidden" name="entity_id" id="entityId" value="">
+
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Code *</label>
+                    <input type="text" name="code" id="entityCode" required
+                           class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Name *</label>
+                    <input type="text" name="name" id="entityName" required
+                           class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                </div>
+            </div>
+
+            <div id="companySelect">
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Parent Company</label>
+                <select name="parent_id" id="entityParent"
+                        class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                    <option value="">None (Top Level)</option>
+                    {% for company in companies %}
+                    <option value="{{ company.id }}">{{ company.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Type</label>
+                <input type="text" name="entity_type" id="entityType" placeholder="e.g., Holding, Subsidiary, Regional"
+                       class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Description</label>
+                <textarea name="description" id="entityDescription" rows="2"
+                          class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white"></textarea>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <input type="checkbox" name="is_active" id="entityActive" value="1" checked
+                       class="w-4 h-4 text-blue-600 rounded border-slate-300">
+                <label for="entityActive" class="text-sm text-slate-600 dark:text-slate-400">Active</label>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <button type="button" onclick="closeModal()" class="px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-lg transition-colors">
+                    Cancel
+                </button>
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                    Save
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% include 'admin_scripts.html' %}
+
+<script>
+let entityType = 'company';
+
+function showTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('[id^="tab-"]').forEach(el => {
+        el.classList.remove('border-blue-600', 'text-blue-600');
+        el.classList.add('border-transparent', 'text-slate-600', 'dark:text-slate-400');
+    });
+    document.getElementById('content-' + tab).classList.remove('hidden');
+    document.getElementById('tab-' + tab).classList.remove('border-transparent', 'text-slate-600', 'dark:text-slate-400');
+    document.getElementById('tab-' + tab).classList.add('border-blue-600', 'text-blue-600');
+}
+
+function openCreateModal(type) {
+    entityType = type;
+    document.getElementById('formAction').value = 'create_' + type;
+    document.getElementById('entityId').value = '';
+    document.getElementById('modalTitle').textContent = 'Add ' + type.charAt(0).toUpperCase() + type.slice(1);
+    document.getElementById('companySelect').classList.toggle('hidden', type === 'company');
+    document.getElementById('entityForm').reset();
+    document.getElementById('entityActive').checked = true;
+    document.getElementById('entityModal').classList.remove('hidden');
+    document.getElementById('entityModal').classList.add('flex');
+}
+
+function openEditModal(type, id) {
+    entityType = type;
+    document.getElementById('formAction').value = 'edit_' + type;
+    document.getElementById('entityId').value = id;
+    document.getElementById('modalTitle').textContent = 'Edit ' + type.charAt(0).toUpperCase() + type.slice(1);
+    document.getElementById('companySelect').classList.toggle('hidden', type === 'company');
+
+    fetch(`/admin/api/${type}s/${id}`)
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('entityCode').value = data.code || '';
+            document.getElementById('entityName').value = data.name || '';
+            document.getElementById('entityParent').value = data.parent_id || '';
+            document.getElementById('entityType').value = data.entity_type || data.company_type || '';
+            document.getElementById('entityDescription').value = data.description || '';
+            document.getElementById('entityActive').checked = data.is_active == 1;
+        });
+
+    document.getElementById('entityModal').classList.remove('hidden');
+    document.getElementById('entityModal').classList.add('flex');
+}
+
+function closeModal() {
+    document.getElementById('entityModal').classList.add('hidden');
+    document.getElementById('entityModal').classList.remove('flex');
+}
+
+document.getElementById('entityForm').addEventListener('submit', function(e) {
+    // Form submits normally
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeModal();
+});
+</script>
+</body>
+</html>

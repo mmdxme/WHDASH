@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - {{ get_setting('platform_name', 'WHDASH') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>{% include 'theme_variables.html' %}</style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+{% include 'admin_sidebar.html' %}
+<div class="ml-64 min-h-screen">
+    {% include 'admin_header.html' %}
+    <main class="p-6">
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
+            <p class="text-slate-600 dark:text-slate-400 mt-1">Configure warehouse policies, inventory methods, stock rules, and location management</p>
+        </div>
+
+        <form method="post" action="{{ url_for('admin_settings_category', category='WAREHOUSE') }}">
+            <input type="hidden" name="category" value="WAREHOUSE">
+
+            <!-- Inventory Method -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-warehouse text-blue-600"></i> Inventory Valuation Method
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Inventory Method</label>
+                        <select name="wms_inventory_method" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                            <option value="FIFO" {% if settings.wms_inventory_method == 'FIFO' %}selected{% endif %}>FIFO (First In, First Out)</option>
+                            <option value="LIFO" {% if settings.wms_inventory_method == 'LIFO' %}selected{% endif %}>LIFO (Last In, First Out)</option>
+                            <option value="FEFO" {% if settings.wms_inventory_method == 'FEFO' %}selected{% endif %}>FEFO (First Expired, First Out)</option>
+                            <option value="AVCO" {% if settings.wms_inventory_method == 'AVCO' %}selected{% endif %}>AVCO (Average Cost)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stock Thresholds -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-exclamation-triangle text-yellow-600"></i> Stock Alert Thresholds
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Low Stock Threshold (%)</label>
+                        <input type="number" name="wms_low_stock_threshold_percent" value="{{ settings.wms_low_stock_threshold_percent or '20' }}" min="0" max="100"
+                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                        <p class="text-xs text-slate-500 mt-1">Alert when stock falls below this % of max</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Reorder Threshold (%)</label>
+                        <input type="number" name="wms_reorder_threshold_percent" value="{{ settings.wms_reorder_threshold_percent or '30' }}" min="0" max="100"
+                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Critical Stock Threshold (%)</label>
+                        <input type="number" name="wms_critical_stock_percent" value="{{ settings.wms_critical_stock_percent or '10' }}" min="0" max="100"
+                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tracking Options -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-search text-green-600"></i> Tracking Options
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <label class="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg cursor-pointer">
+                        <input type="checkbox" name="wms_enable_serial_tracking" value="1" {% if settings.wms_enable_serial_tracking == '1' %}checked{% endif %}
+                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                        <div>
+                            <p class="font-medium text-slate-800 dark:text-white">Enable Serial Number Tracking</p>
+                            <p class="text-sm text-slate-500">Track individual items by serial number</p>
+                        </div>
+                    </label>
+                    <label class="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg cursor-pointer">
+                        <input type="checkbox" name="wms_enable_batch_tracking" value="1" {% if settings.wms_enable_batch_tracking == '1' %}checked{% endif %}
+                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                        <div>
+                            <p class="font-medium text-slate-800 dark:text-white">Enable Batch Tracking</p>
+                            <p class="text-sm text-slate-500">Track items by batch/lot number</p>
+                        </div>
+                    </label>
+                    <label class="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg cursor-pointer">
+                        <input type="checkbox" name="wms_auto_assign_location" value="1" {% if settings.wms_auto_assign_location == '1' %}checked{% endif %}
+                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                        <div>
+                            <p class="font-medium text-slate-800 dark:text-white">Auto-Assign Storage Location</p>
+                            <p class="text-sm text-slate-500">Automatically suggest storage bin locations</p>
+                        </div>
+                    </label>
+                    <label class="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg cursor-pointer">
+                        <input type="checkbox" name="wms_auto_receive" value="1" {% if settings.wms_auto_receive == '1' %}checked{% endif %}
+                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                        <div>
+                            <p class="font-medium text-slate-800 dark:text-white">Enable Auto-Receiving</p>
+                            <p class="text-sm text-slate-500">Auto-confirm incoming shipments</p>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Reservation Settings -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-lock text-purple-600"></i> Reservation & Allocation
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Reservation Expiry (hours)</label>
+                        <input type="number" name="wms_reservation_expiry_hours" value="{{ settings.wms_reservation_expiry_hours or '48' }}" min="1"
+                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg cursor-pointer">
+                            <input type="checkbox" name="wms_auto_reservation" value="1" {% if settings.wms_auto_reservation == '1' %}checked{% endif %}
+                                   class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                            <div>
+                                <p class="font-medium text-slate-800 dark:text-white">Auto-Reserve on Order</p>
+                                <p class="text-sm text-slate-500">Automatically reserve stock when order is placed</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cycle Count -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-clipboard-check text-teal-600"></i> Stock Count Policies
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Cycle Count Frequency (days)</label>
+                        <input type="number" name="wms_cycle_count_frequency" value="{{ settings.wms_cycle_count_frequency or '30' }}" min="1"
+                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Allow Negative Stock</label>
+                        <div class="flex items-center gap-4 mt-2">
+                            <label class="flex items-center gap-2">
+                                <input type="radio" name="wms_allow_negative_stock" value="1" {% if settings.wms_allow_negative_stock == '1' %}checked{% endif %} class="w-4 h-4 text-blue-600">Allow
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input type="radio" name="wms_allow_negative_stock" value="0" {% if settings.wms_allow_negative_stock != '1' %}checked{% endif %} class="w-4 h-4 text-blue-600">Block
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <button type="submit" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                    <i class="fas fa-save mr-2"></i>Save Settings
+                </button>
+            </div>
+        </form>
+    </main>
+</div>
+{% include 'admin_scripts.html' %}
+</body>
+</html>

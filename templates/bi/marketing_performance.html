@@ -1,0 +1,202 @@
+{% extends "bi/base_bi.html" %}
+
+{% block title %}Marketing Performance Dashboard{% endblock %}
+
+{% block bi_content %}
+<!-- Marketing Header -->
+<section class="executive-hero mb-4">
+    <h1>Marketing & Lead Performance</h1>
+    <div class="subtitle">Campaign metrics, lead conversion, and marketing ROI</div>
+    
+    <div class="hero-kpi-grid">
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="mkt-campaigns">0</div>
+            <div class="hero-kpi-label">Active Campaigns</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="mkt-leads">0</div>
+            <div class="hero-kpi-label">Total Leads</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="mkt-conversion">0%</div>
+            <div class="hero-kpi-label">Lead-to-Sale Rate</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="mkt-revenue">AED 0</div>
+            <div class="hero-kpi-label">Converted Revenue</div>
+        </div>
+    </div>
+</section>
+
+<!-- Lead Funnel -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Lead Conversion Funnel</h2>
+    </div>
+    
+    <div class="funnel-container">
+        <div class="funnel-step">
+            <div class="funnel-value" id="funnel-leads">0</div>
+            <div class="funnel-label">Total Leads</div>
+            <div class="funnel-rate" id="funnel-lead-rate">-</div>
+        </div>
+        <div class="funnel-arrow"><i class="fas fa-arrow-right"></i></div>
+        <div class="funnel-step">
+            <div class="funnel-value" id="funnel-qualified">0</div>
+            <div class="funnel-label">Qualified</div>
+            <div class="funnel-rate" id="funnel-qual-rate">-</div>
+        </div>
+        <div class="funnel-arrow"><i class="fas fa-arrow-right"></i></div>
+        <div class="funnel-step">
+            <div class="funnel-value" id="funnel-opportunities">0</div>
+            <div class="funnel-label">Opportunities</div>
+            <div class="funnel-rate" id="funnel-opp-rate">-</div>
+        </div>
+        <div class="funnel-arrow"><i class="fas fa-arrow-right"></i></div>
+        <div class="funnel-step">
+            <div class="funnel-value" id="funnel-customers">0</div>
+            <div class="funnel-label">Customers</div>
+        </div>
+    </div>
+</section>
+
+<!-- Leads by Source -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Leads by Source</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Leads</th>
+                    <th>Qualified</th>
+                    <th>Conversion</th>
+                    <th>Revenue</th>
+                </tr>
+            </thead>
+            <tbody id="leads-by-source"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Campaign Performance -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Campaign Performance</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Campaign</th>
+                    <th>Type</th>
+                    <th>Leads</th>
+                    <th>Conversions</th>
+                    <th>Conversion Rate</th>
+                    <th>Revenue</th>
+                </tr>
+            </thead>
+            <tbody id="campaign-performance"></tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadMarketingData();
+});
+
+async function loadMarketingData() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        params.set('format', 'json');
+        
+        const response = await fetch(`/api/bi/kpis/marketing?${params.toString()}`);
+        const data = await response.json();
+        
+        updateMarketingKPIs(data);
+        updateFunnel(data.funnel || {});
+        updateLeadsBySource(data.by_source || []);
+        updateCampaignPerformance(data.campaigns || []);
+        
+    } catch (error) {
+        console.error('Error loading marketing data:', error);
+    }
+}
+
+function updateMarketingKPIs(data) {
+    document.getElementById('mkt-campaigns').textContent = formatNumber(data.active_campaigns || 0);
+    document.getElementById('mkt-leads').textContent = formatNumber(data.total_leads || 0);
+    document.getElementById('mkt-conversion').textContent = formatPercent(data.lead_to_sale_rate || 0);
+    document.getElementById('mkt-revenue').textContent = formatCurrency(data.converted_revenue || 0);
+}
+
+function updateFunnel(funnel) {
+    document.getElementById('funnel-leads').textContent = formatNumber(funnel.total_leads || 0);
+    document.getElementById('funnel-qualified').textContent = formatNumber(funnel.qualified || 0);
+    document.getElementById('funnel-opportunities').textContent = formatNumber(funnel.opportunities || 0);
+    document.getElementById('funnel-customers').textContent = formatNumber(funnel.customers || 0);
+    
+    const leadToQual = funnel.total_leads > 0 ? ((funnel.qualified / funnel.total_leads) * 100).toFixed(1) + '%' : '-';
+    const qualToOpp = funnel.qualified > 0 ? ((funnel.opportunities / funnel.qualified) * 100).toFixed(1) + '%' : '-';
+    const oppToCust = funnel.opportunities > 0 ? ((funnel.customers / funnel.opportunities) * 100).toFixed(1) + '%' : '-';
+    document.getElementById('funnel-lead-rate').textContent = leadToQual;
+    document.getElementById('funnel-qual-rate').textContent = qualToOpp;
+    document.getElementById('funnel-opp-rate').textContent = oppToCust;
+}
+
+function updateLeadsBySource(sources) {
+    const tbody = document.getElementById('leads-by-source');
+    tbody.innerHTML = sources.map(s => `
+        <tr>
+            <td><strong>${s.source_name || 'Unknown'}</strong></td>
+            <td>${formatNumber(s.lead_count || 0)}</td>
+            <td>${formatNumber(s.qualified_count || 0)}</td>
+            <td>
+                <span class="${s.conversion_rate >= 20 ? 'text-success' : s.conversion_rate >= 10 ? 'text-warning' : 'text-danger'}">
+                    ${formatPercent(s.conversion_rate || 0)}
+                </span>
+            </td>
+            <td class="font-bold">${formatCurrency(s.revenue || 0)}</td>
+        </tr>
+    `).join('');
+}
+
+function updateCampaignPerformance(campaigns) {
+    const tbody = document.getElementById('campaign-performance');
+    tbody.innerHTML = campaigns.map(c => `
+        <tr>
+            <td><strong>${c.campaign_name || 'Unknown'}</strong></td>
+            <td><span class="status-badge status-${(c.campaign_type || 'unknown').toLowerCase()}">${c.campaign_type || 'Unknown'}</span></td>
+            <td>${formatNumber(c.lead_count || 0)}</td>
+            <td>${formatNumber(c.conversion_count || 0)}</td>
+            <td>
+                <span class="${c.conversion_rate >= 20 ? 'text-success' : c.conversion_rate >= 10 ? 'text-warning' : 'text-danger'}">
+                    ${formatPercent(c.conversion_rate || 0)}
+                </span>
+            </td>
+            <td class="font-bold">${formatCurrency(c.revenue || 0)}</td>
+        </tr>
+    `).join('');
+}
+
+function formatNumber(num, decimals = 0) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function formatCurrency(num) {
+    if (num === null || num === undefined) return '-';
+    return 'AED ' + parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function formatPercent(num) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,78 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">Transfer Suggestions</h2>
+        <p class="text-slate-400 text-sm">Internal stock rebalancing recommendations</p>
+    </div>
+    <div class="flex gap-3">
+        <form action="{{ url_for('transfer_suggestions_generate') }}" method="POST" class="inline">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+                <i class="fas fa-play mr-2"></i>Generate Transfer Suggestions
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Transfer Recommendations Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <table class="w-full text-sm" id="transferTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Item</th>
+                    <th class="text-left py-3 px-4">Source Warehouse</th>
+                    <th class="text-left py-3 px-4">Destination</th>
+                    <th class="text-right py-3 px-3">Source Stock</th>
+                    <th class="text-right py-3 px-3">Dest Stock</th>
+                    <th class="text-right py-3 px-3">Recommended Qty</th>
+                    <th class="text-center py-3 px-3">Urgency</th>
+                    <th class="text-left py-3 px-3">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rec in recommendations %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ rec.item_code }}</div>
+                        <div class="text-slate-400 text-xs">{{ rec.item_name }}</div>
+                    </td>
+                    <td class="py-3 px-4 text-slate-300">{{ rec.source_warehouse|default('-') }}</td>
+                    <td class="py-3 px-4 text-slate-300">{{ rec.dest_warehouse|default('-') }}</td>
+                    <td class="py-3 px-3 text-right text-emerald-400">{{ rec.source_current_stock|default(0)|int }}</td>
+                    <td class="py-3 px-3 text-right text-red-400">{{ rec.destination_current_stock|default(0)|int }}</td>
+                    <td class="py-3 px-3 text-right text-sky-400 font-bold">{{ rec.recommended_quantity|default(0)|int }}</td>
+                    <td class="py-3 px-3 text-center">
+                        {% if rec.urgency == 'CRITICAL' %}
+                        <span class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs font-bold">CRITICAL</span>
+                        {% elif rec.urgency == 'HIGH' %}
+                        <span class="px-2 py-1 rounded bg-orange-500/20 text-orange-400 text-xs">HIGH</span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded bg-slate-500/20 text-slate-400 text-xs">NORMAL</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-3">
+                        {% if rec.status == 'OPEN' %}
+                        <span class="status-badge status-open">Open</span>
+                        {% elif rec.status == 'APPROVED' %}
+                        <span class="status-badge status-approved">Approved</span>
+                        {% else %}
+                        <span class="status-badge">{{ rec.status }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not recommendations %}
+                <tr>
+                    <td colspan="8" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-arrows-alt-h text-4xl mb-3 text-slate-600"></i>
+                        <p>No transfer suggestions. Click "Generate Transfer Suggestions" to analyze.</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

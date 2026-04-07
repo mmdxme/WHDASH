@@ -1,0 +1,897 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+
+    <!-- ── Page Header ── -->
+    <div class="relative overflow-hidden rounded-2xl p-6 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border border-white/10">
+        <!-- Background decoration -->
+        <div class="absolute top-0 right-0 w-64 h-64 bg-gradient-to-br from-brand-500/10 to-purple-600/10 rounded-full blur-3xl"></div>
+        <div class="absolute bottom-0 left-0 w-48 h-48 bg-gradient-to-tr from-purple-500/10 to-blue-600/10 rounded-full blur-3xl"></div>
+        <div class="absolute top-2 right-12 w-px h-20 bg-gradient-to-b from-brand-400/0 via-brand-400/30 to-brand-400/0"></div>
+
+        <div class="relative flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                <div class="relative">
+                    <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-400 to-purple-600 flex items-center justify-center shadow-xl shadow-brand-500/25">
+                        <i class="fa-solid fa-chart-bar text-white text-lg"></i>
+                    </div>
+                    <div class="absolute -inset-1 rounded-2xl bg-gradient-to-br from-brand-400 to-purple-600 opacity-30 blur-sm -z-10"></div>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-extrabold text-white tracking-tight">{{ title }}</h1>
+                    <p class="text-slate-400 text-sm mt-0.5 flex items-center gap-2">
+                        <i class="fa-solid fa-layer-group text-[10px] text-brand-400"></i>
+                        Comprehensive customer analytics & insights
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 flex-wrap">
+                <a href="{{ url_for('customers_sync') }}"
+                   class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-all text-sm font-medium">
+                    <i class="fa-solid fa-arrow-left text-xs"></i> Back to Sync
+                </a>
+                <div class="relative" x-data="{ open: false }">
+                    <button @click="open = !open"
+                            class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-500 hover:to-purple-500 text-white transition-all text-sm font-bold shadow-lg shadow-brand-500/20">
+                        <i class="fa-solid fa-download text-xs"></i> Export
+                        <i class="fa-solid fa-chevron-down text-[10px] opacity-70"></i>
+                    </button>
+                    <div x-show="open" @click.outside="open = false" x-transition
+                         class="absolute right-0 mt-2 w-44 rounded-xl bg-slate-800 border border-white/10 shadow-xl shadow-black/40 overflow-hidden z-50">
+                        <a href="{{ url_for('api_customers_export', format='csv') }}"
+                           class="flex items-center gap-3 px-4 py-3 hover:bg-white/10 transition-all text-sm text-slate-300 hover:text-white">
+                            <i class="fa-solid fa-file-csv text-emerald-400 w-4"></i> CSV
+                        </a>
+                        <a href="{{ url_for('api_customers_export', format='excel') }}"
+                           class="flex items-center gap-3 px-4 py-3 hover:bg-white/10 transition-all text-sm text-slate-300 hover:text-white">
+                            <i class="fa-solid fa-file-excel text-green-400 w-4"></i> Excel
+                        </a>
+                        <a href="{{ url_for('api_customers_export', format='json') }}"
+                           class="flex items-center gap-3 px-4 py-3 hover:bg-white/10 transition-all text-sm text-slate-300 hover:text-white">
+                            <i class="fa-solid fa-brackets-curly text-blue-400 w-4"></i> JSON
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Report Type Navigation ── -->
+    <div class="glass-panel rounded-2xl p-1.5">
+        <div class="flex flex-wrap gap-1">
+            {% set report_tabs = [
+                ('summary', 'fa-wand-magic-sparkles', 'Summary'),
+                ('by_country', 'fa-globe', 'By Country'),
+                ('by_city', 'fa-city', 'By City'),
+                ('by_locale', 'fa-map-pin', 'Locale'),
+                ('by_type', 'fa-tags', 'By Type'),
+                ('by_salesperson', 'fa-user-badge', 'Salesperson'),
+                ('activity', 'fa-chart-line', 'Activity'),
+                ('domestic', 'fa-house-chimney', 'Domestic'),
+                ('export', 'fa-box-arrow-up', 'Export'),
+                ('top_purchases', 'fa-trophy', 'Top Purchases'),
+                ('top_outstanding', 'fa-triangle-exclamation', 'Top Outstanding'),
+                ('credit_overdue', 'fa-credit-card', 'Credit Overdue'),
+                ('new', 'fa-star', 'New'),
+                ('all', 'fa-list', 'All')
+            ] %}
+            {% for tab_type, tab_icon, tab_label in report_tabs %}
+            <a href="{{ url_for('customers_reports', report_type=tab_type) }}"
+               class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex-shrink-0
+                      {% if report_type == tab_type %}
+                          bg-gradient-to-r from-brand-500 to-purple-600 text-white shadow-lg shadow-brand-500/20
+                      {% else %}
+                          text-slate-400 hover:text-white hover:bg-white/10
+                      {% endif %}">
+                <i class="fa-solid {{ tab_icon }} text-[10px]"></i>
+                {{ tab_label }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- ════════════════════════════════════ -->
+    <!-- SUMMARY REPORT                       -->
+    <!-- ════════════════════════════════════ -->
+    {% if report_type == 'summary' %}
+    {% set sum = data %}
+
+    <!-- KPI Cards Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <!-- Total Customers -->
+        <div class="group relative glass-panel rounded-2xl p-5 border border-brand-500/20 overflow-hidden cursor-default">
+            <div class="absolute inset-0 bg-gradient-to-br from-brand-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div class="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-brand-500/15 to-transparent rounded-bl-[60px]"></div>
+            <div class="relative flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="w-8 h-8 rounded-lg bg-brand-500/15 flex items-center justify-center">
+                            <i class="fa-solid fa-users text-brand-400 text-xs"></i>
+                        </div>
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Customers</span>
+                    </div>
+                    <div class="flex items-end gap-3">
+                        <span class="text-3xl font-black text-white tabular-nums counter" data-target="{{ (sum.total_customers or 0) | int }}">0</span>
+                    </div>
+                    <div class="flex items-center gap-3 mt-2">
+                        <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">
+                            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> {{ sum.active_customers or 0 }} active
+                        </span>
+                        <span class="text-[10px] text-slate-500">{{ sum.inactive_customers or 0 }} inactive</span>
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-users-rectangle text-brand-400 text-sm"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Purchases -->
+        <div class="group relative glass-panel rounded-2xl p-5 border border-emerald-500/20 overflow-hidden cursor-default">
+            <div class="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div class="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-emerald-500/15 to-transparent rounded-bl-[60px]"></div>
+            <div class="relative flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                            <i class="fa-solid fa-sack-dollar text-emerald-400 text-xs"></i>
+                        </div>
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Purchases</span>
+                    </div>
+                    <span class="text-3xl font-black text-white tabular-nums counter" data-target="{{ (sum.total_purchases or 0) | int }}">0</span>
+                    <div class="flex items-center gap-1.5 mt-2">
+                        <span class="text-[10px] text-slate-500">Avg per customer:</span>
+                        <span class="text-[10px] font-bold text-emerald-400">{{ (sum.average_purchase or 0) | int | format("%,d") }}</span>
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-chart-line text-emerald-400 text-sm"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Outstanding -->
+        <div class="group relative glass-panel rounded-2xl p-5 border border-red-500/20 overflow-hidden cursor-default">
+            <div class="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div class="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-red-500/15 to-transparent rounded-bl-[60px]"></div>
+            <div class="relative flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="w-8 h-8 rounded-lg bg-red-500/15 flex items-center justify-center">
+                            <i class="fa-solid fa-money-bill-wave text-red-400 text-xs"></i>
+                        </div>
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Outstanding</span>
+                    </div>
+                    <span class="text-3xl font-black text-red-400 tabular-nums counter" data-target="{{ (sum.total_outstanding or 0) | int }}">0</span>
+                    <div class="flex items-center gap-1.5 mt-2">
+                        <span class="text-[10px] text-slate-500">Credit limit:</span>
+                        <span class="text-[10px] font-bold text-slate-300">{{ (sum.total_credit_limit or 0) | int | format("%,d") }}</span>
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation text-red-400 text-sm"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Export Customers -->
+        <div class="group relative glass-panel rounded-2xl p-5 border border-purple-500/20 overflow-hidden cursor-default">
+            <div class="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+            <div class="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-purple-500/15 to-transparent rounded-bl-[60px]"></div>
+            <div class="relative flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="w-8 h-8 rounded-lg bg-purple-500/15 flex items-center justify-center">
+                            <i class="fa-solid fa-box-arrow-up-right text-purple-400 text-xs"></i>
+                        </div>
+                        <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Export Customers</span>
+                    </div>
+                    <span class="text-3xl font-black text-purple-400 tabular-nums">{{ sum.export_customers or 0 }}</span>
+                    <div class="mt-2">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-[10px] text-slate-500">% of total</span>
+                            <span class="text-[10px] font-bold text-purple-400">{{ ((sum.export_customers or 0) / (sum.total_customers or 1) * 100) | round(1) }}%</span>
+                        </div>
+                        <div class="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                            <div class="h-full bg-gradient-to-r from-purple-500 to-purple-400 rounded-full progress-bar"
+                                 data-progress="{{ ((sum.export_customers or 0) / (sum.total_customers or 1) * 100) | round(1) }}"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-globe text-purple-400 text-sm"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts + Tables Row -->
+    <div class="grid grid-cols-1 xl:grid-cols-5 gap-6">
+        <!-- By Country Chart -->
+        <div class="xl:col-span-3 glass-panel rounded-2xl overflow-hidden">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-white/5">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-blue-500/15 flex items-center justify-center">
+                        <i class="fa-solid fa-globe text-blue-400"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">Customers by Country</h3>
+                        <p class="text-[10px] text-slate-500">Top 8 markets</p>
+                    </div>
+                </div>
+                <a href="{{ url_for('customers_reports', report_type='by_country') }}"
+                   class="text-xs text-brand-400 hover:text-brand-300 font-semibold transition-colors flex items-center gap-1">
+                    View All <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                </a>
+            </div>
+            <div class="p-6">
+                <div class="space-y-3">
+                    {% for c in sum.by_country[:8] %}
+                    {% set pct = ((c.cnt / (sum.total_customers or 1)) * 100) | round(1) %}
+                    <div class="flex items-center gap-3">
+                        <div class="w-28 flex items-center gap-2 flex-shrink-0">
+                            <span class="w-2 h-2 rounded-full bg-brand-400 flex-shrink-0"></span>
+                            <span class="text-xs font-semibold text-slate-300 truncate">{{ c.country }}</span>
+                        </div>
+                        <div class="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full bg-gradient-to-r from-brand-600 to-brand-400 transition-all duration-700"
+                                 style="width: {{ pct }}%"></div>
+                        </div>
+                        <div class="w-20 flex items-center justify-between flex-shrink-0">
+                            <span class="text-xs font-bold text-white">{{ c.cnt }}</span>
+                            <span class="text-[10px] text-slate-500">{{ pct }}%</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- By Type Donut -->
+        <div class="xl:col-span-2 glass-panel rounded-2xl overflow-hidden">
+            <div class="flex items-center justify-between px-6 py-4 border-b border-white/5">
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
+                        <i class="fa-solid fa-tags text-purple-400"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-bold text-white">By Customer Type</h3>
+                        <p class="text-[10px] text-slate-500">Distribution</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6">
+                <div class="space-y-4">
+                    {% for t in sum.by_type %}
+                    {% set pct = ((t.cnt / (sum.total_customers or 1)) * 100) | round(1) %}
+                    <div class="flex items-center gap-3">
+                        <div class="w-24 flex items-center gap-2 flex-shrink-0">
+                            <div class="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-[10px] font-black text-slate-300">
+                                {{ t.customer_type[:3].upper() }}
+                            </div>
+                            <span class="text-xs font-medium text-slate-300">{{ t.customer_type }}</span>
+                        </div>
+                        <div class="flex-1 h-2 bg-white/5 rounded-full overflow-hidden">
+                            <div class="h-full rounded-full bg-gradient-to-r from-purple-600 to-purple-400 transition-all duration-700"
+                                 style="width: {{ pct }}%"></div>
+                        </div>
+                        <span class="text-xs font-bold text-slate-300 w-10 text-right">{{ pct }}%</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Salesperson Performance Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-white/5">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
+                    <i class="fa-solid fa-user-badge text-amber-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">Salesperson Performance</h3>
+                    <p class="text-[10px] text-slate-500">Revenue & outstanding by rep</p>
+                </div>
+            </div>
+            <a href="{{ url_for('customers_reports', report_type='by_salesperson') }}"
+               class="text-xs text-brand-400 hover:text-brand-300 font-semibold transition-colors flex items-center gap-1">
+                Full Report <i class="fa-solid fa-arrow-right text-[10px]"></i>
+            </a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/5">
+                        <th class="px-6 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Rep</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Team</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Customers</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Sales</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Outstanding</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Avg / Cust</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for s in sum.by_salesperson %}
+                    <tr class="hover:bg-white/5 transition-colors group">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center text-white text-xs font-black flex-shrink-0">
+                                    {{ s.salesperson_name[:1] if s.salesperson_name else '?' }}
+                                </div>
+                                <span class="text-sm font-semibold text-slate-200">{{ s.salesperson_name or 'Unassigned' }}</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <span class="text-xs text-slate-400">{{ s.sales_team or '—' }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <span class="text-sm font-bold text-slate-200">{{ s.customers }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-sm font-bold text-white tabular-nums">{{ (s.total_sales or 0) | int | format("%,d") }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-sm font-bold text-red-400 tabular-nums">{{ (s.outstanding or 0) | int | format("%,d") }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-sm font-bold text-emerald-400 tabular-nums">{{ ((s.total_sales or 0) / (s.customers or 1)) | int | format("%,d") }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ════════════════════════════════════ -->
+    <!-- BY COUNTRY REPORT                   -->
+    <!-- ════════════════════════════════════ -->
+    {% if report_type == 'by_country' %}
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-gradient-to-r from-blue-500/5 to-transparent">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-blue-500/15 flex items-center justify-center">
+                    <i class="fa-solid fa-globe text-blue-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">All Countries</h3>
+                    <p class="text-[10px] text-slate-500">{{ data.countries|length }} markets tracked</p>
+                </div>
+            </div>
+            <span class="px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-slate-400">
+                {{ data.countries|length }} countries
+            </span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-900/50">
+                        <th class="px-6 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Country</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Customers</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Export</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Sales</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Outstanding</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Avg Sale</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for c in data.countries %}
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4">
+                            <a href="{{ url_for('customers_reports', report_type='by_city', country=c.country) }}"
+                               class="flex items-center gap-2 text-slate-200 hover:text-brand-400 transition-colors group">
+                                <span class="w-2 h-2 rounded-full bg-brand-400 group-hover:scale-125 transition-transform"></span>
+                                {{ c.country }}
+                            </a>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <span class="text-sm font-bold text-slate-200">{{ c.customer_count }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-500/15 text-emerald-400 text-xs font-bold">
+                                <i class="fa-solid fa-box-arrow-up text-[8px]"></i> {{ c.export_count }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-sm font-bold text-white tabular-nums">{{ (c.total_sales or 0) | int | format("%,d") }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-sm font-bold text-red-400 tabular-nums">{{ (c.total_outstanding or 0) | int | format("%,d") }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-sm font-bold text-emerald-400 tabular-nums">{{ (c.avg_sales or 0) | int | format("%,d") }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ════════════════════════════════════ -->
+    <!-- BY CITY REPORT                      -->
+    <!-- ════════════════════════════════════ -->
+    {% if report_type == 'by_city' %}
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-gradient-to-r from-cyan-500/5 to-transparent">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
+                    <i class="fa-solid fa-city text-cyan-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">Customers by City</h3>
+                    <p class="text-[10px] text-slate-500">{% if filters.country %}{{ filters.country }} · {% endif %}{{ data.cities|length }} cities</p>
+                </div>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-900/50">
+                        <th class="px-6 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">City</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Country</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Customers</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Sales</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Outstanding</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for c in data.cities %}
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4 text-sm font-semibold text-slate-200">{{ c.city }}</td>
+                        <td class="px-4 py-4 text-xs text-slate-400">{{ c.country }}</td>
+                        <td class="px-4 py-4 text-center text-sm font-bold text-slate-200">{{ c.customer_count }}</td>
+                        <td class="px-4 py-4 text-right text-sm font-bold text-white tabular-nums">{{ (c.total_sales or 0) | int | format("%,d") }}</td>
+                        <td class="px-4 py-4 text-right text-sm font-bold text-red-400 tabular-nums">{{ (c.total_outstanding or 0) | int | format("%,d") }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ════════════════════════════════════ -->
+    <!-- BY LOCALE REPORT                    -->
+    <!-- ════════════════════════════════════ -->
+    {% if report_type == 'by_locale' %}
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-gradient-to-r from-pink-500/5 to-transparent">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-pink-500/15 flex items-center justify-center">
+                    <i class="fa-solid fa-map-pin text-pink-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">Customers by Locale / Area</h3>
+                    <p class="text-[10px] text-slate-500">{{ data.locales|length }} areas tracked</p>
+                </div>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-900/50">
+                        <th class="px-6 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Locale</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">City</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Country</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Customers</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Sales</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Outstanding</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for l in data.locales %}
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4 text-sm font-semibold text-slate-200">{{ l.locale }}</td>
+                        <td class="px-4 py-4 text-xs text-slate-400">{{ l.city }}</td>
+                        <td class="px-4 py-4 text-xs text-slate-400">{{ l.country }}</td>
+                        <td class="px-4 py-4 text-center text-sm font-bold text-slate-200">{{ l.customer_count }}</td>
+                        <td class="px-4 py-4 text-right text-sm font-bold text-white tabular-nums">{{ (l.total_sales or 0) | int | format("%,d") }}</td>
+                        <td class="px-4 py-4 text-right text-sm font-bold text-red-400 tabular-nums">{{ (l.total_outstanding or 0) | int | format("%,d") }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ════════════════════════════════════ -->
+    <!-- BY TYPE REPORT                     -->
+    <!-- ════════════════════════════════════ -->
+    {% if report_type == 'by_type' %}
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {% for t in data.types %}
+        {% set pct = ((t.count / (data.types|sum(attribute='count') or 1)) * 100) | round(1) %}
+        <div class="group glass-panel rounded-2xl p-6 border border-white/5 hover:border-brand-500/30 transition-all duration-300 hover:shadow-xl hover:shadow-brand-500/5">
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-400 to-purple-600 flex items-center justify-center text-white font-black text-lg shadow-lg shadow-brand-500/20">
+                        {{ t.count }}
+                    </div>
+                    <div>
+                        <h4 class="text-sm font-bold text-white uppercase tracking-wide">{{ t.customer_type }}</h4>
+                        <p class="text-[10px] text-slate-500">customers</p>
+                    </div>
+                </div>
+                <div class="px-2.5 py-1 rounded-lg bg-white/5 border border-white/10">
+                    <span class="text-xs font-bold text-brand-400">{{ pct }}%</span>
+                </div>
+            </div>
+            <div class="h-1.5 bg-white/5 rounded-full overflow-hidden mb-4">
+                <div class="h-full rounded-full bg-gradient-to-r from-brand-600 to-purple-500 transition-all duration-700" style="width: {{ pct }}%"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 pt-4 border-t border-white/5">
+                <div>
+                    <p class="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">Total Sales</p>
+                    <p class="text-base font-black text-white tabular-nums">{{ (t.total_sales or 0) | int | format("%,d") }}</p>
+                </div>
+                <div>
+                    <p class="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">Outstanding</p>
+                    <p class="text-base font-black text-red-400 tabular-nums">{{ (t.total_outstanding or 0) | int | format("%,d") }}</p>
+                </div>
+                <div class="col-span-2">
+                    <p class="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1">Avg Sale</p>
+                    <p class="text-sm font-bold text-emerald-400 tabular-nums">{{ (t.avg_sales or 0) | int | format("%,d") }}</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- ════════════════════════════════════ -->
+    <!-- BY SALESPERSON REPORT               -->
+    <!-- ════════════════════════════════════ -->
+    {% if report_type == 'by_salesperson' %}
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-gradient-to-r from-amber-500/5 to-transparent">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
+                    <i class="fa-solid fa-user-badge text-amber-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">Salesperson Performance</h3>
+                    <p class="text-[10px] text-slate-500">{{ data.salespersons|length }} sales representatives</p>
+                </div>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-900/50">
+                        <th class="px-6 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Salesperson</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Team</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Customers</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Transactions</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Sales</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Outstanding</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Avg / Cust</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Avg / Txn</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for s in data.salespersons %}
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-400 to-purple-600 flex items-center justify-center text-white text-sm font-black">
+                                    {{ s.salesperson_name[:1] if s.salesperson_name else '?' }}
+                                </div>
+                                <span class="text-sm font-semibold text-slate-200">{{ s.salesperson_name }}</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-center text-xs text-slate-400">{{ s.sales_team or '—' }}</td>
+                        <td class="px-4 py-4 text-center text-sm font-bold text-slate-200">{{ s.customer_count }}</td>
+                        <td class="px-4 py-4 text-center text-sm font-bold text-slate-300">{{ s.total_transactions or 0 }}</td>
+                        <td class="px-4 py-4 text-right text-sm font-bold text-white tabular-nums">{{ (s.total_sales or 0) | int | format("%,d") }}</td>
+                        <td class="px-4 py-4 text-right text-sm font-bold text-red-400 tabular-nums">{{ (s.total_outstanding or 0) | int | format("%,d") }}</td>
+                        <td class="px-4 py-4 text-right text-sm font-bold text-emerald-400 tabular-nums">{{ (s.avg_sale_per_customer or 0) | int | format("%,d") }}</td>
+                        <td class="px-4 py-4 text-right text-sm font-bold text-slate-300 tabular-nums">{{ (s.avg_transaction or 0) | int | format("%,d") }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ════════════════════════════════════ -->
+    <!-- ACTIVITY REPORT                     -->
+    <!-- ════════════════════════════════════ -->
+    {% if report_type == 'activity' %}
+    <!-- KPI Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="glass-panel rounded-2xl p-5 border border-emerald-500/20">
+            <div class="flex items-center gap-2 mb-3">
+                <div class="w-8 h-8 rounded-lg bg-emerald-500/15 flex items-center justify-center">
+                    <i class="fa-solid fa-bolt text-emerald-400 text-xs"></i>
+                </div>
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active (Last 30d)</span>
+            </div>
+            <span class="text-4xl font-black text-emerald-400 counter" data-target="{{ data.active_recently or 0 }}">0</span>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 border border-amber-500/20">
+            <div class="flex items-center gap-2 mb-3">
+                <div class="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                    <i class="fa-solid fa-history text-amber-400 text-xs"></i>
+                </div>
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Inactive w/ History</span>
+            </div>
+            <span class="text-4xl font-black text-amber-400 counter" data-target="{{ data.inactive_with_history or 0 }}">0</span>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 border border-slate-500/20">
+            <div class="flex items-center gap-2 mb-3">
+                <div class="w-8 h-8 rounded-lg bg-slate-500/15 flex items-center justify-center">
+                    <i class="fa-solid fa-snowflake text-slate-400 text-xs"></i>
+                </div>
+                <span class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Never Purchased</span>
+            </div>
+            <span class="text-4xl font-black text-slate-400 counter" data-target="{{ data.never_purchased or 0 }}">0</span>
+        </div>
+    </div>
+
+    <!-- Recency Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-white/5">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-indigo-500/15 flex items-center justify-center">
+                    <i class="fa-solid fa-clock-rotate-left text-indigo-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">Customer Recency Distribution</h3>
+                    <p class="text-[10px] text-slate-500">Last purchase timing analysis</p>
+                </div>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-900/50">
+                        <th class="px-6 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Recency Group</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Customers</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Total Sales</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for r in data.by_recency %}
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4">
+                            {% if '7 days' in r.recency_group %}
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-bold border border-emerald-500/20">
+                                    <i class="fa-solid fa-bolt text-[10px]"></i> {{ r.recency_group }}
+                                </span>
+                            {% elif '30 days' in r.recency_group %}
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-500/15 text-blue-400 text-xs font-bold border border-blue-500/20">
+                                    <i class="fa-solid fa-fire text-[10px]"></i> {{ r.recency_group }}
+                                </span>
+                            {% elif '90 days' in r.recency_group %}
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 text-amber-400 text-xs font-bold border border-amber-500/20">
+                                    <i class="fa-solid fa-warning text-[10px]"></i> {{ r.recency_group }}
+                                </span>
+                            {% elif '6 months' in r.recency_group %}
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500/15 text-orange-400 text-xs font-bold border border-orange-500/20">
+                                    {{ r.recency_group }}
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-500/15 text-slate-400 text-xs font-bold border border-slate-500/20">
+                                    <i class="fa-solid fa-snowflake text-[10px]"></i> {{ r.recency_group }}
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 text-center text-sm font-bold text-slate-200">{{ r.customer_count }}</td>
+                        <td class="px-4 py-4 text-right text-sm font-bold text-white tabular-nums">{{ (r.total_sales or 0) | int | format("%,d") }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- CUSTOMER LIST VIEWS: export, domestic, top_*, credit_overdue  -->
+    <!-- new, all                                                   -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    {% if report_type in ['export', 'domestic', 'top_purchases', 'top_outstanding', 'credit_overdue', 'new', 'all'] %}
+    {% set list_title = {
+        'export': 'Export Customers',
+        'domestic': 'Domestic Customers',
+        'top_purchases': 'Top Customers by Purchases',
+        'top_outstanding': 'Top Customers by Outstanding',
+        'credit_overdue': 'Credit Overdue Customers',
+        'new': 'New Customers',
+        'all': 'All Customers'
+    }[report_type] %}
+    {% set list_icon = {
+        'export': 'fa-box-arrow-up',
+        'domestic': 'fa-house-chimney',
+        'top_purchases': 'fa-trophy',
+        'top_outstanding': 'fa-triangle-exclamation',
+        'credit_overdue': 'fa-credit-card',
+        'new': 'fa-star',
+        'all': 'fa-list'
+    }[report_type] %}
+    {% set list_color = {
+        'export': 'purple',
+        'domestic': 'cyan',
+        'top_purchases': 'amber',
+        'top_outstanding': 'red',
+        'credit_overdue': 'orange',
+        'new': 'emerald',
+        'all': 'brand'
+    }[report_type] %}
+    {% set color_classes = {
+        'purple': 'from-purple-500/15 to-purple-500/5',
+        'cyan': 'from-cyan-500/15 to-cyan-500/5',
+        'amber': 'from-amber-500/15 to-amber-500/5',
+        'red': 'from-red-500/15 to-red-500/5',
+        'orange': 'from-orange-500/15 to-orange-500/5',
+        'emerald': 'from-emerald-500/15 to-emerald-500/5',
+        'brand': 'from-brand-500/15 to-brand-500/5'
+    }[report_type] %}
+
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-gradient-to-r {{ color_classes }}">
+            <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-{{ list_color }}-500/15 flex items-center justify-center">
+                    <i class="fa-solid {{ list_icon }} text-{{ list_color }}-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">{{ list_title }}</h3>
+                    <p class="text-[10px] text-slate-500">{{ data.customers|length }} customers found</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-bold text-slate-400 tabular-nums">
+                    {{ data.customers|length }} rows
+                </span>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-900/50">
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">ID</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Name</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Contact</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Location</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Type</th>
+                        <th class="px-4 py-3 text-center text-[10px] font-black text-slate-500 uppercase tracking-widest">Status</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Purchases</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Paid</th>
+                        <th class="px-4 py-3 text-right text-[10px] font-black text-slate-500 uppercase tracking-widest">Outstanding</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Last Purchase</th>
+                        <th class="px-4 py-3 text-left text-[10px] font-black text-slate-500 uppercase tracking-widest">Salesperson</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for c in data.customers %}
+                    <tr class="hover:bg-white/5 transition-colors {% if c.outstanding > c.credit_limit and c.credit_limit > 0 %}bg-red-500/5{% endif %}">
+                        <td class="px-4 py-3.5">
+                            <code class="text-xs font-mono font-bold text-brand-400 bg-brand-500/10 px-2 py-0.5 rounded">{{ c.customer_id }}</code>
+                        </td>
+                        <td class="px-4 py-3.5">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm font-semibold text-white">{{ c.name }}</span>
+                                {% if c.is_verified %}
+                                <i class="fa-solid fa-circle-check text-emerald-400 text-xs"></i>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-4 py-3.5">
+                            <div class="text-xs text-slate-400 space-y-0.5">
+                                {% if c.phone %}
+                                <div class="flex items-center gap-1">
+                                    <i class="fa-solid fa-phone text-[10px] text-slate-600 w-3"></i>{{ c.phone }}
+                                </div>
+                                {% endif %}
+                                {% if c.email %}
+                                <div class="flex items-center gap-1">
+                                    <i class="fa-solid fa-envelope text-[10px] text-slate-600 w-3"></i>{{ c.email[:28] }}{% if c.email|length > 28 %}...{% endif %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-4 py-3.5">
+                            <div class="text-xs text-slate-400">
+                                {% if c.locale %}{{ c.locale }},{% endif %} {% if c.city %}{{ c.city }},{% endif %} {% if c.country %}{{ c.country }}{% endif %}
+                            </div>
+                        </td>
+                        <td class="px-4 py-3.5 text-center">
+                            <div class="flex flex-col items-center gap-1">
+                                <span class="inline-flex px-2 py-0.5 rounded-md bg-white/5 text-slate-300 text-xs font-bold border border-white/10">
+                                    {{ c.customer_type }}
+                                </span>
+                                {% if c.is_export %}
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 text-[10px] font-bold">
+                                    <i class="fa-solid fa-box-arrow-up text-[8px]"></i> Export
+                                </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-4 py-3.5 text-center">
+                            {% if c.is_active %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-bold border border-emerald-500/20">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Active
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-500/15 text-slate-400 text-xs font-bold border border-slate-500/20">
+                                Inactive
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3.5 text-right text-sm font-bold text-white tabular-nums">{{ (c.total_purchases or 0) | int | format("%,d") }}</td>
+                        <td class="px-4 py-3.5 text-right text-sm font-bold text-emerald-400 tabular-nums">{{ (c.total_paid or 0) | int | format("%,d") }}</td>
+                        <td class="px-4 py-3.5 text-right text-sm font-bold {% if (c.outstanding or 0) > 0 %}text-red-400{% else %}text-slate-400{% endif %} tabular-nums">
+                            {{ (c.outstanding or 0) | int | format("%,d") }}
+                        </td>
+                        <td class="px-4 py-3.5 text-xs text-slate-400 tabular-nums">{{ c.last_purchase_date or '—' }}</td>
+                        <td class="px-4 py-3.5 text-xs text-slate-400">{{ c.salesperson_name or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // ── Animated Counter ──
+    function animateCounter(el) {
+        const target = parseInt(el.dataset.target || el.textContent.replace(/[^\d]/g, ''), 10);
+        if (!target || isNaN(target)) return;
+        const duration = 1200;
+        const start = performance.now();
+        const suffix = el.textContent.includes(',') ? ',' : '';
+
+        function update(now) {
+            const elapsed = now - start;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            const current = Math.round(eased * target);
+            el.textContent = current.toLocaleString();
+            if (progress < 1) requestAnimationFrame(update);
+        }
+        requestAnimationFrame(update);
+    }
+
+    const counters = document.querySelectorAll('.counter');
+    const counterObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                animateCounter(entry.target);
+                counterObserver.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.5 });
+    counters.forEach(c => counterObserver.observe(c));
+
+    // ── Progress Bars ──
+    const progressBars = document.querySelectorAll('.progress-bar');
+    const barObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const pct = entry.target.dataset.progress || 0;
+                setTimeout(() => {
+                    entry.target.style.width = pct + '%';
+                }, 200);
+                barObserver.unobserve(entry.target);
+            }
+        });
+    }, { threshold: 0.3 });
+    progressBars.forEach(b => barObserver.observe(b));
+});
+</script>
+{% endblock %}

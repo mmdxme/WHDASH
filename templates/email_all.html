@@ -1,0 +1,684 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="space-y-4 fade-in" x-data="emailAllApp()" x-init="init()">
+    {# Header Section #}
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-brand-400">{{ t('app_name', 'MMDx') }}</p>
+            <h1 class="mt-2 text-2xl xl:text-3xl font-extrabold tracking-tight text-white">All Emails</h1>
+            <p class="mt-2 max-w-3xl text-xs xl:text-sm text-slate-400">
+                Unified view of all emails from connected accounts.
+                <span class="text-brand-400">{{ total_messages }}</span> total messages
+                {% if fetch_errors %}
+                <span class="text-red-400"> ({{ fetch_errors|length }} account(s) unreachable)</span>
+                {% endif %}
+            </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="{{ url_for('email_manager.email_dashboard') }}"
+               class="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                <i class="fa-solid fa-inbox mr-2"></i>Back to Inbox
+            </a>
+            <a href="{{ url_for('email_manager.email_compose') }}" class="rounded-xl bg-brand-600 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                <i class="fa-solid fa-plus mr-2"></i>Compose
+            </a>
+        </div>
+    </div>
+
+    {# Fetch Errors #}
+    {% if fetch_errors %}
+    <div class="glass-panel rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
+        <div class="flex items-start gap-3">
+            <i class="fa-solid fa-triangle-exclamation text-red-400 mt-0.5"></i>
+            <div>
+                <p class="text-sm font-bold text-red-400">Some accounts could not be reached</p>
+                <div class="mt-2 text-xs text-red-400/70 space-y-1">
+                    {% for error in fetch_errors %}
+                    <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# No Accounts #}
+    {% if not email_accounts %}
+    <div class="glass-panel rounded-3xl border border-amber-400/20 bg-amber-500/10 p-6 xl:p-8">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center gap-4 xl:gap-6">
+            <div class="w-14 h-14 xl:w-16 xl:h-16 rounded-2xl bg-amber-500/20 flex items-center justify-center shrink-0">
+                <i class="fa-solid fa-envelope text-2xl xl:text-3xl text-amber-400"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <h2 class="text-lg font-black text-white">No Email Accounts Connected</h2>
+                <p class="mt-2 text-xs xl:text-sm text-amber-100 max-w-2xl">Connect your Gmail account or add your company email (SMTP/IMAP) to start viewing emails.</p>
+                <div class="mt-4 xl:mt-6 flex flex-wrap gap-3 xl:gap-4">
+                    <a href="{{ url_for('email_manager.email_settings') }}" class="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-950 transition-all hover:bg-amber-100">
+                        <i class="fa-solid fa-plus"></i>Add Account
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Filter & Toolbar #}
+    {% if email_accounts %}
+    <div class="glass-panel rounded-2xl xl:rounded-3xl border border-white/5 p-4 space-y-4">
+        {# Top Toolbar #}
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            {# Global Search #}
+            <form method="GET" class="flex-1 flex gap-2" x-ref="searchForm">
+                <input type="hidden" name="page_size" :value="pageSize">
+                <input type="hidden" name="view" :value="viewMode">
+                <input type="hidden" name="sort" :value="sortBy">
+                <input type="hidden" name="order" :value="sortOrder">
+                <div class="relative flex-1">
+                    <input type="text" name="q" value="{{ email_query }}" placeholder="Search all emails..."
+                           class="w-full rounded-xl border border-white/10 bg-slate-900/70 pl-10 pr-4 py-2.5 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                </div>
+                <select name="folder" onchange="this.form.submit()" class="rounded-xl border border-white/10 bg-slate-900/70 px-4 py-2.5 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    <option value="INBOX" {% if current_folder == 'INBOX' %}selected{% endif %}>Inbox</option>
+                    <option value="SENT" {% if current_folder == 'SENT' %}selected{% endif %}>Sent</option>
+                    <option value="DRAFT" {% if current_folder == 'DRAFT' %}selected{% endif %}>Drafts</option>
+                </select>
+                <button type="submit" class="rounded-xl bg-brand-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500 shrink-0">
+                    Search
+                </button>
+            </form>
+
+            {# View Mode Toggle #}
+            <div class="flex items-center gap-1 bg-white/5 rounded-xl p-1">
+                <button @click="setViewMode('compact')" :class="viewMode === 'compact' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'" class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
+                    <i class="fa-solid fa-bars"></i>
+                </button>
+                <button @click="setViewMode('detailed')" :class="viewMode === 'detailed' ? 'bg-brand-600 text-white' : 'text-slate-400 hover:text-white'" class="px-3 py-2 rounded-lg text-xs font-bold transition-all">
+                    <i class="fa-solid fa-list"></i>
+                </button>
+            </div>
+        </div>
+
+        {# Second Row - Bulk Actions & Filters #}
+        <div class="flex flex-col lg:flex-row items-start lg:items-center gap-3 justify-between">
+            {# Bulk Actions #}
+            <div class="flex flex-wrap items-center gap-2" x-show="selectedEmails.length > 0 || true">
+                <span class="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                    <span x-text="selectedEmails.length">0</span> selected
+                </span>
+                <button @click="toggleSelectAll()" class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white text-xs font-bold transition-all">
+                    <span x-show="!selectAll">Select All</span>
+                    <span x-show="selectAll">Deselect All</span>
+                </button>
+                <div class="h-4 w-px bg-white/10"></div>
+                <button @click="bulkAction('delete')" :disabled="selectedEmails.length === 0" class="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold transition-all">
+                    <i class="fa-solid fa-trash mr-1"></i>Delete
+                </button>
+                <button @click="bulkAction('junk')" :disabled="selectedEmails.length === 0" class="px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold transition-all">
+                    <i class="fa-solid fa-exclamation-triangle mr-1"></i>Junk
+                </button>
+                <button @click="bulkAction('archive')" :disabled="selectedEmails.length === 0" class="px-3 py-1.5 rounded-lg bg-slate-500/10 text-slate-400 hover:bg-slate-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold transition-all">
+                    <i class="fa-solid fa-archive mr-1"></i>Archive
+                </button>
+                <button @click="bulkAction('read')" :disabled="selectedEmails.length === 0" class="px-3 py-1.5 rounded-lg bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 disabled:opacity-50 disabled:cursor-not-allowed text-xs font-bold transition-all">
+                    <i class="fa-solid fa-envelope-open mr-1"></i>Mark Read
+                </button>
+            </div>
+
+            {# Right Side - Page Size & Sort #}
+            <div class="flex flex-wrap items-center gap-3">
+                {# Page Size Selector #}
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-500 uppercase tracking-wider">Show</span>
+                    <select x-model="pageSize" @change="changePageSize()" class="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-1.5 text-xs text-white outline-none focus:border-brand-500">
+                        {% for size in available_page_sizes %}
+                        <option value="{{ size }}">{{ size }}</option>
+                        {% endfor %}
+                    </select>
+                    <span class="text-xs text-slate-500 uppercase tracking-wider">per page</span>
+                </div>
+
+                {# Sort Order #}
+                <div class="flex items-center gap-2">
+                    <span class="text-xs text-slate-500 uppercase tracking-wider">Sort</span>
+                    <select x-model="sortBy" @change="changeSort()" class="rounded-lg border border-white/10 bg-slate-900/70 px-3 py-1.5 text-xs text-white outline-none focus:border-brand-500">
+                        <option value="date">Date</option>
+                        <option value="from">Sender</option>
+                        <option value="subject">Subject</option>
+                    </select>
+                    <button @click="toggleSortOrder()" class="p-1.5 rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white transition-all" :title="sortOrder === 'desc' ? 'Descending' : 'Ascending'">
+                        <i class="fa-solid" :class="sortOrder === 'desc' ? 'fa-arrow-down' : 'fa-arrow-up'"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Email List #}
+    {% if email_messages %}
+    <div class="glass-panel rounded-2xl xl:rounded-3xl border border-white/5 overflow-hidden" :class="viewMode === 'compact' ? '' : 'detailed-view'">
+        <div class="overflow-x-auto">
+            <table class="w-full min-w-[900px]">
+                <thead>
+                    <tr class="border-b border-white/5 bg-white/[0.02] text-left">
+                        <th class="w-12 px-4 py-3 text-center">
+                            <input type="checkbox" x-model="selectAll" @click="toggleSelectAll()" class="rounded border-slate-500 bg-slate-800 text-brand-500 outline-none focus:ring-2 focus:ring-brand-500/50">
+                        </th>
+                        <th class="w-16 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">#</th>
+                        <th class="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 cursor-pointer hover:text-white" @click="sortBy = 'from'; changeSort()">
+                            <span class="flex items-center gap-1">
+                                Sender
+                                <i class="fa-solid fa-sort text-slate-600"></i>
+                            </span>
+                        </th>
+                        <th class="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 cursor-pointer hover:text-white" @click="sortBy = 'subject'; changeSort()">
+                            <span class="flex items-center gap-1">
+                                Subject
+                                <i class="fa-solid fa-sort text-slate-600"></i>
+                            </span>
+                        </th>
+                        <th class="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Preview</th>
+                        <th class="w-24 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 cursor-pointer hover:text-white" @click="sortBy = 'date'; changeSort()">
+                            <span class="flex items-center gap-1">
+                                Date
+                                <i class="fa-solid fa-sort text-slate-600"></i>
+                            </span>
+                        </th>
+                        <th class="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-brand-400">
+                            <i class="fa-solid fa-at mr-1"></i>Account
+                        </th>
+                    </tr>
+                    {# Column Search Row #}
+                    <tr class="bg-slate-900/30">
+                        <th class="w-12 px-4 py-2"></th>
+                        <th class="w-16 px-4 py-2"></th>
+                        <th class="px-4 py-2">
+                            <input type="text" placeholder="Filter..." class="w-full rounded-lg border border-white/5 bg-white/5 px-2 py-1 text-xs text-white placeholder-slate-600 outline-none focus:border-brand-500" @input="filterColumn('from', $event.target.value)">
+                        </th>
+                        <th class="px-4 py-2">
+                            <input type="text" placeholder="Filter..." class="w-full rounded-lg border border-white/5 bg-white/5 px-2 py-1 text-xs text-white placeholder-slate-600 outline-none focus:border-brand-500" @input="filterColumn('subject', $event.target.value)">
+                        </th>
+                        <th class="px-4 py-2"></th>
+                        <th class="w-24 px-4 py-2"></th>
+                        <th class="px-4 py-2"></th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5" id="email-table-body">
+                    <template x-if="loading">
+                        <tr>
+                            <td colspan="7" class="px-4 py-12 text-center">
+                                <div class="flex flex-col items-center gap-3">
+                                    <div class="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+                                    <p class="text-sm text-slate-400">Loading emails...</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                    <template x-for="(message, index) in filteredMessages" :key="message.id">
+                        <tr class="hover:bg-white/[0.02] transition-all email-row" :class="selectedEmails.includes(message.id) ? 'bg-brand-500/10' : ''" :data-message-id="message.id">
+                            <td class="px-4 py-3 text-center">
+                                <input type="checkbox" :checked="selectedEmails.includes(message.id)" @click="toggleEmail(message.id)" class="rounded border-slate-500 bg-slate-800 text-brand-500 outline-none focus:ring-2 focus:ring-brand-500/50">
+                            </td>
+                            <td class="px-4 py-3 text-xs text-slate-500 font-mono" x-text="message.row_number"></td>
+                            <td class="px-4 py-3 align-top">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded-lg bg-brand-500/20 flex items-center justify-center shrink-0">
+                                        <i class="fa-solid fa-user text-brand-400 text-xs"></i>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-white email-sender" x-text="message.from || 'Unknown'"></p>
+                                        <p class="text-[10px] text-brand-400/70 email-address" x-text="message.email_address || message.from || ''"></p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 align-top">
+                                <p class="text-sm font-medium text-white" x-text="message.subject || '(No subject)'"></p>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <template x-if="message.has_attachments">
+                                        <span class="inline-flex items-center gap-1 text-[9px] text-slate-500">
+                                            <i class="fa-solid fa-paperclip"></i>Attachment
+                                        </span>
+                                    </template>
+                                    <template x-if="message.label_ids && message.label_ids.includes('IMPORTANT')">
+                                        <span class="inline-flex items-center gap-1 text-[9px] text-red-400">
+                                            <i class="fa-solid fa-star"></i>Important
+                                        </span>
+                                    </template>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 align-top max-w-xs">
+                                <p class="text-xs text-slate-400 line-clamp-2 email-snippet" x-text="getSnippet(message)"></p>
+                            </td>
+                            <td class="px-4 py-3 align-top whitespace-nowrap">
+                                <p class="text-xs text-slate-400" x-text="formatDate(message.date)"></p>
+                                <p class="text-[10px] text-slate-600" x-text="formatTime(message.date)"></p>
+                            </td>
+                            <td class="px-4 py-3 align-top">
+                                <span class="inline-flex items-center gap-1 rounded bg-brand-500/10 px-2 py-1 text-[10px] text-brand-400">
+                                    <i class="fa-solid fa-at"></i><span x-text="message.account_email || 'Unknown'"></span>
+                                </span>
+                            </td>
+                        </tr>
+                        {# Expanded Email Body Row #}
+                        <tr class="email-body-row hidden" :id="'email-body-' + message.id">
+                            <td colspan="7" class="px-4 py-4 bg-slate-900/50">
+                                <div class="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                                    <div class="flex items-center justify-between mb-3">
+                                        <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">Full Message</span>
+                                        <div class="flex items-center gap-2">
+                                            <a :href="'{{ url_for('email_manager.email_compose') }}?reply_to=' + encodeURIComponent(message.from || '') + '&subject=Re: ' + encodeURIComponent(message.subject || '') + '&account_id=' + (message.account_id || '')"
+                                               class="px-3 py-1.5 rounded-lg bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 transition-all text-[10px] font-bold">
+                                                <i class="fa-solid fa-reply mr-1"></i>Reply
+                                            </a>
+                                            <button @click="closeEmailBody(message.id)" class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 transition-all text-[10px] font-bold">
+                                                <i class="fa-solid fa-xmark mr-1"></i>Close
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="text-sm leading-7 text-slate-300 whitespace-pre-wrap email-body-content" x-html="getBodyHtml(message)"></div>
+                                    <template x-if="message.attachments && message.attachments.length > 0">
+                                        <div class="mt-4 pt-4 border-t border-white/5">
+                                            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
+                                                <i class="fa-solid fa-paperclip mr-1"></i>Attachments (<span x-text="message.attachments.length"></span>)
+                                            </p>
+                                            <div class="flex flex-wrap gap-2">
+                                                <template x-for="att in message.attachments" :key="att.filename">
+                                                    <a :href="'{{ url_for('email_manager.email_download_attachment', account_type='PLACEHOLDER', account_identifier='MSGID', message_id='MSG', part_id='PARTID') }}'.replace('PLACEHOLDER', message.account_type || 'smtp').replace('MSGID', message.account_id || '0').replace('MSG', message.id).replace('PARTID', att.part_id || 0)"
+                                                       class="inline-flex items-center gap-2 rounded-lg bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10 transition-all">
+                                                        <i class="fa-solid fa-file text-slate-500"></i>
+                                                        <span x-text="att.filename"></span>
+                                                        <template x-if="att.size">
+                                                            <span class="text-[10px] text-slate-500">(<span x-text="formatFileSize(att.size)"></span>)</span>
+                                                        </template>
+                                                    </a>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+
+        {# Pagination Footer #}
+        {% if total_messages > page_size %}
+        <div class="border-t border-white/5 px-4 py-3 bg-white/[0.02]">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+                {# Showing X to Y of Z #}
+                <span class="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                    Showing <span class="text-brand-400">{{ (current_page - 1) * page_size + 1 }}</span> - 
+                    <span class="text-brand-400">{{ [current_page * page_size, total_messages]|min }}</span> of 
+                    <span class="text-brand-400">{{ total_messages }}</span> messages
+                </span>
+
+                {# Page Numbers #}
+                <div class="flex items-center gap-1 flex-wrap justify-center">
+                    {# First Page #}
+                    {% if current_page > 1 %}
+                    <a href="{{ url_for('email_manager.email_all', folder=current_folder, q=email_query, sort=sort_by, order=sort_order, page=1, page_size=page_size, view=view_mode) }}"
+                       class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white text-xs font-bold transition-all">
+                        <i class="fa-solid fa-angles-left"></i>
+                    </a>
+                    {% endif %}
+
+                    {# Previous #}
+                    {% if current_page > 1 %}
+                    <a href="{{ url_for('email_manager.email_all', folder=current_folder, q=email_query, sort=sort_by, order=sort_order, page=current_page - 1, page_size=page_size, view=view_mode) }}"
+                       class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white text-xs font-bold transition-all">
+                        <i class="fa-solid fa-chevron-left mr-1"></i>Prev
+                    </a>
+                    {% endif %}
+
+                    {# Page Numbers - Using page_range from server #}
+                    {% if page_range and page_range[0] > 1 %}
+                    <a href="{{ url_for('email_manager.email_all', folder=current_folder, q=email_query, sort=sort_by, order=sort_order, page=1, page_size=page_size, view=view_mode) }}"
+                       class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white text-xs font-bold transition-all">1</a>
+                    {% if page_range[0] > 2 %}
+                    <span class="px-2 text-slate-600">...</span>
+                    {% endif %}
+                    {% endif %}
+
+                    {% for p in page_range %}
+                    <a href="{{ url_for('email_manager.email_all', folder=current_folder, q=email_query, sort=sort_by, order=sort_order, page=p, page_size=page_size, view=view_mode) }}"
+                       class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all {% if p == current_page %}bg-brand-600 text-white{% else %}bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white{% endif %}">
+                        {{ p }}
+                    </a>
+                    {% endfor %}
+
+                    {% if page_range and page_range[-1] < total_pages %}
+                    {% if page_range[-1] < total_pages - 1 %}
+                    <span class="px-2 text-slate-600">...</span>
+                    {% endif %}
+                    <a href="{{ url_for('email_manager.email_all', folder=current_folder, q=email_query, sort=sort_by, order=sort_order, page=total_pages, page_size=page_size, view=view_mode) }}"
+                       class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white text-xs font-bold transition-all">{{ total_pages }}</a>
+                    {% endif %}
+
+                    {# Next #}
+                    {% if (current_page * page_size) < total_messages %}
+                    <a href="{{ url_for('email_manager.email_all', folder=current_folder, q=email_query, sort=sort_by, order=sort_order, page=current_page + 1, page_size=page_size, view=view_mode) }}"
+                       class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white text-xs font-bold transition-all">
+                        Next<i class="fa-solid fa-chevron-right ml-1"></i>
+                    </a>
+                    {% endif %}
+
+                    {# Last Page #}
+                    {% if (current_page * page_size) < total_messages %}
+                    <a href="{{ url_for('email_manager.email_all', folder=current_folder, q=email_query, sort=sort_by, order=sort_order, page=total_pages, page_size=page_size, view=view_mode) }}"
+                       class="px-3 py-1.5 rounded-lg bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white text-xs font-bold transition-all">
+                        <i class="fa-solid fa-angles-right"></i>
+                    </a>
+                    {% endif %}
+                </div>
+
+                {# Go to Page #}
+                <form method="GET" class="flex items-center gap-2">
+                    <input type="hidden" name="folder" value="{{ current_folder }}">
+                    <input type="hidden" name="q" value="{{ email_query }}">
+                    <input type="hidden" name="sort" value="{{ sort_by }}">
+                    <input type="hidden" name="order" value="{{ sort_order }}">
+                    <input type="hidden" name="page_size" value="{{ page_size }}">
+                    <input type="hidden" name="view" value="{{ view_mode }}">
+                    <span class="text-[10px] text-slate-500 uppercase">Go to</span>
+                    <input type="number" name="page" min="1" max="{{ total_pages }}" value="{{ current_page }}"
+                           class="w-16 rounded-lg border border-white/10 bg-slate-900/70 px-2 py-1 text-xs text-white text-center outline-none focus:border-brand-500">
+                    <button type="submit" class="rounded-lg bg-brand-600 px-3 py-1 text-[10px] font-bold text-white hover:bg-brand-500 transition-all">Go</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% elif email_accounts %}
+    <div class="glass-panel rounded-2xl xl:rounded-3xl border border-white/5 p-10 xl:p-16 text-center">
+        <div class="w-16 h-16 xl:w-20 xl:h-20 rounded-2xl xl:rounded-3xl bg-white/5 flex items-center justify-center mx-auto mb-4">
+            <i class="fa-solid fa-inbox text-2xl xl:text-3xl text-slate-600"></i>
+        </div>
+        <p class="text-sm font-bold text-slate-400">No messages found</p>
+        <p class="text-xs text-slate-500 mt-1">Try a different search or folder</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function emailAllApp() {
+    return {
+        viewMode: '{{ view_mode }}',
+        pageSize: {{ page_size }},
+        sortBy: '{{ sort_by }}',
+        sortOrder: '{{ sort_order }}',
+        selectedEmails: [],
+        selectAll: false,
+        loading: false,
+        messages: {{ email_messages|tojson }},
+        filters: {
+            from: '',
+            subject: ''
+        },
+
+        init() {
+            // Client-side filtering
+            this.$watch('filters', () => this.updateFilteredUI());
+        },
+
+        get filteredMessages() {
+            let msgs = [...this.messages];
+            
+            // Apply column filters
+            if (this.filters.from) {
+                const fromFilter = this.filters.from.toLowerCase();
+                msgs = msgs.filter(m => (m.from || '').toLowerCase().includes(fromFilter));
+            }
+            if (this.filters.subject) {
+                const subjectFilter = this.filters.subject.toLowerCase();
+                msgs = msgs.filter(m => (m.subject || '').toLowerCase().includes(subjectFilter));
+            }
+            
+            return msgs;
+        },
+
+        setViewMode(mode) {
+            this.viewMode = mode;
+            const url = new URL(window.location);
+            url.searchParams.set('view', mode);
+            url.searchParams.set('page', '1');
+            window.location.href = url.toString();
+        },
+
+        changePageSize() {
+            const url = new URL(window.location);
+            url.searchParams.set('page_size', this.pageSize);
+            url.searchParams.set('page', '1');
+            window.location.href = url.toString();
+        },
+
+        changeSort() {
+            const url = new URL(window.location);
+            url.searchParams.set('sort', this.sortBy);
+            url.searchParams.set('page', '1');
+            window.location.href = url.toString();
+        },
+
+        toggleSortOrder() {
+            this.sortOrder = this.sortOrder === 'desc' ? 'asc' : 'desc';
+            const url = new URL(window.location);
+            url.searchParams.set('order', this.sortOrder);
+            window.location.href = url.toString();
+        },
+
+        toggleEmail(id) {
+            const idx = this.selectedEmails.indexOf(id);
+            if (idx === -1) {
+                this.selectedEmails.push(id);
+            } else {
+                this.selectedEmails.splice(idx, 1);
+            }
+        },
+
+        toggleSelectAll() {
+            if (this.selectAll) {
+                this.selectedEmails = this.messages.map(m => m.id);
+            } else {
+                this.selectedEmails = [];
+            }
+        },
+
+        filterColumn(column, value) {
+            this.filters[column] = value;
+        },
+
+        updateFilteredUI() {
+            // Update UI with filtered results without page reload
+            // This is handled by Alpine's reactivity
+        },
+
+        getSnippet(message) {
+            // Try snippet first
+            if (message.snippet && message.snippet.trim()) {
+                return this.stripHtml(message.snippet);
+            }
+            // Fall back to body
+            if (message.body && message.body.trim()) {
+                return this.stripHtml(message.body).substring(0, 200);
+            }
+            return '(No preview available)';
+        },
+
+        stripHtml(html) {
+            if (!html) return '';
+            // Create a temporary element to strip HTML
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            return tmp.textContent || tmp.innerText || '';
+        },
+
+        getBodyHtml(message) {
+            let body = message.body || message.snippet || '(No content)';
+            // Check if body is HTML
+            if (body.includes('<') && body.includes('>')) {
+                // It's HTML content - sanitize it a bit
+                body = this.sanitizeHtml(body);
+            } else {
+                // Plain text - escape and convert newlines
+                body = this.escapeHtml(body);
+                body = body.replace(/\n/g, '<br>');
+            }
+            // Convert URLs to links
+            body = body.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" class="text-brand-400 hover:underline">$1</a>');
+            return body;
+        },
+
+        sanitizeHtml(html) {
+            if (!html) return '';
+            // Remove script and style tags
+            html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+            html = html.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+            // Remove event handlers
+            html = html.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '');
+            // Remove javascript: URLs
+            html = html.replace(/javascript:/gi, '');
+            return html;
+        },
+
+        escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        },
+
+        formatDate(dateStr) {
+            if (!dateStr) return '';
+            try {
+                const date = new Date(dateStr);
+                const now = new Date();
+                const diff = now - date;
+                
+                // Less than 24 hours
+                if (diff < 86400000) {
+                    return 'Today';
+                }
+                // Less than 48 hours
+                if (diff < 172800000) {
+                    return 'Yesterday';
+                }
+                // This year
+                if (date.getFullYear() === now.getFullYear()) {
+                    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                }
+                // Other years
+                return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            } catch (e) {
+                return dateStr;
+            }
+        },
+
+        formatTime(dateStr) {
+            if (!dateStr) return '';
+            try {
+                const date = new Date(dateStr);
+                return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            } catch (e) {
+                return '';
+            }
+        },
+
+        formatFileSize(bytes) {
+            if (!bytes) return '';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(1) + ' MB';
+        },
+
+        closeEmailBody(messageId) {
+            const bodyRow = document.getElementById('email-body-' + messageId);
+            const row = document.querySelector('.email-row[data-message-id="' + messageId + '"]');
+            if (bodyRow) {
+                bodyRow.classList.add('hidden');
+            }
+            if (row) {
+                row.classList.remove('bg-brand-500/10');
+            }
+        },
+
+        async bulkAction(action) {
+            if (this.selectedEmails.length === 0) return;
+            
+            if (!confirm(`Are you sure you want to ${action} ${this.selectedEmails.length} email(s)?`)) {
+                return;
+            }
+
+            // In a real implementation, this would call an API endpoint
+            // For now, just show a flash message
+            alert(`${action} action triggered for ${this.selectedEmails.length} email(s). This would call the server API.`);
+            
+            // Clear selection after action
+            this.selectedEmails = [];
+            this.selectAll = false;
+        },
+
+        async loadEmailBody(messageId) {
+            const row = document.querySelector('.email-row[data-message-id="' + messageId + '"]');
+            const bodyRow = document.getElementById('email-body-' + messageId);
+            
+            if (!bodyRow) return;
+            
+            // Check if already loaded
+            if (bodyRow.classList.contains('loaded')) {
+                bodyRow.classList.toggle('hidden');
+                if (bodyRow.classList.contains('hidden')) {
+                    row.classList.remove('bg-brand-500/10');
+                } else {
+                    row.classList.add('bg-brand-500/10');
+                }
+                return;
+            }
+
+            // Mark as loaded
+            bodyRow.classList.add('loaded');
+            bodyRow.classList.toggle('hidden');
+            if (!bodyRow.classList.contains('hidden')) {
+                row.classList.add('bg-brand-500/10');
+            }
+        }
+    }
+}
+
+// Click handler for rows - delegate to table
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.email-row').forEach(function(row) {
+        row.style.cursor = 'pointer';
+        row.addEventListener('click', function(e) {
+            // Don't toggle if clicking on a link, checkbox, or button
+            if (e.target.tagName === 'A' || e.target.closest('a') || 
+                e.target.tagName === 'INPUT' || e.target.closest('input') ||
+                e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+                return;
+            }
+
+            var messageId = this.getAttribute('data-message-id');
+            var bodyRow = document.getElementById('email-body-' + messageId);
+
+            if (bodyRow) {
+                bodyRow.classList.toggle('hidden');
+
+                if (bodyRow.classList.contains('hidden')) {
+                    this.classList.remove('bg-brand-500/10');
+                } else {
+                    this.classList.add('bg-brand-500/10');
+                    // Mark as loaded if first time
+                    if (!bodyRow.classList.contains('loaded')) {
+                        bodyRow.classList.add('loaded');
+                    }
+                }
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

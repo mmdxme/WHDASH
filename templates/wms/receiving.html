@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-white">{{ title }}</h1>
+        <a href="{{ url_for('wms_receiving_new') }}" class="px-4 py-2 bg-brand-500 text-white rounded-xl hover:bg-brand-400 text-sm font-medium">
+            <i class="fa-solid fa-plus mr-2"></i>New Receipt
+        </a>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-5">
+        <form method="GET" class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div>
+                <select name="status" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <option value="">All Status</option>
+                    <option value="EXPECTED" {% if status=='EXPECTED' %}selected{% endif %}>Expected</option>
+                    <option value="PARTIAL" {% if status=='PARTIAL' %}selected{% endif %}>Partial</option>
+                    <option value="COMPLETED" {% if status=='COMPLETED' %}selected{% endif %}>Completed</option>
+                    <option value="CANCELLED" {% if status=='CANCELLED' %}selected{% endif %}>Cancelled</option>
+                </select>
+            </div>
+            <div>
+                <select name="warehouse_id" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <option value="">All Warehouses</option>
+                    {% for wh in warehouses %}
+                    <option value="{{ wh.id }}" {% if warehouse_id|int == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <input type="text" name="search" value="{{ search }}" placeholder="Receipt number, PO reference..." class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="flex-1 px-4 py-2.5 bg-brand-500 text-white rounded-xl text-sm font-medium"><i class="fa-solid fa-filter mr-2"></i>Filter</button>
+                <a href="{{ url_for('wms_receiving') }}" class="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-slate-400"><i class="fa-solid fa-xmark"></i></a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="text-left py-4 px-5 font-semibold">Receipt #</th>
+                        <th class="text-left py-4 px-5 font-semibold">Type</th>
+                        <th class="text-left py-4 px-5 font-semibold">Warehouse</th>
+                        <th class="text-left py-4 px-5 font-semibold">Supplier</th>
+                        <th class="text-left py-4 px-5 font-semibold">Expected</th>
+                        <th class="text-left py-4 px-5 font-semibold">Received</th>
+                        <th class="text-center py-4 px-5 font-semibold">Status</th>
+                        <th class="text-center py-4 px-5 font-semibold">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in receipts %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-4 px-5">
+                            <a href="{{ url_for('wms_receiving_detail', receipt_id=r.id) }}" class="text-brand-400 hover:text-brand-300 font-medium">{{ r.receipt_number }}</a>
+                            {% if r.po_reference %}
+                            <p class="text-xs text-slate-500">PO: {{ r.po_reference }}</p>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-5 text-slate-300">{{ r.receipt_type }}</td>
+                        <td class="py-4 px-5 text-slate-300">{{ r.warehouse_name }}</td>
+                        <td class="py-4 px-5 text-slate-400">{{ r.supplier_name or '-' }}</td>
+                        <td class="py-4 px-5 text-slate-400">{{ r.expected_date[:10] if r.expected_date else '-' }}</td>
+                        <td class="py-4 px-5 text-slate-400">{{ r.actual_arrival_date[:10] if r.actual_arrival_date else '-' }}</td>
+                        <td class="py-4 px-5 text-center">
+                            <span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider
+                                {% if r.status == 'COMPLETED' %}bg-emerald-500/10 text-emerald-400
+                                {% elif r.status == 'PARTIAL' %}bg-amber-500/10 text-amber-400
+                                {% elif r.status == 'EXPECTED' %}bg-cyan-500/10 text-cyan-400
+                                {% elif r.status == 'CANCELLED' %}bg-red-500/10 text-red-400
+                                {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ r.status }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5 text-center">
+                            <a href="{{ url_for('wms_receiving_detail', receipt_id=r.id) }}" class="px-3 py-1.5 rounded-lg bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 text-xs font-medium">
+                                <i class="fa-solid fa-eye mr-1"></i>View
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="py-16 text-center text-slate-500">
+                            <i class="fa-solid fa-truck-ramp-box text-5xl mb-4 block opacity-20"></i>
+                            <p class="text-lg font-medium">No receipts found</p>
+                            <a href="{{ url_for('wms_receiving_new') }}" class="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm hover:bg-brand-400">
+                                <i class="fa-solid fa-plus"></i>New Receipt
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if total_pages > 1 %}
+        <div class="flex items-center justify-between px-6 py-4 border-t border-white/5">
+            <p class="text-sm text-slate-400">Page {{ page }} of {{ total_pages }}</p>
+            <div class="flex gap-2">
+                {% if page > 1 %}
+                <a href="?page={{ page-1 }}&status={{ status }}&warehouse_id={{ warehouse_id }}" class="px-3 py-2 rounded-lg bg-white/5 text-slate-400 text-sm"><i class="fa-solid fa-chevron-left"></i></a>
+                {% endif %}
+                <span class="px-4 py-2 bg-brand-500/10 text-brand-400 rounded-lg text-sm font-medium">{{ page }}</span>
+                {% if page < total_pages %}
+                <a href="?page={{ page+1 }}&status={{ status }}&warehouse_id={{ warehouse_id }}" class="px-3 py-2 rounded-lg bg-white/5 text-slate-400 text-sm"><i class="fa-solid fa-chevron-right"></i></a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

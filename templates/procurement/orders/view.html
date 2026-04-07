@@ -1,0 +1,81 @@
+{% extends "procurement/base.html" %}
+
+{% block proc_content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+    <div>
+        <h2 style="margin: 0 0 0.5rem 0;">PO: {{ order.po_number }}</h2>
+        <div style="display: flex; gap: 0.5rem;">
+            <span class="proc-badge proc-badge-{% if order.status == 'RECEIVED' %}success{% elif order.status == 'APPROVED' %}info{% elif order.status == 'DRAFT' %}gray{% elif order.status == 'CANCELLED' %}danger{% elif order.status == 'CLOSED' %}primary{% else %}warning{% endif %}">
+                {{ order.status }}
+            </span>
+            {% if order.po_type == 'EMERGENCY' %}
+            <span class="proc-badge proc-badge-danger">EMERGENCY</span>
+            {% elif order.po_type == 'IMPORT' %}
+            <span class="proc-badge proc-badge-info">IMPORT</span>
+            {% endif %}
+        </div>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+        {% if order.status == 'DRAFT' %}
+        <form method="POST" action="{{ url_for('procurement_orders_approve', po_id=order.id) }}">
+            <button type="submit" class="proc-btn proc-btn-success"><i class="fa fa-check"></i> Approve</button>
+        </form>
+        {% endif %}
+        <a href="{{ url_for('procurement_orders') }}" class="proc-btn proc-btn-secondary">Back</a>
+    </div>
+</div>
+
+<div class="proc-grid-4" style="margin-bottom: 1.5rem;">
+    <div class="proc-stat-card"><div class="proc-stat-label">Supplier</div><div class="proc-stat-value" style="font-size: 1rem;">{{ order.supplier_name or '-' }}</div></div>
+    <div class="proc-stat-card"><div class="proc-stat-label">Date</div><div class="proc-stat-value" style="font-size: 1rem;">{{ order.po_date[:10] if order.po_date else '-' }}</div></div>
+    <div class="proc-stat-card"><div class="proc-stat-label">Expected Delivery</div><div class="proc-stat-value" style="font-size: 1rem;">{{ order.expected_delivery_date[:10] if order.expected_delivery_date else '-' }}</div></div>
+    <div class="proc-stat-card"><div class="proc-stat-label">Total Amount</div><div class="proc-stat-value" style="font-size: 1.25rem; font-weight: 700;">{{ "%.2f"|format(order.total_amount or 0) }} {{ order.currency or 'AED' }}</div></div>
+</div>
+
+<div class="proc-card">
+    <div class="proc-card-header"><h3 class="proc-card-title">Line Items</h3></div>
+    <table class="proc-table">
+        <thead>
+            <tr><th>#</th><th>Item Code</th><th>Item Name</th><th>Brand</th><th>Qty</th><th>Unit Price</th><th>Total</th><th>Received</th></tr>
+        </thead>
+        <tbody>
+            {% for line in order.lines %}
+            <tr>
+                <td>{{ line.line_number or loop.index }}</td>
+                <td>{{ line.item_code or '-' }}</td>
+                <td>{{ line.item_name or '-' }}</td>
+                <td>{{ line.brand or '-' }}</td>
+                <td>{{ line.ordered_qty }} {{ line.unit_of_measure or 'PCS' }}</td>
+                <td>{{ "%.2f"|format(line.final_unit_price or 0) }}</td>
+                <td>{{ "%.2f"|format(line.line_total or 0) }}</td>
+                <td>{{ line.received_qty or 0 }} {{ line.unit_of_measure or 'PCS' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if order.history and order.history|length > 0 %}
+<div class="proc-card" style="margin-top: 1rem;">
+    <div class="proc-card-header"><h3 class="proc-card-title">History</h3></div>
+    <div class="proc-card-body" style="padding: 0;">
+        <table class="proc-table">
+            <thead>
+                <tr><th>Date</th><th>Action</th><th>Field</th><th>Old</th><th>New</th></tr>
+            </thead>
+            <tbody>
+                {% for h in order.history %}
+                <tr>
+                    <td>{{ h.changed_at[:16] if h.changed_at else '-' }}</td>
+                    <td>{{ h.action_type }}</td>
+                    <td>{{ h.field_name or '-' }}</td>
+                    <td>{{ h.old_value or '-' }}</td>
+                    <td>{{ h.new_value or '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

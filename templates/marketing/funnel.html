@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <div class="flex items-center justify-between mb-8">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white">{{ t('funnel_conversion', 'Funnel & Conversion') }}</h1>
+            <p class="text-slate-400 mt-1">{{ t('funnel_desc', 'Track leads through the marketing funnel') }}</p>
+        </div>
+    </div>
+
+    <!-- Funnel Stages -->
+    <div class="mb-8">
+        <div class="flex items-end gap-1">
+            {% for stage in funnel_stages %}
+            {% set max_count = funnel_stages[0].records_in_stage if funnel_stages[0].records_in_stage > 0 else 1 %}
+            {% set bar_height = (stage.records_in_stage / max_count * 100) if max_count > 0 else 0 %}
+            <div class="flex-1 text-center">
+                <div class="bg-gradient-to-t from-brand-600 to-brand-400 rounded-t-xl mx-1 relative group" style="min-height: {{ [bar_height, 20] | max }}px; height: {{ [bar_height, 20] | max }}px;">
+                    <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 rounded-t-xl">
+                        <div class="text-center">
+                            <div class="text-2xl font-extrabold text-white">{{ stage.records_in_stage }}</div>
+                            <div class="text-xs text-white/70">{{ t('records', 'records') }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-2 text-xs font-bold text-white">{{ stage.name }}</div>
+                <div class="text-xs text-slate-500">{{ stage.records_in_stage }}</div>
+                {% if stage.conversion_rate is defined and stage.conversion_rate < 100 %}
+                <div class="text-xs text-rose-400">↓ {{ stage.conversion_rate }}%</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Funnel Details Table -->
+    <div class="glass-panel rounded-2xl p-6 mb-8">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('funnel_stages_detail', 'Funnel Stages Detail') }}</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-3 px-4">{{ t('stage', 'Stage') }}</th>
+                        <th class="text-center py-3 px-4">{{ t('records', 'Records') }}</th>
+                        <th class="text-center py-3 px-4">{{ t('avg_time', 'Avg Time (hrs)') }}</th>
+                        <th class="text-center py-3 px-4">{{ t('conversion_rate', 'Conversion Rate') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stage in funnel_stages %}
+                    <tr class="border-b border-white/5">
+                        <td class="py-3 px-4">
+                            <span class="font-semibold text-white">{{ stage.name }}</span>
+                            <div class="text-xs text-slate-500">{{ stage.stage_type }}</div>
+                        </td>
+                        <td class="py-3 px-4 text-center text-cyan-400 font-bold">{{ stage.records_in_stage }}</td>
+                        <td class="py-3 px-4 text-center text-slate-300">{{ "%.1f"|format(stage.avg_hours or 0) }}</td>
+                        <td class="py-3 px-4 text-center">
+                            {% if stage.conversion_rate is defined and stage.conversion_rate < 100 %}
+                            <span class="text-rose-400 font-bold">{{ stage.conversion_rate }}%</span>
+                            {% else %}
+                            <span class="text-emerald-400 font-bold">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Channel Breakdown -->
+    {% if channel_funnel %}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('channel_funnel', 'Channel Funnel') }}</h3>
+            <div class="space-y-2 max-h-[400px] overflow-y-auto">
+                {% for item in channel_funnel %}
+                <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                    <span class="text-white">{{ item.channel_name }} - {{ item.stage_name }}</span>
+                    <span class="text-cyan-400 font-bold">{{ item.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('campaign_funnel', 'Campaign Funnel') }}</h3>
+            <div class="space-y-2 max-h-[400px] overflow-y-auto">
+                {% for item in campaign_funnel %}
+                <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                    <span class="text-white">{{ item.campaign_name }} - {{ item.stage_name }}</span>
+                    <span class="text-cyan-400 font-bold">{{ item.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

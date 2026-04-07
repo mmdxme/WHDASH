@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+
+    <!-- Page Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div class="flex items-center gap-4">
+            <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-500 to-purple-600 flex items-center justify-center shadow-xl shadow-brand-500/20">
+                <i class="fa-solid fa-user-tie text-2xl text-white"></i>
+            </div>
+            <div>
+                <h1 class="text-2xl font-extrabold text-white tracking-tight">{{ t('customers_by_salesperson', 'Customers by Salesperson') }}</h1>
+                <p class="text-sm text-slate-400 font-medium">{{ t('salesperson_performance_overview', 'Salesperson performance & customer distribution') }}</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('customers_reports') }}" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white transition-all text-sm font-semibold">
+                <i class="fa-solid fa-arrow-left"></i>
+                <span>{{ t('back_to_reports', 'Back to Reports') }}</span>
+            </a>
+            <div class="relative">
+                <button onclick="toggleExportMenu(this)" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white transition-all text-sm font-bold shadow-lg shadow-brand-500/20">
+                    <i class="fa-solid fa-download"></i>
+                    <span>{{ t('export', 'Export') }}</span>
+                    <i class="fa-solid fa-chevron-down text-xs"></i>
+                </button>
+                <div id="export-menu" class="absolute right-0 mt-2 w-44 rounded-xl bg-slate-800 border border-white/10 shadow-xl shadow-black/30 hidden z-50 overflow-hidden">
+                    <a href="{{ url_for('api_customers_export', format='csv') }}?report_type=by_salesperson" class="flex items-center gap-3 px-4 py-3 hover:bg-white/10 transition-all text-slate-300 text-sm">
+                        <i class="fa-solid fa-file-csv text-emerald-400"></i> CSV
+                    </a>
+                    <a href="{{ url_for('api_customers_export', format='excel') }}?report_type=by_salesperson" class="flex items-center gap-3 px-4 py-3 hover:bg-white/10 transition-all text-slate-300 text-sm">
+                        <i class="fa-solid fa-file-excel text-green-400"></i> Excel
+                    </a>
+                    <a href="{{ url_for('api_customers_export', format='json') }}?report_type=by_salesperson" class="flex items-center gap-3 px-4 py-3 hover:bg-white/10 transition-all text-slate-300 text-sm">
+                        <i class="fa-solid fa-code text-blue-400"></i> JSON
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-panel rounded-2xl p-5 relative overflow-hidden group hover:border-brand-500/30 transition-all duration-300">
+            <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-brand-500/20 to-transparent rounded-bl-[2rem] group-hover:from-brand-500/30 transition-all"></div>
+            <div class="relative">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-user-tie text-brand-400"></i>
+                    </div>
+                    <span class="text-xs font-bold text-brand-400 bg-brand-500/10 px-2 py-1 rounded-full">{{ salespersons|length }} {{ t('salespersons', 'Salespersons') }}</span>
+                </div>
+                <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">{{ t('total_customers', 'Total Customers') }}</p>
+                <p class="text-2xl font-extrabold text-white tabular-nums" data-count="{{ salespersons|sum(attribute='customer_count') }}">{{ "{:,}".format(salespersons|sum(attribute='customer_count') or 0) }}</p>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5 relative overflow-hidden group hover:border-emerald-500/30 transition-all duration-300">
+            <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-emerald-500/20 to-transparent rounded-bl-[2rem] group-hover:from-emerald-500/30 transition-all"></div>
+            <div class="relative">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-coins text-emerald-400"></i>
+                    </div>
+                    <span class="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full">{{ t('total_sales', 'Total Sales') }}</span>
+                </div>
+                <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">{{ t('revenue', 'Revenue') }}</p>
+                <p class="text-2xl font-extrabold text-white tabular-nums">{{ "{:,.0f}".format(salespersons|sum(attribute='total_sales') or 0) }}</p>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5 relative overflow-hidden group hover:border-red-500/30 transition-all duration-300">
+            <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-red-500/20 to-transparent rounded-bl-[2rem] group-hover:from-red-500/30 transition-all"></div>
+            <div class="relative">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-triangle-exclamation text-red-400"></i>
+                    </div>
+                    <span class="text-xs font-bold text-red-400 bg-red-500/10 px-2 py-1 rounded-full">{{ t('outstanding', 'Outstanding') }}</span>
+                </div>
+                <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">{{ t('total_debt', 'Total Debt') }}</p>
+                <p class="text-2xl font-extrabold text-red-400 tabular-nums">{{ "{:,.0f}".format(salespersons|sum(attribute='total_debt') or 0) }}</p>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5 relative overflow-hidden group hover:border-purple-500/30 transition-all duration-300">
+            <div class="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-purple-500/20 to-transparent rounded-bl-[2rem] group-hover:from-purple-500/30 transition-all"></div>
+            <div class="relative">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-chart-line text-purple-400"></i>
+                    </div>
+                    <span class="text-xs font-bold text-purple-400 bg-purple-500/10 px-2 py-1 rounded-full">{{ t('avg', 'Avg') }}</span>
+                </div>
+                <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">{{ t('avg_per_salesperson', 'Per Salesperson') }}</p>
+                <p class="text-2xl font-extrabold text-white tabular-nums">
+                    {% set total_sales = salespersons|sum(attribute='total_sales') %}
+                    {% set sp_count = salespersons|length %}
+                    {{ "{:,.0f}".format((total_sales / sp_count) if sp_count > 0 else 0) }}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Table Card -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <!-- Card Header -->
+        <div class="px-6 py-5 border-b border-white/5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-table text-brand-400"></i>
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-white">{{ t('salesperson_performance_table', 'Salesperson Performance Table') }}</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">{{ t('detailed_breakdown', 'Detailed breakdown of customer counts, sales & outstanding balances') }}</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <!-- Search -->
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i class="fa-solid fa-magnifying-glass text-slate-500 text-sm"></i>
+                    </div>
+                    <input type="text" id="table-search" placeholder="{{ t('search_salesperson', 'Search salesperson...') }}" class="pl-10 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-slate-200 placeholder:text-slate-600 focus:ring-1 focus:ring-brand-500/50 focus:border-brand-500/50 transition-all w-64 font-medium">
+                </div>
+                <!-- Sort Dropdown -->
+                <select id="sort-select" class="px-3 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-slate-300 focus:ring-1 focus:ring-brand-500/50 focus:border-brand-500/50 transition-all cursor-pointer">
+                    <option value="customers-desc">{{ t('sort_customers_high', 'Customers: High → Low') }}</option>
+                    <option value="customers-asc">{{ t('sort_customers_low', 'Customers: Low → High') }}</option>
+                    <option value="sales-desc">{{ t('sort_sales_high', 'Sales: High → Low') }}</option>
+                    <option value="sales-asc">{{ t('sort_sales_low', 'Sales: Low → High') }}</option>
+                    <option value="outstanding-desc">{{ t('sort_outstanding_high', 'Outstanding: High → Low') }}</option>
+                    <option value="name-asc">{{ t('sort_name_az', 'Name: A → Z') }}</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-responsive">
+            <table class="w-full" id="salesperson-table">
+                <thead>
+                    <tr class="border-b border-white/5">
+                        <th class="px-6 py-4 text-left">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">{{ t('salesperson', 'Salesperson') }}</span>
+                        </th>
+                        <th class="px-4 py-4 text-center">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">{{ t('team', 'Team') }}</span>
+                        </th>
+                        <th class="px-4 py-4 text-center">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">{{ t('customers', 'Customers') }}</span>
+                        </th>
+                        <th class="px-4 py-4 text-center">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">{{ t('transactions', 'Transactions') }}</span>
+                        </th>
+                        <th class="px-4 py-4 text-right">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">{{ t('total_sales', 'Total Sales') }}</span>
+                        </th>
+                        <th class="px-4 py-4 text-right">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">{{ t('outstanding', 'Outstanding') }}</span>
+                        </th>
+                        <th class="px-4 py-4 text-right">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">{{ t('avg_customer', 'Avg / Customer') }}</span>
+                        </th>
+                        <th class="px-4 py-4 text-right">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">{{ t('avg_transaction', 'Avg Transaction') }}</span>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="salesperson-tbody">
+                    {% for s in salespersons %}
+                    <tr class="table-row border-b border-white/5 hover:bg-white/5 transition-all duration-150" data-salesperson="{{ s.salesperson_name|lower }}" data-customers="{{ s.customer_count }}" data-sales="{{ s.total_sales }}" data-outstanding="{{ s.total_debt }}">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500/30 to-purple-500/30 flex items-center justify-center flex-shrink-0">
+                                    <i class="fa-solid fa-user text-brand-400 text-sm"></i>
+                                </div>
+                                <div>
+                                    <span class="font-bold text-white text-sm">{{ s.salesperson_name }}</span>
+                                    <div class="flex items-center gap-2 mt-0.5">
+                                        {% if s.customer_count > 0 %}
+                                        <span class="inline-flex items-center gap-1 text-xs text-emerald-400">
+                                            <i class="fa-solid fa-circle text-[5px]"></i>{{ t('active', 'Active') }}
+                                        </span>
+                                        {% else %}
+                                        <span class="inline-flex items-center gap-1 text-xs text-slate-500">
+                                            <i class="fa-solid fa-circle text-[5px]"></i>{{ t('no_customers', 'No Customers') }}
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            {% if s.sales_team %}
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-lg bg-purple-500/10 text-purple-300 text-xs font-semibold border border-purple-500/20">
+                                <i class="fa-solid fa-users mr-1.5 text-purple-400"></i>{{ s.sales_team }}
+                            </span>
+                            {% else %}
+                            <span class="text-slate-600 text-xs">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <div class="inline-flex flex-col items-center">
+                                <span class="text-base font-extrabold text-white tabular-nums">{{ s.customer_count }}</span>
+                                <div class="w-16 h-1 bg-white/10 rounded-full mt-1 overflow-hidden">
+                                    <div class="h-full bg-gradient-to-r from-brand-500 to-purple-500 rounded-full" style="width: {{ '100%' if s.customer_count == (salespersons|max(attribute='customer_count')).customer_count else ((s.customer_count / (salespersons|max(attribute='customer_count')).customer_count) * 100)|round }}%"></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            {% if s.total_transactions %}
+                            <span class="text-sm font-bold text-slate-300 tabular-nums">{{ s.total_transactions }}</span>
+                            {% else %}
+                            <span class="text-slate-600 text-xs">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-sm font-bold text-emerald-400 tabular-nums">{{ "{:,.0f}".format(s.total_sales or 0) }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            {% if s.total_debt and s.total_debt > 0 %}
+                            <span class="inline-flex items-center gap-1 text-sm font-bold text-red-400 tabular-nums">
+                                <i class="fa-solid fa-arrow-up text-[8px]"></i>{{ "{:,.0f}".format(s.total_debt) }}
+                            </span>
+                            {% else %}
+                            <span class="text-sm font-bold text-slate-500 tabular-nums">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            {% if s.avg_sale and s.avg_sale > 0 %}
+                            <span class="text-sm font-bold text-white tabular-nums">{{ "{:,.0f}".format(s.avg_sale) }}</span>
+                            {% else %}
+                            <span class="text-slate-600 text-xs">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            {% if s.avg_transaction and s.avg_transaction > 0 %}
+                            <span class="text-sm font-bold text-slate-300 tabular-nums">{{ "{:,.0f}".format(s.avg_transaction) }}</span>
+                            {% else %}
+                            <span class="text-slate-600 text-xs">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+
+                    {% if not salespersons %}
+                    <tr>
+                        <td colspan="8" class="px-6 py-16 text-center">
+                            <div class="flex flex-col items-center gap-4">
+                                <div class="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center">
+                                    <i class="fa-solid fa-user-tie text-3xl text-slate-600"></i>
+                                </div>
+                                <div>
+                                    <p class="text-slate-300 font-semibold">{{ t('no_salespersons_found', 'No Salespersons Found') }}</p>
+                                    <p class="text-slate-500 text-sm mt-1">{{ t('no_salesperson_data', 'There is no salesperson data available yet.') }}</p>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+                <tfoot>
+                    <tr class="border-t border-white/10 bg-slate-900/50">
+                        <td class="px-6 py-4">
+                            <span class="text-sm font-extrabold text-white">{{ t('total', 'Total') }} ({{ salespersons|length }})</span>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <span class="text-slate-500 text-xs">—</span>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <span class="text-base font-extrabold text-white tabular-nums">{{ salespersons|sum(attribute='customer_count') }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <span class="text-base font-extrabold text-slate-300 tabular-nums">
+                                {{ salespersons|sum(attribute='total_transactions') or '—' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-base font-extrabold text-emerald-400 tabular-nums">{{ "{:,.0f}".format(salespersons|sum(attribute='total_sales') or 0) }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-base font-extrabold text-red-400 tabular-nums">{{ "{:,.0f}".format(salespersons|sum(attribute='total_debt') or 0) }}</span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-base font-extrabold text-white tabular-nums">
+                                {% set total_sales = salespersons|sum(attribute='total_sales') %}
+                                {% set sp_count = salespersons|length %}
+                                {{ "{:,.0f}".format((total_sales / sp_count) if sp_count > 0 else 0) }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4 text-right">
+                            <span class="text-slate-500 text-xs">—</span>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <!-- Table Footer Info -->
+        <div class="px-6 py-4 border-t border-white/5 flex items-center justify-between">
+            <p class="text-xs text-slate-500">
+                {{ t('showing_results', 'Showing') }} <span class="text-slate-300 font-semibold">{{ salespersons|length }}</span> {{ t('salespersons', 'salespersons') }}
+            </p>
+            <p class="text-xs text-slate-500">
+                {{ t('last_updated', 'Last updated') }}: <span class="text-slate-400 font-medium">{{ current_year }}</span>
+            </p>
+        </div>
+    </div>
+
+    <!-- Secondary Info Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Top Performer -->
+        {% set top_sp = salespersons|sort(attribute='total_sales', reverse=true)|first %}
+        {% if top_sp %}
+        <div class="glass-panel rounded-2xl p-5 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 via-orange-500 to-red-500"></div>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-trophy text-amber-400"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider">{{ t('top_performer', 'Top Performer') }}</p>
+                    <p class="text-sm font-bold text-white mt-0.5">{{ top_sp.salesperson_name }}</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-white/5 rounded-xl p-3">
+                    <p class="text-xs text-slate-500 mb-1">{{ t('customers', 'Customers') }}</p>
+                    <p class="text-lg font-extrabold text-white">{{ top_sp.customer_count }}</p>
+                </div>
+                <div class="bg-white/5 rounded-xl p-3">
+                    <p class="text-xs text-slate-500 mb-1">{{ t('revenue', 'Revenue') }}</p>
+                    <p class="text-lg font-extrabold text-emerald-400">{{ "{:,.0f}".format(top_sp.total_sales or 0) }}</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Highest Outstanding -->
+        {% set worst_sp = salespersons|sort(attribute='total_debt', reverse=true)|first %}
+        {% if worst_sp and worst_sp.total_debt and worst_sp.total_debt > 0 %}
+        <div class="glass-panel rounded-2xl p-5 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-red-600 to-red-400"></div>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-exclamation-triangle text-red-400"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider">{{ t('highest_outstanding', 'Highest Outstanding') }}</p>
+                    <p class="text-sm font-bold text-white mt-0.5">{{ worst_sp.salesperson_name }}</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-white/5 rounded-xl p-3">
+                    <p class="text-xs text-slate-500 mb-1">{{ t('outstanding', 'Outstanding') }}</p>
+                    <p class="text-lg font-extrabold text-red-400">{{ "{:,.0f}".format(worst_sp.total_debt) }}</p>
+                </div>
+                <div class="bg-white/5 rounded-xl p-3">
+                    <p class="text-xs text-slate-500 mb-1">{{ t('customers', 'Customers') }}</p>
+                    <p class="text-lg font-extrabold text-white">{{ worst_sp.customer_count }}</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Most Customers -->
+        {% set most_cust_sp = salespersons|sort(attribute='customer_count', reverse=true)|first %}
+        {% if most_cust_sp %}
+        <div class="glass-panel rounded-2xl p-5 relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-brand-500 to-blue-500"></div>
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-users text-brand-400"></i>
+                </div>
+                <div>
+                    <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider">{{ t('most_customers', 'Most Customers') }}</p>
+                    <p class="text-sm font-bold text-white mt-0.5">{{ most_cust_sp.salesperson_name }}</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-white/5 rounded-xl p-3">
+                    <p class="text-xs text-slate-500 mb-1">{{ t('customers', 'Customers') }}</p>
+                    <p class="text-lg font-extrabold text-brand-400">{{ most_cust_sp.customer_count }}</p>
+                </div>
+                <div class="bg-white/5 rounded-xl p-3">
+                    <p class="text-xs text-slate-500 mb-1">{{ t('avg_customer', 'Avg / Customer') }}</p>
+                    <p class="text-lg font-extrabold text-white">{{ "{:,.0f}".format(most_cust_sp.avg_sale or 0) }}</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleExportMenu(btn) {
+    const menu = document.getElementById('export-menu');
+    menu.classList.toggle('hidden');
+    document.addEventListener('click', function closeMenu(e) {
+        if (!btn.contains(e.target) && !menu.contains(e.target)) {
+            menu.classList.add('hidden');
+            document.removeEventListener('click', closeMenu);
+        }
+    });
+}
+
+// Table search
+document.getElementById('table-search').addEventListener('input', function(e) {
+    const q = e.target.value.toLowerCase().trim();
+    document.querySelectorAll('.table-row').forEach(row => {
+        const name = row.dataset.salesperson || '';
+        row.style.display = name.includes(q) ? '' : 'none';
+    });
+});
+
+// Table sort
+document.getElementById('sort-select').addEventListener('change', function(e) {
+    const [field, dir] = e.target.value.split('-');
+    const rows = Array.from(document.querySelectorAll('.table-row'));
+    const dirFactor = dir === 'desc' ? -1 : 1;
+
+    rows.sort((a, b) => {
+        let aVal, bVal;
+        switch(field) {
+            case 'customers': aVal = parseInt(a.dataset.customers || 0); bVal = parseInt(b.dataset.customers || 0); break;
+            case 'sales': aVal = parseFloat(a.dataset.sales || 0); bVal = parseFloat(b.dataset.sales || 0); break;
+            case 'outstanding': aVal = parseFloat(a.dataset.outstanding || 0); bVal = parseFloat(b.dataset.outstanding || 0); break;
+            case 'name': aVal = (a.dataset.salesperson || ''); bVal = (b.dataset.salesperson || ''); break;
+            default: aVal = 0; bVal = 0;
+        }
+        if (typeof aVal === 'string') return aVal.localeCompare(bVal) * dirFactor;
+        return (aVal - bVal) * dirFactor;
+    });
+
+    const tbody = document.getElementById('salesperson-tbody');
+    rows.forEach(row => tbody.appendChild(row));
+});
+</script>
+{% endblock %}

@@ -1,0 +1,365 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-sky-500/20 flex items-center justify-center">
+                <i class="fas fa-boxes text-sky-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">Active Items</p>
+                <p class="text-white text-xl font-bold">{{ total_items|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <i class="fas fa-exclamation-triangle text-red-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">Active Alerts</p>
+                <p class="text-white text-xl font-bold">{{ active_alerts|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <i class="fas fa-arrow-down text-orange-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">Below Safety</p>
+                <p class="text-white text-xl font-bold">{{ below_safety|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                <i class="fas fa-sync text-yellow-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">Below ROP</p>
+                <p class="text-white text-xl font-bold">{{ below_rop|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-red-600/20 flex items-center justify-center">
+                <i class="fas fa-times-circle text-red-500"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">Zero Stock</p>
+                <p class="text-white text-xl font-bold">{{ zero_stock|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <i class="fas fa-cubes text-purple-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">Excess Stock</p>
+                <p class="text-white text-xl font-bold">{{ excess_stock|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Stock Health Summary -->
+    <div class="glass-panel rounded-xl p-5">
+        <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+            <i class="fas fa-heartbeat text-rose-400"></i> Stock Health Summary
+        </h3>
+        <div class="space-y-3">
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">Stockout Risk</span>
+                <span class="text-red-400 font-bold">{{ stockout_alerts|default(0) }} items</span>
+            </div>
+            <div class="w-full bg-slate-700 rounded-full h-2">
+                <div class="bg-red-500 h-2 rounded-full" style="width: {{ (stockout_alerts / total_items * 100)|default(0) if total_items > 0 else 0 }}%"></div>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">Below Safety Stock</span>
+                <span class="text-orange-400 font-bold">{{ below_safety|default(0) }} items</span>
+            </div>
+            <div class="w-full bg-slate-700 rounded-full h-2">
+                <div class="bg-orange-500 h-2 rounded-full" style="width: {{ (below_safety / total_items * 100)|default(0) if total_items > 0 else 0 }}%"></div>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">Below Reorder Point</span>
+                <span class="text-yellow-400 font-bold">{{ below_rop|default(0) }} items</span>
+            </div>
+            <div class="w-full bg-slate-700 rounded-full h-2">
+                <div class="bg-yellow-500 h-2 rounded-full" style="width: {{ (below_rop / total_items * 100)|default(0) if total_items > 0 else 0 }}%"></div>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">Healthy Stock</span>
+                <span class="text-green-400 font-bold">{{ (total_items - below_safety - below_rop - zero_stock)|default(0) }} items</span>
+            </div>
+            <div class="w-full bg-slate-700 rounded-full h-2">
+                <div class="bg-green-500 h-2 rounded-full" style="width: {{ ((total_items - below_safety - below_rop - zero_stock) / total_items * 100)|default(0) if total_items > 0 else 0 }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory Coverage -->
+    <div class="glass-panel rounded-xl p-5">
+        <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+            <i class="fas fa-layer-group text-sky-400"></i> Coverage Analysis
+        </h3>
+        <div class="space-y-3">
+            {% for cov in coverage_stats|default([]) %}
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">{{ cov.days }}</span>
+                <div class="flex items-center gap-2">
+                    <div class="w-32 bg-slate-700 rounded-full h-2">
+                        <div class="bg-sky-500 h-2 rounded-full" style="width: {{ (cov.count / total_items * 100)|default(0) if total_items > 0 else 0 }}%"></div>
+                    </div>
+                    <span class="text-sky-300 text-sm font-medium">{{ cov.count }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="mt-4 pt-4 border-t border-slate-700">
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">Recent Demand (MTD)</span>
+                <span class="text-white font-bold">{{ "{:,.0f}".format(recent_demand|default(0)) }}</span>
+            </div>
+            <div class="flex items-center justify-between mt-2">
+                <span class="text-slate-400 text-sm">In-Transit Value</span>
+                <span class="text-sky-300 font-bold">${{ "{:,.0f}".format(in_transit_value|default(0)) }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendation Summary -->
+    <div class="glass-panel rounded-xl p-5">
+        <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+            <i class="fas fa-clipboard-check text-emerald-400"></i> Recommendations
+        </h3>
+        <div class="space-y-4">
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-sky-500/20 flex items-center justify-center">
+                        <i class="fas fa-shopping-cart text-sky-400 text-sm"></i>
+                    </div>
+                    <span class="text-slate-300 text-sm">Purchase Suggestions</span>
+                </div>
+                <span class="text-white font-bold">{{ open_purchase_recs|default(0) }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <i class="fas fa-arrows-alt-h text-purple-400 text-sm"></i>
+                    </div>
+                    <span class="text-slate-300 text-sm">Replenishments</span>
+                </div>
+                <span class="text-white font-bold">{{ open_recommendations|default(0) }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-area text-amber-400 text-sm"></i>
+                    </div>
+                    <span class="text-slate-300 text-sm">Pending Forecasts</span>
+                </div>
+                <span class="text-white font-bold">{{ pending_forecasts|default(0) }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center">
+                        <i class="fas fa-skull text-rose-400 text-sm"></i>
+                    </div>
+                    <span class="text-slate-300 text-sm">Dead Stock Items</span>
+                </div>
+                <span class="text-white font-bold">{{ dead_stock_count|default(0) }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Top Shortage Items -->
+    <div class="glass-panel rounded-xl p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-white font-semibold flex items-center gap-2">
+                <i class="fas fa-arrow-up text-red-400"></i> Top Shortage Items
+            </h3>
+            <a href="{{ url_for('inventory_health') }}" class="text-sky-400 text-sm hover:underline">View All</a>
+        </div>
+        {% if top_shortage_items %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-slate-700">
+                        <th class="text-left py-2 px-2">Item</th>
+                        <th class="text-right py-2 px-2">Current</th>
+                        <th class="text-right py-2 px-2">ROP</th>
+                        <th class="text-right py-2 px-2">Shortage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in top_shortage_items %}
+                    <tr class="border-b border-slate-800 searchable-row hover:bg-slate-800/30">
+                        <td class="py-2 px-2">
+                            <div class="text-white font-medium">{{ item.item_code }}</div>
+                            <div class="text-slate-400 text-xs">{{ item.name }}</div>
+                        </td>
+                        <td class="py-2 px-2 text-right text-red-400 font-bold">{{ item.qty|default(0)|int }}</td>
+                        <td class="py-2 px-2 text-right text-slate-300">{{ item.rop|default(0)|int }}</td>
+                        <td class="py-2 px-2 text-right text-red-500 font-bold">{{ ((item.rop|default(0)) - (item.qty|default(0)))|abs|int }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-slate-500">
+            <i class="fas fa-check-circle text-3xl mb-2 text-green-500"></i>
+            <p>No shortage items found</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Top Overstock Items -->
+    <div class="glass-panel rounded-xl p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-white font-semibold flex items-center gap-2">
+                <i class="fas fa-arrow-down text-purple-400"></i> Top Overstock Items
+            </h3>
+            <a href="{{ url_for('inventory_health') }}" class="text-sky-400 text-sm hover:underline">View All</a>
+        </div>
+        {% if top_overstock_items %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-slate-700">
+                        <th class="text-left py-2 px-2">Item</th>
+                        <th class="text-right py-2 px-2">Current</th>
+                        <th class="text-right py-2 px-2">Max</th>
+                        <th class="text-right py-2 px-2">Excess</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in top_overstock_items %}
+                    <tr class="border-b border-slate-800 searchable-row hover:bg-slate-800/30">
+                        <td class="py-2 px-2">
+                            <div class="text-white font-medium">{{ item.item_code }}</div>
+                            <div class="text-slate-400 text-xs">{{ item.name }}</div>
+                        </td>
+                        <td class="py-2 px-2 text-right text-purple-400 font-bold">{{ item.qty|default(0)|int }}</td>
+                        <td class="py-2 px-2 text-right text-slate-300">{{ item.max_stock|default(0)|int }}</td>
+                        <td class="py-2 px-2 text-right text-purple-500 font-bold">{{ ((item.qty|default(0)) - (item.max_stock|default(0)))|abs|int }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-slate-500">
+            <i class="fas fa-check-circle text-3xl mb-2 text-green-500"></i>
+            <p>No overstock items found</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Recent Alerts -->
+<div class="glass-panel rounded-xl p-5 mt-6">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-white font-semibold flex items-center gap-2">
+            <i class="fas fa-bell text-amber-400"></i> Recent Planning Alerts
+        </h3>
+        <div class="flex gap-2">
+            <a href="{{ url_for('planning_alerts') }}" class="text-sky-400 text-sm hover:underline mr-4">View All</a>
+            <form action="{{ url_for('alerts_generate') }}" method="POST" class="inline">
+                <button type="submit" class="px-3 py-1 rounded bg-sky-500/20 text-sky-400 text-xs hover:bg-sky-500/30">
+                    <i class="fas fa-sync mr-1"></i>Refresh Alerts
+                </button>
+            </form>
+        </div>
+    </div>
+    {% if recent_alerts %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-2 px-3">Severity</th>
+                    <th class="text-left py-2 px-3">Type</th>
+                    <th class="text-left py-2 px-3">Alert</th>
+                    <th class="text-left py-2 px-3">Item</th>
+                    <th class="text-left py-2 px-3">Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in recent_alerts %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30">
+                    <td class="py-2 px-3">
+                        {% if alert.severity == 'CRITICAL' %}
+                        <span class="severity-critical"><i class="fas fa-circle text-xs mr-1"></i>CRITICAL</span>
+                        {% elif alert.severity == 'HIGH' %}
+                        <span class="severity-high"><i class="fas fa-circle text-xs mr-1"></i>HIGH</span>
+                        {% elif alert.severity == 'MEDIUM' %}
+                        <span class="severity-medium"><i class="fas fa-circle text-xs mr-1"></i>MEDIUM</span>
+                        {% else %}
+                        <span class="severity-low"><i class="fas fa-circle text-xs mr-1"></i>LOW</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-2 px-3 text-slate-300">{{ alert.alert_type|replace('_', ' ') }}</td>
+                    <td class="py-2 px-3 text-white">{{ alert.title }}</td>
+                    <td class="py-2 px-3 text-slate-400">{{ alert.item_code|default('-') }}</td>
+                    <td class="py-2 px-3 text-slate-400 text-xs">{{ alert.created_at }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-slate-500">
+        <i class="fas fa-check-circle text-3xl mb-2 text-green-500"></i>
+        <p>No active alerts</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Quick Actions -->
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mt-6">
+    <a href="{{ url_for('forecast_center') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-chart-area text-2xl text-sky-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">Forecast Center</p>
+        <p class="text-slate-400 text-xs">Generate & review forecasts</p>
+    </a>
+    <a href="{{ url_for('demand_analysis') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-chart-bar text-2xl text-emerald-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">Demand Analysis</p>
+        <p class="text-slate-400 text-xs">Analyze consumption patterns</p>
+    </a>
+    <a href="{{ url_for('replenishment_planning') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-redo text-2xl text-amber-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">Replenishment</p>
+        <p class="text-slate-400 text-xs">Stock replenishment plan</p>
+    </a>
+    <a href="{{ url_for('purchase_suggestions') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-shopping-cart text-2xl text-violet-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">Purchase</p>
+        <p class="text-slate-400 text-xs">Buy recommendations</p>
+    </a>
+    <a href="{{ url_for('safety_stock_rules') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-shield-alt text-2xl text-rose-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">Safety Stock</p>
+        <p class="text-slate-400 text-xs">Reorder rules & parameters</p>
+    </a>
+    <a href="{{ url_for('planning_alerts') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-exclamation-circle text-2xl text-red-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">Alerts</p>
+        <p class="text-slate-400 text-xs">Exceptions & warnings</p>
+    </a>
+</div>
+{% endblock %}

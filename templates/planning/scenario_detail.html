@@ -1,0 +1,93 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <a href="{{ url_for('scenarios') }}" class="text-sky-400 hover:underline text-sm mb-1 inline-flex items-center gap-1">
+            <i class="fas fa-arrow-left"></i> Back to Scenarios
+        </a>
+        <h2 class="text-lg font-semibold text-white">{{ scenario.name if scenario else 'Scenario Not Found' }}</h2>
+        <p class="text-slate-400 text-sm">{{ scenario.description if scenario else '' }}</p>
+    </div>
+    <div class="flex gap-3">
+        {% if scenario %}
+        <form action="{{ url_for('scenario_run', scenario_id=scenario.id) }}" method="POST" class="inline">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium transition">
+                <i class="fas fa-play mr-2"></i>Run Simulation
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if scenario %}
+<!-- Scenario Summary -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="glass-panel rounded-xl p-4 text-center">
+        <p class="text-slate-400 text-xs">Type</p>
+        <p class="text-white font-bold">{{ scenario.scenario_type|replace('_', ' ') }}</p>
+    </div>
+    <div class="glass-panel rounded-xl p-4 text-center">
+        <p class="text-slate-400 text-xs">Items Impacted</p>
+        <p class="text-sky-400 text-2xl font-bold">{{ scenario.total_impact_items|default(0) }}</p>
+    </div>
+    <div class="glass-panel rounded-xl p-4 text-center">
+        <p class="text-slate-400 text-xs">Total Shortage Impact</p>
+        <p class="text-orange-400 text-2xl font-bold">{{ "{:,.0f}".format(scenario.total_shortage_impact|default(0)) }}</p>
+    </div>
+    <div class="glass-panel rounded-xl p-4 text-center">
+        <p class="text-slate-400 text-xs">Status</p>
+        <p class="text-emerald-400 font-bold">{{ 'Active' if scenario.is_active else 'Inactive' }}</p>
+    </div>
+</div>
+
+<!-- Scenario Lines Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Item</th>
+                    <th class="text-left py-3 px-3">Metric</th>
+                    <th class="text-right py-3 px-3">Base Value</th>
+                    <th class="text-right py-3 px-3">Scenario Value</th>
+                    <th class="text-right py-3 px-3">Impact</th>
+                    <th class="text-right py-3 px-3">Impact %</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in lines %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30">
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ line.item_code }}</div>
+                        <div class="text-slate-400 text-xs">{{ line.item_name }}</div>
+                    </td>
+                    <td class="py-3 px-3 text-slate-300">{{ line.metric_name }}</td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ "{:.1f}".format(line.base_value|default(0)) }}</td>
+                    <td class="py-3 px-3 text-right text-sky-400">{{ "{:.1f}".format(line.scenario_value|default(0)) }}</td>
+                    <td class="py-3 px-3 text-right {% if line.impact_value > 0 %}text-red-400{% elif line.impact_value < 0 %}text-emerald-400{% else %}text-slate-300{% endif %} font-bold">
+                        {{ "{:+.1f}".format(line.impact_value|default(0)) }}
+                    </td>
+                    <td class="py-3 px-3 text-right {% if line.impact_percent > 0 %}text-red-400{% elif line.impact_percent < 0 %}text-emerald-400{% else %}text-slate-300{% endif %}">
+                        {{ "{:+.1f}%".format(line.impact_percent|default(0)) }}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not lines %}
+                <tr>
+                    <td colspan="6" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-chart-line text-4xl mb-3 text-slate-600"></i>
+                        <p>No simulation results yet. Click "Run Simulation" to calculate impact.</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="glass-panel rounded-xl p-12 text-center text-slate-500">
+    <p>Scenario not found.</p>
+</div>
+{% endif %}
+{% endblock %}

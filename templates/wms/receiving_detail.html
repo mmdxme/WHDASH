@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <div class="flex items-center justify-between">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('wms_receiving') }}" class="text-slate-400 hover:text-white"><i class="fa-solid fa-arrow-left"></i></a>
+                <h1 class="text-2xl font-bold text-white">{{ receipt.receipt_number }}</h1>
+                <span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider
+                    {% if receipt.status == 'COMPLETED' %}bg-emerald-500/10 text-emerald-400{% elif receipt.status == 'PARTIAL' %}bg-amber-500/10 text-amber-400{% elif receipt.status == 'EXPECTED' %}bg-cyan-500/10 text-cyan-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                    {{ receipt.status }}
+                </span>
+            </div>
+            <p class="text-slate-400 text-sm mt-1 ml-10">{{ receipt.receipt_type }} / {{ receipt.warehouse_name }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('wms_print_grn', receipt_id=receipt.id) }}" target="_blank" class="px-4 py-2 bg-slate-500/10 border border-slate-500/20 rounded-xl text-slate-400 hover:text-white text-sm">
+                <i class="fa-solid fa-print mr-2"></i>Print GRN
+            </a>
+        </div>
+    </div>
+
+    <!-- Details -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs text-slate-400 mb-1">Supplier</p>
+            <p class="text-white font-medium">{{ receipt.supplier_name or '-' }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs text-slate-400 mb-1">Expected Date</p>
+            <p class="text-white font-medium">{{ receipt.expected_date[:10] if receipt.expected_date else '-' }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs text-slate-400 mb-1">Arrival Date</p>
+            <p class="text-white font-medium">{{ receipt.actual_arrival_date[:10] if receipt.actual_arrival_date else '-' }}</p>
+        </div>
+        {% if receipt.po_reference %}
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs text-slate-400 mb-1">PO Reference</p>
+            <p class="text-white font-medium">{{ receipt.po_reference }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Receive Form -->
+    {% if receipt.status != 'COMPLETED' %}
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Receive Items</h3>
+        <form method="POST" action="{{ url_for('wms_receiving_receive', receipt_id=receipt.id) }}">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2">Item</label>
+                    <input type="text" name="item_id_display" placeholder="Search item..." class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <input type="hidden" name="item_id" id="receive-item-id">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2">Received Qty</label>
+                    <input type="number" step="0.01" name="received_quantity" required class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2">Lot Number</label>
+                    <input type="text" name="lot_number" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2">Expiry Date</label>
+                    <input type="date" name="expiry_date" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2">Location</label>
+                    <input type="text" name="location_id_display" placeholder="Location code..." class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <input type="hidden" name="location_id" id="receive-location-id">
+                </div>
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button type="submit" class="px-6 py-3 bg-emerald-500 text-white rounded-xl hover:bg-emerald-400 text-sm font-medium">
+                    <i class="fa-solid fa-check mr-2"></i>Receive
+                </button>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Lines -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="text-left py-4 px-5 font-semibold">#</th>
+                        <th class="text-left py-4 px-5 font-semibold">Item</th>
+                        <th class="text-right py-4 px-5 font-semibold">Expected</th>
+                        <th class="text-right py-4 px-5 font-semibold">Received</th>
+                        <th class="text-right py-4 px-5 font-semibold">Accepted</th>
+                        <th class="text-right py-4 px-5 font-semibold">Rejected</th>
+                        <th class="text-left py-4 px-5 font-semibold">Lot</th>
+                        <th class="text-left py-4 px-5 font-semibold">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for line in lines %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-4 px-5 text-slate-400">{{ line.line_number }}</td>
+                        <td class="py-4 px-5">
+                            <span class="text-white font-medium">{{ line.item_code }}</span>
+                            <span class="text-slate-400 text-xs ml-2">{{ line.item_name[:30] }}</span>
+                        </td>
+                        <td class="py-4 px-5 text-right text-slate-300 tabular-nums">{{ line.expected_quantity|int }}</td>
+                        <td class="py-4 px-5 text-right text-cyan-400 font-bold tabular-nums">{{ line.received_quantity|int }}</td>
+                        <td class="py-4 px-5 text-right text-emerald-400 font-bold tabular-nums">{{ line.accepted_quantity|int }}</td>
+                        <td class="py-4 px-5 text-right text-red-400 tabular-nums">{{ line.rejected_quantity|int }}</td>
+                        <td class="py-4 px-5 text-slate-400">{{ line.lot_number or '-' }}</td>
+                        <td class="py-4 px-5">
+                            <span class="px-2 py-1 rounded text-xs
+                                {% if line.status == 'COMPLETED' %}bg-emerald-500/10 text-emerald-400{% else %}bg-amber-500/10 text-amber-400{% endif %}">
+                                {{ line.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-list text-4xl mb-3 block opacity-20"></i>
+                            No line items yet
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

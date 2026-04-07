@@ -1,0 +1,106 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">Seasonality & Trend Analysis</h2>
+        <p class="text-slate-400 text-sm">Identify seasonal patterns and demand trends</p>
+    </div>
+</div>
+
+<!-- Monthly Pattern Overview -->
+<div class="glass-panel rounded-xl p-5 mb-6">
+    <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+        <i class="fas fa-calendar-alt text-sky-400"></i> Monthly Demand Pattern (Last 24 Months)
+    </h3>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-2 px-3">Month</th>
+                    <th class="text-right py-2 px-3">Avg Demand</th>
+                    <th class="text-right py-2 px-3">Peak</th>
+                    <th class="text-right py-2 px-3">Min</th>
+                    <th class="text-right py-2 px-3">Active Items</th>
+                    <th class="text-center py-2 px-3">Trend</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for mp in monthly_patterns %}
+                <tr class="border-b border-slate-800">
+                    <td class="py-2 px-3 text-white font-medium">{{ mp.month_key }}</td>
+                    <td class="py-2 px-3 text-right text-sky-400">{{ "{:,.0f}".format(mp.avg_demand|default(0)) }}</td>
+                    <td class="py-2 px-3 text-right text-emerald-400">{{ "{:,.0f}".format(mp.peak_demand|default(0)) }}</td>
+                    <td class="py-2 px-3 text-right text-red-400">{{ "{:,.0f}".format(mp.min_demand|default(0)) }}</td>
+                    <td class="py-2 px-3 text-right text-slate-300">{{ mp.active_items|default(0) }}</td>
+                    <td class="py-2 px-3 text-center">
+                        <div class="w-full bg-slate-700 rounded-full h-1.5">
+                            <div class="bg-sky-500 h-1.5 rounded-full" style="width: {{ (mp.avg_demand / 100 * 100)|default(50) }}%"></div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not monthly_patterns %}
+                <tr>
+                    <td colspan="6" class="py-8 text-center text-slate-500">
+                        No monthly pattern data available.
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Items with Seasonality -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[400px] overflow-y-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Item</th>
+                    <th class="text-center py-3 px-3">Pattern Class</th>
+                    <th class="text-center py-3 px-3">Seasonal</th>
+                    <th class="text-center py-3 px-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30">
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ item.item_code }}</div>
+                        <div class="text-slate-400 text-xs">{{ item.name }}</div>
+                    </td>
+                    <td class="py-3 px-3 text-center">
+                        {% if item.pattern_class == 'SEASONAL' %}
+                        <span class="px-2 py-1 rounded bg-sky-500/20 text-sky-400 text-xs">Seasonal</span>
+                        {% elif item.pattern_class == 'TREND_UP' %}
+                        <span class="px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 text-xs">Trending Up</span>
+                        {% elif item.pattern_class == 'TREND_DOWN' %}
+                        <span class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs">Trending Down</span>
+                        {% elif item.pattern_class == 'VOLATILE' %}
+                        <span class="px-2 py-1 rounded bg-orange-500/20 text-orange-400 text-xs">Volatile</span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded bg-slate-500/20 text-slate-400 text-xs">Stable</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-3 text-center">
+                        {% if item.is_seasonal %}
+                        <i class="fas fa-snowflake text-sky-400"></i>
+                        {% else %}
+                        <i class="fas fa-minus text-slate-500"></i>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-3 text-center">
+                        <button onclick="viewItemTrend({{ item.id }})"
+                                class="px-3 py-1 rounded bg-sky-500/20 text-sky-400 text-xs hover:bg-sky-500/30">
+                            <i class="fas fa-chart-line"></i> View
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="bg-slate-100 dark:bg-slate-900">
+    
+    {% include 'admin_sidebar.html' %}
+    
+    <div class="ml-64 min-h-screen">
+        {% include 'admin_header.html' %}
+        
+        <main class="p-6">
+            <!-- Page Header -->
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
+                <p class="text-slate-600 dark:text-slate-400 mt-1">Configure approval workflows and business process chains</p>
+            </div>
+            
+            <!-- Workflows Table -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="p-6 border-b border-slate-200 dark:border-slate-700">
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white">Active Workflows</h2>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-slate-50 dark:bg-slate-700/50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Workflow</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Module</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Approval Required</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Steps</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                            {% for workflow in workflows %}
+                            <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                <td class="px-6 py-4">
+                                    <div class="font-medium text-slate-800 dark:text-white">{{ workflow.label }}</div>
+                                    <div class="text-xs text-slate-500">{{ workflow.workflow_type }}</div>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <span class="px-2 py-1 text-xs font-medium rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+                                        {{ workflow.module }}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    {% if workflow.requires_approval %}
+                                    <span class="px-2 py-1 text-xs font-medium rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Yes</span>
+                                    {% else %}
+                                    <span class="px-2 py-1 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">No</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">
+                                    <button onclick="loadSteps('{{ workflow.workflow_type }}')" class="text-blue-600 hover:underline">
+                                        View Steps
+                                    </button>
+                                </td>
+                                <td class="px-6 py-4 text-right">
+                                    <button onclick="openEditModal('{{ workflow.workflow_type }}')" 
+                                            class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
+                                    <i class="fas fa-project-diagram text-4xl mb-3"></i>
+                                    <p>No workflows configured.</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <!-- Workflow Templates Reference -->
+            <div class="mt-8 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="p-6 border-b border-slate-200 dark:border-slate-700">
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white">Available Workflow Types</h2>
+                </div>
+                <div class="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {% for wf_type, wf_def in workflow_templates.items() %}
+                    <div class="p-4 rounded-lg bg-slate-50 dark:bg-slate-700/30">
+                        <div class="font-medium text-slate-800 dark:text-white">{{ wf_def.label }}</div>
+                        <div class="text-xs text-slate-500 mt-1">Module: {{ wf_def.module }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Edit Modal -->
+    <div id="editModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50" onclick="closeModal()"></div>
+        <div class="absolute inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-white dark:bg-slate-800 rounded-xl shadow-xl max-h-[90vh] overflow-y-auto">
+            <div class="p-6 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-800">
+                <h3 class="text-lg font-semibold text-slate-800 dark:text-white">Edit Workflow</h3>
+                <button onclick="closeModal()" class="p-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form method="POST" class="p-6 space-y-6">
+                <input type="hidden" name="workflow_type" id="editWorkflowType" value="">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Workflow Label *</label>
+                        <input type="text" name="label" id="editLabel" required
+                               class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Module *</label>
+                        <select name="module" id="editModule" required
+                                class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                            <option value="SALES">Sales</option>
+                            <option value="CRM">CRM</option>
+                            <option value="WMS">Warehouse</option>
+                            <option value="LOGISTICS">Logistics</option>
+                            <option value="HR">HR</option>
+                            <option value="MARKETING">Marketing</option>
+                            <option value="PLANNING">Planning</option>
+                            <option value="SOCIAL_MEDIA">Social Media</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                    <input type="checkbox" name="requires_approval" id="editRequiresApproval" value="on" checked class="w-4 h-4 rounded border-slate-300">
+                    <label for="editRequiresApproval" class="text-sm text-slate-700 dark:text-slate-300">Requires Approval</label>
+                </div>
+                
+                <!-- Approval Steps -->
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <label class="text-sm font-medium text-slate-700 dark:text-slate-300">Approval Steps</label>
+                        <button type="button" onclick="addStep()" class="text-sm text-blue-600 hover:text-blue-700">
+                            <i class="fas fa-plus mr-1"></i> Add Step
+                        </button>
+                    </div>
+                    <div id="stepsContainer" class="space-y-3">
+                        <!-- Steps will be added dynamically -->
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <button type="button" onclick="closeModal()" 
+                            class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+                        Save Workflow
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        const workflows = {{ workflows|tojson }};
+        const roles = {{ roles|tojson|safe }};
+        let stepCount = 0;
+        
+        function openEditModal(wfType) {
+            const workflow = workflows.find(w => w.workflow_type === wfType);
+            if (!workflow) return;
+            
+            document.getElementById('editWorkflowType').value = workflow.workflow_type;
+            document.getElementById('editLabel').value = workflow.label;
+            document.getElementById('editModule').value = workflow.module;
+            document.getElementById('editRequiresApproval').checked = workflow.requires_approval == 1;
+            
+            // Load steps via API
+            loadSteps(wfType);
+            
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+        
+        function loadSteps(wfType) {
+            fetch(`/admin/api/workflows/${wfType}/steps`)
+                .then(r => r.json())
+                .then(steps => {
+                    document.getElementById('stepsContainer').innerHTML = '';
+                    stepCount = 0;
+                    steps.forEach(step => addStep(step));
+                    if (steps.length === 0) addStep();
+                });
+        }
+        
+        function addStep(existingStep = null) {
+            stepCount++;
+            const container = document.getElementById('stepsContainer');
+            const stepHtml = `
+                <div class="step-row p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg" data-step="${stepCount}">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-sm font-medium text-slate-700 dark:text-slate-300">Step ${stepCount}</span>
+                        <button type="button" onclick="removeStep(${stepCount})" class="text-red-500 hover:text-red-700">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">Approver Role</label>
+                            <select name="approver_role_${stepCount - 1}" class="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm">
+                                <option value="">-- Select Role --</option>
+                                ${roles.map(r => `<option value="${r.id}" ${existingStep && existingStep.approver_role_id == r.id ? 'selected' : ''}>${r.role_name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-slate-500 mb-1">SLA (hours)</label>
+                            <input type="number" name="sla_hours_${stepCount - 1}" value="${existingStep ? existingStep.sla_hours : 24}" min="1"
+                                   class="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-sm">
+                        </div>
+                    </div>
+                    <input type="hidden" name="step_order" value="${stepCount - 1}">
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', stepHtml);
+        }
+        
+        function removeStep(stepNum) {
+            document.querySelector(`.step-row[data-step="${stepNum}"]`)?.remove();
+        }
+        
+        function closeModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+    </script>
+    
+    {% include 'admin_scripts.html' %}
+</body>
+</html>

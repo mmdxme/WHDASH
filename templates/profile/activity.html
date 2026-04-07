@@ -1,0 +1,167 @@
+{% extends "profile/base.html" %}
+
+{% set page_title = 'Activity Log' %}
+{% set page_description = 'View a history of actions taken on your account.' %}
+
+{% block profile_content %}
+<!-- Filter Options -->
+<div class="glass-panel rounded-2xl border border-white/5 p-4 mb-6">
+    <div class="flex flex-wrap items-center gap-4">
+        <div class="flex items-center gap-2">
+            <i class="fas fa-filter text-slate-400"></i>
+            <span class="text-sm text-slate-400">Filter by:</span>
+        </div>
+        <select class="px-3 py-2 rounded-lg border border-white/10 bg-slate-800 text-white text-sm">
+            <option>All Activities</option>
+            <option>Logins</option>
+            <option>Profile Changes</option>
+            <option>Password Changes</option>
+        </select>
+        <select class="px-3 py-2 rounded-lg border border-white/10 bg-slate-800 text-white text-sm">
+            <option>All Time</option>
+            <option>Today</option>
+            <option>This Week</option>
+            <option>This Month</option>
+        </select>
+    </div>
+</div>
+
+<!-- Activity List -->
+<div class="glass-panel rounded-2xl border border-white/5 p-6">
+    <div class="flex items-center justify-between mb-6">
+        <h3 class="text-lg font-bold text-white">
+            <i class="fas fa-history mr-2 text-brand-400"></i>Recent Activity
+        </h3>
+        <p class="text-sm text-slate-400">Showing {{ activities|length if activities else 0 }} of {{ (total_pages * 50) }} activities</p>
+    </div>
+
+    {% if activities and activities|length > 0 %}
+    <div class="space-y-3">
+        {% for activity in activities %}
+        <div class="flex items-start gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/8 transition">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0
+                        {% if activity.action == 'LOGIN' %}bg-green-500/20 text-green-400
+                        {% elif activity.action == 'LOGOUT' %}bg-red-500/20 text-red-400
+                        {% elif activity.action == 'PASSWORD_CHANGE' %}bg-yellow-500/20 text-yellow-400
+                        {% elif activity.action == 'UPDATE' %}bg-blue-500/20 text-blue-400
+                        {% elif activity.action == 'CREATE' %}bg-purple-500/20 text-purple-400
+                        {% elif activity.action == 'DELETE' %}bg-red-500/20 text-red-400
+                        {% elif activity.action == 'AVATAR_CHANGE' %}bg-pink-500/20 text-pink-400
+                        {% else %}bg-slate-700/50 text-slate-400{% endif %}">
+                {% if activity.action == 'LOGIN' %}
+                <i class="fas fa-sign-in-alt"></i>
+                {% elif activity.action == 'LOGOUT' %}
+                <i class="fas fa-sign-out-alt"></i>
+                {% elif activity.action == 'PASSWORD_CHANGE' %}
+                <i class="fas fa-key"></i>
+                {% elif activity.action == 'UPDATE' %}
+                <i class="fas fa-edit"></i>
+                {% elif activity.action == 'CREATE' %}
+                <i class="fas fa-plus"></i>
+                {% elif activity.action == 'DELETE' %}
+                <i class="fas fa-trash"></i>
+                {% elif activity.action == 'AVATAR_CHANGE' %}
+                <i class="fas fa-camera"></i>
+                {% elif activity.action == 'USERNAME_CHANGE' %}
+                <i class="fas fa-at"></i>
+                {% else %}
+                <i class="fas fa-circle"></i>
+                {% endif %}
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                    <p class="font-medium text-white">
+                        {% if activity.action == 'LOGIN' %}Login
+                        {% elif activity.action == 'LOGOUT' %}Logout
+                        {% elif activity.action == 'PASSWORD_CHANGE' %}Password Changed
+                        {% elif activity.action == 'PASSWORD_RESET' %}Password Reset
+                        {% elif activity.action == 'UPDATE' %}Profile Updated
+                        {% elif activity.action == 'CREATE' %}Record Created
+                        {% elif activity.action == 'DELETE' %}Record Deleted
+                        {% elif activity.action == 'AVATAR_CHANGE' %}Avatar Changed
+                        {% elif activity.action == 'USERNAME_CHANGE' %}Username Changed
+                        {% elif activity.notes %}{{ activity.notes }}
+                        {% else %}{{ activity.action }}{% endif %}
+                    </p>
+                    {% if activity.field_name %}
+                    <span class="px-2 py-0.5 rounded text-xs bg-slate-700 text-slate-300">
+                        {{ activity.field_name }}
+                    </span>
+                    {% endif %}
+                </div>
+                {% if activity.notes and activity.action not in ['LOGIN', 'LOGOUT', 'PASSWORD_CHANGE'] %}
+                <p class="text-sm text-slate-400 mb-1">{{ activity.notes }}</p>
+                {% endif %}
+                <div class="flex items-center gap-4 text-xs text-slate-500">
+                    {% if activity.created_at %}
+                    <span>
+                        <i class="fas fa-clock mr-1"></i>{{ activity.created_at }}
+                    </span>
+                    {% endif %}
+                    {% if activity.ip_address %}
+                    <span>
+                        <i class="fas fa-map-marker-alt mr-1"></i>{{ activity.ip_address }}
+                    </span>
+                    {% endif %}
+                    {% if activity.entity_type and activity.entity_id %}
+                    <span>
+                        <i class="fas fa-database mr-1"></i>{{ activity.entity_type }} #{{ activity.entity_id }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="flex-shrink-0">
+                {% if activity.action == 'LOGIN' %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-green-500/20 text-green-300">
+                    Success
+                </span>
+                {% elif activity.action == 'PASSWORD_CHANGE' %}
+                <span class="px-3 py-1 rounded-full text-xs font-bold bg-green-500/20 text-green-300">
+                    Completed
+                </span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="flex items-center justify-between mt-6 pt-6 border-t border-white/10">
+        <div class="text-sm text-slate-400">
+            Page {{ page }} of {{ total_pages }}
+        </div>
+        <div class="flex items-center gap-2">
+            {% if page > 1 %}
+            <a href="{{ url_for('profile.activity', page=page-1) }}"
+               class="px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 transition">
+                <i class="fas fa-chevron-left mr-1"></i>Previous
+            </a>
+            {% endif %}
+            {% if page < total_pages %}
+            <a href="{{ url_for('profile.activity', page=page+1) }}"
+               class="px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 transition">
+                Next<i class="fas fa-chevron-right ml-1"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="text-center py-12 text-slate-500">
+        <i class="fas fa-history text-5xl mb-4"></i>
+        <p class="text-lg">No activity recorded yet.</p>
+        <p class="text-sm mt-2">Your account activity will appear here.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Export Option -->
+<div class="mt-6 text-right">
+    <button class="px-4 py-2 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 transition">
+        <i class="fas fa-download mr-2"></i>Export Activity Log
+    </button>
+</div>
+
+{% endblock %}

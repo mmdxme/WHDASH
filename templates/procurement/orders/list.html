@@ -1,0 +1,91 @@
+{% extends "procurement/base.html" %}
+
+{% block proc_content %}
+<div class="proc-filters">
+    <form method="get" class="proc-filter-row">
+        <div class="proc-filter-group">
+            <label class="proc-filter-label">Search</label>
+            <input type="text" name="search" class="proc-filter-input" value="{{ filters.search or '' }}">
+        </div>
+        <div class="proc-filter-group">
+            <label class="proc-filter-label">Status</label>
+            <select name="status" class="proc-filter-select">
+                <option value="">All</option>
+                <option value="DRAFT" {% if filters.status == 'DRAFT' %}selected{% endif %}>Draft</option>
+                <option value="PENDING_APPROVAL" {% if filters.status == 'PENDING_APPROVAL' %}selected{% endif %}>Pending Approval</option>
+                <option value="APPROVED" {% if filters.status == 'APPROVED' %}selected{% endif %}>Approved</option>
+                <option value="SENT" {% if filters.status == 'SENT' %}selected{% endif %}>Sent</option>
+                <option value="RECEIVED" {% if filters.status == 'RECEIVED' %}selected{% endif %}>Received</option>
+                <option value="CLOSED" {% if filters.status == 'CLOSED' %}selected{% endif %}>Closed</option>
+            </select>
+        </div>
+        <div class="proc-filter-group">
+            <label class="proc-filter-label">Type</label>
+            <select name="po_type" class="proc-filter-select">
+                <option value="">All</option>
+                <option value="STANDARD" {% if filters.po_type == 'STANDARD' %}selected{% endif %}>Standard</option>
+                <option value="EMERGENCY" {% if filters.po_type == 'EMERGENCY' %}selected{% endif %}>Emergency</option>
+                <option value="IMPORT" {% if filters.po_type == 'IMPORT' %}selected{% endif %}>Import</option>
+            </select>
+        </div>
+        <div class="proc-filter-group" style="align-self: flex-end;">
+            <button type="submit" class="proc-btn proc-btn-primary"><i class="fa fa-search"></i> Filter</button>
+        </div>
+    </form>
+</div>
+
+<div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+    <div style="color: #64748b;">Showing {{ orders|length }} of {{ total }} purchase orders</div>
+    <div style="display: flex; gap: 0.5rem;">
+        <a href="{{ url_for('procurement_export_orders') }}" class="proc-btn proc-btn-secondary">
+            <i class="fa fa-download"></i> Export
+        </a>
+        <a href="{{ url_for('procurement_orders_new') }}" class="proc-btn proc-btn-primary">
+            <i class="fa fa-plus"></i> New PO
+        </a>
+    </div>
+</div>
+
+<table class="proc-table">
+    <thead>
+        <tr>
+            <th>PO Number</th>
+            <th>Date</th>
+            <th>Supplier</th>
+            <th>Buyer</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Expected Delivery</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for o in orders %}
+        <tr>
+            <td>
+                <a href="{{ url_for('procurement_orders_view', po_id=o.id) }}" style="font-weight: 600; color: #3b82f6;">
+                    {{ o.po_number }}
+                </a>
+            </td>
+            <td>{{ o.po_date[:10] if o.po_date else '-' }}</td>
+            <td>{{ o.supplier_name or '-' }}</td>
+            <td>{{ o.buyer_name or '-' }}</td>
+            <td style="font-weight: 600;">{{ "%.2f"|format(o.total_amount or 0) }} {{ o.currency or 'AED' }}</td>
+            <td>
+                <span class="proc-badge proc-badge-{% if o.status == 'RECEIVED' %}success{% elif o.status == 'APPROVED' %}info{% elif o.status == 'DRAFT' %}gray{% elif o.status == 'CANCELLED' %}danger{% elif o.status == 'CLOSED' %}primary{% else %}warning{% endif %}">
+                    {{ o.status }}
+                </span>
+            </td>
+            <td>{{ o.expected_delivery_date[:10] if o.expected_delivery_date else '-' }}</td>
+            <td>
+                <a href="{{ url_for('procurement_orders_view', po_id=o.id) }}" class="proc-btn proc-btn-sm proc-btn-secondary">View</a>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="8" style="text-align: center; color: #64748b; padding: 3rem;">No purchase orders found</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

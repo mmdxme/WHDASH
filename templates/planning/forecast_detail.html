@@ -1,0 +1,154 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <a href="{{ url_for('forecast_center') }}" class="text-sky-400 hover:underline text-sm mb-1 inline-flex items-center gap-1">
+            <i class="fas fa-arrow-left"></i> Back to Forecast Center
+        </a>
+        <h2 class="text-lg font-semibold text-white">{{ run.run_name or 'Forecast Detail' }}</h2>
+        <p class="text-slate-400 text-sm">
+            {{ run.method }} | {{ run.horizon_days }} days horizon | 
+            Status: 
+            {% if run.status == 'APPROVED' %}<span class="text-green-400">Approved</span>
+            {% else %}<span class="text-yellow-400">{{ run.status }}</span>{% endif %}
+        </p>
+    </div>
+    <div class="flex gap-3">
+        {% if run.status == 'DRAFT' %}
+        <form action="{{ url_for('forecast_approve', run_id=run.id) }}" method="POST" class="inline">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white text-sm font-medium transition">
+                <i class="fas fa-check mr-2"></i>Approve Forecast
+            </button>
+        </form>
+        {% endif %}
+        <button onclick="exportTable('forecastLines')" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition">
+            <i class="fas fa-download mr-2"></i>Export
+        </button>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="glass-panel rounded-xl p-4">
+        <p class="text-slate-400 text-xs">Total Items</p>
+        <p class="text-white text-2xl font-bold">{{ run.total_items|default(0) }}</p>
+    </div>
+    <div class="glass-panel rounded-xl p-4">
+        <p class="text-slate-400 text-xs">Total Forecast</p>
+        <p class="text-sky-400 text-2xl font-bold">{{ "{:,.0f}".format(run.total_demand|default(0)) }}</p>
+    </div>
+    <div class="glass-panel rounded-xl p-4">
+        <p class="text-slate-400 text-xs">Avg Daily/Item</p>
+        <p class="text-emerald-400 text-2xl font-bold">
+            {{ "{:.1f}".format((run.total_demand|default(0)) / (run.total_items|default(1)) / (run.horizon_days|default(1)) * 30) }}
+        </p>
+    </div>
+    <div class="glass-panel rounded-xl p-4">
+        <p class="text-slate-400 text-xs">Method</p>
+        <p class="text-purple-400 text-2xl font-bold">{{ run.method }}</p>
+    </div>
+</div>
+
+<!-- Forecast Lines Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+        <table class="w-full text-sm" id="forecastLines">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Item</th>
+                    <th class="text-left py-3 px-4">Period</th>
+                    <th class="text-right py-3 px-4">Base Qty</th>
+                    <th class="text-right py-3 px-4">Final Qty</th>
+                    <th class="text-center py-3 px-4">Confidence</th>
+                    <th class="text-center py-3 px-4">Frozen</th>
+                    <th class="text-left py-3 px-4">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in lines %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30">
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ line.item_code }}</div>
+                        <div class="text-slate-400 text-xs">{{ line.item_name }}</div>
+                    </td>
+                    <td class="py-3 px-4 text-slate-300">{{ line.period_start }}</td>
+                    <td class="py-3 px-4 text-right text-slate-300">{{ "{:.1f}".format(line.base_quantity|default(0)) }}</td>
+                    <td class="py-3 px-4 text-right text-sky-400 font-bold">{{ "{:.1f}".format(line.final_quantity|default(0)) }}</td>
+                    <td class="py-3 px-4 text-center">
+                        <div class="w-full bg-slate-700 rounded-full h-1.5">
+                            <div class="bg-sky-500 h-1.5 rounded-full" style="width: {{ (line.confidence|default(0.5) * 100) }}%"></div>
+                        </div>
+                        <span class="text-xs text-slate-400">{{ "%.0f"|format((line.confidence|default(0.5)) * 100) }}%</span>
+                    </td>
+                    <td class="py-3 px-4 text-center">
+                        {% if line.is_frozen %}
+                        <i class="fas fa-snowflake text-blue-400"></i>
+                        {% else %}
+                        <i class="fas fa-edit text-slate-500 cursor-pointer hover:text-sky-400"
+                           onclick="showOverrideForm({{ line.id }})"></i>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-4">
+                        {% if not line.is_frozen %}
+                        <button onclick="showOverrideForm({{ line.id }}, '{{ line.item_code }}', '{{ line.period_start }}', {{ line.final_quantity|default(0) }})"
+                                class="px-3 py-1 rounded bg-sky-500/20 text-sky-400 text-xs hover:bg-sky-500/30">
+                            Override
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Override Modal -->
+<div id="overrideModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+    <div class="glass-panel rounded-xl p-6 w-full max-w-md mx-4">
+        <h3 class="text-lg font-semibold text-white mb-4">Override Forecast Value</h3>
+        <form action="{{ url_for('forecast_override', run_id=run.id) }}" method="POST">
+            <input type="hidden" name="item_id" id="override_item_id">
+            <input type="hidden" name="period_start" id="override_period_start">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Item</label>
+                    <p id="override_item_display" class="text-white font-medium"></p>
+                </div>
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Period</label>
+                    <p id="override_period_display" class="text-slate-300"></p>
+                </div>
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Override Quantity</label>
+                    <input type="number" name="override_quantity" id="override_quantity" step="0.01" min="0"
+                           class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500">
+                </div>
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Reason for Override</label>
+                    <textarea name="reason" rows="3"
+                              class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500"
+                              placeholder="Explain why this override is needed..."></textarea>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button type="button" onclick="document.getElementById('overrideModal').classList.add('hidden')"
+                        class="flex-1 px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm hover:bg-slate-600">Cancel</button>
+                <button type="submit" class="flex-1 px-4 py-2 rounded-lg bg-sky-500 text-white text-sm font-medium hover:bg-sky-600">Apply Override</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showOverrideForm(lineId, itemCode, periodStart, currentValue) {
+    document.getElementById('override_item_id').value = {{ lines[0].item_id if lines else 0 }};
+    document.getElementById('override_period_start').value = periodStart;
+    document.getElementById('override_item_display').textContent = itemCode;
+    document.getElementById('override_period_display').textContent = periodStart;
+    document.getElementById('override_quantity').value = currentValue;
+    document.getElementById('overrideModal').classList.remove('hidden');
+}
+</script>
+{% endblock %}

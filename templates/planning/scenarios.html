@@ -1,0 +1,97 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">Scenarios & Simulations</h2>
+        <p class="text-slate-400 text-sm">What-if scenario planning and impact analysis</p>
+    </div>
+    <button onclick="document.getElementById('createModal').classList.remove('hidden')"
+            class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+        <i class="fas fa-plus mr-2"></i>New Scenario
+    </button>
+</div>
+
+<!-- Scenarios Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for scenario in scenarios %}
+    <div class="glass-panel rounded-xl p-5 hover:bg-slate-800/30 transition">
+        <div class="flex items-start justify-between mb-3">
+            <div>
+                <h4 class="text-white font-semibold">{{ scenario.name }}</h4>
+                <p class="text-slate-400 text-xs">{{ scenario.scenario_type|replace('_', ' ') }}</p>
+            </div>
+            {% if scenario.is_base %}
+            <span class="px-2 py-0.5 rounded bg-sky-500/20 text-sky-400 text-xs">Base</span>
+            {% endif %}
+        </div>
+        <p class="text-slate-400 text-sm mb-3">{{ scenario.description|truncate(80) }}</p>
+        <div class="flex items-center justify-between text-xs text-slate-500 mb-3">
+            <span>{{ scenario.total_impact_items|default(0) }} items impacted</span>
+            <span>{{ scenario.created_at }}</span>
+        </div>
+        <div class="flex gap-2">
+            <a href="{{ url_for('scenario_detail', scenario_id=scenario.id) }}"
+               class="flex-1 px-3 py-2 rounded bg-sky-500/20 text-sky-400 text-xs text-center hover:bg-sky-500/30">
+                <i class="fas fa-eye mr-1"></i> View
+            </a>
+            <form action="{{ url_for('scenario_run', scenario_id=scenario.id) }}" method="POST" class="flex-1">
+                <button type="submit"
+                        class="w-full px-3 py-2 rounded bg-emerald-500/20 text-emerald-400 text-xs hover:bg-emerald-500/30">
+                    <i class="fas fa-play mr-1"></i> Run
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+    {% if not scenarios %}
+    <div class="col-span-3 text-center py-12 text-slate-500">
+        <i class="fas fa-magic text-4xl mb-3 text-slate-600"></i>
+        <p>No scenarios yet. Create a what-if scenario to simulate planning impacts.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Create Scenario Modal -->
+<div id="createModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+    <div class="glass-panel rounded-xl p-6 w-full max-w-lg mx-4">
+        <h3 class="text-lg font-semibold text-white mb-4">Create New Scenario</h3>
+        <form action="{{ url_for('scenarios_create') }}" method="POST">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Scenario Name</label>
+                    <input type="text" name="name" required
+                           class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500"
+                           placeholder="e.g., Demand Spike +20%">
+                </div>
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Description</label>
+                    <textarea name="description" rows="2"
+                              class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500"></textarea>
+                </div>
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Scenario Type</label>
+                    <select name="scenario_type" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                        <option value="DEMAND_CHANGE">Demand Change</option>
+                        <option value="LEAD_TIME_CHANGE">Lead Time Change</option>
+                        <option value="SUPPLIER_FAIL">Supplier Failure</option>
+                        <option value="PROMOTION">Promotion Effect</option>
+                        <option value="SEASONAL_SPIKE">Seasonal Spike</option>
+                    </select>
+                </div>
+                <div id="paramFields">
+                    <label class="block text-slate-300 text-sm mb-1">Parameters (JSON)</label>
+                    <textarea name="parameters_json" rows="3"
+                              class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500"
+                              placeholder='{"demand_change_percent": 20}'></textarea>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button type="button" onclick="document.getElementById('createModal').classList.add('hidden')"
+                        class="flex-1 px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm hover:bg-slate-600">Cancel</button>
+                <button type="submit" class="flex-1 px-4 py-2 rounded-lg bg-sky-500 text-white text-sm font-medium hover:bg-sky-600">Create</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

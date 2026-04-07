@@ -1,0 +1,69 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <a href="{{ url_for('planning_reports') }}" class="text-sky-400 hover:underline text-sm mb-1 inline-flex items-center gap-1">
+            <i class="fas fa-arrow-left"></i> Back to Reports
+        </a>
+        <h2 class="text-lg font-semibold text-white">Forecast Accuracy Report</h2>
+        <p class="text-slate-400 text-sm">Compare forecasted vs actual demand</p>
+    </div>
+    <button onclick="exportTable('accuracyTable')" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm transition">
+        <i class="fas fa-download mr-2"></i>Export
+    </button>
+</div>
+
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <table class="w-full text-sm" id="accuracyTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Item</th>
+                    <th class="text-right py-3 px-3">MAE</th>
+                    <th class="text-right py-3 px-3">MAPE %</th>
+                    <th class="text-center py-3 px-3">Accuracy %</th>
+                    <th class="text-center py-3 px-3">Bias</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in accuracy_data %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30">
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ row.item_code }}</div>
+                        <div class="text-slate-400 text-xs">{{ row.name }}</div>
+                    </td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ "%.2f"|format(row.mae|default(0)) }}</td>
+                    <td class="py-3 px-3 text-right text-orange-400">{{ "%.1f"|format((row.mape|default(0)) * 100) }}%</td>
+                    <td class="py-3 px-3 text-center">
+                        <div class="inline-flex items-center gap-2">
+                            <div class="w-16 bg-slate-700 rounded-full h-1.5">
+                                <div class="h-1.5 rounded-full {% if row.accuracy|default(0) >= 0.8 %}bg-green-500{% elif row.accuracy|default(0) >= 0.5 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
+                                     style="width: {{ (row.accuracy|default(0) * 100) }}%"></div>
+                            </div>
+                            <span class="text-xs text-slate-300">{{ "%.0f"|format((row.accuracy|default(0)) * 100) }}%</span>
+                        </div>
+                    </td>
+                    <td class="py-3 px-3 text-center">
+                        {% if row.accuracy|default(0) >= 0.8 %}
+                        <span class="text-green-400"><i class="fas fa-check"></i></span>
+                        {% elif row.accuracy|default(0) >= 0.5 %}
+                        <span class="text-yellow-400"><i class="fas fa-minus"></i></span>
+                        {% else %}
+                        <span class="text-red-400"><i class="fas fa-times"></i></span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not accuracy_data %}
+                <tr>
+                    <td colspan="5" class="py-12 text-center text-slate-500">
+                        No forecast accuracy data available.
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

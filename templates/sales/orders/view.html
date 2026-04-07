@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <div class="flex gap-2 mb-2">
+                <span class="px-2 py-1 text-xs rounded-full {% if order.status == 'Fully Delivered' %}bg-green-100{% elif order.status == 'Cancelled' %}bg-gray-200{% elif order.status == 'Delayed' %}bg-red-100{% elif order.status in ['In Preparation', 'Ready for Delivery'] %}bg-purple-100{% else %}bg-yellow-100{% endif %}">
+                    {{ order.status }}
+                </span>
+                <span class="px-2 py-1 text-xs rounded-full {% if order.priority == 'Critical' %}bg-red-100{% elif order.priority == 'High' %}bg-orange-100{% else %}bg-gray-100{% endif %}">
+                    {{ order.priority }} Priority
+                </span>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">{{ order.order_number }}</h1>
+            <p class="text-gray-500">{{ order.order_date }} | Customer: {{ order.customer_name }}</p>
+        </div>
+        <div class="flex gap-2">
+            {% if order.status == 'Pending Approval' %}
+            <form action="{{ url_for('sales_orders_approve', order_id=order.id) }}" method="post">
+                <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">
+                    <i class="fas fa-check mr-2"></i> Approve
+                </button>
+            </form>
+            {% endif %}
+            <a href="{{ url_for('sales_orders_edit', order_id=order.id) }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                <i class="fas fa-edit mr-2"></i> Edit
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4 border-b pb-2">Order Items</h2>
+                {% if order.lines %}
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                            <th class="px-3 py-2 text-left text-xs">Part #</th>
+                            <th class="px-3 py-2 text-left text-xs">Brand</th>
+                            <th class="px-3 py-2 text-right text-xs">Qty</th>
+                            <th class="px-3 py-2 text-right text-xs">Reserved</th>
+                            <th class="px-3 py-2 text-right text-xs">Unit Price</th>
+                            <th class="px-3 py-2 text-right text-xs">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for line in order.lines %}
+                        <tr>
+                            <td class="px-3 py-2 font-mono text-blue-600">{{ line.part_number }}</td>
+                            <td class="px-3 py-2">{{ line.brand or 'N/A' }}</td>
+                            <td class="px-3 py-2 text-right">{{ line.ordered_quantity }}</td>
+                            <td class="px-3 py-2 text-right">{{ line.reserved_qty or 0 }}</td>
+                            <td class="px-3 py-2 text-right">{{ "$ {:,.2f}".format(line.final_price) }}</td>
+                            <td class="px-3 py-2 text-right font-semibold">{{ "$ {:,.2f}".format(line.line_total) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-gray-500 text-center py-4">No items in this order</p>
+                {% endif %}
+            </div>
+
+            {% if order.reservations %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4 border-b pb-2">Stock Reservations</h2>
+                <table class="min-w-full text-sm">
+                    <thead class="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                            <th class="px-3 py-2 text-left text-xs">Part #</th>
+                            <th class="px-3 py-2 text-left text-xs">Reserved</th>
+                            <th class="px-3 py-2 text-left text-xs">Warehouse</th>
+                            <th class="px-3 py-2 text-left text-xs">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for r in order.reservations %}
+                        <tr>
+                            <td class="px-3 py-2">{{ r.part_number }}</td>
+                            <td class="px-3 py-2">{{ r.reserved_quantity }}</td>
+                            <td class="px-3 py-2">{{ r.warehouse_name }}</td>
+                            <td class="px-3 py-2"><span class="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">{{ r.status }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="space-y-6">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4">Summary</h2>
+                <div class="space-y-2">
+                    <div class="flex justify-between"><span class="text-gray-500">Subtotal</span><span class="font-medium">{{ "$ {:,.2f}".format(order.subtotal or 0) }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Discount</span><span class="font-medium text-red-600">-{{ "$ {:,.2f}".format(order.discount_amount or 0) }}</span></div>
+                    <div class="flex justify-between"><span class="text-gray-500">Tax</span><span class="font-medium">{{ "$ {:,.2f}".format(order.tax_amount or 0) }}</span></div>
+                    <hr class="dark:border-gray-600">
+                    <div class="flex justify-between text-lg font-bold"><span>Total</span><span class="text-green-600">{{ "$ {:,.2f}".format(order.total_amount or 0) }}</span></div>
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4">Details</h2>
+                <div class="space-y-2 text-sm">
+                    <div><span class="text-gray-500">Payment Terms:</span> {{ order.payment_terms or 'N/A' }}</div>
+                    <div><span class="text-gray-500">Delivery:</span> {{ order.delivery_terms or 'N/A' }}</div>
+                    <div><span class="text-gray-500">Market:</span> {{ order.market }}</div>
+                    <div><span class="text-gray-500">Salesperson:</span> {{ order.assigned_salesperson_name or 'N/A' }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,877 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .kpi-card {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .kpi-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 20px 40px -12px rgba(0, 0, 0, 0.4);
+    }
+    .gradient-border {
+        background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .glow-emerald { box-shadow: 0 0 30px -5px rgba(16, 185, 129, 0.4); }
+    .glow-brand { box-shadow: 0 0 30px -5px rgba(14, 165, 233, 0.4); }
+    .glow-amber { box-shadow: 0 0 30px -5px rgba(245, 158, 11, 0.4); }
+    .glow-rose { box-shadow: 0 0 30px -5px rgba(244, 63, 94, 0.4); }
+    .glow-purple { box-shadow: 0 0 30px -5px rgba(139, 92, 246, 0.4); }
+    .pulse-dot {
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(1.1); }
+    }
+    .glass-dark {
+        background: rgba(15, 23, 42, 0.8);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .stat-trend-up { color: #10b981; }
+    .stat-trend-down { color: #ef4444; }
+    .progress-ring {
+        transform: rotate(-90deg);
+    }
+    .metric-card {
+        background: linear-gradient(135deg, rgba(30,41,59,0.9), rgba(15,23,42,0.7));
+    }
+</style>
+
+<div class="space-y-8 pb-20 fade-in">
+
+    <!-- Page Header with Executive Summary -->
+    <div class="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <div class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></div>
+                <span class="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400">Live Executive View</span>
+            </div>
+            <h1 class="text-4xl font-extrabold text-white tracking-tight">Enterprise Command Center</h1>
+            <p class="text-slate-400 text-sm mt-2">Unified management dashboard with real-time KPIs and performance indicators</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <select id="period-selector" onchange="changePeriod(this.value)" class="px-5 py-3 bg-slate-800/60 border border-white/10 rounded-xl text-sm font-medium text-white outline-none focus:border-brand-500 transition-all">
+                <option value="today">Today</option>
+                <option value="week" selected>This Week</option>
+                <option value="month">This Month</option>
+                <option value="quarter">This Quarter</option>
+                <option value="year">This Year</option>
+            </select>
+            <button onclick="exportExecutiveReport()" class="px-6 py-3 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white rounded-xl flex items-center gap-3 transition-all shadow-lg shadow-brand-500/30 font-bold text-sm">
+                <i class="fa-solid fa-file-pdf"></i>
+                Export Report
+            </button>
+        </div>
+    </div>
+
+    <!-- Executive KPI Row -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        <!-- Total Revenue -->
+        <div class="kpi-card gradient-border rounded-2xl p-5 relative overflow-hidden group">
+            <div class="absolute -right-3 -top-3 w-20 h-20 bg-emerald-500/10 rounded-full blur-2xl group-hover:bg-emerald-500/20 transition-all"></div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-sack-dollar text-emerald-400 text-lg"></i>
+                    </span>
+                    <span class="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-up text-[8px]"></i> 12.5%
+                    </span>
+                </div>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Total Revenue</p>
+                <h4 class="text-2xl font-black text-white">AED {{ "{:,.0f}".format(kpi.total_revenue) }}</h4>
+                <p class="text-[10px] text-slate-500 mt-1">+AED {{ "{:,.0f}".format(kpi.revenue_growth) }} vs last period</p>
+            </div>
+        </div>
+
+        <!-- Total Tasks -->
+        <div class="kpi-card gradient-border rounded-2xl p-5 relative overflow-hidden group">
+            <div class="absolute -right-3 -top-3 w-20 h-20 bg-brand-500/10 rounded-full blur-2xl group-hover:bg-brand-500/20 transition-all"></div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-list-check text-brand-400 text-lg"></i>
+                    </span>
+                    <span class="text-[10px] font-bold text-brand-400 flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-up text-[8px]"></i> 8.3%
+                    </span>
+                </div>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Active Tasks</p>
+                <h4 class="text-2xl font-black text-white">{{ kpi.total_tasks }}</h4>
+                <p class="text-[10px] text-slate-500 mt-1">{{ kpi.tasks_completed }} completed this period</p>
+            </div>
+        </div>
+
+        <!-- Issues -->
+        <div class="kpi-card gradient-border rounded-2xl p-5 relative overflow-hidden group">
+            <div class="absolute -right-3 -top-3 w-20 h-20 bg-rose-500/10 rounded-full blur-2xl group-hover:bg-rose-500/20 transition-all"></div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-triangle-exclamation text-rose-400 text-lg"></i>
+                    </span>
+                    <span class="text-[10px] font-bold text-rose-400 flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-down text-[8px]"></i> 3.2%
+                    </span>
+                </div>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Open Issues</p>
+                <h4 class="text-2xl font-black text-white">{{ kpi.open_issues }}</h4>
+                <p class="text-[10px] text-slate-500 mt-1">{{ kpi.high_priority_issues }} high priority</p>
+            </div>
+        </div>
+
+        <!-- Employees -->
+        <div class="kpi-card gradient-border rounded-2xl p-5 relative overflow-hidden group">
+            <div class="absolute -right-3 -top-3 w-20 h-20 bg-purple-500/10 rounded-full blur-2xl group-hover:bg-purple-500/20 transition-all"></div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-users text-purple-400 text-lg"></i>
+                    </span>
+                    <span class="text-[10px] font-bold text-purple-400 flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-up text-[8px]"></i> 5.0%
+                    </span>
+                </div>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Employees</p>
+                <h4 class="text-2xl font-black text-white">{{ kpi.total_employees }}</h4>
+                <p class="text-[10px] text-slate-500 mt-1">{{ kpi.active_employees }} active</p>
+            </div>
+        </div>
+
+        <!-- Deliveries -->
+        <div class="kpi-card gradient-border rounded-2xl p-5 relative overflow-hidden group">
+            <div class="absolute -right-3 -top-3 w-20 h-20 bg-amber-500/10 rounded-full blur-2xl group-hover:bg-amber-500/20 transition-all"></div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-truck-fast text-amber-400 text-lg"></i>
+                    </span>
+                    <span class="text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-up text-[8px]"></i> 15.7%
+                    </span>
+                </div>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Deliveries</p>
+                <h4 class="text-2xl font-black text-white">{{ kpi.total_deliveries }}</h4>
+                <p class="text-[10px] text-slate-500 mt-1">{{ kpi.delivery_success_rate }}% success rate</p>
+            </div>
+        </div>
+
+        <!-- Inventory Value -->
+        <div class="kpi-card gradient-border rounded-2xl p-5 relative overflow-hidden group">
+            <div class="absolute -right-3 -top-3 w-20 h-20 bg-cyan-500/10 rounded-full blur-2xl group-hover:bg-cyan-500/20 transition-all"></div>
+            <div class="relative z-10">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-warehouse text-cyan-400 text-lg"></i>
+                    </span>
+                    <span class="text-[10px] font-bold text-cyan-400 flex items-center gap-1">
+                        <i class="fa-solid fa-arrow-up text-[8px]"></i> 7.2%
+                    </span>
+                </div>
+                <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Inventory Value</p>
+                <h4 class="text-2xl font-black text-white">AED {{ "{:,.0f}".format(kpi.inventory_value) }}</h4>
+                <p class="text-[10px] text-slate-500 mt-1">{{ kpi.inventory_items }} items in stock</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Executive Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Revenue Trend -->
+        <div class="lg:col-span-2 glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-emerald-400 to-emerald-600 rounded-full"></span>
+                        Revenue Performance Trend
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Monthly revenue vs target analysis</p>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                        <span class="text-xs text-slate-400">Actual</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-slate-600"></span>
+                        <span class="text-xs text-slate-400">Target</span>
+                    </div>
+                </div>
+            </div>
+            <div class="h-80">
+                <canvas id="revenueTrendChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Task Pipeline -->
+        <div class="glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-8">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-brand-400 to-brand-600 rounded-full"></span>
+                        Task Pipeline
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Current work distribution</p>
+                </div>
+            </div>
+            <div class="h-80">
+                <canvas id="taskPipelineChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Second Row: Department Performance & Issue Analysis -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+        <!-- Department Performance -->
+        <div class="glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-purple-400 to-purple-600 rounded-full"></span>
+                        Department Performance Index
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Task completion rate by department</p>
+                </div>
+            </div>
+            <div class="space-y-5">
+                {% for dept in department_performance %}
+                <div class="metric-card rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-xl bg-{{ dept.color }}/20 flex items-center justify-center">
+                                <i class="fa-solid fa-{{ dept.icon }} text-{{ dept.color }}"></i>
+                            </div>
+                            <div>
+                                <p class="text-sm font-bold text-white">{{ dept.name }}</p>
+                                <p class="text-[10px] text-slate-500">{{ dept.tasks }} tasks · {{ dept.completion_rate }}% completed</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-lg font-black text-{{ dept.color }}">{{ dept.performance_score }}</span>
+                            <span class="text-[10px] text-slate-500">/100</span>
+                        </div>
+                    </div>
+                    <div class="w-full h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-{{ dept.color }} to-{{ dept.color }}-400 rounded-full transition-all duration-1000" style="width: {{ dept.performance_score }}%"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Issue Heat Map -->
+        <div class="glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-rose-400 to-rose-600 rounded-full"></span>
+                        Issue Severity Matrix
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Issues by priority and status</p>
+                </div>
+            </div>
+            <div class="h-80">
+                <canvas id="issueMatrixChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Third Row: HR Metrics & Financial Summary -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- HR Dashboard Mini -->
+        <div class="glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-purple-400 to-purple-600 rounded-full"></span>
+                        HR Intelligence
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Workforce metrics overview</p>
+                </div>
+                <a href="{{ url_for('hr.hr_dashboard') }}" class="text-[10px] font-bold text-brand-400 hover:text-brand-300 transition-colors">
+                    View Full <i class="fa-solid fa-arrow-right ml-1"></i>
+                </a>
+            </div>
+            <div class="space-y-4">
+                <div class="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-user-check text-emerald-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-white">Active Employees</p>
+                            <p class="text-[10px] text-slate-500">{{ kpi.active_employees }} of {{ kpi.total_employees }}</p>
+                        </div>
+                    </div>
+                    <span class="text-xl font-black text-emerald-400">{{ kpi.employee_retention }}%</span>
+                </div>
+                <div class="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-calendar-check text-amber-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-white">Attendance Rate</p>
+                            <p class="text-[10px] text-slate-500">This month</p>
+                        </div>
+                    </div>
+                    <span class="text-xl font-black text-amber-400">{{ kpi.attendance_rate }}%</span>
+                </div>
+                <div class="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-money-bill-wave text-brand-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-white">Avg Salary</p>
+                            <p class="text-[10px] text-slate-500">Monthly average</p>
+                        </div>
+                    </div>
+                    <span class="text-xl font-black text-brand-400">AED {{ "{:,.0f}".format(kpi.avg_salary) }}</span>
+                </div>
+                <div class="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center">
+                            <i class="fa-solid fa-user-slash text-rose-400"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-white">Turnover Rate</p>
+                            <p class="text-[10px] text-slate-500">This quarter</p>
+                        </div>
+                    </div>
+                    <span class="text-xl font-black text-rose-400">{{ kpi.turnover_rate }}%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inventory Health -->
+        <div class="glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-cyan-400 to-cyan-600 rounded-full"></span>
+                        Inventory Health
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Stock level analysis</p>
+                </div>
+            </div>
+            <div class="h-64 flex items-center justify-center mb-4">
+                <canvas id="inventoryHealthChart"></canvas>
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+                <div class="text-center">
+                    <div class="text-xl font-black text-emerald-400">{{ kpi.stock_normal_pct }}%</div>
+                    <p class="text-[10px] text-slate-500">Normal</p>
+                </div>
+                <div class="text-center">
+                    <div class="text-xl font-black text-amber-400">{{ kpi.stock_low_pct }}%</div>
+                    <p class="text-[10px] text-slate-500">Low</p>
+                </div>
+                <div class="text-center">
+                    <div class="text-xl font-black text-rose-400">{{ kpi.stock_out_pct }}%</div>
+                    <p class="text-[10px] text-slate-500">Out</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-brand-400 to-brand-600 rounded-full"></span>
+                        Quick Reports
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Access frequently used reports</p>
+                </div>
+            </div>
+            <div class="space-y-3">
+                <a href="{{ url_for('reports') }}" class="flex items-center gap-4 p-4 bg-slate-800/30 hover:bg-slate-800/60 rounded-xl transition-all group">
+                    <div class="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-chart-pie text-brand-400"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-sm font-bold text-white">Master Reports</p>
+                        <p class="text-[10px] text-slate-500">Complete analytics overview</p>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-slate-600 group-hover:text-brand-400 transition-colors"></i>
+                </a>
+                <a href="{{ url_for('delivery_report') }}" class="flex items-center gap-4 p-4 bg-slate-800/30 hover:bg-slate-800/60 rounded-xl transition-all group">
+                    <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-truck-fast text-amber-400"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-sm font-bold text-white">Logistics Report</p>
+                        <p class="text-[10px] text-slate-500">Delivery fleet analytics</p>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-slate-600 group-hover:text-amber-400 transition-colors"></i>
+                </a>
+                <a href="{{ url_for('task_reports') }}" class="flex items-center gap-4 p-4 bg-slate-800/30 hover:bg-slate-800/60 rounded-xl transition-all group">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-list-check text-emerald-400"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-sm font-bold text-white">Task Analytics</p>
+                        <p class="text-[10px] text-slate-500">Task performance metrics</p>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-slate-600 group-hover:text-emerald-400 transition-colors"></i>
+                </a>
+                <a href="{{ url_for('stock_summary_report') }}" class="flex items-center gap-4 p-4 bg-slate-800/30 hover:bg-slate-800/60 rounded-xl transition-all group">
+                    <div class="w-10 h-10 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                        <i class="fa-solid fa-boxes-stacked text-cyan-400"></i>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-sm font-bold text-white">Stock Summary</p>
+                        <p class="text-[10px] text-slate-500">Inventory status report</p>
+                    </div>
+                    <i class="fa-solid fa-chevron-right text-slate-600 group-hover:text-cyan-400 transition-colors"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fourth Row: Sales Performance & Customer Metrics -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+        <!-- Sales Performance -->
+        <div class="glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-emerald-400 to-emerald-600 rounded-full"></span>
+                        Sales Performance
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Revenue by salesperson and region</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="p-4 bg-slate-800/30 rounded-xl text-center">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Total Customers</p>
+                    <h4 class="text-2xl font-black text-white">{{ kpi.total_customers }}</h4>
+                </div>
+                <div class="p-4 bg-slate-800/30 rounded-xl text-center">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Avg Order Value</p>
+                    <h4 class="text-2xl font-black text-emerald-400">AED {{ "{:,.0f}".format(kpi.avg_order_value) }}</h4>
+                </div>
+            </div>
+            <div class="h-64">
+                <canvas id="salesPerformanceChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Customer Health Score -->
+        <div class="glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-brand-400 to-brand-600 rounded-full"></span>
+                        Customer Health Score
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Customer satisfaction and engagement metrics</p>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="p-4 bg-slate-800/30 rounded-xl text-center">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Active Customers</p>
+                    <h4 class="text-2xl font-black text-brand-400">{{ kpi.active_customers }}</h4>
+                </div>
+                <div class="p-4 bg-slate-800/30 rounded-xl text-center">
+                    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">New This Month</p>
+                    <h4 class="text-2xl font-black text-emerald-400">+{{ kpi.new_customers }}</h4>
+                </div>
+            </div>
+            <div class="h-64">
+                <canvas id="customerHealthChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fifth Row: Warehouse Utilization & Logistics -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Warehouse Utilization -->
+        <div class="glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-cyan-400 to-cyan-600 rounded-full"></span>
+                        Warehouse Utilization
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Capacity and occupancy metrics</p>
+                </div>
+            </div>
+            <div class="flex items-center justify-center mb-6">
+                <div class="relative w-40 h-40">
+                    <canvas id="warehouseUtilizationChart"></canvas>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center">
+                        <span class="text-3xl font-black text-white">{{ kpi.warehouse_occupancy }}%</span>
+                        <span class="text-[10px] text-slate-500 uppercase tracking-widest">Occupied</span>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="text-center p-3 bg-slate-800/30 rounded-xl">
+                    <p class="text-lg font-black text-white">{{ kpi.occupied_locations }}</p>
+                    <p class="text-[10px] text-slate-500">Occupied</p>
+                </div>
+                <div class="text-center p-3 bg-slate-800/30 rounded-xl">
+                    <p class="text-lg font-black text-slate-400">{{ kpi.available_locations }}</p>
+                    <p class="text-[10px] text-slate-500">Available</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fleet Performance -->
+        <div class="glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-amber-400 to-amber-600 rounded-full"></span>
+                        Fleet Performance
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Delivery fleet efficiency metrics</p>
+                </div>
+            </div>
+            <div class="space-y-4">
+                <div class="p-4 bg-slate-800/30 rounded-xl">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-sm font-bold text-white">Fleet Utilization</p>
+                        <p class="text-sm font-black text-amber-400">{{ kpi.fleet_utilization }}%</p>
+                    </div>
+                    <div class="w-full h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full" style="width: {{ kpi.fleet_utilization }}%"></div>
+                    </div>
+                </div>
+                <div class="p-4 bg-slate-800/30 rounded-xl">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-sm font-bold text-white">On-Time Delivery</p>
+                        <p class="text-sm font-black text-emerald-400">{{ kpi.on_time_delivery }}%</p>
+                    </div>
+                    <div class="w-full h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full" style="width: {{ kpi.on_time_delivery }}%"></div>
+                    </div>
+                </div>
+                <div class="p-4 bg-slate-800/30 rounded-xl">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-sm font-bold text-white">Avg Delivery Time</p>
+                        <p class="text-sm font-black text-brand-400">{{ kpi.avg_delivery_time }} min</p>
+                    </div>
+                    <div class="w-full h-2 bg-slate-700/50 rounded-full overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-brand-500 to-brand-400 rounded-full" style="width: 70%"></div>
+                    </div>
+                </div>
+                <div class="p-4 bg-slate-800/30 rounded-xl">
+                    <div class="flex items-center justify-between mb-2">
+                        <p class="text-sm font-bold text-white">Active Vehicles</p>
+                        <p class="text-sm font-black text-purple-400">{{ kpi.active_vehicles }} / {{ kpi.total_vehicles }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Health -->
+        <div class="glass-panel rounded-3xl p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white flex items-center gap-3">
+                        <span class="w-1.5 h-6 bg-gradient-to-b from-emerald-400 to-emerald-600 rounded-full"></span>
+                        System Health
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-1">Platform integration status</p>
+                </div>
+            </div>
+            <div class="space-y-4">
+                {% for system in system_health %}
+                <div class="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-{{ system.color }}/20 flex items-center justify-center">
+                            <i class="fa-brands fa-{{ system.icon }} text-{{ system.color }}"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-bold text-white">{{ system.name }}</p>
+                            <p class="text-[10px] text-slate-500">{{ system.status }}</p>
+                        </div>
+                    </div>
+                    <span class="w-3 h-3 rounded-full bg-{{ system.color }} {% if system.color == 'emerald' %}pulse-dot{% endif %}"></span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // KPI Data from server
+    const kpiData = {{ kpi|tojson|safe }};
+    const departmentPerformance = {{ department_performance|tojson|safe }};
+    const systemHealth = {{ system_health|tojson|safe }};
+
+    const brandColors = ['#0ea5e9', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#f97316'];
+
+    function initExecutiveDashboard() {
+        // Revenue Trend Chart
+        if (document.getElementById('revenueTrendChart')) {
+            new Chart(document.getElementById('revenueTrendChart'), {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    datasets: [{
+                        label: 'Actual Revenue',
+                        data: kpiData.revenue_trend || [65000, 72000, 68000, 85000, 92000, 88000, 95000, 102000, 98000, 115000, 125000, 135000],
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        borderWidth: 3,
+                        fill: true,
+                        tension: 0.4,
+                        pointBackgroundColor: '#10b981',
+                        pointRadius: 4,
+                        pointHoverRadius: 6
+                    }, {
+                        label: 'Target',
+                        data: [60000, 70000, 75000, 80000, 85000, 90000, 95000, 100000, 105000, 110000, 120000, 130000],
+                        borderColor: '#64748b',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        fill: false,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(148, 163, 184, 0.08)' },
+                            ticks: { color: '#94a3b8', font: { size: 11 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(148, 163, 184, 0.08)' },
+                            ticks: { 
+                                color: '#94a3b8', 
+                                font: { size: 11 },
+                                callback: function(value) { return 'AED ' + (value/1000) + 'K'; }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Task Pipeline Chart
+        if (document.getElementById('taskPipelineChart')) {
+            new Chart(document.getElementById('taskPipelineChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Not Started', 'In Progress', 'Completed', 'Blocked'],
+                    datasets: [{
+                        data: [kpiData.tasks_not_started || 12, kpiData.tasks_in_progress || 28, kpiData.tasks_completed || 45, kpiData.tasks_blocked || 5],
+                        backgroundColor: ['#64748b', '#0ea5e9', '#10b981', '#ef4444'],
+                        borderWidth: 0,
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '65%',
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#cbd5e1', boxWidth: 12, padding: 15, font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Issue Matrix Chart
+        if (document.getElementById('issueMatrixChart')) {
+            new Chart(document.getElementById('issueMatrixChart'), {
+                type: 'bar',
+                data: {
+                    labels: ['Critical', 'High', 'Medium', 'Low'],
+                    datasets: [{
+                        label: 'Open',
+                        data: [kpiData.issues_critical_open || 3, kpiData.issues_high_open || 12, kpiData.issues_medium_open || 25, kpiData.issues_low_open || 18],
+                        backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                        borderRadius: 8
+                    }, {
+                        label: 'Resolved',
+                        data: [kpiData.issues_critical_resolved || 8, kpiData.issues_high_resolved || 22, kpiData.issues_medium_resolved || 45, kpiData.issues_low_resolved || 35],
+                        backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#cbd5e1', boxWidth: 12, padding: 15, font: { size: 11 } }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#94a3b8', font: { size: 11 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(148, 163, 184, 0.08)' },
+                            ticks: { color: '#94a3b8', font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Inventory Health Chart
+        if (document.getElementById('inventoryHealthChart')) {
+            new Chart(document.getElementById('inventoryHealthChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Normal Stock', 'Low Stock', 'Out of Stock'],
+                    datasets: [{
+                        data: [kpiData.stock_normal_pct || 72, kpiData.stock_low_pct || 18, kpiData.stock_out_pct || 10],
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '75%',
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
+        // Sales Performance Chart
+        if (document.getElementById('salesPerformanceChart')) {
+            new Chart(document.getElementById('salesPerformanceChart'), {
+                type: 'bar',
+                data: {
+                    labels: kpiData.sales_by_region || ['Dubai', 'Abu Dhabi', 'Sharjah', 'Al Ain', 'Other'],
+                    datasets: [{
+                        label: 'Revenue (AED)',
+                        data: kpiData.sales_by_region_value || [45000, 38000, 22000, 15000, 10000],
+                        backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                        borderColor: '#10b981',
+                        borderWidth: 2,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(148, 163, 184, 0.08)' },
+                            ticks: { color: '#94a3b8', font: { size: 10 } }
+                        },
+                        y: {
+                            grid: { display: false },
+                            ticks: { color: '#cbd5e1', font: { size: 11, weight: 'bold' } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Customer Health Chart
+        if (document.getElementById('customerHealthChart')) {
+            new Chart(document.getElementById('customerHealthChart'), {
+                type: 'radar',
+                data: {
+                    labels: ['Engagement', 'Satisfaction', 'Retention', 'Growth', 'Support'],
+                    datasets: [{
+                        label: 'Current Month',
+                        data: [85, 78, 92, 65, 88],
+                        borderColor: '#0ea5e9',
+                        backgroundColor: 'rgba(14, 165, 233, 0.2)',
+                        borderWidth: 2,
+                        pointBackgroundColor: '#0ea5e9'
+                    }, {
+                        label: 'Last Month',
+                        data: [80, 75, 88, 60, 82],
+                        borderColor: '#64748b',
+                        backgroundColor: 'rgba(100, 116, 139, 0.1)',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointBackgroundColor: '#64748b'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#cbd5e1', boxWidth: 12, padding: 15, font: { size: 11 } }
+                        }
+                    },
+                    scales: {
+                        r: {
+                            grid: { color: 'rgba(148, 163, 184, 0.15)' },
+                            angleLines: { color: 'rgba(148, 163, 184, 0.15)' },
+                            ticks: { display: false },
+                            pointLabels: { color: '#94a3b8', font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Warehouse Utilization Chart
+        if (document.getElementById('warehouseUtilizationChart')) {
+            new Chart(document.getElementById('warehouseUtilizationChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Occupied', 'Available'],
+                    datasets: [{
+                        data: [kpiData.warehouse_occupancy || 75, 100 - (kpiData.warehouse_occupancy || 75)],
+                        backgroundColor: ['#0ea5e9', '#1e293b'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '85%',
+                    plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                }
+            });
+        }
+    }
+
+    function changePeriod(period) {
+        window.location.href = '{{ url_for("executive_dashboard") }}?period=' + period;
+    }
+
+    function exportExecutiveReport() {
+        window.open('{{ url_for("executive_report_pdf") }}', '_blank');
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(initExecutiveDashboard, 100);
+    });
+</script>
+{% endblock %}

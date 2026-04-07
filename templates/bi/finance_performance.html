@@ -1,0 +1,175 @@
+{% extends "bi/base_bi.html" %}
+
+{% block title %}Finance & Collections Dashboard{% endblock %}
+
+{% block bi_content %}
+<!-- Finance Header -->
+<section class="executive-hero mb-4">
+    <h1>Finance & Collections Dashboard</h1>
+    <div class="subtitle">Revenue, margins, and receivables overview</div>
+    
+    <div class="hero-kpi-grid">
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="fin-revenue">AED 0</div>
+            <div class="hero-kpi-label">Revenue</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="fin-net">AED 0</div>
+            <div class="hero-kpi-label">Net Revenue</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="fin-margin">0%</div>
+            <div class="hero-kpi-label">Est. Margin</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="fin-receivables">AED 0</div>
+            <div class="hero-kpi-label">Receivables</div>
+        </div>
+    </div>
+</section>
+
+<!-- Receivables Aging -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Receivables Aging</h2>
+    </div>
+    <div class="bi-grid-4">
+        <div class="bi-card">
+            <div class="bi-card-value text-success" id="recv-current">AED 0</div>
+            <div class="bi-card-label">Current (0-30)</div>
+        </div>
+        <div class="bi-card">
+            <div class="bi-card-value text-warning" id="recv-31-60">AED 0</div>
+            <div class="bi-card-label">31-60 Days</div>
+        </div>
+        <div class="bi-card">
+            <div class="bi-card-value text-danger" id="recv-61-90">AED 0</div>
+            <div class="bi-card-label">61-90 Days</div>
+        </div>
+        <div class="bi-card">
+            <div class="bi-card-value text-danger" id="recv-over-90">AED 0</div>
+            <div class="bi-card-label">Over 90 Days</div>
+        </div>
+    </div>
+</section>
+
+<!-- Top Debtors -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Top Debtors</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Customer</th>
+                    <th>Total Receivable</th>
+                    <th>Oldest Invoice</th>
+                    <th>Days Outstanding</th>
+                    <th>Credit Risk</th>
+                </tr>
+            </thead>
+            <tbody id="top-debtors"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Discounts Given -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Discounts Given</h2>
+    </div>
+    <div class="bi-grid-3">
+        <div class="bi-card">
+            <div class="bi-card-value text-info" id="disc-total">AED 0</div>
+            <div class="bi-card-label">Total Discounts</div>
+        </div>
+        <div class="bi-card">
+            <div class="bi-card-value text-primary" id="disc-pct">0%</div>
+            <div class="bi-card-label">Discount Rate</div>
+        </div>
+        <div class="bi-card">
+            <div class="bi-card-value text-warning" id="disc-overdue">0</div>
+            <div class="bi-card-label">Overdue Invoices</div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadFinanceData();
+});
+
+async function loadFinanceData() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        params.set('format', 'json');
+        
+        const response = await fetch(`/api/bi/kpis/finance?${params.toString()}`);
+        const data = await response.json();
+        
+        updateFinanceKPIs(data);
+        updateAging(data.aging || {});
+        updateTopDebtors(data.top_debtors || []);
+        updateDiscounts(data);
+        
+    } catch (error) {
+        console.error('Error loading finance data:', error);
+    }
+}
+
+function updateFinanceKPIs(data) {
+    document.getElementById('fin-revenue').textContent = formatCurrency(data.gross_revenue || 0);
+    document.getElementById('fin-net').textContent = formatCurrency(data.net_revenue || 0);
+    document.getElementById('fin-margin').textContent = formatPercent(data.gross_margin_pct || 0);
+    document.getElementById('fin-receivables').textContent = formatCurrency(data.total_receivables || 0);
+}
+
+function updateAging(aging) {
+    document.getElementById('recv-current').textContent = formatCurrency(aging.current || 0);
+    document.getElementById('recv-31-60').textContent = formatCurrency(aging.days_31_60 || 0);
+    document.getElementById('recv-61-90').textContent = formatCurrency(aging.days_61_90 || 0);
+    document.getElementById('recv-over-90').textContent = formatCurrency(aging.over_90_days || 0);
+}
+
+function updateTopDebtors(debtors) {
+    const tbody = document.getElementById('top-debtors');
+    tbody.innerHTML = debtors.slice(0, 10).map((d, i) => `
+        <tr>
+            <td><span class="top-list-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
+            <td><strong>${d.customer_name || 'Unknown'}</strong></td>
+            <td class="font-bold text-danger">${formatCurrency(d.total_receivable || 0)}</td>
+            <td>${d.oldest_invoice_date || '-'}</td>
+            <td class="${d.days_outstanding > 60 ? 'text-danger font-bold' : d.days_outstanding > 30 ? 'text-warning' : ''}">${d.days_outstanding || 0}</td>
+            <td>
+                <span class="risk-badge risk-${d.credit_risk || 'low'}">${(d.credit_risk || 'Low').toUpperCase()}</span>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function updateDiscounts(data) {
+    document.getElementById('disc-total').textContent = formatCurrency(data.total_discounts || 0);
+    document.getElementById('disc-pct').textContent = formatPercent(data.discount_rate || 0);
+    document.getElementById('disc-overdue').textContent = formatNumber(data.overdue_invoices || 0);
+}
+
+function formatNumber(num, decimals = 0) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function formatCurrency(num) {
+    if (num === null || num === undefined) return '-';
+    return 'AED ' + parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function formatPercent(num) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+</script>
+{% endblock %}

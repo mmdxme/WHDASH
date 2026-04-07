@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6 fade-in pb-20">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-3xl font-extrabold text-white tracking-tight">Forecast Center</h2>
+            <p class="text-slate-500 font-medium mt-1 text-xs uppercase tracking-widest">Customer Demand Forecasting &amp; Prediction Engine</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <form method="post" action="{{ url_for('ci_forecast_generate') }}" class="flex items-center gap-2">
+                <select name="period_months" class="bg-slate-900/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white">
+                    <option value="3">3 months</option>
+                    <option value="6" selected>6 months</option>
+                    <option value="12">12 months</option>
+                </select>
+                <select name="customer_scope" class="bg-slate-900/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white">
+                    <option value="all">All Customers</option>
+                    <option value="key">Key Customers Only</option>
+                    <option value="wholesale">Wholesale Only</option>
+                </select>
+                <input type="hidden" name="forecast_type" value="customer_demand">
+                <button type="submit" class="px-5 py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl text-xs font-bold transition-all">
+                    <i class="fa-solid fa-bolt mr-1"></i> Generate Forecast
+                </button>
+            </form>
+            <a href="{{ url_for('ci_dashboard') }}" class="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-xl text-xs font-bold transition-all">
+                <i class="fa-solid fa-arrow-left mr-1"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Forecast Runs -->
+    <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/5">
+        <div class="p-5 border-b border-white/5 bg-slate-800/20">
+            <h3 class="font-bold text-white text-sm">Forecast Runs</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead>
+                    <tr class="bg-slate-900/40">
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase">Run Name</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase">Type</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase">Period</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase text-right">Customers</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase text-right">Total Forecasted</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase">Status</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase">Created</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for r in forecast_runs %}
+                    <tr class="hover:bg-white/5">
+                        <td class="px-5 py-4 text-slate-200 font-medium">{{ r.run_name }}</td>
+                        <td class="px-5 py-4 text-slate-400">{{ r.forecast_type }}</td>
+                        <td class="px-5 py-4 text-slate-400">{{ r.period_start[:10] }} → {{ r.period_end[:10] }}</td>
+                        <td class="px-5 py-4 text-right text-emerald-400 font-bold">{{ r.line_count }}</td>
+                        <td class="px-5 py-4 text-right text-blue-400 font-bold">{{ "{:,.0f}".format(r.total_demand_forecasted or 0) }}</td>
+                        <td class="px-5 py-4">
+                            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full {% if r.status == 'completed' %}bg-emerald-500/10 text-emerald-400{% elif r.status == 'running' %}bg-amber-500/10 text-amber-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ r.status|title }}
+                            </span>
+                        </td>
+                        <td class="px-5 py-4 text-slate-400">{{ r.created_at[:16] }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-5 py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-cloud-sun text-4xl mb-3 block"></i>
+                            <p class="text-sm">No forecasts generated yet</p>
+                            <p class="text-xs mt-1">Click "Generate Forecast" to create a new demand forecast</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Active Forecast Lines -->
+    {% if active_forecast and forecast_lines %}
+    <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/5">
+        <div class="p-5 border-b border-white/5 bg-slate-800/20">
+            <h3 class="font-bold text-white text-sm">Latest Forecast Details: {{ active_forecast.run_name }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead>
+                    <tr class="bg-slate-900/40">
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase">Customer</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase">Date</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase text-right">Predicted Demand</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase text-right">Confidence</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase">Range</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for line in forecast_lines %}
+                    <tr class="hover:bg-white/5">
+                        <td class="px-5 py-4"><a href="{{ url_for('ci_profile_detail', customer_id=line.customer_id) }}" class="text-slate-200 hover:text-brand-400">{{ line.customer_name }}</a></td>
+                        <td class="px-5 py-4 text-slate-400">{{ line.forecast_date[:10] }}</td>
+                        <td class="px-5 py-4 text-right text-indigo-400 font-bold">{{ "{:,.0f}".format(line.predicted_demand or 0) }}</td>
+                        <td class="px-5 py-4 text-right"><span class="text-emerald-400">{{ "%.0f"|format(line.confidence_level * 100) }}%</span></td>
+                        <td class="px-5 py-4 text-slate-400">{{ "{:,.0f}".format(line.prediction_interval_low or 0) }} — {{ "{:,.0f}".format(line.prediction_interval_high or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

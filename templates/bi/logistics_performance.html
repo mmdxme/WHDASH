@@ -1,0 +1,183 @@
+{% extends "bi/base_bi.html" %}
+
+{% block title %}Logistics Performance Dashboard{% endblock %}
+
+{% block bi_content %}
+<!-- Logistics Header -->
+<section class="executive-hero mb-4">
+    <h1>Logistics & Delivery Dashboard</h1>
+    <div class="subtitle">Trip completion, on-time delivery, and fleet performance</div>
+    
+    <div class="hero-kpi-grid">
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="log-trips">0</div>
+            <div class="hero-kpi-label">Total Trips</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="log-stops">0</div>
+            <div class="hero-kpi-label">Total Stops</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="log-ontime">0%</div>
+            <div class="hero-kpi-label">On-Time Rate</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="log-failed">0%</div>
+            <div class="hero-kpi-label">Failed Rate</div>
+        </div>
+    </div>
+</section>
+
+<!-- Delivery Performance -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Delivery Performance by Status</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Trips</th>
+                    <th>Stops</th>
+                    <th>% of Total</th>
+                </tr>
+            </thead>
+            <tbody id="delivery-by-status"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Performance by Warehouse -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Performance by Warehouse</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Warehouse</th>
+                    <th>Trips</th>
+                    <th>On-Time</th>
+                    <th>Delayed</th>
+                    <th>Failed</th>
+                    <th>On-Time Rate</th>
+                </tr>
+            </thead>
+            <tbody id="delivery-by-warehouse"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Recent Deliveries -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Recent Deliveries</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Trip ID</th>
+                    <th>Date</th>
+                    <th>Warehouse</th>
+                    <th>Stops</th>
+                    <th>Completed</th>
+                    <th>Failed</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="recent-trips"></tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadLogisticsData();
+});
+
+async function loadLogisticsData() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        params.set('format', 'json');
+        
+        const response = await fetch(`/api/bi/kpis/logistics?${params.toString()}`);
+        const data = await response.json();
+        
+        updateLogisticsKPIs(data);
+        updateDeliveryByStatus(data.by_status || []);
+        updateDeliveryByWarehouse(data.by_warehouse || []);
+        updateRecentTrips(data.recent_trips || []);
+        
+    } catch (error) {
+        console.error('Error loading logistics data:', error);
+    }
+}
+
+function updateLogisticsKPIs(data) {
+    document.getElementById('log-trips').textContent = formatNumber(data.total_trips || 0);
+    document.getElementById('log-stops').textContent = formatNumber(data.total_stops || 0);
+    document.getElementById('log-ontime').textContent = formatPercent(data.on_time_rate || 0);
+    document.getElementById('log-failed').textContent = formatPercent(data.failed_rate || 0);
+}
+
+function updateDeliveryByStatus(statuses) {
+    const tbody = document.getElementById('delivery-by-status');
+    tbody.innerHTML = statuses.map(s => `
+        <tr>
+            <td><span class="status-badge status-${(s.status || 'unknown').toLowerCase()}">${s.status || 'Unknown'}</span></td>
+            <td>${formatNumber(s.trip_count || 0)}</td>
+            <td>${formatNumber(s.stop_count || 0)}</td>
+            <td>${formatPercent(s.pct || 0)}</td>
+        </tr>
+    `).join('');
+}
+
+function updateDeliveryByWarehouse(warehouses) {
+    const tbody = document.getElementById('delivery-by-warehouse');
+    tbody.innerHTML = warehouses.map(w => `
+        <tr>
+            <td><strong>${w.warehouse_name || 'Unknown'}</strong></td>
+            <td>${formatNumber(w.trip_count || 0)}</td>
+            <td class="text-success">${formatNumber(w.on_time || 0)}</td>
+            <td class="text-warning">${formatNumber(w.delayed || 0)}</td>
+            <td class="text-danger">${formatNumber(w.failed || 0)}</td>
+            <td>
+                <span class="${w.on_time_rate >= 90 ? 'text-success' : w.on_time_rate >= 70 ? 'text-warning' : 'text-danger'}">
+                    ${formatPercent(w.on_time_rate || 0)}
+                </span>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function updateRecentTrips(trips) {
+    const tbody = document.getElementById('recent-trips');
+    tbody.innerHTML = trips.map(t => `
+        <tr>
+            <td>#${t.trip_id || 'N/A'}</td>
+            <td>${t.trip_date || '-'}</td>
+            <td>${t.warehouse_name || 'Unknown'}</td>
+            <td>${formatNumber(t.total_stops || 0)}</td>
+            <td class="text-success">${formatNumber(t.completed_stops || 0)}</td>
+            <td class="text-danger">${formatNumber(t.failed_stops || 0)}</td>
+            <td><span class="status-badge status-${(t.status || 'unknown').toLowerCase()}">${t.status || 'Unknown'}</span></td>
+        </tr>
+    `).join('');
+}
+
+function formatNumber(num, decimals = 0) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function formatPercent(num) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-white">Sync Status</h1>
+    <p class="text-slate-400 text-sm mt-1">Synchronization history and current status with Peyvast Panel</p>
+</div>
+
+<!-- Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="glass-panel p-5 rounded-2xl border border-white/5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-400 text-xs font-medium uppercase tracking-wider">Total Products</p>
+                <p class="text-3xl font-bold text-white mt-1">{{ summary.total_products }}</p>
+            </div>
+            <div class="w-12 h-12 bg-brand-500/20 rounded-xl flex items-center justify-center">
+                <i class="fa-solid fa-boxes-stacked text-brand-400 text-lg"></i>
+            </div>
+        </div>
+    </div>
+    <div class="glass-panel p-5 rounded-2xl border border-white/5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-400 text-xs font-medium uppercase tracking-wider">Total Qty</p>
+                <p class="text-3xl font-bold text-emerald-400 mt-1">{{ summary.total_warehouse_quantity }}</p>
+            </div>
+            <div class="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                <i class="fa-solid fa-warehouse text-emerald-400 text-lg"></i>
+            </div>
+        </div>
+    </div>
+    <div class="glass-panel p-5 rounded-2xl border border-white/5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-400 text-xs font-medium uppercase tracking-wider">Low Stock</p>
+                <p class="text-3xl font-bold text-yellow-400 mt-1">{{ summary.low_stock }}</p>
+            </div>
+            <div class="w-12 h-12 bg-yellow-500/20 rounded-xl flex items-center justify-center">
+                <i class="fa-solid fa-triangle-exclamation text-yellow-400 text-lg"></i>
+            </div>
+        </div>
+    </div>
+    <div class="glass-panel p-5 rounded-2xl border border-white/5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-slate-400 text-xs font-medium uppercase tracking-wider">Last Sync</p>
+                <p class="text-lg font-bold text-purple-400 mt-1">{% if summary.last_sync_at %}{{ summary.last_sync_at[:19] }}{% else %}Never{% endif %}</p>
+            </div>
+            <div class="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
+                <i class="fa-solid fa-clock text-purple-400 text-lg"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sync Actions -->
+<div class="glass-panel p-6 rounded-3xl border border-white/5 mb-8">
+    <div class="flex flex-wrap items-center justify-between gap-4">
+        <div>
+            <h3 class="text-lg font-bold text-white">Sync Controls</h3>
+            <p class="text-slate-400 text-sm mt-1">Manual and automated synchronization with Peyvast</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <form action="{{ url_for('stock_sync') }}" method="POST" class="inline">
+                <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs rounded-lg transition-all">
+                    <i class="fa-solid fa-rotate mr-2"></i> Sync Now
+                </button>
+            </form>
+            <button onclick="refreshStatus()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs rounded-lg transition-all">
+                <i class="fa-solid fa-refresh mr-2"></i> Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Sync History -->
+<div class="glass-panel p-8 rounded-3xl border border-white/5">
+    <div class="mb-6">
+        <h2 class="text-xl font-bold text-white">Sync History</h2>
+        <p class="text-slate-400 text-sm mt-1">Recent synchronization operations with Peyvast Panel</p>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="w-full text-left">
+            <thead>
+                <tr class="text-slate-500 text-[10px] font-bold uppercase tracking-[0.15em] border-b border-slate-700/50">
+                    <th class="px-3 py-3">Sync ID</th>
+                    <th class="px-3 py-3">Type</th>
+                    <th class="px-3 py-3">Status</th>
+                    <th class="px-3 py-3 text-right">Items Total</th>
+                    <th class="px-3 py-3 text-right">Items Synced</th>
+                    <th class="px-3 py-3 text-right">Items Failed</th>
+                    <th class="px-3 py-3">Duration</th>
+                    <th class="px-3 py-3">Started At</th>
+                    <th class="px-3 py-3">Completed At</th>
+                    <th class="px-3 py-3">Errors</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-white/5">
+                {% for log in sync_logs %}
+                <tr class="hover:bg-slate-800/40 transition-colors">
+                    <td class="px-3 py-4 text-white font-mono text-sm">#{{ log.id }}</td>
+                    <td class="px-3 py-4 text-slate-300 text-sm">{{ log.sync_type }}</td>
+                    <td class="px-3 py-4">
+                        {% if log.status == 'completed' %}
+                        <span class="px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded text-xs">Completed</span>
+                        {% elif log.status == 'failed' %}
+                        <span class="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs">Failed</span>
+                        {% elif log.status == 'running' %}
+                        <span class="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs">Running</span>
+                        {% else %}
+                        <span class="px-2 py-1 bg-slate-500/20 text-slate-400 rounded text-xs">{{ log.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-3 py-4 text-right text-white font-bold">{{ log.items_total|default(0) }}</td>
+                    <td class="px-3 py-4 text-right text-emerald-400">{{ log.items_synced|default(0) }}</td>
+                    <td class="px-3 py-4 text-right text-red-400">{{ log.items_failed|default(0) }}</td>
+                    <td class="px-3 py-4 text-slate-400 text-sm">{{ "%.2f"|format(log.duration_seconds|default(0)) }}s</td>
+                    <td class="px-3 py-4 text-slate-400 text-sm">{{ log.started_at[:19] if log.started_at else 'N/A' }}</td>
+                    <td class="px-3 py-4 text-slate-400 text-sm">{{ log.completed_at[:19] if log.completed_at else 'N/A' }}</td>
+                    <td class="px-3 py-4">
+                        {% if log.errors %}
+                        <span class="text-red-400 cursor-pointer" onclick="showErrors('{{ log.id }}')">
+                            <i class="fa-solid fa-circle-exclamation"></i> View
+                        </span>
+                        {% else %}
+                        <span class="text-emerald-400"><i class="fa-solid fa-check"></i></span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="10" class="px-3 py-10 text-center text-slate-500 text-sm">
+                        <div class="flex flex-col items-center gap-3">
+                            <i class="fa-solid fa-history text-4xl text-slate-600"></i>
+                            <p>No sync history available. Run a sync operation to see results here.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Error Detail Modal -->
+<div id="errorModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+    <div class="glass-panel rounded-2xl border border-white/10 max-w-lg w-full">
+        <div class="p-6 border-b border-slate-700/50 flex items-center justify-between">
+            <h3 class="text-xl font-bold text-white">Sync Errors</h3>
+            <button onclick="closeErrorModal()" class="text-slate-400 hover:text-white">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+        </div>
+        <div class="p-6" id="errorContent">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshStatus() {
+    window.location.reload();
+}
+
+function showErrors(syncId) {
+    // Find the sync log with this ID
+    const logs = {{ sync_logs|tojson }};
+    const log = logs.find(l => l.id === parseInt(syncId));
+    if (log && log.errors) {
+        document.getElementById('errorContent').innerHTML = `<pre class="text-red-400 text-sm whitespace-pre-wrap">${log.errors}</pre>`;
+        document.getElementById('errorModal').classList.remove('hidden');
+    }
+}
+
+function closeErrorModal() {
+    document.getElementById('errorModal').classList.add('hidden');
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeErrorModal();
+});
+</script>
+{% endblock %}

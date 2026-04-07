@@ -1,0 +1,375 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('hr.employees_list') }}" class="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-all">
+                <i class="fa-solid fa-arrow-left"></i>
+            </a>
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ employee.first_name }} {{ employee.last_name }}</h1>
+                <p class="text-slate-400 mt-1">
+                    <span class="text-brand-400">{{ employee.employee_code }}</span>
+                    {% if employment and employment.department_name %}
+                    • {{ employment.department_name }}
+                    {% endif %}
+                    {% if employment and employment.position_title %}
+                    • {{ employment.position_title }}
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('hr.employees_edit', id=employee.id) }}" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-edit"></i>
+                {{ t('edit', 'Edit') }}
+            </a>
+            <button onclick="window.print()" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all">
+                <i class="fa-solid fa-print"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Status Badge -->
+    <div class="flex items-center gap-3">
+        {% if employee.status == 'Active' %}
+        <span class="px-3 py-1.5 bg-emerald-500/10 text-emerald-400 text-sm font-bold rounded-full">{{ t('active', 'Active') }}</span>
+        {% elif employee.status == 'On Leave' %}
+        <span class="px-3 py-1.5 bg-amber-500/10 text-amber-400 text-sm font-bold rounded-full">{{ t('on_leave', 'On Leave') }}</span>
+        {% elif employee.status == 'Probation' %}
+        <span class="px-3 py-1.5 bg-blue-500/10 text-blue-400 text-sm font-bold rounded-full">{{ t('probation', 'Probation') }}</span>
+        {% else %}
+        <span class="px-3 py-1.5 bg-slate-500/10 text-slate-400 text-sm font-bold rounded-full">{{ t('inactive', 'Inactive') }}</span>
+        {% endif %}
+        <span class="text-slate-500 text-sm">{{ employee.employment_type or 'Full-time' }}</span>
+    </div>
+
+    <!-- Tabs -->
+    <div class="border-b border-white/10">
+        <nav class="flex gap-6 -mb-px overflow-x-auto">
+            <button onclick="showTab('overview')" id="tab-overview" class="px-4 py-3 text-sm font-semibold text-brand-400 border-b-2 border-brand-400 whitespace-nowrap">
+                {{ t('overview', 'Overview') }}
+            </button>
+            <button onclick="showTab('personal')" id="tab-personal" class="px-4 py-3 text-sm font-semibold text-slate-400 border-b-2 border-transparent hover:text-white whitespace-nowrap">
+                {{ t('personal', 'Personal') }}
+            </button>
+            <button onclick="showTab('employment')" id="tab-employment" class="px-4 py-3 text-sm font-semibold text-slate-400 border-b-2 border-transparent hover:text-white whitespace-nowrap">
+                {{ t('employment', 'Employment') }}
+            </button>
+            <button onclick="showTab('leave')" id="tab-leave" class="px-4 py-3 text-sm font-semibold text-slate-400 border-b-2 border-transparent hover:text-white whitespace-nowrap">
+                {{ t('leave', 'Leave') }}
+            </button>
+            <button onclick="showTab('attendance')" id="tab-attendance" class="px-4 py-3 text-sm font-semibold text-slate-400 border-b-2 border-transparent hover:text-white whitespace-nowrap">
+                {{ t('attendance', 'Attendance') }}
+            </button>
+            <button onclick="showTab('documents')" id="tab-documents" class="px-4 py-3 text-sm font-semibold text-slate-400 border-b-2 border-transparent hover:text-white whitespace-nowrap">
+                {{ t('documents', 'Documents') }}
+            </button>
+        </nav>
+    </div>
+
+    <!-- Tab Content -->
+    <div id="content-overview" class="tab-content">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Profile Card -->
+            <div class="glass-panel rounded-2xl p-6 text-center">
+                <div class="w-24 h-24 rounded-full bg-brand-500/20 mx-auto flex items-center justify-center mb-4">
+                    <span class="text-3xl font-bold text-brand-400">{{ employee.first_name[0] }}{{ employee.last_name[0] }}</span>
+                </div>
+                <h3 class="text-xl font-bold text-white">{{ employee.first_name }} {{ employee.last_name }}</h3>
+                <p class="text-slate-400">{{ employee.email or '' }}</p>
+                <p class="text-brand-400 text-sm mt-1">{{ employee.employee_code }}</p>
+                
+                <div class="mt-6 pt-6 border-t border-white/10 space-y-3">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-400">{{ t('hire_date', 'Hire Date') }}</span>
+                        <span class="text-white">{{ employee.hire_date or '-' }}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-400">{{ t('department', 'Department') }}</span>
+                        <span class="text-white">{{ employment.department_name if employment else '-' }}</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-slate-400">{{ t('position', 'Position') }}</span>
+                        <span class="text-white">{{ employment.position_title if employment else '-' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- This Month Attendance -->
+                <div class="glass-panel rounded-2xl p-6">
+                    <h3 class="text-lg font-bold text-white mb-4">{{ t('this_month_attendance', 'This Month Attendance') }}</h3>
+                    <div class="grid grid-cols-4 gap-4">
+                        <div class="bg-emerald-500/10 rounded-xl p-4 text-center">
+                            <div class="text-2xl font-bold text-emerald-400">{{ attendance_summary.present if attendance_summary else 0 }}</div>
+                            <div class="text-xs text-slate-400 mt-1">{{ t('present', 'Present') }}</div>
+                        </div>
+                        <div class="bg-red-500/10 rounded-xl p-4 text-center">
+                            <div class="text-2xl font-bold text-red-400">{{ attendance_summary.absent if attendance_summary else 0 }}</div>
+                            <div class="text-xs text-slate-400 mt-1">{{ t('absent', 'Absent') }}</div>
+                        </div>
+                        <div class="bg-amber-500/10 rounded-xl p-4 text-center">
+                            <div class="text-2xl font-bold text-amber-400">{{ attendance_summary.late if attendance_summary else 0 }}</div>
+                            <div class="text-xs text-slate-400 mt-1">{{ t('late', 'Late') }}</div>
+                        </div>
+                        <div class="bg-cyan-500/10 rounded-xl p-4 text-center">
+                            <div class="text-2xl font-bold text-cyan-400">{{ "%.1f"|format(attendance_summary.overtime_hours or 0) }}</div>
+                            <div class="text-xs text-slate-400 mt-1">{{ t('ot_hours', 'OT Hours') }}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Leave Balances -->
+                <div class="glass-panel rounded-2xl p-6">
+                    <h3 class="text-lg font-bold text-white mb-4">{{ t('leave_balances', 'Leave Balances') }}</h3>
+                    <div class="space-y-3">
+                        {% for balance in leave_balances %}
+                        <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg bg-brand-500/10 flex items-center justify-center">
+                                    <span class="text-brand-400 text-xs font-bold">{{ balance.leave_type_code }}</span>
+                                </div>
+                                <span class="text-white">{{ balance.leave_type_name }}</span>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                <div class="text-right">
+                                    <div class="text-white font-bold">{{ "%.1f"|format(balance.balance_days) }}</div>
+                                    <div class="text-xs text-slate-400">{{ t('remaining', 'Remaining') }}</div>
+                                </div>
+                                <div class="w-24 h-2 bg-white/10 rounded-full overflow-hidden">
+                                    <div class="h-full bg-brand-500 rounded-full" style="width: {{ (balance.balance_days / balance.total_days * 100) if balance.total_days > 0 else 0 }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        {% else %}
+                        <p class="text-slate-500 text-center py-4">{{ t('no_leave_balances', 'No leave balances found') }}</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="content-personal" class="tab-content hidden">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('personal_information', 'Personal Information') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('date_of_birth', 'Date of Birth') }}</label>
+                    <p class="text-white">{{ employee.date_of_birth or '-' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('gender', 'Gender') }}</label>
+                    <p class="text-white">{{ employee.gender or '-' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('nationality', 'Nationality') }}</label>
+                    <p class="text-white">{{ employee.nationality or '-' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('marital_status', 'Marital Status') }}</label>
+                    <p class="text-white">{{ employee.marital_status or '-' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('mobile', 'Mobile') }}</label>
+                    <p class="text-white">{{ employee.mobile or '-' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('email', 'Email') }}</label>
+                    <p class="text-white">{{ employee.email or '-' }}</p>
+                </div>
+                <div class="md:col-span-3">
+                    <label class="text-sm text-slate-400">{{ t('address', 'Address') }}</label>
+                    <p class="text-white">{{ employee.address or '-' }}, {{ employee.city or '' }}, {{ employee.country or '' }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="content-employment" class="tab-content hidden">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('employment_details', 'Employment Details') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('employee_code', 'Employee Code') }}</label>
+                    <p class="text-white font-bold">{{ employee.employee_code }}</p>
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('employment_type', 'Employment Type') }}</label>
+                    <p class="text-white">{{ employee.employment_type or 'Full-time' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('hire_date', 'Hire Date') }}</label>
+                    <p class="text-white">{{ employee.hire_date or '-' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('confirmation_date', 'Confirmation Date') }}</label>
+                    <p class="text-white">{{ employee.confirmation_date or '-' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('probation_end_date', 'Probation End Date') }}</label>
+                    <p class="text-white">{{ employee.probation_end_date or '-' }}</p>
+                </div>
+                {% if employment %}
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('reporting_to', 'Reporting To') }}</label>
+                    <p class="text-white">{{ employment.manager_name or '-' }}</p>
+                </div>
+                <div>
+                    <label class="text-sm text-slate-400">{{ t('shift', 'Shift') }}</label>
+                    <p class="text-white">{{ employment.shift_name or '-' }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div id="content-leave" class="tab-content hidden">
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white">{{ t('leave_requests', 'Leave Requests') }}</h3>
+                <a href="{{ url_for('hr.leave_new') }}" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-sm rounded-lg transition-all">
+                    <i class="fa-solid fa-plus mr-1"></i>{{ t('request_leave', 'Request Leave') }}
+                </a>
+            </div>
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/10">
+                        <th class="py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('type', 'Type') }}</th>
+                        <th class="py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('from', 'From') }}</th>
+                        <th class="py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('to', 'To') }}</th>
+                        <th class="py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('days', 'Days') }}</th>
+                        <th class="py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('status', 'Status') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for req in leave_requests %}
+                    <tr>
+                        <td class="py-3 text-white">{{ req.leave_type_name }}</td>
+                        <td class="py-3 text-slate-300">{{ req.start_date }}</td>
+                        <td class="py-3 text-slate-300">{{ req.end_date }}</td>
+                        <td class="py-3 text-slate-300">{{ req.total_days }}</td>
+                        <td class="py-3">
+                            {% if req.status == 'Approved' %}
+                            <span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ t('approved', 'Approved') }}</span>
+                            {% elif req.status == 'Pending' %}
+                            <span class="px-2 py-1 bg-amber-500/10 text-amber-400 text-xs font-bold rounded-full">{{ t('pending', 'Pending') }}</span>
+                            {% else %}
+                            <span class="px-2 py-1 bg-red-500/10 text-red-400 text-xs font-bold rounded-full">{{ t('rejected', 'Rejected') }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="py-6 text-center text-slate-500">{{ t('no_leave_requests', 'No leave requests') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="content-attendance" class="tab-content hidden">
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white">{{ t('attendance_summary', 'Attendance Summary') }}</h3>
+                <a href="{{ url_for('hr.attendance_list') }}?employee_id={{ employee.id }}" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-sm rounded-lg transition-all">
+                    {{ t('view_all', 'View All') }}
+                </a>
+            </div>
+            {% if attendance_summary %}
+            <div class="grid grid-cols-4 gap-4">
+                <div class="bg-emerald-500/10 rounded-xl p-4 text-center">
+                    <div class="text-2xl font-bold text-emerald-400">{{ attendance_summary.present or 0 }}</div>
+                    <div class="text-xs text-slate-400 mt-1">{{ t('days_present', 'Days Present') }}</div>
+                </div>
+                <div class="bg-red-500/10 rounded-xl p-4 text-center">
+                    <div class="text-2xl font-bold text-red-400">{{ attendance_summary.absent or 0 }}</div>
+                    <div class="text-xs text-slate-400 mt-1">{{ t('days_absent', 'Days Absent') }}</div>
+                </div>
+                <div class="bg-amber-500/10 rounded-xl p-4 text-center">
+                    <div class="text-2xl font-bold text-amber-400">{{ attendance_summary.late or 0 }}</div>
+                    <div class="text-xs text-slate-400 mt-1">{{ t('late_arrivals', 'Late Arrivals') }}</div>
+                </div>
+                <div class="bg-cyan-500/10 rounded-xl p-4 text-center">
+                    <div class="text-2xl font-bold text-cyan-400">{{ "%.1f"|format(attendance_summary.overtime_hours or 0) }}</div>
+                    <div class="text-xs text-slate-400 mt-1">{{ t('ot_hours', 'OT Hours') }}</div>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-slate-500 text-center py-8">{{ t('no_attendance_data', 'No attendance data for this month') }}</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div id="content-documents" class="tab-content hidden">
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white">{{ t('documents', 'Documents') }}</h3>
+                <a href="{{ url_for('hr.documents_new') }}" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-sm rounded-lg transition-all">
+                    <i class="fa-solid fa-plus mr-1"></i>{{ t('add_document', 'Add Document') }}
+                </a>
+            </div>
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/10">
+                        <th class="py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('type', 'Type') }}</th>
+                        <th class="py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('document', 'Document') }}</th>
+                        <th class="py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('number', 'Number') }}</th>
+                        <th class="py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('expiry', 'Expiry') }}</th>
+                        <th class="py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('status', 'Status') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for doc in documents %}
+                    <tr>
+                        <td class="py-3 text-white">{{ doc.document_type }}</td>
+                        <td class="py-3 text-slate-300">{{ doc.document_name }}</td>
+                        <td class="py-3 text-slate-300">{{ doc.document_number or '-' }}</td>
+                        <td class="py-3 text-slate-300">{{ doc.expiry_date or '-' }}</td>
+                        <td class="py-3">
+                            {% if doc.expiry_date and doc.expiry_date < now %}
+                            <span class="px-2 py-1 bg-red-500/10 text-red-400 text-xs font-bold rounded-full">{{ t('expired', 'Expired') }}</span>
+                            {% elif doc.is_verified %}
+                            <span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ t('verified', 'Verified') }}</span>
+                            {% else %}
+                            <span class="px-2 py-1 bg-slate-500/10 text-slate-400 text-xs font-bold rounded-full">{{ t('pending', 'Pending') }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="py-6 text-center text-slate-500">{{ t('no_documents', 'No documents') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+function showTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    
+    // Reset all tab buttons
+    document.querySelectorAll('[id^="tab-"]').forEach(el => {
+        el.classList.remove('text-brand-400', 'border-brand-400');
+        el.classList.add('text-slate-400', 'border-transparent');
+    });
+    
+    // Show selected tab
+    document.getElementById('content-' + tabName).classList.remove('hidden');
+    
+    // Highlight selected tab
+    const selectedTab = document.getElementById('tab-' + tabName);
+    selectedTab.classList.remove('text-slate-400', 'border-transparent');
+    selectedTab.classList.add('text-brand-400', 'border-brand-400');
+}
+</script>
+{% endblock %}

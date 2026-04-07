@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - {{ get_setting('platform_name', 'WHDASH') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>{% include 'theme_variables.html' %}</style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+{% include 'admin_sidebar.html' %}
+<div class="ml-64 min-h-screen">
+    {% include 'admin_header.html' %}
+    <main class="p-6">
+        <div class="mb-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
+                <p class="text-slate-600 dark:text-slate-400 mt-1">Configure automatic numbering formats for business documents</p>
+            </div>
+            <button onclick="showAddModal()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                <i class="fas fa-plus mr-2"></i>Add Rule
+            </button>
+        </div>
+
+        <!-- Rules List -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-slate-50 dark:bg-slate-700">
+                    <tr>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Entity Type</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Prefix</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Format</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Current</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Reset</th>
+                        <th class="px-6 py-4 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Scope</th>
+                        <th class="px-6 py-4 text-right text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                    {% for rule in rules %}
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                        <td class="px-6 py-4">
+                            <span class="font-medium text-slate-800 dark:text-white">{{ rule.entity_type }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <code class="text-sm bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded">{{ rule.prefix }}</code>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-sm text-slate-600 dark:text-slate-400">{{ rule.format_pattern }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-lg font-mono font-bold text-blue-600">{{ rule.current_value }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-sm text-slate-600 dark:text-slate-400">{{ rule.reset_period or 'Never' }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-600 text-slate-600 dark:text-slate-300">{{ rule.scope_level or 'GLOBAL' }}</span>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <button onclick='editRule({{ rule|tojson }})' class="p-2 text-slate-400 hover:text-blue-600 transition-colors">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="resetCounter({{ rule.id }})" class="p-2 text-slate-400 hover:text-green-600 transition-colors">
+                                <i class="fas fa-redo"></i>
+                            </button>
+                            <button onclick="deleteRule({{ rule.id }})" class="p-2 text-slate-400 hover:text-red-600 transition-colors">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-6 py-8 text-center text-slate-500 dark:text-slate-400">
+                            <i class="fas fa-list text-4xl mb-3"></i>
+                            <p>No numbering rules configured yet.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </main>
+</div>
+
+<!-- Add/Edit Modal -->
+<div id="ruleModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-lg mx-4">
+        <div class="flex items-center justify-between p-6 border-b border-slate-200 dark:border-slate-700">
+            <h3 class="text-xl font-semibold text-slate-800 dark:text-white" id="modalTitle">Add Numbering Rule</h3>
+            <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+        </div>
+        <form method="post" action="{{ url_for('admin_numbering_save') }}" class="p-6 space-y-4">
+            <input type="hidden" name="rule_id" id="rule_id">
+            <div>
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Entity Type *</label>
+                <select name="entity_type" id="entity_type" required class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                    <option value="QUOTATION">Quotation</option>
+                    <option value="ORDER">Sales Order</option>
+                    <option value="INVOICE">Invoice</option>
+                    <option value="DELIVERY">Delivery Note</option>
+                    <option value="CUSTOMER">Customer Code</option>
+                    <option value="EMPLOYEE">Employee ID</option>
+                    <option value="TASK">Task Number</option>
+                    <option value="ISSUE">Issue Number</option>
+                </select>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Prefix *</label>
+                    <input type="text" name="prefix" id="prefix" required class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white" placeholder="QT-">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Digits *</label>
+                    <input type="number" name="digits" id="digits" required value="5" min="1" max="10" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Date Pattern</label>
+                <input type="text" name="date_pattern" id="date_pattern" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white" placeholder="YYYYMM or leave empty">
+                <p class="text-xs text-slate-500 mt-1">YYYY=year, MM=month, DD=day</p>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Reset Period</label>
+                <select name="reset_period" id="reset_period" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                    <option value="">Never</option>
+                    <option value="DAILY">Daily</option>
+                    <option value="MONTHLY">Monthly</option>
+                    <option value="YEARLY">Yearly</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Scope Level</label>
+                <select name="scope_level" id="scope_level" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                    <option value="GLOBAL">Global</option>
+                    <option value="COMPANY">Company</option>
+                    <option value="BRANCH">Branch</option>
+                </select>
+            </div>
+            <div class="flex justify-end gap-3 pt-4">
+                <button type="button" onclick="closeModal()" class="px-5 py-2.5 border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700">Cancel</button>
+                <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">Save Rule</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showAddModal() {
+    document.getElementById('modalTitle').textContent = 'Add Numbering Rule';
+    document.getElementById('rule_id').value = '';
+    document.getElementById('ruleModal').classList.remove('hidden');
+}
+function editRule(rule) {
+    document.getElementById('modalTitle').textContent = 'Edit Numbering Rule';
+    document.getElementById('rule_id').value = rule.id;
+    document.getElementById('entity_type').value = rule.entity_type;
+    document.getElementById('prefix').value = rule.prefix;
+    document.getElementById('digits').value = rule.digits;
+    document.getElementById('date_pattern').value = rule.date_pattern || '';
+    document.getElementById('reset_period').value = rule.reset_period || '';
+    document.getElementById('ruleModal').classList.remove('hidden');
+}
+function closeModal() {
+    document.getElementById('ruleModal').classList.add('hidden');
+}
+function resetCounter(id) {
+    if (confirm('Reset counter to 0?')) {
+        fetch('/admin/api/numbering/' + id + '/reset', {method: 'POST'}).then(() => location.reload());
+    }
+}
+function deleteRule(id) {
+    if (confirm('Delete this rule?')) {
+        fetch('/admin/api/numbering/' + id + '/delete', {method: 'POST'}).then(() => location.reload());
+    }
+}
+</script>
+{% include 'admin_scripts.html' %}
+</body>
+</html>

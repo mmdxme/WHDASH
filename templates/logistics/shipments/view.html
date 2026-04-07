@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('logistics.shipments_list') }}" class="p-2 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-all">
+                <i class="fa-solid fa-arrow-left"></i>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-white flex items-center gap-3">
+                    {{ shipment.shipment_code }}
+                    <span class="px-3 py-1 rounded-full text-xs font-medium
+                        {% if shipment.status == 'delivered' %}bg-emerald-500/10 text-emerald-400
+                        {% elif shipment.status == 'in_transit' %}bg-blue-500/10 text-blue-400
+                        {% elif shipment.status == 'failed_delivery' %}bg-red-500/10 text-red-400
+                        {% elif shipment.status == 'returned' %}bg-purple-500/10 text-purple-400
+                        {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                        {{ shipment.status }}
+                    </span>
+                    <span class="px-2 py-1 rounded-full text-xs font-medium
+                        {% if shipment.priority == 'Urgent' %}bg-red-500/10 text-red-400
+                        {% elif shipment.priority == 'High' %}bg-amber-500/10 text-amber-400
+                        {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                        {{ shipment.priority }}
+                    </span>
+                </h1>
+                <p class="text-slate-400 text-sm mt-1">Created {{ shipment.created_at[:10] if shipment.created_at else '' }}</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('logistics.shipments_edit', id=shipment.id) }}" class="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-pencil mr-2"></i>Edit
+            </a>
+            {% if shipment.status not in ['delivered', 'cancelled', 'returned'] %}
+            <div class="relative" x-data="{ open: false }">
+                <button @click="open = !open" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                    <i class="fa-solid fa-sync mr-2"></i>Update Status <i class="fa-solid fa-chevron-down ml-1 text-xs"></i>
+                </button>
+                <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+                    <form action="{{ url_for('logistics.shipments_update_status', id=shipment.id) }}" method="POST">
+                        <input type="hidden" name="status" value="planned">
+                        <button type="submit" class="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-all">Mark as Planned</button>
+                    </form>
+                    <form action="{{ url_for('logistics.shipments_update_status', id=shipment.id) }}" method="POST">
+                        <input type="hidden" name="status" value="ready_dispatch">
+                        <button type="submit" class="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-all">Ready to Dispatch</button>
+                    </form>
+                    <form action="{{ url_for('logistics.shipments_update_status', id=shipment.id) }}" method="POST">
+                        <input type="hidden" name="status" value="assigned">
+                        <button type="submit" class="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-all">Assign Driver/Vehicle</button>
+                    </form>
+                    <form action="{{ url_for('logistics.shipments_update_status', id=shipment.id) }}" method="POST">
+                        <input type="hidden" name="status" value="in_transit">
+                        <button type="submit" class="w-full text-left px-4 py-2.5 text-sm text-slate-300 hover:bg-white/5 hover:text-white transition-all">In Transit</button>
+                    </form>
+                    <form action="{{ url_for('logistics.shipments_update_status', id=shipment.id) }}" method="POST">
+                        <input type="hidden" name="status" value="delivered">
+                        <button type="submit" class="w-full text-left px-4 py-2.5 text-sm text-emerald-400 hover:bg-white/5 transition-all">Delivered</button>
+                    </form>
+                    <form action="{{ url_for('logistics.shipments_update_status', id=shipment.id) }}" method="POST">
+                        <input type="hidden" name="status" value="failed_delivery">
+                        <button type="submit" class="w-full text-left px-4 py-2.5 text-sm text-red-400 hover:bg-white/5 transition-all">Failed Delivery</button>
+                    </form>
+                    <form action="{{ url_for('logistics.shipments_update_status', id=shipment.id) }}" method="POST">
+                        <input type="hidden" name="status" value="returned">
+                        <button type="submit" class="w-full text-left px-4 py-2.5 text-sm text-purple-400 hover:bg-white/5 transition-all">Returned</button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Info Cards Row -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Type</p>
+            <p class="text-lg font-bold text-white capitalize">{{ shipment.shipment_type }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Customer</p>
+            <p class="text-lg font-bold text-white">{{ shipment.customer_name or shipment.consignee_name or '-' }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Driver</p>
+            <p class="text-lg font-bold text-white">{{ shipment.driver_name or 'Unassigned' }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs font-medium text-slate-400 uppercase tracking-wider mb-2">Vehicle</p>
+            <p class="text-lg font-bold text-white">{{ shipment.plate_number or 'Unassigned' }}</p>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Column -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Details Card -->
+            <div class="glass-panel rounded-2xl p-6">
+                <h2 class="text-lg font-bold text-white mb-5">Shipment Details</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Delivery Address</label>
+                        <p class="text-white">{{ shipment.delivery_address or '-' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Pickup Address</label>
+                        <p class="text-white">{{ shipment.pickup_address or '-' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Consignee Name</label>
+                        <p class="text-white">{{ shipment.consignee_name or '-' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Consignee Phone</label>
+                        <p class="text-white">{{ shipment.consignee_phone or '-' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Planned Date</label>
+                        <p class="text-white">{{ shipment.planned_date or '-' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Estimated Delivery</label>
+                        <p class="text-white">{{ shipment.estimated_delivery or '-' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Actual Delivery</label>
+                        <p class="text-white">{{ shipment.actual_delivery[:16] if shipment.actual_delivery else '-' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Transport Mode</label>
+                        <p class="text-white">{{ shipment.transport_mode or '-' }}</p>
+                    </div>
+                </div>
+                {% if shipment.notes %}
+                <div class="mt-6 pt-6 border-t border-white/5">
+                    <label class="block text-sm font-medium text-slate-400 mb-1">Notes</label>
+                    <p class="text-white">{{ shipment.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Shipment Lines -->
+            {% if lines %}
+            <div class="glass-panel rounded-2xl p-6">
+                <h2 class="text-lg font-bold text-white mb-5">Shipment Items</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-slate-400 border-b border-white/5">
+                                <th class="text-left py-3 px-4 font-medium">Description</th>
+                                <th class="text-left py-3 px-4 font-medium">Qty</th>
+                                <th class="text-left py-3 px-4 font-medium">Unit</th>
+                                <th class="text-left py-3 px-4 font-medium">Weight</th>
+                                <th class="text-left py-3 px-4 font-medium">Volume</th>
+                                <th class="text-left py-3 px-4 font-medium">Cartons</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for line in lines %}
+                            <tr class="border-b border-white/5">
+                                <td class="py-3 px-4 text-white">{{ line.description }}</td>
+                                <td class="py-3 px-4 text-slate-300">{{ line.quantity }}</td>
+                                <td class="py-3 px-4 text-slate-300">{{ line.unit }}</td>
+                                <td class="py-3 px-4 text-slate-300">{{ line.weight or '-' }}</td>
+                                <td class="py-3 px-4 text-slate-300">{{ line.volume or '-' }}</td>
+                                <td class="py-3 px-4 text-slate-300">{{ line.cartons or '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- POD -->
+            {% if pod %}
+            <div class="glass-panel rounded-2xl p-6">
+                <h2 class="text-lg font-bold text-white mb-5">Proof of Delivery</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Receiver Name</label>
+                        <p class="text-white">{{ pod.receiver_name }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Receiver Phone</label>
+                        <p class="text-white">{{ pod.receiver_phone or '-' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Delivered At</label>
+                        <p class="text-white">{{ pod.delivery_timestamp[:16] if pod.delivery_timestamp else '-' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Status</label>
+                        <p class="text-emerald-400 font-medium">{{ pod.delivery_status }}</p>
+                    </div>
+                    {% if pod.notes %}
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-slate-400 mb-1">Notes</label>
+                        <p class="text-white">{{ pod.notes }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Incidents -->
+            {% if incidents %}
+            <div class="glass-panel rounded-2xl p-6">
+                <h2 class="text-lg font-bold text-white mb-5">Incidents</h2>
+                <div class="space-y-3">
+                    {% for inc in incidents %}
+                    <div class="p-4 bg-red-500/5 border border-red-500/20 rounded-xl">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-red-400 font-medium">{{ inc.incident_type }}</p>
+                                <p class="text-slate-400 text-sm">{{ inc.description[:100] }}</p>
+                            </div>
+                            <span class="px-2 py-1 rounded-full text-xs font-medium
+                                {% if inc.status == 'open' %}bg-red-500/10 text-red-400{% else %}bg-emerald-500/10 text-emerald-400{% endif %}">
+                                {{ inc.status }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Column -->
+        <div class="space-y-6">
+            <!-- Quick Actions -->
+            <div class="glass-panel rounded-2xl p-6">
+                <h2 class="text-lg font-bold text-white mb-5">Quick Actions</h2>
+                <div class="space-y-3">
+                    {% if shipment.status not in ['delivered', 'cancelled', 'returned'] %}
+                    <a href="{{ url_for('logistics.pod_new', shipment_id=shipment.id) }}" class="flex items-center gap-3 p-3 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-xl text-emerald-400 transition-all">
+                        <i class="fa-solid fa-file-signature"></i>
+                        <span class="text-sm font-medium">Record POD</span>
+                    </a>
+                    <a href="{{ url_for('logistics.incidents_new') }}?shipment_id={{ shipment.id }}" class="flex items-center gap-3 p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl text-red-400 transition-all">
+                        <i class="fa-solid fa-exclamation-circle"></i>
+                        <span class="text-sm font-medium">Report Incident</span>
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('logistics.costs_new') }}?shipment_id={{ shipment.id }}" class="flex items-center gap-3 p-3 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-xl text-blue-400 transition-all">
+                        <i class="fa-solid fa-dollar-sign"></i>
+                        <span class="text-sm font-medium">Add Cost</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Cost Summary -->
+            {% if costs %}
+            <div class="glass-panel rounded-2xl p-6">
+                <h2 class="text-lg font-bold text-white mb-5">Cost Summary</h2>
+                <div class="space-y-3">
+                    {% for cost in costs[:5] %}
+                    <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                        <div>
+                            <p class="text-white text-sm">{{ cost.cost_type }}</p>
+                            <p class="text-slate-400 text-xs">{{ cost.description[:50] if cost.description else '' }}</p>
+                        </div>
+                        <span class="text-amber-400 font-bold">{{ cost.currency }} {{ "%.2f"|format(cost.amount) }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
+                    <span class="text-slate-400 font-medium">Total</span>
+                    <span class="text-white font-bold text-lg">
+                        AED {{ "%.2f"|format(costs|sum(attribute='amount')) }}
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Status History -->
+            <div class="glass-panel rounded-2xl p-6">
+                <h2 class="text-lg font-bold text-white mb-5">Status History</h2>
+                {% if history %}
+                <div class="space-y-4">
+                    {% for h in history %}
+                    <div class="flex gap-4">
+                        <div class="w-2 h-2 rounded-full bg-brand-500 mt-2 flex-shrink-0"></div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-white text-sm font-medium">{{ h.to_status }}</span>
+                                {% if h.from_status %}
+                                <span class="text-slate-500 text-xs"><i class="fa-solid fa-arrow-right mr-1"></i>{{ h.from_status }}</span>
+                                {% endif %}
+                            </div>
+                            <p class="text-slate-400 text-xs mt-1">{{ h.changed_at[:16] if h.changed_at else '' }}</p>
+                            {% if h.reason %}
+                            <p class="text-slate-500 text-xs mt-1 italic">{{ h.reason }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-sm">No history available</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

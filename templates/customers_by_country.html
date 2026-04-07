@@ -1,0 +1,556 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-8 fade-in">
+
+    <!-- Page Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-3 mb-1">
+                <a href="{{ url_for('customers_reports') }}" class="p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-arrow-left text-sm"></i>
+                </a>
+                <div>
+                    <h1 class="text-2xl font-extrabold text-white tracking-tight">
+                        <i class="fa-solid fa-globe text-brand-400 mr-2"></i>{{ title }}
+                    </h1>
+                    <p class="text-slate-500 text-sm mt-0.5">{{ summary.total_customers }} {{ t('total_customers', 'total customers') }} &middot; {{ countries|length }} {{ t('countries', 'countries') }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="exportTable()" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-sm font-medium text-slate-300 hover:text-white">
+                <i class="fa-solid fa-file-export text-brand-400"></i>
+                {{ t('export_csv', 'Export CSV') }}
+            </button>
+            <button onclick="printReport()" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-sm font-medium text-slate-300 hover:text-white">
+                <i class="fa-solid fa-print text-brand-400"></i>
+                {{ t('print', 'Print') }}
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Total Customers -->
+        <div class="glass-panel rounded-2xl p-5 relative overflow-hidden group hover:border-brand-500/30 transition-all duration-300">
+            <div class="absolute top-0 right-0 w-24 h-24 rounded-full bg-brand-500/10 -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500"></div>
+            <div class="relative">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('total_customers', 'Total Customers') }}</span>
+                    <div class="w-9 h-9 rounded-xl bg-brand-500/15 flex items-center justify-center">
+                        <i class="fa-solid fa-users text-brand-400 text-sm"></i>
+                    </div>
+                </div>
+                <p class="text-3xl font-extrabold text-white tabular-nums">{{ summary.total_customers }}</p>
+                <div class="mt-2 flex items-center gap-1.5">
+                    <span class="inline-flex items-center gap-1 text-xs font-semibold text-emerald-400">
+                        <i class="fa-solid fa-arrow-up text-[10px]"></i>{{ summary.export_customers }}
+                    </span>
+                    <span class="text-xs text-slate-600">{{ t('export', 'Export') }}</span>
+                    <span class="text-slate-700 mx-1">&middot;</span>
+                    <span class="inline-flex items-center gap-1 text-xs font-semibold text-amber-400">
+                        {{ summary.total_customers - summary.export_customers }}
+                    </span>
+                    <span class="text-xs text-slate-600">{{ t('domestic', 'Domestic') }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Purchases -->
+        <div class="glass-panel rounded-2xl p-5 relative overflow-hidden group hover:border-purple-500/30 transition-all duration-300">
+            <div class="absolute top-0 right-0 w-24 h-24 rounded-full bg-purple-500/10 -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500"></div>
+            <div class="relative">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('total_purchases', 'Total Purchases') }}</span>
+                    <div class="w-9 h-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
+                        <i class="fa-solid fa-dollar-sign text-purple-400 text-sm"></i>
+                    </div>
+                </div>
+                <p class="text-3xl font-extrabold text-white tabular-nums">{{ "{:,.0f}".format(summary.total_purchases or 0) }}</p>
+                <p class="mt-2 text-xs text-slate-500">{{ t('across_all_countries', 'Across all countries') }}</p>
+            </div>
+        </div>
+
+        <!-- Outstanding Credit -->
+        <div class="glass-panel rounded-2xl p-5 relative overflow-hidden group hover:border-red-500/30 transition-all duration-300">
+            <div class="absolute top-0 right-0 w-24 h-24 rounded-full bg-red-500/10 -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500"></div>
+            <div class="relative">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('outstanding', 'Outstanding') }}</span>
+                    <div class="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center">
+                        <i class="fa-solid fa-exclamation-triangle text-red-400 text-sm"></i>
+                    </div>
+                </div>
+                <p class="text-3xl font-extrabold text-red-400 tabular-nums">{{ "{:,.0f}".format(summary.total_outstanding or 0) }}</p>
+                <div class="mt-2 flex items-center gap-1.5">
+                    <span class="text-xs text-slate-500">{{ t('credit_limit', 'Credit Limit') }}:</span>
+                    <span class="text-xs font-bold text-slate-300 tabular-nums">{{ "{:,.0f}".format(summary.total_credit_limit or 0) }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Average Purchase -->
+        <div class="glass-panel rounded-2xl p-5 relative overflow-hidden group hover:border-emerald-500/30 transition-all duration-300">
+            <div class="absolute top-0 right-0 w-24 h-24 rounded-full bg-emerald-500/10 -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-500"></div>
+            <div class="relative">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('avg_purchase', 'Avg. Purchase') }}</span>
+                    <div class="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+                        <i class="fa-solid fa-chart-line text-emerald-400 text-sm"></i>
+                    </div>
+                </div>
+                <p class="text-3xl font-extrabold text-emerald-400 tabular-nums">{{ "{:,.0f}".format(summary.average_purchase or 0) }}</p>
+                <p class="mt-2 text-xs text-slate-500">{{ t('per_customer', 'per customer') }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- Bar Chart: Top Countries by Customers -->
+        <div class="lg:col-span-2 glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-base font-bold text-white">{{ t('customers_by_country', 'Customers by Country') }}</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">{{ t('bar_chart_desc', 'Number of customers per country') }}</p>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-chart-bar text-brand-400"></i>
+                </div>
+            </div>
+            <div class="relative" style="height: 280px;">
+                <canvas id="barChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Doughnut Chart: Export vs Domestic -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-base font-bold text-white">{{ t('export_domestic', 'Export vs Domestic') }}</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">{{ t('customer_type_breakdown', 'Customer type breakdown') }}</p>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-chart-pie text-purple-400"></i>
+                </div>
+            </div>
+            <div class="relative" style="height: 240px;">
+                <canvas id="doughnutChart"></canvas>
+            </div>
+            <div class="mt-6 space-y-2">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-brand-500"></div>
+                        <span class="text-xs text-slate-400">{{ t('domestic', 'Domestic') }}</span>
+                    </div>
+                    <span class="text-sm font-bold text-slate-200 tabular-nums">{{ summary.total_customers - summary.export_customers }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-purple-500"></div>
+                        <span class="text-xs text-slate-400">{{ t('export', 'Export') }}</span>
+                    </div>
+                    <span class="text-sm font-bold text-slate-200 tabular-nums">{{ summary.export_customers }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Second Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- Line Chart: Purchases by Country -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-base font-bold text-white">{{ t('purchases_by_country', 'Purchases by Country') }}</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">{{ t('total_sales_per_country', 'Total sales per country') }}</p>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-chart-line text-emerald-400"></i>
+                </div>
+            </div>
+            <div class="relative" style="height: 240px;">
+                <canvas id="lineChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Horizontal Bar: Credit Utilization -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-base font-bold text-white">{{ t('credit_utilization', 'Credit Utilization') }}</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">{{ t('outstanding_vs_credit_limit', 'Outstanding vs credit limit by country') }}</p>
+                </div>
+                <div class="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-credit-card text-red-400"></i>
+                </div>
+            </div>
+            <div class="relative" style="height: 240px;">
+                <canvas id="creditChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-6 pb-0">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h3 class="text-base font-bold text-white">{{ t('country_details', 'Country Details') }}</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">{{ t('detailed_breakdown', 'Detailed breakdown by country') }}</p>
+                </div>
+                <div class="relative">
+                    <input type="text" id="tableSearch" placeholder="{{ t('search_country', 'Search country...') }}" class="w-full sm:w-64 pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-slate-200 placeholder:text-slate-600 focus:ring-1 focus:ring-brand-500/50 focus:border-brand-500/50 transition-all">
+                    <i class="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+                </div>
+            </div>
+        </div>
+        <div class="p-6 pt-4">
+            <div class="overflow-x-auto rounded-xl">
+                <table class="w-full text-sm" id="countryTable">
+                    <thead>
+                        <tr class="border-b border-white/10">
+                            <th class="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('country', 'Country') }}</th>
+                            <th class="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('customers', 'Customers') }}</th>
+                            <th class="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('export', 'Export') }}</th>
+                            <th class="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('domestic', 'Domestic') }}</th>
+                            <th class="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('total_purchases', 'Total Purchases') }}</th>
+                            <th class="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('outstanding', 'Outstanding') }}</th>
+                            <th class="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('credit_limit', 'Credit Limit') }}</th>
+                            <th class="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-widest">{{ t('avg_purchase', 'Avg. Purchase') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                        {% for c in countries %}
+                        <tr class="border-b border-white/5 hover:bg-white/[0.03] transition-colors group">
+                            <td class="px-4 py-3.5">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 rounded-lg bg-brand-500/15 flex items-center justify-center flex-shrink-0">
+                                        <i class="fa-solid fa-globe text-brand-400 text-xs"></i>
+                                    </div>
+                                    <a href="{{ url_for('customers_reports', report_type='by_city', country=c.country) }}" class="font-semibold text-slate-200 hover:text-brand-400 transition-colors">
+                                        {{ c.country }}
+                                    </a>
+                                </div>
+                            </td>
+                            <td class="text-center px-4 py-3.5">
+                                <span class="inline-flex items-center justify-center min-w-[32px] px-2 py-0.5 rounded-lg bg-brand-500/15 text-brand-400 text-xs font-bold tabular-nums">
+                                    {{ c.customer_count }}
+                                </span>
+                            </td>
+                            <td class="text-center px-4 py-3.5">
+                                {% if c.export_count > 0 %}
+                                <span class="inline-flex items-center justify-center min-w-[32px] px-2 py-0.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-xs font-bold tabular-nums">
+                                    {{ c.export_count }}
+                                </span>
+                                {% else %}
+                                <span class="text-slate-600 text-xs">0</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center px-4 py-3.5">
+                                {% set domestic = c.customer_count - c.export_count %}
+                                {% if domestic > 0 %}
+                                <span class="inline-flex items-center justify-center min-w-[32px] px-2 py-0.5 rounded-lg bg-amber-500/15 text-amber-400 text-xs font-bold tabular-nums">
+                                    {{ domestic }}
+                                </span>
+                                {% else %}
+                                <span class="text-slate-600 text-xs">0</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right px-4 py-3.5 font-semibold text-slate-200 tabular-nums">{{ "{:,.0f}".format(c.total_sales or 0) }}</td>
+                            <td class="text-right px-4 py-3.5 font-semibold text-red-400 tabular-nums">{{ "{:,.0f}".format(c.total_outstanding or 0) }}</td>
+                            <td class="text-right px-4 py-3.5 text-slate-300 tabular-nums">{{ "{:,.0f}".format(c.credit_limit or 0) }}</td>
+                            <td class="text-right px-4 py-3.5 text-slate-400 tabular-nums">{{ "{:,.0f}".format(c.avg_sales or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="border-t-2 border-brand-500/30 bg-slate-900/50">
+                            <td class="px-4 py-4 font-bold text-white"><strong>{{ t('total', 'Total') }}</strong></td>
+                            <td class="text-center px-4 py-4"><strong class="text-brand-400 tabular-nums">{{ summary.total_customers }}</strong></td>
+                            <td class="text-center px-4 py-4"><strong class="text-emerald-400 tabular-nums">{{ summary.export_customers }}</strong></td>
+                            <td class="text-center px-4 py-4"><strong class="text-amber-400 tabular-nums">{{ summary.total_customers - summary.export_customers }}</strong></td>
+                            <td class="text-right px-4 py-4 font-bold text-white tabular-nums">{{ "{:,.0f}".format(summary.total_purchases) }}</td>
+                            <td class="text-right px-4 py-4 font-bold text-red-400 tabular-nums">{{ "{:,.0f}".format(summary.total_outstanding) }}</td>
+                            <td class="text-right px-4 py-4 font-bold text-slate-200 tabular-nums">{{ "{:,.0f}".format(summary.total_credit_limit) }}</td>
+                            <td class="text-right px-4 py-4 font-bold text-emerald-400 tabular-nums">{{ "{:,.0f}".format(summary.average_purchase) }}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <p class="text-xs text-slate-600 mt-3 text-center">{{ countries|length }} {{ t('countries_total', 'countries total') }}</p>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Chart Data ──────────────────────────────────────────────
+const chartData = {
+    labels: {{ countries|map(attribute='country')|list|tojson }},
+    customers: {{ countries|map(attribute='customer_count')|list|tojson }},
+    exports: {{ countries|map(attribute='export_count')|list|tojson }},
+    purchases: {{ countries|map(attribute='total_sales')|list|tojson }},
+    outstanding: {{ countries|map(attribute='total_outstanding')|list|tojson }},
+    creditLimits: {{ countries|map(attribute='credit_limit')|list|tojson }},
+    avgPurchases: {{ countries|map(attribute='avg_sales')|list|tojson }}
+};
+
+const totalCustomers = {{ summary.total_customers }};
+const totalExports = {{ summary.export_customers }};
+
+// ── Global Chart Defaults ───────────────────────────────────
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.05)';
+Chart.defaults.font.family = "'Outfit', sans-serif";
+
+// ── Bar Chart ──────────────────────────────────────────────
+new Chart(document.getElementById('barChart'), {
+    type: 'bar',
+    data: {
+        labels: chartData.labels,
+        datasets: [
+            {
+                label: 'Customers',
+                data: chartData.customers,
+                backgroundColor: 'rgba(14, 165, 233, 0.7)',
+                borderColor: 'rgba(14, 165, 233, 1)',
+                borderWidth: 1,
+                borderRadius: 8,
+                borderSkipped: false
+            },
+            {
+                label: 'Export',
+                data: chartData.exports,
+                backgroundColor: 'rgba(139, 92, 246, 0.7)',
+                borderColor: 'rgba(139, 92, 246, 1)',
+                borderWidth: 1,
+                borderRadius: 8,
+                borderSkipped: false
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'top',
+                align: 'end',
+                labels: { boxWidth: 12, boxHeight: 12, borderRadius: 4, useBorderRadius: true, padding: 16, font: { size: 12 } }
+            },
+            tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                borderColor: 'rgba(255,255,255,0.1)',
+                borderWidth: 1,
+                cornerRadius: 10,
+                padding: 12,
+                callbacks: {
+                    label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()}`
+                }
+            }
+        },
+        scales: {
+            x: {
+                grid: { display: false },
+                ticks: { font: { size: 11 }, maxRotation: 35 }
+            },
+            y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(255,255,255,0.03)' },
+                ticks: { font: { size: 11 }, callback: v => v.toLocaleString() }
+            }
+        }
+    }
+});
+
+// ── Doughnut Chart ─────────────────────────────────────────
+new Chart(document.getElementById('doughnutChart'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Domestic', 'Export'],
+        datasets: [{
+            data: [totalCustomers - totalExports, totalExports],
+            backgroundColor: ['rgba(14, 165, 233, 0.85)', 'rgba(139, 92, 246, 0.85)'],
+            borderColor: ['rgba(14, 165, 233, 1)', 'rgba(139, 92, 246, 1)'],
+            borderWidth: 2,
+            hoverOffset: 8
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '68%',
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                borderColor: 'rgba(255,255,255,0.1)',
+                borderWidth: 1,
+                cornerRadius: 10,
+                padding: 12,
+                callbacks: {
+                    label: ctx => {
+                        const pct = ((ctx.raw / totalCustomers) * 100).toFixed(1);
+                        return ` ${ctx.label}: ${ctx.raw.toLocaleString()} (${pct}%)`;
+                    }
+                }
+            }
+        }
+    }
+});
+
+// ── Line Chart ─────────────────────────────────────────────
+new Chart(document.getElementById('lineChart'), {
+    type: 'line',
+    data: {
+        labels: chartData.labels,
+        datasets: [{
+            label: 'Total Purchases',
+            data: chartData.purchases,
+            borderColor: 'rgba(16, 185, 129, 1)',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            borderWidth: 2.5,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointBackgroundColor: 'rgba(16, 185, 129, 1)',
+            pointBorderColor: 'rgba(15, 23, 42, 1)',
+            pointBorderWidth: 2,
+            pointHoverRadius: 6
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                borderColor: 'rgba(255,255,255,0.1)',
+                borderWidth: 1,
+                cornerRadius: 10,
+                padding: 12,
+                callbacks: {
+                    label: ctx => ` ${ctx.raw.toLocaleString()}`
+                }
+            }
+        },
+        scales: {
+            x: {
+                grid: { display: false },
+                ticks: { font: { size: 11 }, maxRotation: 35 }
+            },
+            y: {
+                beginAtZero: true,
+                grid: { color: 'rgba(255,255,255,0.03)' },
+                ticks: { font: { size: 11 }, callback: v => v.toLocaleString() }
+            }
+        }
+    }
+});
+
+// ── Horizontal Bar Chart: Credit Utilization ────────────────
+new Chart(document.getElementById('creditChart'), {
+    type: 'bar',
+    data: {
+        labels: chartData.labels,
+        datasets: [
+            {
+                label: 'Outstanding',
+                data: chartData.outstanding,
+                backgroundColor: 'rgba(239, 68, 68, 0.75)',
+                borderColor: 'rgba(239, 68, 68, 1)',
+                borderWidth: 1,
+                borderRadius: 6,
+                borderSkipped: false
+            },
+            {
+                label: 'Credit Limit',
+                data: chartData.creditLimits,
+                backgroundColor: 'rgba(148, 163, 184, 0.2)',
+                borderColor: 'rgba(148, 163, 184, 0.5)',
+                borderWidth: 1,
+                borderRadius: 6,
+                borderSkipped: false
+            }
+        ]
+    },
+    options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'top',
+                align: 'end',
+                labels: { boxWidth: 12, boxHeight: 12, borderRadius: 4, useBorderRadius: true, padding: 16, font: { size: 12 } }
+            },
+            tooltip: {
+                backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                borderColor: 'rgba(255,255,255,0.1)',
+                borderWidth: 1,
+                cornerRadius: 10,
+                padding: 12,
+                callbacks: {
+                    label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()}`
+                }
+            }
+        },
+        scales: {
+            x: {
+                beginAtZero: true,
+                grid: { color: 'rgba(255,255,255,0.03)' },
+                ticks: { font: { size: 11 }, callback: v => v.toLocaleString() }
+            },
+            y: {
+                grid: { display: false },
+                ticks: { font: { size: 11 } }
+            }
+        }
+    }
+});
+
+// ── Table Search ─────────────────────────────────────────────
+document.getElementById('tableSearch').addEventListener('input', function (e) {
+    const q = e.target.value.toLowerCase();
+    document.querySelectorAll('#tableBody tr').forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(q) ? '' : 'none';
+    });
+});
+
+// ── Export CSV ─────────────────────────────────────────────
+function exportTable() {
+    const rows = [['Country', 'Customers', 'Export', 'Domestic', 'Total Purchases', 'Outstanding', 'Credit Limit', 'Avg Purchase']];
+    {% for c in countries %}
+    rows.push([
+        {{ c.country|tojson }},
+        {{ c.customer_count }},
+        {{ c.export_count }},
+        {{ c.customer_count - c.export_count }},
+        {{ c.total_sales or 0 }},
+        {{ c.total_outstanding or 0 }},
+        {{ c.credit_limit or 0 }},
+        {{ c.avg_sales or 0 }}
+    ]);
+    {% endfor %}
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'customers_by_country.csv';
+    a.click();
+}
+
+// ── Print ───────────────────────────────────────────────────
+function printReport() {
+    window.print();
+}
+</script>
+{% endblock %}

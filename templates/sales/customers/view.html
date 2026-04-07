@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+        <div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="px-2 py-1 text-xs rounded-full {{ 'bg-green-100 text-green-800' if customer.status == 'Active' else 'bg-gray-100 text-gray-800' }}">
+                    {{ customer.status or 'Active' }}
+                </span>
+                <span class="px-2 py-1 text-xs rounded-full {{ 'bg-blue-100 text-blue-800' if customer.customer_type == 'Retail' else 'bg-purple-100 text-purple-800' }}">
+                    {{ customer.customer_type or 'Retail' }}
+                </span>
+                <span class="px-2 py-1 text-xs rounded-full {{ 'bg-green-100 text-green-800' if customer.market == 'Local' else 'bg-orange-100 text-orange-800' }}">
+                    {{ customer.market or 'Local' }}
+                </span>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">{{ customer.name }}</h1>
+            <p class="text-gray-500 dark:text-gray-400">
+                {% if customer.trade_name %}{{ customer.trade_name }} • {% endif %}
+                Code: {{ customer.customer_code or 'N/A' }}
+            </p>
+        </div>
+        <div class="mt-4 md:mt-0 flex gap-2">
+            <a href="{{ url_for('sales_inquiries_new') }}?customer_id={{ customer.id }}"
+               class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition inline-flex items-center gap-2">
+                <i class="fas fa-plus"></i> New Inquiry
+            </a>
+            <a href="{{ url_for('sales_quotations_new') }}?customer_id={{ customer.id }}"
+               class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition inline-flex items-center gap-2">
+                <i class="fas fa-file-invoice"></i> New Quote
+            </a>
+            <a href="{{ url_for('sales_customers_edit', customer_id=customer.id) }}"
+               class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition inline-flex items-center gap-2">
+                <i class="fas fa-edit"></i> Edit
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Column - Customer Details -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Basic Info Card -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4 border-b pb-2">
+                    <i class="fas fa-user mr-2 text-blue-500"></i> Customer Information
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Phone</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.phone or 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">WhatsApp</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.whatsapp or 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Email</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.email or 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Website</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.website or 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Country / City</label>
+                        <p class="text-gray-900 dark:text-white">{{ [customer.country, customer.city]|join(', ') if customer.country or customer.city else 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Address</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.address or 'N/A' }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Commercial Info Card -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4 border-b pb-2">
+                    <i class="fas fa-hand-holding-usd mr-2 text-yellow-500"></i> Commercial Information
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Assigned Salesperson</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.assigned_salesperson_name or 'Unassigned' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Payment Terms</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.payment_terms or 'Net 30' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Credit Limit</label>
+                        <p class="text-gray-900 dark:text-white">{{ "$ {:,.2f}".format(customer.credit_limit or 0) }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Outstanding Balance</label>
+                        <p class="text-gray-900 dark:text-white {{ 'text-red-600 font-semibold' if balance.outstanding_balance > 0 else '' }}">
+                            {{ "$ {:,.2f}".format(balance.outstanding_balance or 0) }}
+                        </p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Default Discount</label>
+                        <p class="text-gray-900 dark:text-white">{{ "%.1f"|format(customer.default_discount or 0) }}%</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Currency</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.currency or 'AED' }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Buyer Contact Card -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4 border-b pb-2">
+                    <i class="fas fa-user-tie mr-2 text-purple-500"></i> Buyer / Contact Person
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Name</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.buyer_name or 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Phone</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.buyer_phone or 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500 dark:text-gray-400">Email</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.buyer_email or 'N/A' }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Orders -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white">
+                        <i class="fas fa-shopping-cart mr-2 text-orange-500"></i> Recent Orders
+                    </h2>
+                    <a href="{{ url_for('sales_orders') }}?customer_id={{ customer.id }}" class="text-blue-500 hover:underline text-sm">View All</a>
+                </div>
+                {% if recent_orders %}
+                <div class="overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-gray-50 dark:bg-gray-700">
+                            <tr>
+                                <th class="px-3 py-2 text-left text-gray-600 dark:text-gray-300">Order #</th>
+                                <th class="px-3 py-2 text-left text-gray-600 dark:text-gray-300">Date</th>
+                                <th class="px-3 py-2 text-right text-gray-600 dark:text-gray-300">Amount</th>
+                                <th class="px-3 py-2 text-center text-gray-600 dark:text-gray-300">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
+                            {% for order in recent_orders %}
+                            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <td class="px-3 py-2 text-blue-600">
+                                    <a href="{{ url_for('sales_orders_view', order_id=order.id) }}" class="hover:underline">{{ order.order_number }}</a>
+                                </td>
+                                <td class="px-3 py-2 text-gray-600 dark:text-gray-300">{{ order.order_date }}</td>
+                                <td class="px-3 py-2 text-right font-medium text-gray-900 dark:text-white">{{ "$ {:,.2f}".format(order.total_amount or 0) }}</td>
+                                <td class="px-3 py-2 text-center">
+                                    <span class="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">{{ order.status }}</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-gray-500 dark:text-gray-400 text-center py-4">No orders yet</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right Column - Summary & Stats -->
+        <div class="space-y-6">
+            <!-- Financial Summary -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+                    <i class="fas fa-chart-pie mr-2 text-indigo-500"></i> Financial Summary
+                </h2>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-400">Total Orders</span>
+                        <span class="font-semibold text-gray-900 dark:text-white">{{ customer.total_orders or 0 }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-400">Total Revenue</span>
+                        <span class="font-semibold text-green-600">{{ "$ {:,.2f}".format(customer.total_revenue or 0) }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-400">Outstanding Balance</span>
+                        <span class="font-semibold {{ 'text-red-600' if balance.outstanding_balance > 0 else 'text-gray-900 dark:text-white' }}">
+                            {{ "$ {:,.2f}".format(balance.outstanding_balance or 0) }}
+                        </span>
+                    </div>
+                    <hr class="dark:border-gray-600">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-400">Credit Limit</span>
+                        <span class="font-semibold text-gray-900 dark:text-white">{{ "$ {:,.2f}".format(customer.credit_limit or 0) }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-600 dark:text-gray-400">Credit Available</span>
+                        <span class="font-semibold {{ 'text-red-600' if (customer.credit_limit - balance.outstanding_balance) < 0 else 'text-green-600' }}">
+                            {{ "$ {:,.2f}".format((customer.credit_limit or 0) - (balance.outstanding_balance or 0)) }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Stats -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+                    <i class="fas fa-chart-bar mr-2 text-cyan-500"></i> Quick Stats
+                </h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center p-3 bg-blue-50 dark:bg-blue-900 rounded-lg">
+                        <p class="text-2xl font-bold text-blue-600">{{ customer.total_orders or 0 }}</p>
+                        <p class="text-xs text-gray-600 dark:text-gray-300">Total Orders</p>
+                    </div>
+                    <div class="text-center p-3 bg-green-50 dark:bg-green-900 rounded-lg">
+                        <p class="text-2xl font-bold text-green-600">{{ recent_quotations|length }}</p>
+                        <p class="text-xs text-gray-600 dark:text-gray-300">Quotations</p>
+                    </div>
+                    <div class="text-center p-3 bg-purple-50 dark:bg-purple-900 rounded-lg">
+                        <p class="text-2xl font-bold text-purple-600">{{ recent_activities|length }}</p>
+                        <p class="text-xs text-gray-600 dark:text-gray-300">Activities</p>
+                    </div>
+                    <div class="text-center p-3 bg-orange-50 dark:bg-orange-900 rounded-lg">
+                        <p class="text-2xl font-bold text-orange-600">{{ "$ {:,.0f}".format(customer.credit_limit or 0) }}</p>
+                        <p class="text-xs text-gray-600 dark:text-gray-300">Credit Limit</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activities -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white">
+                        <i class="fas fa-tasks mr-2 text-pink-500"></i> Recent Activities
+                    </h2>
+                    <a href="{{ url_for('sales_activities') }}?customer_id={{ customer.id }}" class="text-blue-500 hover:underline text-sm">View All</a>
+                </div>
+                {% if recent_activities %}
+                <div class="space-y-3">
+                    {% for activity in recent_activities %}
+                    <div class="flex gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded">
+                        <div class="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-{{ 'phone' if activity.activity_type == 'Call' else 'envelope' if activity.activity_type == 'Email' else 'comment' }} text-blue-600 text-sm"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm text-gray-900 dark:text-white truncate">{{ activity.subject }}</p>
+                            <p class="text-xs text-gray-500">{{ activity.activity_date }} • {{ activity.owner_name }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-500 dark:text-gray-400 text-center py-4">No activities recorded</p>
+                {% endif %}
+            </div>
+
+            <!-- Notes -->
+            {% if customer.notes %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+                    <i class="fas fa-sticky-note mr-2 text-gray-500"></i> Notes
+                </h2>
+                <p class="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap">{{ customer.notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

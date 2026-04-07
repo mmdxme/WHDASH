@@ -1,0 +1,329 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('wms_items') }}" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </a>
+                <h1 class="text-2xl font-bold text-white">{{ item.name }}</h1>
+                <span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider
+                    {% if item.selling_status == 'active' %}bg-emerald-500/10 text-emerald-400
+                    {% elif item.selling_status == 'discontinued' %}bg-red-500/10 text-red-400
+                    {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                    {{ item.selling_status }}
+                </span>
+            </div>
+            <p class="text-slate-400 text-sm mt-1 ml-10">{{ item.item_code }} {% if item.brand_name %} / {{ item.brand_name }}{% endif %} {% if item.category_name %} / {{ item.category_name }}{% endif %}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('wms_items_edit', item_id=item.id) }}" class="px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 hover:bg-amber-500/20 transition-all text-sm font-medium">
+                <i class="fa-solid fa-pen mr-2"></i>Edit
+            </a>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="flex items-center gap-1 border-b border-white/10 pb-px overflow-x-auto">
+        {% for t in ['overview', 'stock', 'movements', 'related', 'suppliers', 'alerts'] %}
+        <a href="?tab={{ t }}" class="px-5 py-3 text-sm font-medium transition-all whitespace-nowrap rounded-t-xl
+            {% if tab == t %}bg-brand-500/10 text-brand-400 border-b-2 border-brand-500{% else %}text-slate-400 hover:text-white hover:bg-white/5{% endif %}">
+            {{ t|capitalize }}
+        </a>
+        {% endfor %}
+    </div>
+
+    {% if tab == 'overview' %}
+    <!-- Overview Tab -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Details -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Basic Info -->
+            <div class="glass-panel rounded-2xl p-6">
+                <h3 class="text-lg font-bold text-white mb-4">Basic Information</h3>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-5 text-sm">
+                    <div><span class="text-slate-400">Item Code:</span> <span class="text-white font-medium ml-2">{{ item.item_code }}</span></div>
+                    <div><span class="text-slate-400">SKU:</span> <span class="text-white font-medium ml-2">{{ item.sku or '-' }}</span></div>
+                    <div><span class="text-slate-400">Barcode:</span> <span class="text-white font-medium ml-2">{{ item.barcode or '-' }}</span></div>
+                    <div><span class="text-slate-400">Part Number:</span> <span class="text-white font-medium ml-2">{{ item.part_number or '-' }}</span></div>
+                    <div><span class="text-slate-400">OEM Number:</span> <span class="text-white font-medium ml-2">{{ item.oem_number or '-' }}</span></div>
+                    <div><span class="text-slate-400">UOM:</span> <span class="text-white font-medium ml-2">{{ item.unit_of_measure }}</span></div>
+                    <div><span class="text-slate-400">Brand:</span> <span class="text-white font-medium ml-2">{{ item.brand_name or '-' }}</span></div>
+                    <div><span class="text-slate-400">Category:</span> <span class="text-white font-medium ml-2">{{ item.category_name or '-' }}</span></div>
+                    <div><span class="text-slate-400">Group:</span> <span class="text-white font-medium ml-2">{{ item.group_name or '-' }}</span></div>
+                    <div><span class="text-slate-400">Country:</span> <span class="text-white font-medium ml-2">{{ item.country_of_origin or '-' }}</span></div>
+                    <div><span class="text-slate-400">ABC Class:</span> <span class="text-white font-medium ml-2">{{ item.abc_class or '-' }}</span></div>
+                    <div><span class="text-slate-400">Weight:</span> <span class="text-white font-medium ml-2">{{ item.weight_kg|default(0) }} kg</span></div>
+                </div>
+                {% if item.long_description %}
+                <div class="mt-4 pt-4 border-t border-white/5">
+                    <p class="text-sm text-slate-400">Description:</p>
+                    <p class="text-sm text-white mt-1">{{ item.long_description }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Inventory Rules -->
+            <div class="glass-panel rounded-2xl p-6">
+                <h3 class="text-lg font-bold text-white mb-4">Inventory Rules</h3>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-5 text-sm">
+                    <div class="text-center p-4 rounded-xl bg-red-500/5 border border-red-500/10">
+                        <p class="text-xs text-slate-400 mb-1">Min Stock</p>
+                        <p class="text-xl font-bold text-red-400">{{ item.min_stock_level|default(0) }}</p>
+                    </div>
+                    <div class="text-center p-4 rounded-xl bg-amber-500/5 border border-amber-500/10">
+                        <p class="text-xs text-slate-400 mb-1">Reorder Point</p>
+                        <p class="text-xl font-bold text-amber-400">{{ item.reorder_point|default(0) }}</p>
+                    </div>
+                    <div class="text-center p-4 rounded-xl bg-slate-500/5 border border-slate-500/10">
+                        <p class="text-xs text-slate-400 mb-1">Safety Stock</p>
+                        <p class="text-xl font-bold text-slate-300">{{ item.safety_stock|default(0) }}</p>
+                    </div>
+                    <div class="text-center p-4 rounded-xl bg-brand-500/5 border border-brand-500/10">
+                        <p class="text-xs text-slate-400 mb-1">Rotation</p>
+                        <p class="text-xl font-bold text-brand-400">{{ item.rotation_policy or 'FIFO' }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tracking -->
+            <div class="glass-panel rounded-2xl p-6">
+                <h3 class="text-lg font-bold text-white mb-4">Tracking & Quality</h3>
+                <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div class="text-center p-3 rounded-xl bg-white/5">
+                        <i class="fa-solid fa-calendar-days text-brand-400 text-xl mb-2 block"></i>
+                        <p class="text-xs text-slate-400">Expiry</p>
+                        <p class="text-sm font-bold text-white">{% if item.expiry_tracking %}Yes{% else %}No{% endif %}</p>
+                    </div>
+                    <div class="text-center p-3 rounded-xl bg-white/5">
+                        <i class="fa-solid fa-layer-group text-brand-400 text-xl mb-2 block"></i>
+                        <p class="text-xs text-slate-400">Batch</p>
+                        <p class="text-sm font-bold text-white">{% if item.batch_tracking %}Yes{% else %}No{% endif %}</p>
+                    </div>
+                    <div class="text-center p-3 rounded-xl bg-white/5">
+                        <i class="fa-solid fa-hashtag text-brand-400 text-xl mb-2 block"></i>
+                        <p class="text-xs text-slate-400">Lot</p>
+                        <p class="text-sm font-bold text-white">{% if item.lot_tracking %}Yes{% else %}No{% endif %}</p>
+                    </div>
+                    <div class="text-center p-3 rounded-xl bg-white/5">
+                        <i class="fa-solid fa-qrcode text-brand-400 text-xl mb-2 block"></i>
+                        <p class="text-xs text-slate-400">Serial</p>
+                        <p class="text-sm font-bold text-white">{% if item.serial_tracking %}Yes{% else %}No{% endif %}</p>
+                    </div>
+                    <div class="text-center p-3 rounded-xl bg-white/5">
+                        <i class="fa-solid fa-clipboard-check text-brand-400 text-xl mb-2 block"></i>
+                        <p class="text-xs text-slate-400">QC</p>
+                        <p class="text-sm font-bold text-white">{% if item.quality_inspection_required %}Required{% else %}No{% endif %}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Quick Stats -->
+        <div class="space-y-6">
+            <!-- Stock Summary -->
+            <div class="glass-panel rounded-2xl p-6">
+                <h3 class="text-lg font-bold text-white mb-4">Stock Summary</h3>
+                <div class="space-y-4">
+                    {% for ws in stock_by_wh %}
+                    <div class="flex items-center justify-between p-3 rounded-xl bg-white/5">
+                        <div>
+                            <p class="text-sm text-white font-medium">{{ ws.warehouse_name }}</p>
+                            <p class="text-xs text-slate-400">Qty / Reserved / Alloc</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-xl font-bold text-emerald-400">{{ ws.quantity|int|abs }}</p>
+                            <p class="text-xs text-slate-400">{{ ws.reserved|int|abs }} / {{ ws.allocated|int|abs }}</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-slate-500 py-4">No stock records</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Alerts -->
+            {% if alerts %}
+            <div class="glass-panel rounded-2xl p-6">
+                <h3 class="text-lg font-bold text-white mb-4">Active Alerts</h3>
+                <div class="space-y-3">
+                    {% for alert in alerts[:5] %}
+                    <div class="p-3 rounded-xl bg-red-500/5 border border-red-500/10">
+                        <p class="text-sm text-white font-medium">{{ alert.title }}</p>
+                        <p class="text-xs text-slate-400 mt-1">{{ alert.message }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if tab == 'stock' %}
+    <!-- Stock Tab -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="text-left py-4 px-5 font-semibold">Warehouse</th>
+                        <th class="text-left py-4 px-5 font-semibold">Location</th>
+                        <th class="text-left py-4 px-5 font-semibold">Lot</th>
+                        <th class="text-left py-4 px-5 font-semibold">Expiry</th>
+                        <th class="text-right py-4 px-5 font-semibold">Available</th>
+                        <th class="text-right py-4 px-5 font-semibold">Reserved</th>
+                        <th class="text-right py-4 px-5 font-semibold">Allocated</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for lot in lots %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-4 px-5 text-white">{{ lot.warehouse_name }}</td>
+                        <td class="py-4 px-5 text-slate-300">{{ lot.location_code or '-' }}</td>
+                        <td class="py-4 px-5 text-slate-300">{{ lot.lot_number or '-' }}</td>
+                        <td class="py-4 px-5">
+                            {% if lot.expiry_date %}
+                                <span class="{% if lot.expiry_date < now|date %}text-red-400{% elif lot.expiry_date < soon|date %}text-orange-400{% else %}text-slate-300{% endif %}">
+                                    {{ lot.expiry_date }}
+                                </span>
+                            {% else %}
+                                <span class="text-slate-500">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-5 text-right text-emerald-400 font-bold tabular-nums">{{ lot.quantity|int|abs }}</td>
+                        <td class="py-4 px-5 text-right text-amber-400 tabular-nums">{{ lot.reserved_quantity|default(0)|int|abs }}</td>
+                        <td class="py-4 px-5 text-right text-cyan-400 tabular-nums">{{ lot.allocated_quantity|default(0)|int|abs }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-cubes text-4xl mb-3 block opacity-20"></i>
+                            No stock records found
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if tab == 'movements' %}
+    <!-- Movements Tab -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="text-left py-4 px-5 font-semibold">Date</th>
+                        <th class="text-left py-4 px-5 font-semibold">Type</th>
+                        <th class="text-left py-4 px-5 font-semibold">Warehouse</th>
+                        <th class="text-right py-4 px-5 font-semibold">Qty Before</th>
+                        <th class="text-right py-4 px-5 font-semibold">Moved</th>
+                        <th class="text-right py-4 px-5 font-semibold">Qty After</th>
+                        <th class="text-left py-4 px-5 font-semibold">User</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in movements %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-4 px-5 text-slate-400 text-xs">{{ m.created_at[:16] if m.created_at else '' }}</td>
+                        <td class="py-4 px-5"><span class="px-2 py-1 rounded-lg text-xs bg-brand-500/10 text-brand-400">{{ m.transaction_type }}</span></td>
+                        <td class="py-4 px-5 text-white">{{ m.warehouse_name }}</td>
+                        <td class="py-4 px-5 text-right text-slate-400 tabular-nums">{{ m.quantity_before|int }}</td>
+                        <td class="py-4 px-5 text-right {% if m.quantity_moved > 0 %}text-emerald-400{% else %}text-red-400{% endif %} font-bold tabular-nums">
+                            {% if m.quantity_moved > 0 %}+{% endif %}{{ "%.0f"|format(m.quantity_moved) }}
+                        </td>
+                        <td class="py-4 px-5 text-right text-white tabular-nums">{{ m.quantity_after|int }}</td>
+                        <td class="py-4 px-5 text-slate-400">{{ m.username or 'System' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-arrows-left-right text-4xl mb-3 block opacity-20"></i>
+                            No movements recorded
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if tab == 'related' %}
+    <!-- Related Items Tab -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Related / Substitute Items</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for rel in related %}
+            <a href="{{ url_for('wms_item_detail', item_id=rel.related_item_id) }}" class="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all">
+                <p class="text-brand-400 font-medium text-sm">{{ rel.item_code }}</p>
+                <p class="text-white font-medium">{{ rel.item_name }}</p>
+                <span class="inline-block mt-2 px-2 py-1 rounded text-xs bg-slate-500/10 text-slate-400">{{ rel.relation_type }}</span>
+            </a>
+            {% else %}
+            <p class="col-span-3 text-center text-slate-500 py-8">No related items configured</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if tab == 'suppliers' %}
+    <!-- Suppliers Tab -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                    <th class="text-left py-4 px-5 font-semibold">Supplier</th>
+                    <th class="text-left py-4 px-5 font-semibold">Code</th>
+                    <th class="text-right py-4 px-5 font-semibold">Unit Cost</th>
+                    <th class="text-left py-4 px-5 font-semibold">Lead Time</th>
+                    <th class="text-center py-4 px-5 font-semibold">Preferred</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sup in suppliers %}
+                <tr class="border-b border-white/5">
+                    <td class="py-4 px-5 text-white">{{ sup.name }}</td>
+                    <td class="py-4 px-5 text-slate-300">{{ sup.item_supplier_code or '-' }}</td>
+                    <td class="py-4 px-5 text-right text-emerald-400 tabular-nums">{{ sup.currency|default('USD') }} {{ sup.unit_cost|default(0) }}</td>
+                    <td class="py-4 px-5 text-slate-300">{{ sup.lead_time_days|default('-') }} days</td>
+                    <td class="py-4 px-5 text-center">{% if sup.is_preferred %}<i class="fa-solid fa-star text-amber-400"></i>{% endif %}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="py-12 text-center text-slate-500">No suppliers linked</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if tab == 'alerts' %}
+    <!-- Alerts Tab -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Item Alerts</h3>
+        <div class="space-y-3">
+            {% for alert in alerts %}
+            <div class="p-4 rounded-xl border {% if alert.severity == 'CRITICAL' %}bg-red-500/5 border-red-500/20{% elif alert.severity == 'HIGH' %}bg-orange-500/5 border-orange-500/20{% else %}bg-slate-500/5 border-slate-500/20{% endif %}">
+                <div class="flex items-center justify-between">
+                    <p class="text-white font-medium">{{ alert.title }}</p>
+                    <span class="px-2 py-1 rounded text-xs font-bold uppercase {% if alert.severity == 'CRITICAL' %}bg-red-500/20 text-red-400{% elif alert.severity == 'HIGH' %}bg-orange-500/20 text-orange-400{% else %}bg-slate-500/20 text-slate-400{% endif %}">{{ alert.severity }}</span>
+                </div>
+                <p class="text-sm text-slate-400 mt-2">{{ alert.message }}</p>
+                <p class="text-xs text-slate-500 mt-2">{{ alert.created_at[:16] if alert.created_at else '' }}</p>
+            </div>
+            {% else %}
+            <p class="text-center text-slate-500 py-8">No alerts for this item</p>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

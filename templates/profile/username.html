@@ -1,0 +1,170 @@
+{% extends "profile/base.html" %}
+
+{% set page_title = 'Username & Identity' %}
+{% set page_description = 'Manage your username and account identity settings.' %}
+
+{% block profile_content %}
+<!-- Current Username -->
+<div class="glass-panel rounded-2xl border border-white/5 p-6 mb-6">
+    <h3 class="text-lg font-bold text-white mb-6">Current Username</h3>
+
+    <div class="flex items-center justify-between p-4 rounded-xl bg-brand-500/10 border border-brand-500/20">
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-brand-500/20 flex items-center justify-center">
+                <i class="fas fa-at text-brand-400 text-xl"></i>
+            </div>
+            <div>
+                <p class="font-bold text-white text-lg">{{ user.username }}</p>
+                <p class="text-sm text-slate-400">Your unique identifier</p>
+            </div>
+        </div>
+        <span class="px-4 py-2 rounded-full text-xs font-bold bg-green-500/20 text-green-300 border border-green-500/20">
+            <i class="fas fa-check mr-1"></i>In Use
+        </span>
+    </div>
+</div>
+
+<!-- Change Username Form -->
+<div class="glass-panel rounded-2xl border border-white/5 p-6 mb-6">
+    <h3 class="text-lg font-bold text-white mb-2">Change Username</h3>
+    <p class="text-sm text-slate-400 mb-6">Username changes may affect how colleagues mention you in messages and comments.</p>
+
+    <form method="POST" class="space-y-4">
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">New Username</label>
+            <input type="text" name="username" id="new_username" value="{{ user.username }}"
+                   class="w-full px-4 py-3 rounded-xl border border-white/10 bg-slate-900/50 text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition">
+            <div id="username_validation" class="mt-2 text-sm"></div>
+        </div>
+
+        <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5">
+            <h4 class="text-sm font-bold text-white mb-3">Username Requirements</h4>
+            <ul class="space-y-2 text-sm text-slate-400">
+                <li class="flex items-center gap-2">
+                    <i class="fas fa-check text-green-400" id="req_length"></i>
+                    <span>3-30 characters long</span>
+                </li>
+                <li class="flex items-center gap-2">
+                    <i class="fas fa-check text-green-400" id="req_chars"></i>
+                    <span>Letters, numbers, underscores, and dots only</span>
+                </li>
+                <li class="flex items-center gap-2">
+                    <i class="fas fa-check text-green-400" id="req_start"></i>
+                    <span>Cannot start or end with underscore/dot</span>
+                </li>
+                <li class="flex items-center gap-2">
+                    <i class="fas fa-check text-green-400" id="req_unique"></i>
+                    <span>Must be unique (not already taken)</span>
+                </li>
+            </ul>
+        </div>
+
+        <div class="flex justify-end">
+            <button type="submit" id="change_btn" disabled
+                    class="px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold transition">
+                <i class="fas fa-save mr-2"></i>Change Username
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Username History -->
+{% if username_history and username_history|length > 0 %}
+<div class="glass-panel rounded-2xl border border-white/5 p-6">
+    <h3 class="text-lg font-bold text-white mb-6">Username History</h3>
+
+    <div class="space-y-3">
+        {% for history in username_history %}
+        <div class="flex items-center justify-between p-3 rounded-xl bg-white/5">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center">
+                    <i class="fas fa-history text-slate-400 text-sm"></i>
+                </div>
+                <div>
+                    <p class="text-sm text-white">{{ history.old_value }} → {{ history.new_value }}</p>
+                    <p class="text-xs text-slate-500">{{ history.created_at }}</p>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const usernameInput = document.getElementById('new_username');
+    const validationDiv = document.getElementById('username_validation');
+    const changeBtn = document.getElementById('change_btn');
+    const currentUsername = '{{ user.username }}';
+
+    // Requirement indicators
+    const reqLength = document.getElementById('req_length');
+    const reqChars = document.getElementById('req_chars');
+    const reqStart = document.getElementById('req_start');
+    const reqUnique = document.getElementById('req_unique');
+
+    function validateUsername() {
+        const username = usernameInput.value.trim();
+        const isCurrentUsername = username === currentUsername;
+
+        // Reset indicators
+        reqLength.className = 'fas fa-check text-green-400';
+        reqChars.className = 'fas fa-check text-green-400';
+        reqStart.className = 'fas fa-check text-green-400';
+        reqUnique.className = 'fas fa-check text-green-400';
+
+        let isValid = true;
+
+        // Length check
+        if (username.length < 3 || username.length > 30) {
+            reqLength.className = 'fas fa-times text-red-400';
+            isValid = false;
+        }
+
+        // Characters check
+        if (!/^[a-zA-Z0-9_\.]+$/.test(username)) {
+            reqChars.className = 'fas fa-times text-red-400';
+            isValid = false;
+        }
+
+        // Start/end check
+        if (username.length > 0 && (username[0] === '_' || username[0] === '.' || username.slice(-1) === '_' || username.slice(-1) === '.')) {
+            reqStart.className = 'fas fa-times text-red-400';
+            isValid = false;
+        }
+
+        // Check availability via API
+        if (!isCurrentUsername && username.length >= 3) {
+            fetch(`/profile/api/validate-username?username=${encodeURIComponent(username)}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.valid) {
+                        reqUnique.className = 'fas fa-times text-red-400';
+                        validationDiv.innerHTML = `<span class="text-red-400">${data.message}</span>`;
+                        changeBtn.disabled = true;
+                    } else {
+                        reqUnique.className = 'fas fa-check text-green-400';
+                        validationDiv.innerHTML = `<span class="text-green-400">${data.message}</span>`;
+                        changeBtn.disabled = false;
+                    }
+                })
+                .catch(() => {
+                    changeBtn.disabled = true;
+                });
+        } else if (isCurrentUsername) {
+            validationDiv.innerHTML = '';
+            changeBtn.disabled = true;
+        } else {
+            validationDiv.innerHTML = '';
+            changeBtn.disabled = !isValid;
+        }
+    }
+
+    usernameInput.addEventListener('input', validateUsername);
+});
+</script>
+{% endblock %}

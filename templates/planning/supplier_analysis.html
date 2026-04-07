@@ -1,0 +1,104 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">Supplier & Lead Time Analysis</h2>
+        <p class="text-slate-400 text-sm">Supplier performance metrics and lead time tracking</p>
+    </div>
+    <div class="flex gap-3">
+        <form action="{{ url_for('supplier_analysis_refresh') }}" method="POST" class="inline">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+                <i class="fas fa-sync mr-2"></i>Refresh Metrics
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Supplier Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    {% for supplier in suppliers[:8] %}
+    <div class="glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3 mb-2">
+            <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <i class="fas fa-truck text-purple-400 text-sm"></i>
+            </div>
+            <div class="overflow-hidden">
+                <p class="text-white font-medium text-sm truncate">{{ supplier.name }}</p>
+                <p class="text-slate-400 text-xs">{{ supplier.country|default('-') }}</p>
+            </div>
+        </div>
+        <div class="flex justify-between text-xs">
+            <span class="text-slate-400">Avg Lead Time:</span>
+            <span class="text-sky-400 font-bold">{{ supplier.avg_lead_time|default(7)|int }}d</span>
+        </div>
+        <div class="flex justify-between text-xs mt-1">
+            <span class="text-slate-400">Items:</span>
+            <span class="text-white">{{ supplier.item_count|default(0) }}</span>
+        </div>
+        {% if supplier.rating %}
+        <div class="flex gap-1 mt-2">
+            {% for i in range(5) %}
+            <i class="fas fa-star text-xs {% if i < (supplier.rating|int) %}text-amber-400{% else %}text-slate-600{% endif %}"></i>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Supplier Performance Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+        <table class="w-full text-sm" id="supplierPerfTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Supplier</th>
+                    <th class="text-left py-3 px-3">Period</th>
+                    <th class="text-right py-3 px-3">Total Orders</th>
+                    <th class="text-right py-3 px-3">On-Time</th>
+                    <th class="text-center py-3 px-3">On-Time %</th>
+                    <th class="text-right py-3 px-3">Fill Rate %</th>
+                    <th class="text-right py-3 px-3">Avg Lead Time</th>
+                    <th class="text-right py-3 px-3">Total Qty</th>
+                    <th class="text-right py-3 px-3">Received Qty</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sp in supplier_perf %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ sp.supplier_name }}</div>
+                        <div class="text-slate-400 text-xs">{{ sp.supplier_code|default('') }}</div>
+                    </td>
+                    <td class="py-3 px-3 text-slate-300 text-sm">{{ sp.period_start }}</td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ sp.total_orders|default(0) }}</td>
+                    <td class="py-3 px-3 text-right text-emerald-400">{{ sp.on_time_count|default(0) }}</td>
+                    <td class="py-3 px-3 text-center">
+                        <div class="inline-flex items-center gap-2">
+                            <div class="w-16 bg-slate-700 rounded-full h-1.5">
+                                <div class="h-1.5 rounded-full {% if sp.on_time_percent|default(0) >= 90 %}bg-green-500{% elif sp.on_time_percent|default(0) >= 70 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
+                                     style="width: {{ sp.on_time_percent|default(0) }}%"></div>
+                            </div>
+                            <span class="text-xs text-slate-300">{{ "%.0f"|format(sp.on_time_percent|default(0)) }}%</span>
+                        </div>
+                    </td>
+                    <td class="py-3 px-3 text-right text-sky-400">{{ "%.0f"|format(sp.fill_rate|default(0)) }}%</td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ sp.avg_lead_time_days|default(7)|int }}d</td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ "{:,.0f}".format(sp.total_quantity_ordered|default(0)) }}</td>
+                    <td class="py-3 px-3 text-right text-emerald-400">{{ "{:,.0f}".format(sp.total_quantity_received|default(0)) }}</td>
+                </tr>
+                {% endfor %}
+                {% if not supplier_perf %}
+                <tr>
+                    <td colspan="9" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-chart-line text-4xl mb-3 text-slate-600"></i>
+                        <p>No supplier performance data. Click "Refresh Metrics" to calculate.</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

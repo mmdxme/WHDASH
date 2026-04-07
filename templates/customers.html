@@ -11,49 +11,43 @@
         </div>
         
         <div class="flex items-center gap-4">
-            <button onclick="document.getElementById('importModal').classList.remove('hidden')" class="px-6 py-3.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 group">
-                <i class="fa-solid fa-file-import text-lg text-brand-400 group-hover:scale-110 transition-transform"></i>
-                Import Data
-            </button>
+            <a href="{{ url_for('customers_reports') }}" class="px-6 py-3.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 group">
+                <i class="fa-solid fa-chart-pie text-lg text-emerald-400 group-hover:scale-110 transition-transform"></i>
+                Reports
+            </a>
             <a href="{{ url_for('customers_export') }}" class="px-6 py-3.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 group">
                 <i class="fa-solid fa-file-excel text-lg text-emerald-500 group-hover:scale-110 transition-transform"></i>
-                Export Excel File
+                Export Excel
             </a>
-            
-            <button onclick="document.getElementById('addCustomerModal').classList.remove('hidden')" class="px-6 py-3.5 bg-brand-600 hover:bg-brand-500 text-white rounded-2xl text-sm font-bold shadow-xl shadow-brand-500/20 transition-all flex items-center gap-2 group">
-                <i class="fa-solid fa-plus-circle text-lg group-hover:rotate-90 transition-transform"></i>
-                Register New Enterprise Client
-            </button>
         </div>
     </div>
 
     <!-- Stats Overview -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div class="glass-panel rounded-3xl p-6 border-l-4 border-l-brand-500 shadow-xl">
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Active Accounts</p>
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Total Accounts</p>
             <div class="flex items-end justify-between">
-                <span class="text-4xl font-black text-white">{{ customers|length }}</span>
+                <span class="text-4xl font-black text-white">{{ stats.total }}</span>
                 <div class="h-10 w-10 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-400">
                     <i class="fa-solid fa-address-book"></i>
                 </div>
             </div>
         </div>
-        
-        {% set wholesale_count = customers|selectattr('type', 'equalto', 'Wholesale')|list|length %}
+
         <div class="glass-panel rounded-3xl p-6 border-l-4 border-l-emerald-500 shadow-xl">
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Wholesale Partners</p>
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Active Partners</p>
             <div class="flex items-end justify-between">
-                <span class="text-4xl font-black text-white">{{ wholesale_count }}</span>
+                <span class="text-4xl font-black text-white">{{ stats.active }}</span>
                 <div class="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                    <i class="fa-solid fa-handshake"></i>
+                    <i class="fa-solid fa-user-check"></i>
                 </div>
             </div>
         </div>
 
         <div class="glass-panel rounded-3xl p-6 border-l-4 border-l-orange-500 shadow-xl">
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Regional Diversity</p>
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Countries Covered</p>
             <div class="flex items-end justify-between">
-                <span class="text-4xl font-black text-white">47</span>
+                <span class="text-4xl font-black text-white">{{ stats.countries }}</span>
                 <div class="h-10 w-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-400">
                     <i class="fa-solid fa-globe"></i>
                 </div>
@@ -61,9 +55,9 @@
         </div>
 
         <div class="glass-panel rounded-3xl p-6 border-l-4 border-l-purple-500 shadow-xl">
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Sales Efficiency</p>
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Total Debt</p>
             <div class="flex items-end justify-between">
-                <span class="text-4xl font-black text-white">88%</span>
+                <span class="text-4xl font-black text-white">{{ "{:,.0f}".format(stats.total_debt) }}</span>
                 <div class="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
                     <i class="fa-solid fa-chart-line"></i>
                 </div>
@@ -74,11 +68,19 @@
     <!-- Main Client Table -->
     <div class="glass-panel rounded-[2.5rem] overflow-hidden shadow-2xl border border-white/5">
         <div class="p-8 border-b border-white/5 flex items-center justify-between bg-slate-800/20">
+            <div class="flex items-center gap-3">
+                <button id="clearFilters" class="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-xmark text-[10px]"></i> Clear Filters
+                </button>
+                <button id="resetSort" class="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 rounded-xl text-xs font-bold transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-arrow-up-short-wide text-[10px]"></i> Reset Sort
+                </button>
+            </div>
             <div class="relative w-72 group">
                 <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 group-focus-within:text-brand-400">
                     <i class="fa-solid fa-magnifying-glass text-sm"></i>
                 </div>
-                <input type="text" id="customerSearch" placeholder="Filter Registry..." class="w-full pl-10 pr-4 py-2.5 bg-slate-900/50 border border-white/10 rounded-xl text-xs text-white focus:ring-1 focus:ring-brand-500 focus:border-brand-500 transition-all font-medium">
+                <input type="text" id="globalSearch" placeholder="Filter Registry..." class="w-full pl-10 pr-4 py-2.5 bg-slate-900/50 border border-white/10 rounded-xl text-xs text-white focus:ring-1 focus:ring-brand-500 focus:border-brand-500 transition-all font-medium">
             </div>
         </div>
         
@@ -86,78 +88,181 @@
             <table class="w-full text-left" id="customerTable">
                 <thead>
                     <tr class="bg-slate-900/40">
-                        <th class="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">#</th>
-                        <th class="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Enterprise Identity</th>
-                        <th class="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Point of Contact</th>
-                        <th class="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Location Architecture</th>
-                        <th class="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Operations</th>
-                        <th class="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Representative</th>
-                        <th class="px-8 py-5 text-[10px] font-black text-slate-500 uppercase tracking-widest">Actions</th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="0" data-type="num" data-sort="none">
+                            <div class="flex items-center gap-1.5"># <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="1" data-type="text" data-sort="none">
+                            <div class="flex items-center gap-1.5">Enterprise Identity <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="2" data-type="text" data-sort="none">
+                            <div class="flex items-center gap-1.5">Contact <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="3" data-type="text" data-sort="none">
+                            <div class="flex items-center gap-1.5">Location <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="4" data-type="text" data-sort="none">
+                            <div class="flex items-center gap-1.5">Salesperson <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="5" data-type="text" data-sort="none">
+                            <div class="flex items-center gap-1.5">Brands <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="6" data-type="num" data-sort="none">
+                            <div class="flex items-center gap-1.5">Sales <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="7" data-type="num" data-sort="none">
+                            <div class="flex items-center gap-1.5">Payments <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="8" data-type="num" data-sort="none">
+                            <div class="flex items-center gap-1.5">Debt <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="9" data-type="num" data-sort="none">
+                            <div class="flex items-center gap-1.5">Credit Limit <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="10" data-type="text" data-sort="none">
+                            <div class="flex items-center gap-1.5">Credit Status <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest cursor-pointer hover:text-brand-400 transition-colors sort-col" data-col="11" data-type="date" data-sort="none">
+                            <div class="flex items-center gap-1.5">Last Purchase <i class="fa-solid fa-sort text-[8px] sort-icon"></i></div>
+                        </th>
+                        <th class="px-6 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                            <div class="flex items-center gap-1.5">Actions</div>
+                        </th>
+                    </tr>
+                    <tr class="bg-slate-900/20">
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="0" placeholder="Filter #"></th>
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="1" placeholder="Filter name..."></th>
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="2" placeholder="Filter contact..."></th>
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="3" placeholder="Filter location..."></th>
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="4" placeholder="Filter salesperson..."></th>
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="5" placeholder="Filter brands..."></th>
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="6" placeholder="Filter sales..."></th>
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="7" placeholder="Filter payments..."></th>
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="8" placeholder="Filter debt..."></th>
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="9" placeholder="Filter credit..."></th>
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="10" placeholder="Filter status..."></th>
+                        <th class="px-6 py-2"><input type="text" class="col-filter w-full bg-transparent border border-white/5 rounded-lg px-2 py-1 text-[10px] text-slate-400 placeholder-slate-600 focus:outline-none focus:border-brand-500" data-col="11" placeholder="Filter date..."></th>
+                        <th class="px-6 py-2"></th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-white/5">
+                <tbody class="divide-y divide-white/5" id="customerTableBody">
                     {% for customer in customers %}
                     <tr class="hover:bg-brand-500/[0.02] transition-all group">
-                        <td class="px-8 py-6 text-xs font-black text-slate-600">{{ loop.index }}</td>
-                        <td class="px-8 py-6">
-                            <div class="flex items-center gap-4">
-                                <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-500/10 to-purple-500/10 flex items-center justify-center text-brand-400 group-hover:scale-110 transition-transform">
-                                    <i class="fa-solid fa-building text-xl"></i>
+                        <td class="px-6 py-5 text-xs font-black text-slate-600">{{ loop.index }}</td>
+                        <td class="px-6 py-5">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500/10 to-purple-500/10 flex items-center justify-center text-brand-400 group-hover:scale-110 transition-transform shrink-0">
+                                    <i class="fa-solid fa-building text-lg"></i>
                                 </div>
-                                <div>
-                                    <p class="font-extrabold text-white text-lg leading-tight">{{ customer.name }}</p>
-                                    <span class="inline-block mt-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-tighter {% if customer.type == 'Wholesale' %}bg-purple-500/10 text-purple-400{% elif customer.type == 'Garage' %}bg-orange-500/10 text-orange-400{% else %}bg-brand-500/10 text-brand-400{% endif %}">
-                                        {{ customer.type }}
-                                    </span>
+                                <div class="min-w-0">
+                                    <p class="font-extrabold text-white text-sm leading-tight truncate">{{ customer.name }}</p>
+                                    <div class="flex items-center gap-2 mt-1">
+                                        <span class="text-[9px] font-bold px-2 py-0.5 rounded-full {% if customer.active %}bg-emerald-500/10 text-emerald-400{% else %}bg-red-500/10 text-red-400{% endif %}">
+                                            {% if customer.active %}Active{% else %}Inactive{% endif %}
+                                        </span>
+                                        <span class="text-[9px] font-black text-slate-500 uppercase tracking-tighter">{{ customer.customer_code or customer.sdad_customer_id }}</span>
+                                    </div>
                                 </div>
                             </div>
                         </td>
-                        <td class="px-8 py-6">
-                            <div class="flex items-center gap-2 text-slate-300 font-bold">
-                                <i class="fa-solid fa-phone text-xs text-slate-500"></i>
-                                {{ customer.phone }}
-                            </div>
-                        </td>
-                        <td class="px-8 py-6">
-                            <div class="flex items-center gap-2 text-slate-400 text-sm">
-                                <i class="fa-solid fa-map-location-dot text-brand-500"></i>
-                                {{ customer.location }}
-                            </div>
-                        </td>
-                        <td class="px-8 py-6">
+                        <td class="px-6 py-5">
                             <div class="space-y-1">
-                                <div class="flex items-center gap-2 text-[10px] font-bold text-slate-500">
-                                    <i class="fa-solid fa-clock"></i>
-                                    {{ customer.working_hours }}
+                                <div class="flex items-center gap-2 text-xs font-bold text-slate-300">
+                                    <i class="fa-solid fa-phone text-[10px] text-slate-500"></i>
+                                    <span class="truncate">{{ customer.phone or '—' }}</span>
                                 </div>
-                                <div class="flex items-center gap-2 text-[10px] font-bold text-brand-400">
-                                    <i class="fa-solid fa-calendar-day"></i>
-                                    {{ customer.working_days }}
+                                {% if customer.whatsapp_phone %}
+                                <div class="flex items-center gap-2 text-xs font-bold text-slate-300">
+                                    <i class="fa-brands fa-whatsapp text-[10px] text-green-400"></i>
+                                    <span class="truncate">{{ customer.whatsapp_phone }}</span>
                                 </div>
+                                {% endif %}
+                                {% if customer.email %}
+                                <div class="flex items-center gap-2 text-[10px] font-bold text-slate-500 truncate">
+                                    <i class="fa-solid fa-envelope text-[10px]"></i>
+                                    {{ customer.email }}
+                                </div>
+                                {% endif %}
                             </div>
                         </td>
-                        <td class="px-8 py-6">
-                            <div class="flex items-center gap-2">
-                                <div class="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 border border-white/5">
-                                    {{ customer.salesperson_name[0]|upper if customer.salesperson_name else '?' }}
+                        <td class="px-6 py-5">
+                            <div class="space-y-1">
+                                <div class="flex items-center gap-2 text-xs font-bold text-slate-300">
+                                    <i class="fa-solid fa-globe text-[10px] text-brand-500"></i>
+                                    {{ [customer.city, customer.country]|join(', ') if customer.city or customer.country else '—' }}
                                 </div>
-                                <span class="text-sm font-bold text-white">{{ customer.salesperson_name or 'Unassigned' }}</span>
+                                {% if customer.address %}
+                                <div class="flex items-center gap-2 text-[10px] font-bold text-slate-500 max-w-[180px] truncate">
+                                    <i class="fa-solid fa-location-dot text-[10px]"></i>
+                                    {{ customer.address }}
+                                </div>
+                                {% endif %}
                             </div>
                         </td>
-                        <td class="px-8 py-6">
+                        <td class="px-6 py-5">
                             <div class="flex items-center gap-2">
-                                <button type="button" 
-                                        data-customer='{{ customer|tojson|safe }}'
-                                        onclick="openEditModal(JSON.parse(this.dataset.customer))" 
-                                        class="p-2.5 rounded-xl bg-brand-500/10 text-brand-400 hover:bg-brand-500 hover:text-white transition-all">
-                                    <i class="fa-solid fa-pen-to-square"></i>
+                                <div class="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold text-slate-400 border border-white/5 shrink-0">
+                                    {{ (customer.salesperson_name or '?')[0]|upper }}
+                                </div>
+                                <span class="text-xs font-bold text-white truncate max-w-[120px]">{{ customer.salesperson_name or 'Unassigned' }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-5">
+                            {% if customer.brand_names %}
+                            <div class="flex flex-wrap gap-1 max-w-[200px]">
+                                {% for brand in customer.brand_names.split(',')[:3] %}
+                                <span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-400 uppercase tracking-tighter truncate">{{ brand.strip() }}</span>
+                                {% endfor %}
+                                {% if customer.brand_names.split(',')|length > 3 %}
+                                <span class="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-800 text-slate-500">+{{ customer.brand_names.split(',')|length - 3 }}</span>
+                                {% endif %}
+                            </div>
+                            {% else %}
+                            <span class="text-[10px] text-slate-600 italic">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-5">
+                            <div class="text-xs font-black {% if customer.total_orders > 0 %}text-emerald-400{% else %}text-slate-500{% endif %}">
+                                {{ "{:,.0f}".format(customer.total_orders or 0) }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-5">
+                            <div class="text-xs font-black text-slate-300">
+                                {{ "{:,.0f}".format(customer.total_payments or 0) }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-5">
+                            <div class="text-xs font-black {% if customer.total_debt > 0 %}text-red-400{% else %}text-slate-500{% endif %}">
+                                {{ "{:,.0f}".format(customer.total_debt or 0) }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-5">
+                            <div class="text-xs font-black text-brand-400">
+                                {{ "{:,.0f}".format(customer.credit_limit or 0) }}
+                            </div>
+                            {% if customer.has_credit_enabled %}
+                            <div class="text-[9px] text-slate-500 mt-0.5">
+                                {{ customer.payment_method or 'Credit' }} · {{ customer.payment_deadline_days }}D
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-5">
+                            {% set credit_class = 'text-emerald-400' if customer.credit_status == 'healthy' else ('text-red-400' if customer.credit_status in ['overdue','blocked'] else 'text-slate-400') %}
+                            <span class="text-xs font-black {{ credit_class }}">
+                                {{ customer.credit_status or 'N/A' }}
+                            </span>
+                            {% if customer.is_credit_blocked %}
+                            <div class="text-[9px] text-red-400 font-bold">BLOCKED</div>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-5">
+                            <span class="text-xs font-bold text-slate-400">{{ customer.last_purchase_date[:10] if customer.last_purchase_date else '—' }}</span>
+                        </td>
+                        <td class="px-6 py-5">
+                            <form action="{{ url_for('delete_customer', id=customer.sdad_id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete {{ customer.name|replace("'", "\\'") }}?');" class="inline">
+                                <button type="submit" class="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-all" title="Delete Customer">
+                                    <i class="fa-solid fa-trash-can text-sm"></i>
                                 </button>
-                                <form action="{{ url_for('delete_customer', id=customer.id) }}" method="POST" onsubmit="return confirm('Archive this client profile?');">
-                                    <button type="submit" class="p-2.5 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all">
-                                        <i class="fa-solid fa-trash-can"></i>
-                                    </button>
-                                </form>
-                            </div>
+                            </form>
                         </td>
                     </tr>
                     {% endfor %}
@@ -167,206 +272,130 @@
     </div>
 </div>
 
-<!-- Add Customer Modal -->
-<div id="addCustomerModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 md:p-8">
-    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onclick="this.parentElement.classList.add('hidden')"></div>
-    <div class="relative w-full max-w-xl p-8 glass-panel rounded-[2.5rem] shadow-2xl border border-white/10 animate-in fade-in zoom-in duration-300">
-        <div class="flex items-center justify-between mb-8">
-            <h3 class="text-2xl font-black text-white">Register New Entity</h3>
-            <button onclick="document.getElementById('addCustomerModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors">
-                <i class="fa-solid fa-circle-xmark text-2xl"></i>
-            </button>
-        </div>
-        
-        <form action="{{ url_for('customers') }}" method="POST" class="space-y-6">
-            <div class="grid grid-cols-2 gap-4">
-                <div class="col-span-2 space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Company Legal Name</label>
-                    <input type="text" name="name" required class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium placeholder:text-slate-700" placeholder="e.g. Al Hashimi Auto Parts">
-                </div>
-                
-                <div class="space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Contact Number</label>
-                    <input type="text" name="phone" class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium placeholder:text-slate-700" placeholder="+971 50 123 4567">
-                </div>
-                
-                <div class="space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Entity Type</label>
-                    <select name="type" class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium">
-                        <option value="Wholesale">Wholesale Hub</option>
-                        <option value="Retail">Retail Point</option>
-                        <option value="Garage">Service Garage</option>
-                        <option value="Shop">Parts Shop</option>
-                        <option value="Other">Special Entity</option>
-                    </select>
-                </div>
-
-                <div class="col-span-2 space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Geographical Location (City, Country)</label>
-                    <input type="text" name="location" required class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium placeholder:text-slate-700" placeholder="Dubai, UAE">
-                </div>
-
-                <div class="space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Operating Hours</label>
-                    <input type="text" name="working_hours" value="08:00 - 18:00" class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium">
-                </div>
-
-                <div class="space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Operating Days</label>
-                    <input type="text" name="working_days" value="Sat-Wed" class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium">
-                </div>
-
-                <div class="col-span-2 space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Account Manager (Sales Person)</label>
-                    <select name="salesperson_id" class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium">
-                        <option value="">No Active Assignment</option>
-                        {% for user in users %}
-                        <option value="{{ user.id }}">{{ user.username }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <div class="pt-4">
-                <button type="submit" class="w-full py-5 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white rounded-2xl font-black text-lg shadow-xl shadow-brand-500/20 transition-all active:scale-[0.98]">
-                    Finalize Registration
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Edit Customer Modal -->
-<div id="editCustomerModal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 md:p-8">
-    <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onclick="this.parentElement.classList.add('hidden')"></div>
-    <div class="relative w-full max-w-xl p-8 glass-panel rounded-[2.5rem] shadow-2xl border border-white/10 animate-in fade-in zoom-in duration-300">
-        <div class="flex items-center justify-between mb-8">
-            <h3 class="text-2xl font-black text-white">Modify Entity Profile</h3>
-            <button onclick="document.getElementById('editCustomerModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors">
-                <i class="fa-solid fa-circle-xmark text-2xl"></i>
-            </button>
-        </div>
-        
-        <form id="editCustomerForm" method="POST" class="space-y-6">
-            <div class="grid grid-cols-2 gap-4">
-                <div class="col-span-2 space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Company Legal Name</label>
-                    <input type="text" name="name" id="edit_name" required class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium">
-                </div>
-                
-                <div class="space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Contact Number</label>
-                    <input type="text" name="phone" id="edit_phone" class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium">
-                </div>
-                
-                <div class="space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Entity Type</label>
-                    <select name="type" id="edit_type" class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium">
-                        <option value="Wholesale">Wholesale Hub</option>
-                        <option value="Retail">Retail Point</option>
-                        <option value="Garage">Service Garage</option>
-                        <option value="Shop">Parts Shop</option>
-                        <option value="Other">Special Entity</option>
-                    </select>
-                </div>
-
-                <div class="col-span-2 space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Geographical Location</label>
-                    <input type="text" name="location" id="edit_location" required class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium">
-                </div>
-
-                <div class="space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Operating Hours</label>
-                    <input type="text" name="working_hours" id="edit_hours" class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium">
-                </div>
-
-                <div class="space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Operating Days</label>
-                    <input type="text" name="working_days" id="edit_days" class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium">
-                </div>
-
-                <div class="col-span-2 space-y-2">
-                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-2">Account Manager</label>
-                    <select name="salesperson_id" id="edit_salesperson" class="w-full px-5 py-3.5 bg-slate-900 border border-white/10 rounded-2xl text-white focus:ring-2 focus:ring-brand-500 transition-all font-medium">
-                        <option value="">No Active Assignment</option>
-                        {% for user in users %}
-                        <option value="{{ user.id }}">{{ user.username }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <div class="pt-4">
-                <button type="submit" class="w-full py-5 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white rounded-2xl font-black text-lg shadow-xl shadow-brand-500/20 transition-all active:scale-[0.98]">
-                    Optimize & Sync Profile
-                </button>
-            </div>
-        </form>
-    </div>
-    <!-- Import Modal -->
-    <div id="importModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4">
-        <div class="glass-panel w-full max-w-lg rounded-3xl p-8 shadow-2xl relative">
-            <button onclick="document.getElementById('importModal').classList.add('hidden')" class="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors">
-                <i class="fa-solid fa-xmark text-xl"></i>
-            </button>
-            
-            <div class="text-center mb-8">
-                <div class="w-20 h-20 bg-brand-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-brand-500/20 shadow-inner">
-                    <i class="fa-solid fa-file-csv text-3xl text-brand-400"></i>
-                </div>
-                <h3 class="text-2xl font-black text-white">Mass Data Ingest</h3>
-                <p class="text-slate-500 text-sm mt-2">Bulk import customers using a standardized CSV template.</p>
-            </div>
-
-            <div class="bg-white/5 border border-white/10 rounded-2xl p-6 mb-8 text-center">
-                <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Protocol Requirements</p>
-                <p class="text-sm text-slate-300 mb-4 font-medium">Please ensure your file strictly follows our internal structural architecture.</p>
-                <a href="{{ url_for('customers_sample_template') }}" class="inline-flex items-center gap-2 text-brand-400 hover:text-brand-300 text-sm font-bold transition-all">
-                    <i class="fa-solid fa-download"></i>
-                    Download Sample Import Template
-                </a>
-            </div>
-
-            <form action="{{ url_for('customers_import') }}" method="POST" enctype="multipart/form-data" class="space-y-6">
-                <div class="relative group">
-                    <input type="file" name="file" accept=".csv" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                    <div class="border-2 border-dashed border-white/10 group-hover:border-brand-500/50 rounded-2xl p-8 text-center transition-all bg-white/5">
-                        <i class="fa-solid fa-cloud-arrow-up text-3xl text-slate-500 group-hover:text-brand-400 mb-2 transition-colors"></i>
-                        <p class="text-sm text-slate-400 group-hover:text-slate-200 font-bold transition-colors">Click to stage or drag export here</p>
-                        <p class="text-[10px] text-slate-600 mt-1 uppercase font-bold tracking-tighter">Accepted: .CSV ONLY</p>
-                    </div>
-                </div>
-
-                <button type="submit" class="w-full py-4 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-brand-500/20 active:scale-[0.98] uppercase tracking-widest text-xs">
-                    Execute Data Ingestion
-                </button>
-            </form>
-        </div>
-    </div>
-</div>
-
 <script>
-    // Real-time Search Filtration
-    document.getElementById('customerSearch').addEventListener('input', function(e) {
-        const q = e.target.value.toLowerCase().trim();
-        const rows = document.querySelectorAll('#customerTable tbody tr');
+(function() {
+    const tbody = document.getElementById('customerTableBody');
+    const globalSearch = document.getElementById('globalSearch');
+    const colFilters = document.querySelectorAll('.col-filter');
+    const sortCols = document.querySelectorAll('.sort-col');
+    const clearFilters = document.getElementById('clearFilters');
+    const resetSort = document.getElementById('resetSort');
+
+    let currentSort = { col: null, dir: 'asc', type: 'text' };
+
+    function getCellValue(row, colIndex, type) {
+        const td = row.children[colIndex];
+        if (!td) return '';
+
+        if (type === 'num') {
+            const val = parseFloat(td.textContent.replace(/[^0-9.-]/g, ''));
+            return isNaN(val) ? 0 : val;
+        }
+        if (type === 'date') {
+            const raw = td.textContent.trim();
+            const d = new Date(raw === '—' || raw === '' ? '1970-01-01' : raw);
+            return isNaN(d.getTime()) ? new Date('1970-01-01').getTime() : d.getTime();
+        }
+        return td.textContent.trim().toLowerCase();
+    }
+
+    function filterRows() {
+        const globalQ = globalSearch.value.toLowerCase().trim();
+        const colQs = Array.from(colFilters).map(f => f.value.toLowerCase().trim());
+
+        const rows = tbody.querySelectorAll('tr');
         rows.forEach(row => {
-            const text = row.textContent.toLowerCase();
-            row.style.display = text.includes(q) ? '' : 'none';
+            const cells = row.children;
+            const rowText = row.textContent.toLowerCase();
+
+            let show = true;
+
+            if (globalQ && !rowText.includes(globalQ)) {
+                show = false;
+            }
+
+            if (show) {
+                for (let i = 0; i < colQs.length; i++) {
+                    if (colQs[i]) {
+                        const cellText = cells[i] ? cells[i].textContent.toLowerCase() : '';
+                        if (!cellText.includes(colQs[i])) {
+                            show = false;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            row.style.display = show ? '' : 'none';
+        });
+    }
+
+    function applySort(rows) {
+        const { col, dir, type } = currentSort;
+        if (col === null) return;
+
+        const rowsArr = Array.from(rows).filter(r => r.style.display !== 'none');
+        rowsArr.sort((a, b) => {
+            let av = getCellValue(a, col, type);
+            let bv = getCellValue(b, col, type);
+
+            if (type === 'num') {
+                return dir === 'asc' ? av - bv : bv - av;
+            }
+            if (type === 'date') {
+                return dir === 'asc' ? av - bv : bv - av;
+            }
+            return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+        });
+
+        rowsArr.forEach(r => tbody.appendChild(r));
+    }
+
+    function updateSortIcons() {
+        sortCols.forEach(th => {
+            const icon = th.querySelector('.sort-icon');
+            const colIdx = parseInt(th.dataset.col);
+            if (colIdx === currentSort.col) {
+                icon.className = currentSort.dir === 'asc' ? 'fa-solid fa-sort-up text-brand-400' : 'fa-solid fa-sort-down text-brand-400';
+            } else {
+                icon.className = 'fa-solid fa-sort text-[8px]';
+            }
+        });
+    }
+
+    sortCols.forEach(th => {
+        th.addEventListener('click', () => {
+            const col = parseInt(th.dataset.col);
+            const type = th.dataset.type;
+
+            if (currentSort.col === col) {
+                currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.col = col;
+                currentSort.dir = 'asc';
+                currentSort.type = type;
+            }
+
+            updateSortIcons();
+            applySort(tbody.querySelectorAll('tr'));
         });
     });
 
-    function openEditModal(customer) {
-        document.getElementById('edit_name').value = customer.name;
-        document.getElementById('edit_phone').value = customer.phone || '';
-        document.getElementById('edit_location').value = customer.location;
-        document.getElementById('edit_type').value = customer.type;
-        document.getElementById('edit_hours').value = customer.working_hours || '';
-        document.getElementById('edit_days').value = customer.working_days || '';
-        document.getElementById('edit_salesperson').value = customer.salesperson_id || '';
-        
-        document.getElementById('editCustomerForm').action = `/customers/edit/${customer.id}`;
-        document.getElementById('editCustomerModal').classList.remove('hidden');
-    }
+    globalSearch.addEventListener('input', filterRows);
+    colFilters.forEach(f => f.addEventListener('input', filterRows));
+
+    clearFilters.addEventListener('click', () => {
+        globalSearch.value = '';
+        colFilters.forEach(f => f.value = '');
+        filterRows();
+    });
+
+    resetSort.addEventListener('click', () => {
+        currentSort = { col: null, dir: 'asc', type: 'text' };
+        updateSortIcons();
+        const rows = tbody.querySelectorAll('tr');
+        rows.forEach(r => tbody.appendChild(r));
+    });
+})();
 </script>
 {% endblock %}

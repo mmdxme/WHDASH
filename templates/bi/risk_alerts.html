@@ -1,0 +1,352 @@
+{% extends "bi/base_bi.html" %}
+
+{% block title %}Risk Alerts & Exceptions{% endblock %}
+
+{% block bi_content %}
+<!-- Alerts Header -->
+<section class="executive-hero mb-4">
+    <h1>Risk Alerts & Exception Center</h1>
+    <div class="subtitle">Critical issues requiring attention</div>
+    
+    <div class="hero-kpi-grid">
+        <div class="hero-kpi">
+            <div class="hero-kpi-value text-danger" id="alert-critical">0</div>
+            <div class="hero-kpi-label">Critical</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value text-warning" id="alert-warning">0</div>
+            <div class="hero-kpi-label">Warnings</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value text-info" id="alert-info">0</div>
+            <div class="hero-kpi-label">Info</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="alert-total">0</div>
+            <div class="hero-kpi-label">Total Alerts</div>
+        </div>
+    </div>
+</section>
+
+<!-- Filter Bar -->
+<section class="bi-section">
+    <div class="filter-bar">
+        <button class="filter-btn active" data-filter="all">All</button>
+        <button class="filter-btn" data-filter="critical">Critical</button>
+        <button class="filter-btn" data-filter="warning">Warning</button>
+        <button class="filter-btn" data-filter="low_stock">Low Stock</button>
+        <button class="filter-btn" data-filter="delayed">Delayed</button>
+        <button class="filter-btn" data-filter="receivables">Receivables</button>
+    </div>
+</section>
+
+<!-- Critical Alerts -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title"><i class="fas fa-exclamation-circle text-danger"></i> Critical Issues</h2>
+    </div>
+    <div class="alerts-list" id="critical-alerts"></div>
+</section>
+
+<!-- Warning Alerts -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title"><i class="fas fa-exclamation-triangle text-warning"></i> Warnings</h2>
+    </div>
+    <div class="alerts-list" id="warning-alerts"></div>
+</section>
+
+<!-- Info Alerts -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title"><i class="fas fa-info-circle text-info"></i> Information</h2>
+    </div>
+    <div class="alerts-list" id="info-alerts"></div>
+</section>
+
+<!-- Low Stock Items -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title"><i class="fas fa-boxes text-warning"></i> Low Stock Alerts</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Warehouse</th>
+                    <th>Current Stock</th>
+                    <th>Reorder Point</th>
+                    <th>Shortage</th>
+                    <th>Priority</th>
+                </tr>
+            </thead>
+            <tbody id="low-stock-alerts"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Overdue Receivables -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title"><i class="fas fa-money-bill-wave text-danger"></i> Overdue Receivables</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Customer</th>
+                    <th>Invoice #</th>
+                    <th>Due Date</th>
+                    <th>Amount</th>
+                    <th>Days Overdue</th>
+                    <th>Risk Level</th>
+                </tr>
+            </thead>
+            <tbody id="overdue-receivables"></tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadAlertsData();
+    
+    // Filter button handlers
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            applyFilter(this.dataset.filter);
+        });
+    });
+});
+
+let allAlerts = [];
+
+async function loadAlertsData() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        params.set('format', 'json');
+        
+        const response = await fetch(`/api/bi/alerts?${params.toString()}`);
+        const data = await response.json();
+        
+        allAlerts = data.alerts || [];
+        updateAlertKPIs(data.summary || {});
+        updateAlertsList(allAlerts);
+        updateLowStock(data.low_stock || []);
+        updateOverdueReceivables(data.overdue_receivables || []);
+        
+    } catch (error) {
+        console.error('Error loading alerts data:', error);
+    }
+}
+
+function updateAlertKPIs(summary) {
+    document.getElementById('alert-critical').textContent = formatNumber(summary.critical || 0);
+    document.getElementById('alert-warning').textContent = formatNumber(summary.warning || 0);
+    document.getElementById('alert-info').textContent = formatNumber(summary.info || 0);
+    document.getElementById('alert-total').textContent = formatNumber(summary.total || 0);
+}
+
+function updateAlertsList(alerts) {
+    const criticalContainer = document.getElementById('critical-alerts');
+    const warningContainer = document.getElementById('warning-alerts');
+    const infoContainer = document.getElementById('info-alerts');
+    
+    const critical = alerts.filter(a => a.severity === 'critical');
+    const warning = alerts.filter(a => a.severity === 'warning');
+    const info = alerts.filter(a => a.severity === 'info');
+    
+    criticalContainer.innerHTML = critical.length ? critical.map(renderAlertCard).join('') : '<div class="empty-state">No critical alerts</div>';
+    warningContainer.innerHTML = warning.length ? warning.map(renderAlertCard).join('') : '<div class="empty-state">No warnings</div>';
+    infoContainer.innerHTML = info.length ? info.map(renderAlertCard).join('') : '<div class="empty-state">No info alerts</div>';
+}
+
+function renderAlertCard(alert) {
+    const iconMap = {
+        'low_stock': 'fa-boxes',
+        'delayed_order': 'fa-truck',
+        'overdue_receivable': 'fa-money-bill',
+        'credit_risk': 'fa-credit-card',
+        'quality': 'fa-check-circle'
+    };
+    const icon = iconMap[alert.alert_type] || 'fa-bell';
+    
+    return `
+        <div class="alert-card alert-${alert.severity}" data-type="${alert.alert_type}">
+            <div class="alert-icon">
+                <i class="fas ${icon}"></i>
+            </div>
+            <div class="alert-content">
+                <div class="alert-title">${alert.title || alert.alert_type}</div>
+                <div class="alert-description">${alert.description || ''}</div>
+                <div class="alert-meta">
+                    <span class="alert-company">${alert.company_name || ''}</span>
+                    <span class="alert-date">${alert.created_at || ''}</span>
+                </div>
+            </div>
+            <div class="alert-actions">
+                <button class="btn-sm btn-primary" onclick="acknowledgeAlert(${alert.id})">Acknowledge</button>
+            </div>
+        </div>
+    `;
+}
+
+function updateLowStock(items) {
+    const tbody = document.getElementById('low-stock-alerts');
+    tbody.innerHTML = items.slice(0, 20).map(item => {
+        const shortage = (item.reorder_point || 0) - (item.current_qty || 0);
+        const priority = shortage > (item.reorder_point || 1) * 2 ? 'high' : shortage > item.reorder_point ? 'medium' : 'low';
+        return `
+            <tr>
+                <td>${item.item_name || 'Unknown'}</td>
+                <td>${item.warehouse_name || 'Unknown'}</td>
+                <td class="${item.current_qty === 0 ? 'text-danger font-bold' : 'text-warning'}">${formatNumber(item.current_qty || 0)}</td>
+                <td>${formatNumber(item.reorder_point || 0)}</td>
+                <td class="text-danger font-bold">${formatNumber(shortage)}</td>
+                <td><span class="priority-badge priority-${priority}">${priority.toUpperCase()}</span></td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function updateOverdueReceivables(receivables) {
+    const tbody = document.getElementById('overdue-receivables');
+    tbody.innerHTML = receivables.slice(0, 20).map(r => {
+        const risk = r.days_overdue > 90 ? 'high' : r.days_overdue > 60 ? 'medium' : 'low';
+        return `
+            <tr>
+                <td><strong>${r.customer_name || 'Unknown'}</strong></td>
+                <td>${r.invoice_number || '-'}</td>
+                <td class="text-danger">${r.due_date || '-'}</td>
+                <td class="font-bold text-danger">${formatCurrency(r.amount || 0)}</td>
+                <td class="font-bold text-danger">${r.days_overdue || 0}</td>
+                <td><span class="risk-badge risk-${risk}">${risk.toUpperCase()}</span></td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function applyFilter(filter) {
+    const cards = document.querySelectorAll('.alert-card');
+    cards.forEach(card => {
+        if (filter === 'all' || card.dataset.type === filter) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function acknowledgeAlert(alertId) {
+    console.log('Acknowledging alert:', alertId);
+}
+
+function formatNumber(num, decimals = 0) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function formatCurrency(num) {
+    if (num === null || num === undefined) return '-';
+    return 'AED ' + parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+</script>
+
+<style>
+.filter-bar {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.filter-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.875rem;
+}
+
+.filter-btn.active {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+}
+
+.alerts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.alert-card {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+    border-radius: 8px;
+    background: var(--color-bg-secondary);
+    border-left: 4px solid var(--color-border);
+}
+
+.alert-card.alert-critical {
+    border-left-color: var(--color-danger);
+    background: rgba(220, 53, 69, 0.05);
+}
+
+.alert-card.alert-warning {
+    border-left-color: var(--color-warning);
+    background: rgba(255, 193, 7, 0.05);
+}
+
+.alert-card.alert-info {
+    border-left-color: var(--color-info);
+}
+
+.alert-icon {
+    font-size: 1.5rem;
+    margin-right: 1rem;
+    width: 40px;
+    text-align: center;
+}
+
+.alert-critical .alert-icon { color: var(--color-danger); }
+.alert-warning .alert-icon { color: var(--color-warning); }
+.alert-info .alert-icon { color: var(--color-info); }
+
+.alert-content {
+    flex: 1;
+}
+
+.alert-title {
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.alert-description {
+    font-size: 0.875rem;
+    color: var(--color-text-secondary);
+}
+
+.alert-meta {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    margin-top: 0.5rem;
+}
+
+.alert-actions {
+    margin-left: 1rem;
+}
+
+.empty-state {
+    padding: 2rem;
+    text-align: center;
+    color: var(--color-text-muted);
+}
+</style>
+{% endblock %}

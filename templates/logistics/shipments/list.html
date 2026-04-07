@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 mt-1">Manage and track all logistics shipments</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('logistics.shipments_new') }}" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-plus mr-2"></i>New Shipment
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-5">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div class="md:col-span-2">
+                <label class="block text-xs font-medium text-slate-400 mb-2">Search</label>
+                <input type="text" name="search" value="{{ search }}" placeholder="Shipment code, consignee..." class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/50">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-2">Status</label>
+                <select name="status" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                    <option value="">All Statuses</option>
+                    {% for s in statuses %}
+                    <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-2">Type</label>
+                <select name="shipment_type" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                    <option value="">All Types</option>
+                    {% for t in types %}
+                    <option value="{{ t }}" {% if shipment_type == t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-400 mb-2">Priority</label>
+                <select name="priority" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                    <option value="">All Priorities</option>
+                    {% for p in priorities %}
+                    <option value="{{ p }}" {% if priority == p %}selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                    <i class="fa-solid fa-filter mr-2"></i>Filter
+                </button>
+                <a href="{{ url_for('logistics.shipments_list') }}" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-all">
+                    <i class="fa-solid fa-times"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Results -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-5 border-b border-white/5">
+            <div class="flex items-center justify-between">
+                <p class="text-sm text-slate-400">Showing <span class="text-white font-medium">{{ total }}</span> shipments</p>
+            </div>
+        </div>
+
+        {% if shipments %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-4 px-5 font-medium">Shipment Code</th>
+                        <th class="text-left py-4 px-5 font-medium">Type</th>
+                        <th class="text-left py-4 px-5 font-medium">Customer</th>
+                        <th class="text-left py-4 px-5 font-medium">Priority</th>
+                        <th class="text-left py-4 px-5 font-medium">Status</th>
+                        <th class="text-left py-4 px-5 font-medium">Driver</th>
+                        <th class="text-left py-4 px-5 font-medium">Vehicle</th>
+                        <th class="text-left py-4 px-5 font-medium">Created</th>
+                        <th class="text-left py-4 px-5 font-medium">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ship in shipments %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-4 px-5">
+                            <a href="{{ url_for('logistics.shipments_view', id=ship.id) }}" class="text-brand-400 hover:text-brand-300 font-medium">
+                                {{ ship.shipment_code }}
+                            </a>
+                        </td>
+                        <td class="py-4 px-5 text-slate-300 capitalize">{{ ship.shipment_type }}</td>
+                        <td class="py-4 px-5 text-slate-300">{{ ship.customer_name or ship.consignee_name or '-' }}</td>
+                        <td class="py-4 px-5">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium
+                                {% if ship.priority == 'Urgent' %}bg-red-500/10 text-red-400
+                                {% elif ship.priority == 'High' %}bg-amber-500/10 text-amber-400
+                                {% elif ship.priority == 'Normal' %}bg-blue-500/10 text-blue-400
+                                {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ ship.priority }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium
+                                {% if ship.status == 'delivered' %}bg-emerald-500/10 text-emerald-400
+                                {% elif ship.status == 'in_transit' %}bg-blue-500/10 text-blue-400
+                                {% elif ship.status == 'failed_delivery' %}bg-red-500/10 text-red-400
+                                {% elif ship.status == 'returned' %}bg-purple-500/10 text-purple-400
+                                {% elif ship.status == 'cancelled' %}bg-slate-500/10 text-slate-400
+                                {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ ship.status }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5 text-slate-300">{{ ship.driver_name or '-' }}</td>
+                        <td class="py-4 px-5 text-slate-300">{{ ship.plate_number or '-' }}</td>
+                        <td class="py-4 px-5 text-slate-400">{{ ship.created_at[:10] if ship.created_at else '-' }}</td>
+                        <td class="py-4 px-5">
+                            <div class="flex items-center gap-2">
+                                <a href="{{ url_for('logistics.shipments_view', id=ship.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="View">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                                <a href="{{ url_for('logistics.shipments_edit', id=ship.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="Edit">
+                                    <i class="fa-solid fa-pencil"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="p-5 border-t border-white/5 flex items-center justify-between">
+            <p class="text-sm text-slate-400">Page {{ page }} of {{ total_pages }}</p>
+            <div class="flex items-center gap-2">
+                {% if page > 1 %}
+                <a href="{{ url_for('logistics.shipments_list') }}?page={{ page - 1 }}&search={{ search }}&status={{ status }}&shipment_type={{ shipment_type }}&priority={{ priority }}" class="px-3 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm transition-all">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </a>
+                {% endif %}
+                {% if page < total_pages %}
+                <a href="{{ url_for('logistics.shipments_list') }}?page={{ page + 1 }}&search={{ search }}&status={{ status }}&shipment_type={{ shipment_type }}&priority={{ priority }}" class="px-3 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm transition-all">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="text-center py-16">
+            <div class="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                <i class="fa-solid fa-boxes-stacked text-3xl text-slate-600"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2">No shipments found</h3>
+            <p class="text-slate-400 mb-6">Get started by creating your first shipment</p>
+            <a href="{{ url_for('logistics.shipments_new') }}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-plus"></i>Create Shipment
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

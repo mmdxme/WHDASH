@@ -1,0 +1,124 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">Exceptions & Alerts</h2>
+        <p class="text-slate-400 text-sm">Planning exceptions and warning alerts</p>
+    </div>
+    <div class="flex gap-3">
+        <form action="{{ url_for('alerts_generate') }}" method="POST" class="inline">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+                <i class="fas fa-sync mr-2"></i>Refresh Alerts
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="glass-panel rounded-xl p-4 mb-6 filter-bar">
+    <form method="GET" class="flex flex-wrap gap-4 items-end">
+        <div>
+            <label class="block text-slate-400 text-xs mb-1">Show</label>
+            <select name="acknowledged" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                <option value="0" {% if acknowledged == '0' %}selected{% endif %}>Active Only</option>
+                <option value="1" {% if acknowledged == '1' %}selected{% endif %}>Acknowledged Only</option>
+                <option value="all" {% if acknowledged == 'all' %}selected{% endif %}>All</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-slate-400 text-xs mb-1">Severity</label>
+            <select name="severity" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                <option value="">All</option>
+                <option value="CRITICAL" {% if selected_severity == 'CRITICAL' %}selected{% endif %}>Critical</option>
+                <option value="HIGH" {% if selected_severity == 'HIGH' %}selected{% endif %}>High</option>
+                <option value="MEDIUM" {% if selected_severity == 'MEDIUM' %}selected{% endif %}>Medium</option>
+                <option value="LOW" {% if selected_severity == 'LOW' %}selected{% endif %}>Low</option>
+            </select>
+        </div>
+        <div>
+            <label class="block text-slate-400 text-xs mb-1">Alert Type</label>
+            <select name="alert_type" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                <option value="">All</option>
+                {% for at in alert_types %}
+                <option value="{{ at }}" {% if selected_alert_type == at %}selected{% endif %}>{{ at|replace('_', ' ') }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+            <i class="fas fa-filter mr-2"></i>Filter
+        </button>
+    </form>
+</div>
+
+<!-- Alerts Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <table class="w-full text-sm" id="alertsTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Severity</th>
+                    <th class="text-left py-3 px-3">Type</th>
+                    <th class="text-left py-3 px-4">Title</th>
+                    <th class="text-left py-3 px-3">Item</th>
+                    <th class="text-left py-3 px-3">Warehouse</th>
+                    <th class="text-left py-3 px-3">Created</th>
+                    <th class="text-left py-3 px-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in alerts %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 {% if alert.is_acknowledged %}opacity-50{% endif %}">
+                    <td class="py-3 px-4">
+                        {% if alert.severity == 'CRITICAL' %}
+                        <span class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs font-bold">
+                            <i class="fas fa-circle text-xs mr-1"></i>CRITICAL
+                        </span>
+                        {% elif alert.severity == 'HIGH' %}
+                        <span class="px-2 py-1 rounded bg-orange-500/20 text-orange-400 text-xs font-bold">
+                            <i class="fas fa-circle text-xs mr-1"></i>HIGH
+                        </span>
+                        {% elif alert.severity == 'MEDIUM' %}
+                        <span class="px-2 py-1 rounded bg-yellow-500/20 text-yellow-400 text-xs font-bold">
+                            <i class="fas fa-circle text-xs mr-1"></i>MEDIUM
+                        </span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs font-bold">
+                            <i class="fas fa-circle text-xs mr-1"></i>LOW
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-3 text-slate-300 text-xs">{{ alert.alert_type|replace('_', ' ') }}</td>
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ alert.title }}</div>
+                        <div class="text-slate-400 text-xs">{{ alert.message|truncate(60) }}</div>
+                    </td>
+                    <td class="py-3 px-3 text-slate-300 text-sm">{{ alert.item_code|default('-') }}</td>
+                    <td class="py-3 px-3 text-slate-300 text-sm">{{ alert.warehouse_name|default('-') }}</td>
+                    <td class="py-3 px-3 text-slate-400 text-xs">{{ alert.created_at }}</td>
+                    <td class="py-3 px-3">
+                        {% if not alert.is_acknowledged %}
+                        <form action="{{ url_for('alert_acknowledge', alert_id=alert.id) }}" method="POST" class="inline">
+                            <button type="submit" class="px-3 py-1 rounded bg-green-500/20 text-green-400 text-xs hover:bg-green-500/30">
+                                <i class="fas fa-check"></i> Ack
+                            </button>
+                        </form>
+                        {% else %}
+                        <span class="text-slate-500 text-xs"><i class="fas fa-check-circle"></i> Done</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not alerts %}
+                <tr>
+                    <td colspan="7" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-check-circle text-4xl mb-3 text-green-500"></i>
+                        <p>No alerts match your filter criteria.</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -19,13 +19,96 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from datetime import datetime, timedelta
 from issue_seed_data import ISSUE_SEED_DATA
 from google_workspace_integration import register_google_workspace, google_workspace_report_snapshot
+from email_manager import register_email_manager
+from peyvast_sync import PeyvastSyncManager, get_sync_manager, run_sync as run_peyvast_sync
+from translations import TRANSLATIONS, LANGUAGES, RTL_LANGUAGES, get_translation, get_translations, is_rtl, get_language_direction
+from hr_routes import register_hr_routes
+from wms_routes import register_wms_routes
+from logistics_routes import register_logistics_routes
+from company_routes import register_company_routes
+from planning_routes import register_planning_routes
+from marketing_routes import register_marketing_routes
+from customer_intelligence_routes import register_ci_routes
+from social_media_routes import register_social_media_routes
+from customer_intelligence_models import init_ci_tables
+from planning_models import init_planning_tables
+from sales_routes import register_sales_routes
+from sales_suite_routes import register_sales_suite_routes
+from admin_routes import register_admin_routes
+from procurement_routes import register_procurement_routes
+from profile_routes import register_profile_routes
+
+# =============================================================================
+# UNIFIED PLATFORM MODULES (Enterprise Integration)
+# =============================================================================
+# These modules provide unified infrastructure across all modules:
+# - database.py: Single source of truth for database connections
+# - permissions.py: Unified RBAC system
+# - settings.py: Unified settings management
+# - navigation.py: Unified menu/navigation structure
+# - master_data.py: Unified master data management
+# - reporting.py: Unified reporting framework
+# - theme_system.py: Theme tokens, palettes, and helpers
+
+from database import (
+    get_db, get_db_context, get_one, get_all,
+    initialize_platform_schema, create_notification,
+    log_audit, get_user_notifications,
+    get_platform_setting, set_platform_setting,
+    STANDARD_STATUSES, STATUS_COLORS
+)
+from permissions import (
+    get_user_permissions, get_role_permissions,
+    user_has_permission, require_permission,
+    require_module_access, get_module_resources,
+    initialize_permissions, invalidate_user_permission_cache
+)
+from settings import (
+    get_setting, set_setting,
+    get_settings_by_category, DEFAULT_SETTINGS,
+    initialize_settings
+)
+from navigation import (
+    MENU_STRUCTURE, get_main_menu, get_breadcrumbs,
+    get_page_title, get_active_module,
+    prepare_menu_for_template, get_notification_badge,
+    get_menu_label
+)
+from master_data import (
+    get_canonical_customer, get_all_canonical_customers,
+    get_canonical_item, get_all_canonical_items,
+    get_canonical_employee, get_all_canonical_employees,
+    resolve_customer, resolve_item,
+    run_master_data_health_check,
+    initialize_master_data
+)
+from reporting import (
+    get_dashboard_stats, build_inventory_report,
+    build_sales_report, build_delivery_report,
+    build_hr_attendance_report, build_planning_alerts_report,
+    export_to_excel, export_to_csv,
+    initialize_reporting
+)
+from theme_system import (
+    get_available_themes, get_theme_config,
+    get_theme_tokens, get_chart_palette,
+    is_dark_theme, validate_theme,
+    get_default_theme, get_all_theme_ids,
+    CHART_PALETTES, AVAILABLE_THEMES
+)
+from theme_engine import (
+    theme_css_variables, theme_inline_style,
+    theme_data_attrs, chartjs_config,
+    theme_preview_data, get_status_color_classes,
+    get_priority_classes
+)
 
 app = Flask(__name__)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DEFAULT_SECRET_KEY = 'change-me-in-production'
 app.secret_key = os.environ.get('SECRET_KEY', DEFAULT_SECRET_KEY)
-app.config['TEMPLATES_AUTO_RELOAD'] = True
-app.jinja_env.auto_reload = True
+app.config['TEMPLATES_AUTO_RELOAD'] = False
+app.jinja_env.auto_reload = False
 
 DATABASE = os.environ.get('DATABASE_PATH', os.path.join(BASE_DIR, 'warehouse.db'))
 UPLOAD_FOLDER = os.environ.get(
@@ -107,13 +190,149 @@ def ensure_admin_user():
     finally:
         conn.close()
 
-def get_db():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+# ─── Customer Helper Functions ──────────────────────────────────────────────────
+# Note: get_db() is imported from database.py to ensure consistent settings
+
+def get_customers_from_db(filters=None):
+    """Get customers from local sdad_customers table with optional filters."""
+    db = get_db()
+    try:
+        query = "SELECT * FROM sdad_customers WHERE 1=1"
+        params = []
+        
+        if filters:
+            if filters.get('country'):
+                query += " AND country = ?"
+                params.append(filters['country'])
+            if filters.get('city'):
+                query += " AND city = ?"
+                params.append(filters['city'])
+            if filters.get('customer_type'):
+                query += " AND location = ?"
+                params.append(filters['customer_type'])
+            if filters.get('is_export') is not None:
+                query += " AND location = 'export'" if filters['is_export'] else " AND location = 'local'"
+            if filters.get('salesperson_id'):
+                query += " AND salesperson_id = ?"
+                params.append(filters['salesperson_id'])
+            if filters.get('search'):
+                search = f"%{filters['search']}%"
+                query += " AND (name LIKE ? OR email LIKE ? OR phone LIKE ? OR customer_code LIKE ?)"
+                params.extend([search, search, search, search])
+        
+        query += " ORDER BY total_orders DESC"
+        return [dict(r) for r in db.execute(query, params).fetchall()]
+    finally:
+        db.close()
+
+
+def get_customers_summary_from_db():
+    """Get customers summary statistics from local database."""
+    db = get_db()
+    try:
+        total = db.execute("SELECT COUNT(*) as cnt FROM sdad_customers").fetchone()['cnt']
+        total_orders = db.execute("SELECT COALESCE(SUM(total_orders), 0) as t FROM sdad_customers").fetchone()['t']
+        total_debt = db.execute("SELECT COALESCE(SUM(total_debt), 0) as t FROM sdad_customers").fetchone()['t']
+        export_count = db.execute("SELECT COUNT(*) as cnt FROM sdad_customers WHERE location = 'export'").fetchone()['cnt']
+        active_count = db.execute("SELECT COUNT(*) as cnt FROM sdad_customers WHERE active = 1").fetchone()['cnt']
+        
+        countries = db.execute("""
+            SELECT country, COUNT(*) as cnt, SUM(total_orders) as total_sales, SUM(total_debt) as outstanding
+            FROM sdad_customers WHERE country != '' GROUP BY country ORDER BY cnt DESC
+        """).fetchall()
+        
+        locations = db.execute("""
+            SELECT location, COUNT(*) as cnt, SUM(total_orders) as total_sales, SUM(total_debt) as outstanding
+            FROM sdad_customers GROUP BY location ORDER BY cnt DESC
+        """).fetchall()
+        
+        salespersons = db.execute("""
+            SELECT salesperson_name, COUNT(*) as customers, SUM(total_orders) as total_sales, SUM(total_debt) as total_debt
+            FROM sdad_customers WHERE salesperson_name != '' GROUP BY salesperson_name ORDER BY total_sales DESC
+        """).fetchall()
+        
+        return {
+            'total_customers': total,
+            'total_orders': total_orders,
+            'total_debt': total_debt,
+            'total_purchases': total_orders,
+            'total_outstanding': total_debt,
+            'total_credit_limit': db.execute("SELECT COALESCE(SUM(credit_limit), 0) as total FROM sdad_customers").fetchone()['total'],
+            'average_purchase': total_orders / total if total > 0 else 0,
+            'export_customers': export_count,
+            'domestic_customers': total - export_count,
+            'active_customers': active_count,
+            'inactive_customers': total - active_count,
+            'by_country': [dict(r) for r in countries],
+            'by_location': [dict(r) for r in locations],
+            'by_salesperson': [dict(r) for r in salespersons],
+        }
+    finally:
+        db.close()
+
+
+def get_customers_by_country_from_db():
+    """Group customers by country."""
+    db = get_db()
+    try:
+        return [dict(r) for r in db.execute('''
+            SELECT country, COUNT(*) as customer_count, SUM(total_orders) as total_sales,
+                   SUM(total_debt) as total_outstanding, SUM(credit_limit) as credit_limit,
+                   AVG(total_orders) as avg_sales,
+                   SUM(CASE WHEN location = 'export' THEN 1 ELSE 0 END) as export_count
+            FROM sdad_customers WHERE country != '' GROUP BY country ORDER BY customer_count DESC
+        ''').fetchall()]
+    finally:
+        db.close()
+
+
+def get_salesperson_performance_from_db():
+    """Salesperson performance metrics."""
+    db = get_db()
+    try:
+        return [dict(r) for r in db.execute('''
+            SELECT salesperson_name, COUNT(*) as customer_count, SUM(total_orders) as total_sales,
+                   SUM(total_payments) as total_payments, SUM(total_debt) as total_debt,
+                   AVG(total_orders) as avg_sale, MAX(last_purchase_date) as last_sale_date
+            FROM sdad_customers WHERE salesperson_name != '' GROUP BY salesperson_name ORDER BY total_sales DESC
+        ''').fetchall()]
+    finally:
+        db.close()
+
+
+def require_login(f):
+    """Decorator factory that redirects unauthenticated users to login."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        allowed_routes = ['login', 'static', 'set_language']
+        if request.endpoint not in allowed_routes and 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 register_google_workspace(app, get_db)
+register_email_manager(app, get_db)
+register_hr_routes(app)
+register_wms_routes(app, get_db)
+register_company_routes(app)
+register_logistics_routes(app)
+register_planning_routes(app, get_db)
+register_marketing_routes(app)
+register_ci_routes(app)
+register_social_media_routes(app)
+register_sales_routes(app, require_login, user_has_permission, get_db)
+register_sales_suite_routes(app, require_login, user_has_permission, get_db)
+register_admin_routes(app)
+register_procurement_routes(app, get_db)
+register_profile_routes(app)
+
+# Register Business Intelligence routes
+from bi_routes import register_bi_routes
+register_bi_routes(app)
+
+# Initialize Customer Intelligence tables
+init_ci_tables()
 
 def init_db():
     db = get_db()
@@ -351,6 +570,43 @@ def init_db():
             FOREIGN KEY (created_by_user_id) REFERENCES users(id)
         )
     ''')
+
+    # Task Items extended columns (with try/except for existing databases)
+    try:
+        db.execute("ALTER TABLE task_items ADD COLUMN reminder_days INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        db.execute("ALTER TABLE task_items ADD COLUMN reminder_hours INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        db.execute("ALTER TABLE task_items ADD COLUMN progress_auto INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        db.execute("ALTER TABLE task_items ADD COLUMN last_reminder_sent TEXT")
+    except Exception:
+        pass
+
+    # Ensure subtasks table has is_completed column
+    try:
+        db.execute("ALTER TABLE task_subtasks ADD COLUMN is_completed INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        db.execute("ALTER TABLE task_subtasks ADD COLUMN reminder_days INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        db.execute("ALTER TABLE task_subtasks ADD COLUMN reminder_hours INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        db.execute("ALTER TABLE task_subtasks ADD COLUMN last_reminder_sent TEXT")
+    except Exception:
+        pass
+
     db.execute('''
         CREATE TABLE IF NOT EXISTS task_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -366,6 +622,89 @@ def init_db():
             FOREIGN KEY (actor_user_id) REFERENCES users(id)
         )
     ''')
+
+    # ── Task Subtasks Table ──
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS task_subtasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            parent_task_id INTEGER NOT NULL,
+            subtask_title TEXT NOT NULL,
+            description TEXT,
+            assigned_to_user_id INTEGER,
+            priority TEXT DEFAULT 'Medium',
+            status TEXT DEFAULT 'Pending',
+            progress INTEGER DEFAULT 0,
+            due_at TEXT,
+            created_by_user_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (parent_task_id) REFERENCES task_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (assigned_to_user_id) REFERENCES users(id),
+            FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+        )
+    ''')
+
+    # ── Task Transaction Categories ──
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS task_transaction_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT,
+            color TEXT DEFAULT '#6366f1',
+            icon TEXT DEFAULT 'fa-money-bill',
+            is_system INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # ── Task Transactions Table ──
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS task_transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER NOT NULL,
+            category_id INTEGER,
+            transaction_type TEXT NOT NULL,
+            amount DECIMAL(12,2) DEFAULT 0,
+            quantity INTEGER DEFAULT 1,
+            unit TEXT DEFAULT 'unit',
+            description TEXT,
+            reference TEXT,
+            transaction_date TEXT,
+            created_by_user_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (task_id) REFERENCES task_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (category_id) REFERENCES task_transaction_categories(id),
+            FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+        )
+    ''')
+
+    # ── Task Reports / Analytics ──
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS task_report_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_name TEXT NOT NULL,
+            report_type TEXT NOT NULL,
+            filters_applied TEXT,
+            snapshot_data TEXT,
+            created_by_user_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+        )
+    ''')
+
+    # ── User Task Permissions ──
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS task_user_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            permission_key TEXT NOT NULL UNIQUE,
+            permission_value INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    ''')
+
     default_departments = [
         ('Administration', 'Cross-functional leadership, governance, and approvals'),
         ('Sales', 'Customer acquisition, key accounts, and commercial follow-up'),
@@ -380,6 +719,23 @@ def init_db():
         db.execute(
             'INSERT OR IGNORE INTO task_departments (name, description) VALUES (?, ?)',
             (dept_name, dept_desc)
+        )
+
+    # Seed default transaction categories
+    default_categories = [
+        ('Labor', 'Employee working hours and wages', '#10b981', 'fa-clock', 1),
+        ('Materials', 'Raw materials and supplies consumed', '#f59e0b', 'fa-box', 1),
+        ('Equipment', 'Equipment usage and rental costs', '#6366f1', 'fa-truck', 1),
+        ('Transportation', 'Travel and transport expenses', '#8b5cf6', 'fa-car', 1),
+        ('Outsourcing', 'Third-party services and contractors', '#ec4899', 'fa-users', 1),
+        ('Overhead', 'Indirect costs and utilities', '#64748b', 'fa-building', 1),
+        ('Revenue', 'Income generated from task completion', '#22c55e', 'fa-dollar-sign', 1),
+        ('Miscellaneous', 'Other task-related expenses', '#78716c', 'fa-ellipsis-h', 1),
+    ]
+    for cat_name, cat_desc, cat_color, cat_icon, cat_system in default_categories:
+        db.execute(
+            'INSERT OR IGNORE INTO task_transaction_categories (name, description, color, icon, is_system) VALUES (?, ?, ?, ?, ?)',
+            (cat_name, cat_desc, cat_color, cat_icon, cat_system)
         )
 
     db.execute('''
@@ -442,10 +798,15 @@ def init_db():
         CREATE TABLE IF NOT EXISTS user_task_preferences (
             user_id INTEGER PRIMARY KEY,
             visible_columns TEXT,
+            task_list_columns TEXT,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     ''')
+    try:
+        db.execute("ALTER TABLE user_task_preferences ADD COLUMN task_list_columns TEXT DEFAULT 'type,title,parent,assigned,priority,status,progress,due'")
+    except Exception:
+        pass
     db.execute('''
         CREATE TABLE IF NOT EXISTS user_preferences (
             user_id INTEGER PRIMARY KEY,
@@ -494,6 +855,10 @@ def init_db():
         pass
     try:
         db.execute("ALTER TABLE user_preferences ADD COLUMN font_weight TEXT DEFAULT 'regular'")
+    except Exception:
+        pass
+    try:
+        db.execute("ALTER TABLE user_preferences ADD COLUMN language TEXT DEFAULT 'en'")
     except Exception:
         pass
 
@@ -561,21 +926,104 @@ ensure_base_schema()
 init_db()
 ensure_admin_user()
 
+# Initialize Planning tables
+db = get_db()
+init_planning_tables(db)
+db.close()
+
+# Initialize Marketing tables
+from marketing_models import run_marketing_migrations
+from social_media_models import run_social_media_migrations
+run_marketing_migrations()
+run_social_media_migrations()
+
+# =============================================================================
+# UNIFIED PLATFORM INITIALIZATION
+# =============================================================================
+# Initialize the unified platform infrastructure that provides:
+# - Centralized database connections
+# - Unified permission/RBAC system
+# - Centralized settings management
+# - Unified navigation/menu structure
+# - Master data management
+# - Reporting framework
+
+initialize_platform_schema()  # Database - unified audit, notifications, settings
+initialize_permissions()        # RBAC - unified permission system
+initialize_settings()          # Settings - unified settings tables
+initialize_reporting()         # Reporting - unified reporting tables
+initialize_master_data()      # Master data - mapping tables
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
+
 @app.before_request
-def require_login():
-    allowed_routes = ['login', 'static']
+def check_session_auth():
+    """Before-request hook that enforces login for all protected routes."""
+    allowed_routes = ['login', 'static', 'set_language']
     if request.endpoint not in allowed_routes and 'user_id' not in session:
         return redirect(url_for('login'))
 
-def admin_required(f):
+
+@app.context_processor
+def inject_translations():
+    """Inject translation function and translations into all templates."""
+    def t(key, default=None):
+        user_id = session.get('user_id')
+        if user_id:
+            prefs = get_user_preferences()
+            lang = prefs.get('language', 'en')
+        else:
+            lang = 'en'
+        return get_translation(lang, key, default)
+
+    user_id = session.get('user_id')
+    if user_id:
+        prefs = get_user_preferences()
+        lang = prefs.get('language', 'en')
+        translations = get_translations(lang)
+        languages = LANGUAGES
+    else:
+        translations = get_translations('en')
+        languages = LANGUAGES
+
+    return dict(
+        t=t,
+        translations=translations,
+        languages=languages,
+        is_rtl=is_rtl,
+        get_language_direction=get_language_direction
+    )
+
+
+def admin_required(f=None):
+    """Decorator that works both as @admin_required and @admin_required()."""
+    def decorator(fn):
+        @wraps(fn)
+        def decorated_function(*args, **kwargs):
+            if not session.get('can_manage_users'):
+                flash("Access Denied. You do not have permission to view this page.", "error")
+                return redirect(url_for('index'))
+            return fn(*args, **kwargs)
+        return decorated_function
+    if f is None:
+        return decorator
+    elif callable(f):
+        return decorator(f)
+    else:
+        return decorator
+
+def stock_admin_required(f):
+    """Decorator that allows any authenticated user to access stock sync pages.
+    This is because stock data is viewable by all warehouse users.
+    Admin-only actions (like sync trigger) have separate permission checks.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get('can_manage_users'):
-            flash("Access Denied. You do not have permission to view this page.", "error")
-            return redirect(url_for('index'))
+        if not session.get('user_id'):
+            flash("Access Denied. Please login first.", "error")
+            return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -587,14 +1035,70 @@ def inject_globals():
     auto_rtl = browser_language.startswith(('ar', 'fa', 'ur', 'he'))
     resolved_direction = 'rtl' if direction_preference == 'rtl' or (direction_preference == 'auto' and auto_rtl) else 'ltr'
     user_preferences['direction_resolved'] = resolved_direction
+    
+    # Get language for menu translation
+    language = user_preferences.get('language', 'en')
+    
+    # Get current user ID from session
+    user_id = session.get('user_id')
+    
+    # Build unified navigation menu
+    main_menu = []
+    breadcrumbs = []
+    current_module = None
+    
+    if user_id:
+        main_menu = get_main_menu(user_id, language)
+        breadcrumbs = get_breadcrumbs(request.path, language)
+        current_module = get_active_module(request.path)
+    
+    # Get notification and task badges
+    notification_count = 0
+    task_badge = 0
+    if user_id:
+        try:
+            notification_count = get_notification_badge(user_id)
+            task_badge = get_one(
+                "SELECT COUNT(*) as cnt FROM task_items WHERE assigned_to_user_id = ? AND status NOT IN ('Completed', 'Canceled')",
+                (user_id,)
+            )
+            task_badge = task_badge['cnt'] if task_badge else 0
+        except:
+            pass
+    
+    # Get platform settings
+    platform_name = get_platform_setting('platform_name', 'WHDASH')
+    
     return dict(
-        APP_NAME="Warehouse Dashboard",
-        user_preferences=user_preferences
+        APP_NAME=platform_name,
+        user_preferences=user_preferences,
+        main_menu=main_menu,
+        breadcrumbs=breadcrumbs,
+        current_module=current_module,
+        notification_count=notification_count,
+        task_badge=task_badge,
+        # Expose unified status helpers
+        STATUS_COLORS=STATUS_COLORS,
+        STANDARD_STATUSES=STANDARD_STATUSES,
+        # Expose permission helpers for templates
+        user_has_permission=lambda m, r, a: user_has_permission(user_id, m, r, a) if user_id else False,
+        # Expose theme system helpers
+        available_themes=get_available_themes(),
+        current_theme_id=user_preferences.get('theme', get_default_theme()),
+        current_theme_config=get_theme_config(user_preferences.get('theme', get_default_theme())),
+        theme_tokens=get_theme_tokens(user_preferences.get('theme', get_default_theme())),
+        chart_palette=get_chart_palette(user_preferences.get('theme', get_default_theme())),
+        # Expose theme engine helpers
+        theme_preview_data=theme_preview_data(),
+        get_status_color_classes=get_status_color_classes,
+        get_priority_classes=get_priority_classes,
+        # Expose settings helpers
+        get_setting=get_setting,
     )
 
 
 TASK_PRIORITIES = ['Low', 'Medium', 'High', 'Critical']
-TASK_STATUSES = ['Open', 'In Progress', 'Blocked', 'Review', 'Completed']
+TASK_STATUSES = ['Open', 'In Progress', 'Review', 'Completed', 'Canceled']
 TASK_COLUMN_OPTIONS = [
     {'key': 'source', 'label': 'Source', 'description': 'Import source and origin badge'},
     {'key': 'company', 'label': 'Company', 'description': 'Owning company or subsidiary'},
@@ -608,9 +1112,49 @@ TASK_COLUMN_OPTIONS = [
     {'key': 'desc', 'label': 'Desc', 'description': 'Primary description field'},
     {'key': 'time', 'label': 'Time', 'description': 'Due time and future-task marker'},
     {'key': 'add_desc', 'label': 'Add desc', 'description': 'Latest execution update'},
+    {'key': 'subtasks', 'label': 'Subtasks', 'description': 'View and manage subtasks'},
 ]
 TASK_COLUMN_KEYS = [item['key'] for item in TASK_COLUMN_OPTIONS]
 TASK_DEFAULT_VISIBLE_COLUMNS = TASK_COLUMN_KEYS[:]
+
+# Task List (combined task + subtask view) columns
+TASK_LIST_COLUMN_OPTIONS = [
+    {'key': 'type', 'label': 'Type', 'description': 'Task or Subtask badge'},
+    {'key': 'title', 'label': 'Title', 'description': 'Item title and description'},
+    {'key': 'parent', 'label': 'Parent Task', 'description': 'Parent task for subtasks'},
+    {'key': 'assigned', 'label': 'Assigned To', 'description': 'Person responsible'},
+    {'key': 'priority', 'label': 'Priority', 'description': 'Urgency level'},
+    {'key': 'status', 'label': 'Status', 'description': 'Current state'},
+    {'key': 'progress', 'label': 'Progress', 'description': 'Completion percentage'},
+    {'key': 'due', 'label': 'Due Date', 'description': 'Deadline'},
+]
+TASK_LIST_COLUMN_KEYS = [item['key'] for item in TASK_LIST_COLUMN_OPTIONS]
+TASK_LIST_DEFAULT_COLUMNS = TASK_LIST_COLUMN_KEYS[:]
+
+# Subtask constants
+SUBTASK_PRIORITIES = ['Low', 'Medium', 'High', 'Critical']
+SUBTASK_STATUSES = ['Pending', 'In Progress', 'Completed', 'Cancelled']
+SUBTASK_COLUMN_OPTIONS = [
+    {'key': 'checkbox', 'label': '', 'description': 'Completion checkbox'},
+    {'key': 'subtask', 'label': 'Subtask', 'description': 'Subtask title and details'},
+    {'key': 'assigned_to', 'label': 'Assigned To', 'description': 'Subtask owner'},
+    {'key': 'priority', 'label': 'Priority', 'description': 'Urgency level'},
+    {'key': 'status', 'label': 'Status', 'description': 'Current state'},
+    {'key': 'progress', 'label': 'Progress %', 'description': 'Completion percentage'},
+    {'key': 'due_at', 'label': 'Due Date', 'description': 'Deadline'},
+    {'key': 'actions', 'label': 'Actions', 'description': 'Edit/Delete actions'},
+]
+SUBTASK_COLUMN_KEYS = [item['key'] for item in SUBTASK_COLUMN_OPTIONS]
+SUBTASK_DEFAULT_VISIBLE_COLUMNS = SUBTASK_COLUMN_KEYS[:]
+
+# Transaction constants
+TRANSACTION_TYPES = ['Expense', 'Revenue', 'Time', 'Resource']
+TRANSACTION_STATUSES = ['Pending', 'Approved', 'Rejected', 'Cancelled']
+
+# Report constants
+REPORT_TYPES = ['Status', 'Priority', 'Department', 'User', 'Timeline', 'Financial', 'Productivity']
+REPORT_INTERVALS = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly', 'Custom']
+
 ISSUE_PRIORITY_OPTIONS = ['High', 'Medium', 'Low']
 ISSUE_STATUS_OPTIONS = ['Open', 'Pending', 'Closed']
 ISSUE_TYPE_OPTIONS = ['Problem', 'Suggestion', 'Issue']
@@ -645,15 +1189,21 @@ ISSUE_COLUMN_OPTIONS = [
 ISSUE_COLUMN_KEYS = [item['key'] for item in ISSUE_COLUMN_OPTIONS]
 ISSUE_DEFAULT_VISIBLE_COLUMNS = ISSUE_COLUMN_KEYS[:]
 USER_THEME_OPTIONS = [
-    {'value': 'dark', 'label': 'Dark Mode'},
-    {'value': 'light', 'label': 'Day Mode'}
+    {'value': 'dark', 'label': 'Dark Night'},
+    {'value': 'light', 'label': 'Light Day'},
+    {'value': 'blue', 'label': 'Ocean Blue'},
+    {'value': 'green', 'label': 'Forest Green'},
+    {'value': 'orange', 'label': 'Sunset Orange'},
+    {'value': 'purple', 'label': 'Royal Purple'}
 ]
 USER_FONT_FAMILY_OPTIONS = [
-    {'value': 'outfit', 'label': 'Outfit', 'stack': "'Outfit', sans-serif"},
-    {'value': 'manrope', 'label': 'Manrope', 'stack': "'Manrope', sans-serif"},
-    {'value': 'tajawal', 'label': 'Tajawal', 'stack': "'Tajawal', sans-serif"},
-    {'value': 'space_grotesk', 'label': 'Space Grotesk', 'stack': "'Space Grotesk', sans-serif"},
-    {'value': 'calibri', 'label': 'Calibri', 'stack': "'Calibri', 'Carlito', 'Segoe UI', sans-serif"}
+    {'value': 'outfit', 'label': 'Outfit', 'stack': "'Outfit', 'Vazirmatn', 'Noto Sans Arabic', 'Noto Sans', sans-serif"},
+    {'value': 'manrope', 'label': 'Manrope', 'stack': "'Manrope', 'Vazirmatn', 'Noto Sans Arabic', 'Noto Sans', sans-serif"},
+    {'value': 'tajawal', 'label': 'Tajawal', 'stack': "'Tajawal', 'Vazirmatn', 'Noto Sans Arabic', sans-serif"},
+    {'value': 'space_grotesk', 'label': 'Space Grotesk', 'stack': "'Space Grotesk', 'Vazirmatn', 'Noto Sans Arabic', 'Noto Sans', sans-serif"},
+    {'value': 'vazirmatn', 'label': 'Vazirmatn', 'stack': "'Vazirmatn', 'Noto Sans Arabic', 'Noto Sans', sans-serif"},
+    {'value': 'noto_sans', 'label': 'Noto Sans', 'stack': "'Noto Sans', 'Vazirmatn', 'Noto Sans Arabic', sans-serif"},
+    {'value': 'calibri', 'label': 'Calibri', 'stack': "'Calibri', 'Carlito', 'Segoe UI', 'Vazirmatn', 'Noto Sans Arabic', sans-serif"}
 ]
 USER_FONT_SIZE_OPTIONS = [
     {'value': 'small', 'label': 'Small', 'size': '15px'},
@@ -667,17 +1217,52 @@ USER_FONT_WEIGHT_OPTIONS = [
 ]
 USER_TIMEZONE_OPTIONS = [
     {'value': 'Asia/Dubai', 'label': 'Dubai (GMT+4)'},
-    {'value': 'UTC', 'label': 'UTC'},
-    {'value': 'Asia/Riyadh', 'label': 'Riyadh'},
-    {'value': 'Asia/Tehran', 'label': 'Tehran'},
-    {'value': 'Asia/Karachi', 'label': 'Karachi'},
-    {'value': 'Asia/Kolkata', 'label': 'Mumbai / New Delhi'},
-    {'value': 'Europe/London', 'label': 'London'},
-    {'value': 'Europe/Berlin', 'label': 'Berlin'},
-    {'value': 'America/New_York', 'label': 'New York'},
-    {'value': 'America/Chicago', 'label': 'Chicago'},
-    {'value': 'America/Denver', 'label': 'Denver'},
-    {'value': 'America/Los_Angeles', 'label': 'Los Angeles'}
+    {'value': 'Asia/Tehran', 'label': 'Tehran (GMT+3:30)'},
+    {'value': 'Asia/Kabul', 'label': 'Kabul (GMT+4:30)'},
+    {'value': 'Asia/Karachi', 'label': 'Karachi (GMT+5)'},
+    {'value': 'Asia/Kolkata', 'label': 'Mumbai / New Delhi (GMT+5:30)'},
+    {'value': 'Asia/Dhaka', 'label': 'Dhaka (GMT+6)'},
+    {'value': 'Asia/Bangkok', 'label': 'Bangkok (GMT+7)'},
+    {'value': 'Asia/Jakarta', 'label': 'Jakarta (GMT+7)'},
+    {'value': 'Asia/Singapore', 'label': 'Singapore (GMT+8)'},
+    {'value': 'Asia/Hong_Kong', 'label': 'Hong Kong (GMT+8)'},
+    {'value': 'Asia/Shanghai', 'label': 'Shanghai (GMT+8)'},
+    {'value': 'Asia/Tokyo', 'label': 'Tokyo (GMT+9)'},
+    {'value': 'Asia/Seoul', 'label': 'Seoul (GMT+9)'},
+    {'value': 'Asia/Yerevan', 'label': 'Yerevan (GMT+4)'},
+    {'value': 'Asia/Tbilisi', 'label': 'Tbilisi (GMT+4)'},
+    {'value': 'Asia/Baghdad', 'label': 'Baghdad (GMT+3)'},
+    {'value': 'Asia/Kuwait', 'label': 'Kuwait (GMT+3)'},
+    {'value': 'Asia/Riyadh', 'label': 'Riyadh (GMT+3)'},
+    {'value': 'Asia/Qatar', 'label': 'Qatar (GMT+3)'},
+    {'value': 'Europe/Istanbul', 'label': 'Istanbul (GMT+3)'},
+    {'value': 'Europe/Moscow', 'label': 'Moscow (GMT+3)'},
+    {'value': 'Europe/Baku', 'label': 'Baku (GMT+4)'},
+    {'value': 'Europe/Athens', 'label': 'Athens (GMT+2)'},
+    {'value': 'Europe/Bucharest', 'label': 'Bucharest (GMT+2)'},
+    {'value': 'Europe/Vienna', 'label': 'Vienna (GMT+1)'},
+    {'value': 'Europe/Berlin', 'label': 'Berlin (GMT+1)'},
+    {'value': 'Europe/Amsterdam', 'label': 'Amsterdam (GMT+1)'},
+    {'value': 'Europe/Paris', 'label': 'Paris (GMT+1)'},
+    {'value': 'Europe/Madrid', 'label': 'Madrid (GMT+1)'},
+    {'value': 'Europe/London', 'label': 'London (GMT+0)'},
+    {'value': 'Europe/Warsaw', 'label': 'Warsaw (GMT+1)'},
+    {'value': 'Africa/Cairo', 'label': 'Cairo (GMT+2)'},
+    {'value': 'Africa/Nairobi', 'label': 'Nairobi (GMT+3)'},
+    {'value': 'Africa/Lagos', 'label': 'Lagos (GMT+1)'},
+    {'value': 'Australia/Sydney', 'label': 'Sydney (GMT+10)'},
+    {'value': 'Australia/Perth', 'label': 'Perth (GMT+8)'},
+    {'value': 'Pacific/Auckland', 'label': 'Auckland (GMT+12)'},
+    {'value': 'America/Toronto', 'label': 'Toronto (GMT-5)'},
+    {'value': 'America/New_York', 'label': 'New York (GMT-5)'},
+    {'value': 'America/Chicago', 'label': 'Chicago (GMT-6)'},
+    {'value': 'America/Denver', 'label': 'Denver (GMT-7)'},
+    {'value': 'America/Los_Angeles', 'label': 'Los Angeles (GMT-8)'},
+    {'value': 'America/Vancouver', 'label': 'Vancouver (GMT-8)'},
+    {'value': 'America/Mexico_City', 'label': 'Mexico City (GMT-6)'},
+    {'value': 'America/Sao_Paulo', 'label': 'Sao Paulo (GMT-3)'},
+    {'value': 'America/Buenos_Aires', 'label': 'Buenos Aires (GMT-3)'},
+    {'value': 'UTC', 'label': 'UTC'}
 ]
 USER_DATE_FORMAT_OPTIONS = [
     {'value': 'DD/MM/YYYY', 'label': 'DD/MM/YYYY'},
@@ -688,6 +1273,14 @@ USER_DIRECTION_OPTIONS = [
     {'value': 'auto', 'label': 'Auto'},
     {'value': 'ltr', 'label': 'Left to Right'},
     {'value': 'rtl', 'label': 'Right to Left'}
+]
+
+# Language options for preferences
+USER_LANGUAGE_OPTIONS = [
+    {'value': 'en', 'label': 'English'},
+    {'value': 'fa', 'label': 'فارسی (Persian)'},
+    {'value': 'ar', 'label': 'العربية (Arabic)'},
+    {'value': 'ru', 'label': 'Русский (Russian)'}
 ]
 USER_CURRENCY_OPTIONS = [
     {'value': 'AED', 'label': 'AED'},
@@ -719,7 +1312,8 @@ USER_PREFERENCE_DEFAULTS = {
     'density': 'comfortable',
     'reduced_motion': 0,
     'show_seconds': 1,
-    'sidebar_compact': 0
+    'sidebar_compact': 0,
+    'language': 'en'
 }
 FUTURE_TASK_KEYWORDS = (
     'future',
@@ -741,6 +1335,105 @@ def user_can_manage_all_tasks():
     return bool(session.get('can_manage_users'))
 
 
+def user_can_create_subtasks():
+    """Check if current user can create subtasks"""
+    return bool(session.get('user_id'))
+
+
+def user_can_edit_subtasks():
+    """Check if current user can edit subtasks they own or are assigned to"""
+    return bool(session.get('user_id'))
+
+
+def user_can_delete_subtasks():
+    """Check if current user can delete subtasks"""
+    return bool(session.get('can_manage_users'))
+
+
+def user_can_manage_task_transactions():
+    """Check if current user can manage task transactions"""
+    return bool(session.get('can_manage_users') or session.get('can_edit_stock'))
+
+
+def user_can_view_task_reports():
+    """Check if current user can view task reports"""
+    return bool(session.get('user_id'))
+
+
+def user_can_export_task_reports():
+    """Check if current user can export task reports"""
+    return bool(session.get('can_manage_users'))
+
+
+# ─── Warehouse Stock Sync Permissions ─────────────────────────────────────────
+
+def user_can_sync_stock():
+    """Check if current user can trigger stock synchronization with Peyvast"""
+    return bool(session.get('can_manage_users') or session.get('can_edit_stock'))
+
+def user_can_view_live_stock():
+    """Check if current user can view live synced stock data"""
+    return bool(session.get('user_id'))
+
+def user_can_view_stock_source_details():
+    """Check if current user can view stock source details like seller/invoice"""
+    return bool(session.get('can_manage_users') or session.get('can_edit_stock'))
+
+def user_can_export_stock_reports():
+    """Check if current user can export stock reports"""
+    return bool(session.get('can_manage_users') or session.get('can_edit_stock'))
+
+def user_can_view_part_costs():
+    """Check if current user can view part cost information (last purchase price, avg unit cost)"""
+    return bool(session.get('can_manage_users') or session.get('can_edit_stock'))
+
+def user_can_view_supplier_invoice_details():
+    """Check if current user can view supplier and invoice details"""
+    return bool(session.get('can_manage_users'))
+
+def user_can_manage_stock_sync_settings():
+    """Check if current user can manage stock sync settings (schedule, credentials, etc)"""
+    return bool(session.get('can_manage_users'))
+
+
+def normalize_subtask_priority(priority_value):
+    """Normalize subtask priority value"""
+    priority = (priority_value or 'Medium').strip()
+    return priority if priority in SUBTASK_PRIORITIES else 'Medium'
+
+
+def normalize_subtask_status(status_value):
+    """Normalize subtask status value"""
+    status = (status_value or 'Pending').strip()
+    return status if status in SUBTASK_STATUSES else 'Pending'
+
+
+def sanitize_task_transaction_columns(raw_columns):
+    """Ensure only valid transaction columns are returned"""
+    valid_columns = ['category', 'type', 'amount', 'quantity', 'unit', 'description', 'reference', 'date', 'actions']
+    if not raw_columns:
+        return valid_columns
+    return [col for col in raw_columns if col in valid_columns]
+
+
+def get_user_task_permissions(db, user_id):
+    """Get all task-related permissions for a user"""
+    rows = db.execute(
+        'SELECT permission_key, permission_value FROM task_user_permissions WHERE user_id = ?',
+        (user_id,)
+    ).fetchall()
+    return {row['permission_key']: row['permission_value'] for row in rows}
+
+
+def check_user_task_permission(db, user_id, permission_key):
+    """Check if user has a specific task permission"""
+    row = db.execute(
+        'SELECT permission_value FROM task_user_permissions WHERE user_id = ? AND permission_key = ?',
+        (user_id, permission_key)
+    ).fetchone()
+    return bool(row and row['permission_value'])
+
+
 def preference_option_values(options):
     return {option['value'] for option in options}
 
@@ -752,7 +1445,7 @@ def build_user_preferences(raw_preferences=None):
     if isinstance(raw_preferences, dict):
         preferences.update({key: raw_preferences.get(key) for key in preferences.keys() if key in raw_preferences})
 
-    theme_values = preference_option_values(USER_THEME_OPTIONS)
+    theme_values = get_all_theme_ids()
     font_values = preference_option_values(USER_FONT_FAMILY_OPTIONS)
     font_size_values = preference_option_values(USER_FONT_SIZE_OPTIONS)
     font_weight_values = preference_option_values(USER_FONT_WEIGHT_OPTIONS)
@@ -761,6 +1454,7 @@ def build_user_preferences(raw_preferences=None):
     direction_values = preference_option_values(USER_DIRECTION_OPTIONS)
     currency_values = preference_option_values(USER_CURRENCY_OPTIONS)
     density_values = preference_option_values(USER_DENSITY_OPTIONS)
+    language_values = preference_option_values(USER_LANGUAGE_OPTIONS)
 
     preferences['theme'] = preferences['theme'] if preferences['theme'] in theme_values else USER_PREFERENCE_DEFAULTS['theme']
     preferences['font_family'] = preferences['font_family'] if preferences['font_family'] in font_values else USER_PREFERENCE_DEFAULTS['font_family']
@@ -771,6 +1465,7 @@ def build_user_preferences(raw_preferences=None):
     preferences['interface_direction'] = preferences['interface_direction'] if preferences['interface_direction'] in direction_values else USER_PREFERENCE_DEFAULTS['interface_direction']
     preferences['currency'] = preferences['currency'] if preferences['currency'] in currency_values else USER_PREFERENCE_DEFAULTS['currency']
     preferences['density'] = preferences['density'] if preferences['density'] in density_values else USER_PREFERENCE_DEFAULTS['density']
+    preferences['language'] = preferences['language'] if preferences['language'] in language_values else USER_PREFERENCE_DEFAULTS['language']
     preferences['reduced_motion'] = 1 if int(preferences.get('reduced_motion') or 0) else 0
     preferences['show_seconds'] = 1 if int(preferences.get('show_seconds') or 0) else 0
     preferences['sidebar_compact'] = 1 if int(preferences.get('sidebar_compact') or 0) else 0
@@ -782,7 +1477,15 @@ def build_user_preferences(raw_preferences=None):
     preferences['font_size_value'] = font_size_map.get(preferences['font_size'], '16px')
     preferences['font_weight_value'] = font_weight_map.get(preferences['font_weight'], '400')
     preferences['timezone_label'] = preferences['timezone'].split('/')[-1].replace('_', ' ')
-    preferences['is_dark'] = preferences['theme'] == 'dark'
+    preferences['is_dark'] = is_dark_theme(preferences['theme'])
+
+    # Resolve direction based on language and interface_direction setting
+    lang_direction = get_language_direction(preferences['language'])
+    if preferences['interface_direction'] == 'auto':
+        preferences['direction_resolved'] = lang_direction
+    else:
+        preferences['direction_resolved'] = preferences['interface_direction']
+
     return preferences
 
 
@@ -805,8 +1508,8 @@ def save_user_preferences_record(db, user_id, preferences):
         '''
         INSERT INTO user_preferences (
             user_id, theme, font_family, font_size, font_weight, timezone, date_format, interface_direction, currency,
-            density, reduced_motion, show_seconds, sidebar_compact, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            density, reduced_motion, show_seconds, sidebar_compact, language, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(user_id) DO UPDATE SET
             theme = excluded.theme,
             font_family = excluded.font_family,
@@ -820,6 +1523,7 @@ def save_user_preferences_record(db, user_id, preferences):
             reduced_motion = excluded.reduced_motion,
             show_seconds = excluded.show_seconds,
             sidebar_compact = excluded.sidebar_compact,
+            language = excluded.language,
             updated_at = CURRENT_TIMESTAMP
         ''',
         (
@@ -835,7 +1539,8 @@ def save_user_preferences_record(db, user_id, preferences):
             sanitized['density'],
             sanitized['reduced_motion'],
             sanitized['show_seconds'],
-            sanitized['sidebar_compact']
+            sanitized['sidebar_compact'],
+            sanitized['language']
         )
     )
     return sanitized
@@ -884,7 +1589,7 @@ def get_task_sort_expression(sort_by):
         'progress': 't.progress',
         'status': (
             "CASE t.status "
-            "WHEN 'Blocked' THEN 1 "
+            "WHEN 'Canceled' THEN 1 "
             "WHEN 'Open' THEN 2 "
             "WHEN 'In Progress' THEN 3 "
             "WHEN 'Review' THEN 4 "
@@ -904,6 +1609,46 @@ def clamp_progress(progress_value):
     except (TypeError, ValueError):
         progress = 0
     return max(0, min(progress, 100))
+
+
+def recalculate_task_progress_from_subtasks(db, task_id):
+    """Recalculate and update task_items.progress_auto based on subtask completion.
+    Returns the new progress value or None if no subtasks exist."""
+    total = db.execute(
+        'SELECT COUNT(*) FROM task_subtasks WHERE parent_task_id = ?', (task_id,)
+    ).fetchone()[0]
+    if total == 0:
+        return None
+    completed = db.execute(
+        "SELECT COUNT(*) FROM task_subtasks WHERE parent_task_id = ? AND status = 'Completed'",
+        (task_id,)
+    ).fetchone()[0]
+    new_progress = int((completed * 100) / total)
+    db.execute(
+        'UPDATE task_items SET progress_auto = ? WHERE id = ?',
+        (new_progress, task_id)
+    )
+    return new_progress
+
+
+def update_task_progress_if_not_manual(db, task_id):
+    """Only update task progress if it's not manually set (progress_auto >= 0 means auto mode)."""
+    task = db.execute('SELECT progress_auto, progress FROM task_items WHERE id = ?', (task_id,)).fetchone()
+    if not task:
+        return
+    if task['progress_auto'] is not None and task['progress_auto'] < 0:
+        return
+    subtask_count = db.execute(
+        'SELECT COUNT(*) FROM task_subtasks WHERE parent_task_id = ?', (task_id,)
+    ).fetchone()[0]
+    if subtask_count == 0:
+        return
+    auto_progress = recalculate_task_progress_from_subtasks(db, task_id)
+    if auto_progress is not None:
+        db.execute(
+            'UPDATE task_items SET progress = ? WHERE id = ?',
+            (auto_progress, task_id)
+        )
 
 
 def parse_optional_int(value):
@@ -1255,7 +2000,7 @@ def build_task_report(tasks):
             'total': len(tasks),
             'active': len(active_tasks),
             'completed': sum(1 for task in tasks if task.get('status') == 'Completed'),
-            'blocked': sum(1 for task in tasks if task.get('status') == 'Blocked'),
+            'canceled': sum(1 for task in tasks if task.get('status') == 'Canceled'),
             'review': sum(1 for task in tasks if task.get('status') == 'Review'),
             'archived': sum(1 for task in tasks if task.get('is_archived')),
             'future': sum(1 for task in tasks if task.get('is_future_task')),
@@ -1454,7 +2199,11 @@ def login():
                 session['company_id'] = role['company_id']
                 session['can_edit_stock'] = bool(role['can_edit_stock'])
                 session['can_manage_users'] = bool(role['can_manage_users'])
-                
+
+                # Load marketing permissions for the user
+                from marketing_models import get_user_marketing_permissions
+                session['marketing_permissions'] = get_user_marketing_permissions(user['id'])
+
                 return redirect(url_for('index'))
             else:
                 flash("Invalid username or password.", "error")
@@ -1562,7 +2311,8 @@ def preferences():
             'density': request.form.get('density', current_preferences['density']).strip(),
             'reduced_motion': request.form.get('reduced_motion', str(current_preferences['reduced_motion'])).strip(),
             'show_seconds': request.form.get('show_seconds', str(current_preferences['show_seconds'])).strip(),
-            'sidebar_compact': request.form.get('sidebar_compact', str(current_preferences['sidebar_compact'])).strip()
+            'sidebar_compact': request.form.get('sidebar_compact', str(current_preferences['sidebar_compact'])).strip(),
+            'language': request.form.get('language', current_preferences['language']).strip()
         }
         save_user_preferences_record(db, user_id, updated_preferences)
         db.commit()
@@ -1573,7 +2323,10 @@ def preferences():
         'preferences.html',
         title="My Preferences",
         preferences=current_preferences,
+        available_themes=get_available_themes(),
         theme_options=USER_THEME_OPTIONS,
+        language_options=USER_LANGUAGE_OPTIONS,
+        languages=LANGUAGES,
         font_family_options=USER_FONT_FAMILY_OPTIONS,
         font_size_options=USER_FONT_SIZE_OPTIONS,
         font_weight_options=USER_FONT_WEIGHT_OPTIONS,
@@ -1582,7 +2335,8 @@ def preferences():
         direction_options=USER_DIRECTION_OPTIONS,
         currency_options=USER_CURRENCY_OPTIONS,
         density_options=USER_DENSITY_OPTIONS,
-        boolean_options=USER_BOOLEAN_OPTIONS
+        boolean_options=USER_BOOLEAN_OPTIONS,
+        translations=get_translations(current_preferences['language'])
     )
 
 
@@ -1602,6 +2356,114 @@ def quick_preference_update():
     saved_preferences = save_user_preferences_record(db, user_id, current_preferences)
     db.commit()
     return jsonify({'success': True, 'message': 'Preference saved.', 'preferences': saved_preferences})
+
+
+@app.route('/api/theme/switch', methods=['POST'])
+def api_switch_theme():
+    """API endpoint for live theme switching without page reload."""
+    data = request.get_json() or {}
+    theme_id = (data.get('theme') or '').strip()
+
+    # Validate theme
+    if not validate_theme(theme_id):
+        return jsonify({'success': False, 'message': 'Invalid theme.'}), 400
+
+    user_id = session.get('user_id')
+    if user_id:
+        # Save to database
+        db = get_db()
+        current_preferences = get_user_preferences(db, user_id)
+        current_preferences['theme'] = theme_id
+        saved_preferences = save_user_preferences_record(db, user_id, current_preferences)
+        db.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Theme saved.',
+            'theme': theme_id,
+            'is_dark': is_dark_theme(theme_id),
+            'chart_palette': get_chart_palette(theme_id)
+        })
+    else:
+        # Not logged in, just return success with localStorage hint
+        return jsonify({
+            'success': True,
+            'message': 'Theme set for session.',
+            'theme': theme_id,
+            'is_dark': is_dark_theme(theme_id),
+            'chart_palette': get_chart_palette(theme_id),
+            'save_to_storage': True
+        })
+
+
+@app.route('/api/theme/current', methods=['GET'])
+def api_current_theme():
+    """Get current theme configuration."""
+    user_id = session.get('user_id')
+    if user_id:
+        prefs = get_user_preferences(user_id)
+        theme_id = prefs.get('theme', get_default_theme())
+    else:
+        theme_id = get_default_theme()
+
+    return jsonify({
+        'theme': theme_id,
+        'config': get_theme_config(theme_id),
+        'is_dark': is_dark_theme(theme_id),
+        'chart_palette': get_chart_palette(theme_id),
+        'tokens': get_theme_tokens(theme_id)
+    })
+
+
+@app.route('/api/theme/list', methods=['GET'])
+def api_list_themes():
+    """Get list of all available themes."""
+    return jsonify({
+        'themes': [
+            {
+                'id': t['id'],
+                'name': t['name'],
+                'label': t['label'],
+                'description': t['description'],
+                'is_dark': t['is_dark'],
+                'preview': t.get('preview', {})
+            }
+            for t in get_available_themes()
+        ],
+        'default': get_default_theme()
+    })
+
+
+@app.route('/set-language', methods=['POST'])
+def set_language():
+    """Set the user's language preference and return translations."""
+    data = request.get_json() or {}
+    lang_code = data.get('language', 'en').strip()
+
+    # Validate language code
+    valid_languages = [l['code'] for l in LANGUAGES]
+    if lang_code not in valid_languages:
+        return jsonify({'success': False, 'message': 'Unsupported language.'}), 400
+
+    user_id = session.get('user_id')
+    if user_id:
+        db = get_db()
+        current_preferences = get_user_preferences(db, user_id)
+        current_preferences['language'] = lang_code
+        saved_preferences = save_user_preferences_record(db, user_id, current_preferences)
+        db.commit()
+    else:
+        # For non-logged in users, just return translations
+        saved_preferences = {'language': lang_code}
+
+    return jsonify({
+        'success': True,
+        'language': lang_code,
+        'direction': get_language_direction(lang_code),
+        'translations': get_translations(lang_code),
+        'is_rtl': is_rtl(lang_code)
+    })
+
 
 @app.route('/settings', methods=['GET', 'POST'])
 @admin_required
@@ -1662,7 +2524,16 @@ def settings():
 @admin_required
 def parts_settings():
     db = get_db()
-    
+
+    # Auto-sync with Peyvast on every page load (GET requests)
+    if request.method == 'GET':
+        try:
+            sync_manager = PeyvastSyncManager()
+            sync_manager.ensure_sync_schema()
+            sync_manager.sync_all()
+        except Exception as e:
+            pass  # Silent fail, show existing data
+
     if request.method == 'POST':
         action = request.form.get('action')
         part_id = request.form.get('part_id')
@@ -2186,7 +3057,8 @@ def task_manager():
         f'''
         SELECT t.*, c.name AS company_name, d.name AS department_name,
                r.username AS report_to_name, a.username AS assigned_to_name,
-               creator.username AS created_by_name
+               creator.username AS created_by_name,
+               (SELECT COUNT(*) FROM task_subtasks WHERE parent_task_id = t.id) AS subtask_count
         {base_sql}
         ORDER BY {sort_expr} {sort_dir}, t.id DESC
         LIMIT ? OFFSET ?
@@ -2201,7 +3073,7 @@ def task_manager():
         SELECT
             COUNT(*) AS total_tasks,
             SUM(CASE WHEN t.status = 'Completed' THEN 1 ELSE 0 END) AS completed_tasks,
-            SUM(CASE WHEN t.status = 'Blocked' THEN 1 ELSE 0 END) AS blocked_tasks,
+            SUM(CASE WHEN t.status = 'Canceled' THEN 1 ELSE 0 END) AS canceled_tasks,
             SUM(CASE WHEN t.is_archived = 1 THEN 1 ELSE 0 END) AS archived_tasks,
             AVG(COALESCE(t.progress, 0)) AS average_progress,
             SUM(
@@ -2400,6 +3272,8 @@ def save_task():
     priority = normalize_task_priority(data.get('priority'))
     status = normalize_task_status(data.get('status'))
     progress = clamp_progress(data.get('progress'))
+    reminder_days = max(0, int(data.get('reminder_days', 0) or 0))
+    reminder_hours = max(0, int(data.get('reminder_hours', 0) or 0))
 
     if not task_name or not company_id or not department_id:
         return jsonify({'success': False, 'message': 'Company, department, and task title are required.'}), 400
@@ -2438,7 +3312,9 @@ def save_task():
         'status': status,
         'description': description,
         'latest_note': latest_note_value,
-        'due_at': due_at
+        'due_at': due_at,
+        'reminder_days': reminder_days,
+        'reminder_hours': reminder_hours
     }
 
     if task_id:
@@ -2453,13 +3329,15 @@ def save_task():
             UPDATE task_items
             SET company_id = ?, department_id = ?, task_name = ?, priority = ?,
                 report_to_user_id = ?, assigned_to_user_id = ?, progress = ?, status = ?,
-                description = ?, latest_note = ?, due_at = ?, updated_at = CURRENT_TIMESTAMP
+                description = ?, latest_note = ?, due_at = ?, reminder_days = ?, reminder_hours = ?,
+                updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
             ''',
             (
                 payload['company_id'], payload['department_id'], payload['task_name'], payload['priority'],
                 payload['report_to_user_id'], payload['assigned_to_user_id'], payload['progress'], payload['status'],
-                payload['description'], payload['latest_note'], payload['due_at'], task_id
+                payload['description'], payload['latest_note'], payload['due_at'],
+                payload['reminder_days'], payload['reminder_hours'], task_id
             )
         )
         for field_name, old_value, new_value in changed_fields:
@@ -2480,14 +3358,14 @@ def save_task():
         INSERT INTO task_items (
             company_id, department_id, task_name, priority, report_to_user_id,
             assigned_to_user_id, progress, status, description, latest_note,
-            due_at, created_by_user_id
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            due_at, reminder_days, reminder_hours, created_by_user_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''',
         (
             payload['company_id'], payload['department_id'], payload['task_name'], payload['priority'],
             payload['report_to_user_id'], payload['assigned_to_user_id'], payload['progress'],
             payload['status'], payload['description'], payload['latest_note'], payload['due_at'],
-            session.get('user_id')
+            payload['reminder_days'], payload['reminder_hours'], session.get('user_id')
         )
     )
     new_task_id = cursor.lastrowid
@@ -2539,15 +3417,23 @@ def task_bulk_action():
             log_task_history(db, task_id, task['task_name'], 'unarchived')
             affected += 1
         elif action == 'status':
-            progress = 100 if target_status == 'Completed' else task['progress']
-            db.execute(
-                "UPDATE task_items SET status = ?, progress = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                (target_status, progress, task_id)
-            )
-            log_task_history(
-                db, task_id, task['task_name'], 'status_changed',
-                field_name='status', old_value=task['status'], new_value=target_status
-            )
+            progress = 100 if target_status in ('Completed', 'Canceled') else task['progress']
+            # Archive task when marked as Completed or Canceled
+            if target_status in ('Completed', 'Canceled') and not task['is_archived']:
+                db.execute(
+                    "UPDATE task_items SET status = ?, progress = ?, is_archived = 1, archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (target_status, progress, task_id)
+                )
+                log_task_history(db, task_id, task['task_name'], 'archived')
+            else:
+                db.execute(
+                    "UPDATE task_items SET status = ?, progress = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (target_status, progress, task_id)
+                )
+                log_task_history(
+                    db, task_id, task['task_name'], 'status_changed',
+                    field_name='status', old_value=task['status'], new_value=target_status
+                )
             affected += 1
         elif action in ('delete', 'remove'):
             log_task_history(db, task_id, task['task_name'], 'deleted', note='Task removed from active register')
@@ -2556,6 +3442,70 @@ def task_bulk_action():
 
     db.commit()
     return jsonify({'success': True, 'message': f'{affected} task(s) updated.', 'affected': affected})
+
+
+@app.route('/tasks/toggle_complete', methods=['POST'])
+def toggle_task_complete():
+    """Toggle task completion (set to Completed or back to In Progress)"""
+    db = get_db()
+    data = request.get_json() or {}
+    task_id = parse_optional_int(data.get('task_id'))
+
+    if not task_id:
+        return jsonify({'success': False, 'message': 'Task ID is required'}), 400
+
+    task = fetch_task_record(db, task_id)
+    if not task:
+        return jsonify({'success': False, 'message': 'Task not found'}), 404
+
+    current_status = task['status']
+    if current_status == 'Completed' or current_status == 'Canceled':
+        new_status = 'In Progress'
+        new_progress = task['progress'] if task['progress'] < 100 else 80
+    else:
+        new_status = 'Completed'
+        new_progress = 100
+
+    # Archive task when marked as Completed or Canceled
+    if new_status == 'Completed' and not task['is_archived']:
+        db.execute(
+            "UPDATE task_items SET status = ?, progress = ?, is_archived = 1, archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (new_status, new_progress, task_id)
+        )
+        log_task_history(db, task_id, task['task_name'], 'archived')
+    else:
+        db.execute(
+            "UPDATE task_items SET status = ?, progress = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (new_status, new_progress, task_id)
+        )
+        log_task_history(db, task_id, task['task_name'], 'status_changed',
+                         field_name='status', old_value=current_status, new_value=new_status)
+    db.commit()
+    return jsonify({'success': True, 'status': new_status, 'progress': new_progress})
+
+
+@app.route('/tasks/delete', methods=['POST'])
+def delete_task_item():
+    """Delete a task and its subtasks"""
+    if not user_can_manage_all_tasks():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    data = request.get_json() or {}
+    task_id = parse_optional_int(data.get('task_id'))
+
+    if not task_id:
+        return jsonify({'success': False, 'message': 'Task ID is required'}), 400
+
+    task = fetch_task_record(db, task_id)
+    if not task:
+        return jsonify({'success': False, 'message': 'Task not found'}), 404
+
+    log_task_history(db, task_id, task['task_name'], 'deleted', note='Task removed')
+    db.execute("DELETE FROM task_subtasks WHERE parent_task_id = ?", (task_id,))
+    db.execute("DELETE FROM task_items WHERE id = ?", (task_id,))
+    db.commit()
+    return jsonify({'success': True, 'message': 'Task deleted'})
 
 
 @app.route('/tasks/note', methods=['POST'])
@@ -2577,7 +3527,7 @@ def add_task_note():
 
     new_progress = clamp_progress(progress if progress is not None else task['progress'])
     new_status = normalize_task_status(status_value if status_value is not None else task['status'])
-    if new_status == 'Completed':
+    if new_status in ('Completed', 'Canceled'):
         new_progress = 100
     new_latest_note = compose_task_latest_note(
         note,
@@ -2586,14 +3536,26 @@ def add_task_note():
         raw_status=task_meta.get('raw_status_label', '')
     )
 
-    db.execute(
-        '''
-        UPDATE task_items
-        SET latest_note = ?, progress = ?, status = ?, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-        ''',
-        (new_latest_note, new_progress, new_status, task_id)
-    )
+    # Archive task when marked as Completed or Canceled
+    if new_status in ('Completed', 'Canceled') and not task['is_archived']:
+        db.execute(
+            '''
+            UPDATE task_items
+            SET latest_note = ?, progress = ?, status = ?, is_archived = 1, archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            ''',
+            (new_latest_note, new_progress, new_status, task_id)
+        )
+        log_task_history(db, task_id, task['task_name'], 'archived')
+    else:
+        db.execute(
+            '''
+            UPDATE task_items
+            SET latest_note = ?, progress = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+            ''',
+            (new_latest_note, new_progress, new_status, task_id)
+        )
     log_task_history(
         db, task_id, task['task_name'], 'note',
         field_name='latest_note', old_value=task['latest_note'],
@@ -2610,6 +3572,329 @@ def add_task_note():
             field_name='status', old_value=task['status'], new_value=new_status
         )
     db.commit()
+    return jsonify({'success': True})
+
+
+@app.route('/tasks/progress/override', methods=['POST'])
+def set_task_progress_manual():
+    """Manually override task progress, locking it from auto-calculation."""
+    db = get_db()
+    data = request.get_json() or {}
+    task_id = parse_optional_int(data.get('task_id'))
+    progress = clamp_progress(data.get('progress'))
+    is_manual = bool(data.get('is_manual', True))
+
+    if not task_id:
+        return jsonify({'success': False, 'message': 'Task ID is required.'}), 400
+
+    task = fetch_task_record(db, task_id)
+    if not task:
+        return jsonify({'success': False, 'message': 'Task not found.'}), 404
+
+    db.execute(
+        'UPDATE task_items SET progress = ?, progress_auto = ? WHERE id = ?',
+        (progress, -1 if is_manual else 0, task_id)
+    )
+    db.commit()
+    return jsonify({'success': True, 'progress': progress})
+
+
+@app.route('/tasks/subtasks/<int:task_id>')
+def get_task_subtasks_inline(task_id):
+    """Get inline subtasks for a task (used in task row expansion)."""
+    db = get_db()
+    subtasks = db.execute('''
+        SELECT s.*,
+               a.username AS assigned_to_name
+        FROM task_subtasks s
+        LEFT JOIN users a ON s.assigned_to_user_id = a.id
+        WHERE s.parent_task_id = ?
+        ORDER BY s.priority DESC, s.created_at ASC
+    ''', (task_id,)).fetchall()
+    return jsonify([dict(row) for row in subtasks])
+
+
+@app.route('/tasks/reminders/check')
+def check_task_reminders():
+    """Return tasks where reminder time has been reached but not yet notified."""
+    db = get_db()
+    now = datetime.now()
+    tasks = db.execute('''
+        SELECT t.id, t.task_name, t.due_at, t.reminder_days, t.reminder_hours,
+               t.last_reminder_sent, t.assigned_to_user_id, t.report_to_user_id,
+               a.username AS assigned_to_name, a.email AS assigned_to_email,
+               r.username AS report_to_name, r.email AS report_to_email,
+               t.progress, t.status
+        FROM task_items t
+        LEFT JOIN users a ON t.assigned_to_user_id = a.id
+        LEFT JOIN users r ON t.report_to_user_id = r.id
+        WHERE t.due_at IS NOT NULL
+          AND t.due_at != ''
+          AND t.status NOT IN ('Completed', 'Archived')
+          AND (t.last_reminder_sent IS NULL OR t.last_reminder_sent = '')
+    ''').fetchall()
+
+    reminders = []
+    for task in tasks:
+        due_at = task['due_at']
+        if not due_at:
+            continue
+        try:
+            due_dt = datetime.fromisoformat(due_at.replace(' ', 'T'))
+        except (ValueError, TypeError):
+            try:
+                due_dt = datetime.strptime(due_at, '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                continue
+
+        reminder_days = task['reminder_days'] or 0
+        reminder_hours = task['reminder_hours'] or 0
+        total_reminder_seconds = (reminder_days * 86400) + (reminder_hours * 3600)
+        reminder_time = due_dt - timedelta(seconds=total_reminder_seconds)
+
+        if now >= reminder_time:
+            recipients = []
+            if task['assigned_to_email']:
+                recipients.append({'name': task['assigned_to_name'], 'email': task['assigned_to_email']})
+            if task['report_to_email']:
+                recipients.append({'name': task['report_to_name'], 'email': task['report_to_email']})
+            reminders.append({
+                'task_id': task['id'],
+                'task_name': task['task_name'],
+                'due_at': due_at,
+                'reminder_text': f"Reminder: '{task['task_name']}' is due on {due_at}. " +
+                                 f"You'll be notified {reminder_days} days and {reminder_hours} hours before.",
+                'recipients': recipients,
+                'progress': task['progress'],
+                'status': task['status']
+            })
+    return jsonify(reminders)
+
+
+@app.route('/tasks/reminders/mark_sent', methods=['POST'])
+def mark_reminder_sent():
+    """Mark that a reminder was sent for a task."""
+    db = get_db()
+    data = request.get_json() or {}
+    task_id = parse_optional_int(data.get('task_id'))
+    if task_id:
+        db.execute(
+            "UPDATE task_items SET last_reminder_sent = datetime('now') WHERE id = ?",
+            (task_id,)
+        )
+        db.commit()
+    return jsonify({'success': True})
+
+
+def _send_reminder_email(recipients, task_name, due_at, reminder_type='Task'):
+    """Helper to send a reminder email."""
+    try:
+        from email_manager import get_email_config
+        email_config = get_email_config()
+        if not email_config or not email_config.get('smtp_host'):
+            return False
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f'Reminder: {task_name} is due on {due_at}'
+        body = f'''Hello,
+
+This is a reminder that the following {reminder_type} is due:
+
+{'_' * 50}
+Title: {task_name}
+Due Date: {due_at}
+{'_' * 50}
+
+Please take action before the deadline.
+
+Best regards,
+WHDASH Notification System
+'''
+        msg.attach(MIMEText(body, 'plain'))
+        msg['From'] = email_config.get('smtp_username', 'noreply@whdash.local')
+
+        for recipient in recipients:
+            email = recipient.get('email')
+            if not email:
+                continue
+            msg['To'] = email
+            try:
+                with smtplib.SMTP(email_config['smtp_host'], email_config.get('smtp_port', 587)) as server:
+                    server.starttls()
+                    server.login(email_config['smtp_username'], email_config['smtp_password'])
+                    server.send_message(msg)
+            except Exception:
+                continue
+        return True
+    except Exception:
+        return False
+
+
+@app.route('/tasks/reminders/send', methods=['POST'])
+def send_task_reminders():
+    """Check and send due reminders for tasks and subtasks, then mark them sent."""
+    db = get_db()
+    data = request.get_json() or {}
+    task_ids = data.get('task_ids', [])
+    subtask_ids = data.get('subtask_ids', [])
+    results = {'tasks': [], 'subtasks': [], 'errors': []}
+
+    # Process task reminders
+    for task_id in task_ids:
+        task = db.execute('''
+            SELECT t.id, t.task_name, t.due_at, t.reminder_days, t.reminder_hours,
+                   t.last_reminder_sent, t.assigned_to_user_id, t.report_to_user_id,
+                   a.username AS assigned_to_name, a.email AS assigned_to_email,
+                   r.username AS report_to_name, r.email AS report_to_email
+            FROM task_items t
+            LEFT JOIN users a ON t.assigned_to_user_id = a.id
+            LEFT JOIN users r ON t.report_to_user_id = r.id
+            WHERE t.id = ? AND t.due_at IS NOT NULL AND t.due_at != ''
+              AND t.status NOT IN ('Completed', 'Archived')
+        ''', (task_id,)).fetchone()
+
+        if not task:
+            continue
+        due_at = task['due_at']
+        try:
+            due_dt = datetime.fromisoformat(due_at.replace(' ', 'T'))
+        except (ValueError, TypeError):
+            try:
+                due_dt = datetime.strptime(due_at, '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                continue
+
+        reminder_days = task['reminder_days'] or 0
+        reminder_hours = task['reminder_hours'] or 0
+        total_reminder_seconds = (reminder_days * 86400) + (reminder_hours * 3600)
+        reminder_time = due_dt - timedelta(seconds=total_reminder_seconds)
+
+        if datetime.now() >= reminder_time:
+            recipients = []
+            if task['assigned_to_email']:
+                recipients.append({'name': task['assigned_to_name'], 'email': task['assigned_to_email']})
+            if task['report_to_email']:
+                recipients.append({'name': task['report_to_name'], 'email': task['report_to_email']})
+            if recipients:
+                _send_reminder_email(recipients, task['task_name'], due_at, 'Task')
+            db.execute("UPDATE task_items SET last_reminder_sent = datetime('now') WHERE id = ?", (task_id,))
+            db.commit()
+            results['tasks'].append(task_id)
+
+    # Process subtask reminders
+    for subtask_id in subtask_ids:
+        st = db.execute('''
+            SELECT s.id, s.subtask_title, s.due_at, s.reminder_days, s.reminder_hours,
+                   s.last_reminder_sent, s.assigned_to_user_id,
+                   a.username AS assigned_to_name, a.email AS assigned_to_email,
+                   p.task_name AS parent_task_name
+            FROM task_subtasks s
+            LEFT JOIN users a ON s.assigned_to_user_id = a.id
+            LEFT JOIN task_items p ON s.parent_task_id = p.id
+            WHERE s.id = ? AND s.due_at IS NOT NULL AND s.due_at != ''
+              AND s.status NOT IN ('Completed', 'Canceled')
+        ''', (subtask_id,)).fetchone()
+
+        if not st:
+            continue
+        due_at = st['due_at']
+        try:
+            due_dt = datetime.fromisoformat(due_at.replace(' ', 'T'))
+        except (ValueError, TypeError):
+            try:
+                due_dt = datetime.strptime(due_at, '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                continue
+
+        reminder_days = st['reminder_days'] or 0
+        reminder_hours = st['reminder_hours'] or 0
+        total_reminder_seconds = (reminder_days * 86400) + (reminder_hours * 3600)
+        reminder_time = due_dt - timedelta(seconds=total_reminder_seconds)
+
+        if datetime.now() >= reminder_time:
+            recipients = []
+            if st['assigned_to_email']:
+                recipients.append({'name': st['assigned_to_name'], 'email': st['assigned_to_email']})
+            if recipients:
+                full_title = f"{st['subtask_title']} (parent: {st['parent_task_name']})"
+                _send_reminder_email(recipients, full_title, due_at, 'Subtask')
+            db.execute("UPDATE task_subtasks SET last_reminder_sent = datetime('now') WHERE id = ?", (subtask_id,))
+            db.commit()
+            results['subtasks'].append(subtask_id)
+
+    return jsonify({'success': True, 'results': results})
+
+
+@app.route('/subtasks/reminders/check')
+def check_subtask_reminders():
+    """Return subtasks where reminder time has been reached but not yet notified."""
+    db = get_db()
+    now = datetime.now()
+    subtasks = db.execute('''
+        SELECT s.id, s.subtask_title, s.due_at, s.reminder_days, s.reminder_hours,
+               s.last_reminder_sent, s.assigned_to_user_id,
+               a.username AS assigned_to_name, a.email AS assigned_to_email,
+               p.task_name AS parent_task_name
+        FROM task_subtasks s
+        LEFT JOIN users a ON s.assigned_to_user_id = a.id
+        LEFT JOIN task_items p ON s.parent_task_id = p.id
+        WHERE s.due_at IS NOT NULL
+          AND s.due_at != ''
+          AND s.status NOT IN ('Completed', 'Canceled')
+          AND (s.last_reminder_sent IS NULL OR s.last_reminder_sent = '')
+    ''').fetchall()
+
+    reminders = []
+    for st in subtasks:
+        due_at = st['due_at']
+        if not due_at:
+            continue
+        try:
+            due_dt = datetime.fromisoformat(due_at.replace(' ', 'T'))
+        except (ValueError, TypeError):
+            try:
+                due_dt = datetime.strptime(due_at, '%Y-%m-%d %H:%M:%S')
+            except (ValueError, TypeError):
+                continue
+
+        reminder_days = st['reminder_days'] or 0
+        reminder_hours = st['reminder_hours'] or 0
+        total_reminder_seconds = (reminder_days * 86400) + (reminder_hours * 3600)
+        reminder_time = due_dt - timedelta(seconds=total_reminder_seconds)
+
+        if now >= reminder_time:
+            recipients = []
+            if st['assigned_to_email']:
+                recipients.append({'name': st['assigned_to_name'], 'email': st['assigned_to_email']})
+            reminders.append({
+                'subtask_id': st['id'],
+                'subtask_title': st['subtask_title'],
+                'parent_task_name': st['parent_task_name'] or '',
+                'due_at': due_at,
+                'reminder_text': f"Reminder: Subtask '{st['subtask_title']}' (parent: {st['parent_task_name']}) is due on {due_at}. " +
+                                 f"You'll be notified {reminder_days} days and {reminder_hours} hours before.",
+                'recipients': recipients,
+                'progress': st['progress'],
+                'status': st['status']
+            })
+    return jsonify(reminders)
+
+
+@app.route('/subtasks/reminders/mark_sent', methods=['POST'])
+def mark_subtask_reminder_sent():
+    """Mark that a reminder was sent for a subtask."""
+    db = get_db()
+    data = request.get_json() or {}
+    subtask_id = data.get('subtask_id')
+    if subtask_id:
+        db.execute(
+            "UPDATE task_subtasks SET last_reminder_sent = datetime('now') WHERE id = ?",
+            (subtask_id,)
+        )
+        db.commit()
     return jsonify({'success': True})
 
 
@@ -3149,7 +4434,7 @@ def reports():
         'risk_chart': [
             {'label': 'High Priority Tasks', 'total': task_report['summary']['high_priority_open']},
             {'label': 'High Priority Issues', 'total': issue_report['summary']['high_priority_open']},
-            {'label': 'Blocked Tasks', 'total': task_report['summary']['blocked']},
+            {'label': 'Canceled Tasks', 'total': task_report['summary']['canceled']},
             {'label': 'Pending Issues', 'total': next((item['total'] for item in issue_report['status_chart'] if item['label'] == 'Pending'), 0)},
         ],
         'discipline_chart': [
@@ -3302,6 +4587,167 @@ def export_reports():
     wb.save(path)
     return send_file(path, as_attachment=True)
 
+@app.route('/executive-dashboard')
+@require_login
+def executive_dashboard():
+    db = get_db()
+    now_value = datetime.now()
+    period = request.args.get('period', 'week')
+    
+    # Core KPI Stats
+    fin_stats = dict(db.execute('''
+        SELECT COALESCE(SUM(i.quantity * p.cost_price), 0) as total_value
+        FROM inventory i JOIN parts p ON i.part_id = p.id
+    ''').fetchone() or {'total_value': 0})
+    
+    # Task Stats
+    task_rows = db.execute('''
+        SELECT status, COUNT(*) as count FROM task_items GROUP BY status
+    ''').fetchall()
+    task_status = {row['status']: row['count'] for row in task_rows}
+    total_tasks = sum(task_status.values())
+    tasks_completed = task_status.get('Completed', 0)
+    
+    # Issue Stats
+    issue_rows = db.execute('''
+        SELECT status, priority, COUNT(*) as count FROM issue_items GROUP BY status, priority
+    ''').fetchall()
+    total_issues = sum(row['count'] for row in issue_rows)
+    open_issues = sum(row['count'] for row in issue_rows if row['status'] in ('Open', 'Pending'))
+    high_priority_issues = sum(row['count'] for row in issue_rows if row['priority'] == 'High' and row['status'] != 'Closed')
+    
+    # Employee Stats (from HR module if available)
+    try:
+        emp_row = db.execute('''
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as active
+            FROM employees
+        ''').fetchone()
+        total_employees = emp_row['total'] if emp_row else 0
+        active_employees = emp_row['active'] if emp_row else 0
+    except:
+        total_employees = 0
+        active_employees = 0
+    
+    # Delivery Stats
+    delivery_rows = db.execute('''
+        SELECT status, COUNT(*) as count FROM delivery_trips GROUP BY status
+    ''').fetchall()
+    total_deliveries = sum(row['count'] for row in delivery_rows)
+    completed_deliveries = sum(row['count'] for row in delivery_rows if row['status'] == 'Completed')
+    delivery_success = int((completed_deliveries / total_deliveries * 100) if total_deliveries > 0 else 0)
+    
+    # Inventory Stats
+    inv_stats = dict(db.execute('''
+        SELECT 
+            COALESCE(SUM(quantity), 0) as total_qty,
+            COUNT(DISTINCT part_id) as item_count,
+            COUNT(CASE WHEN quantity <= 0 THEN 1 END) as out_count,
+            COUNT(CASE WHEN quantity > 0 AND quantity <= 10 THEN 1 END) as low_count
+        FROM inventory
+    ''').fetchone() or {'total_qty': 0, 'item_count': 0, 'out_count': 0, 'low_count': 0})
+    
+    # Customer Stats
+    customer_stats = dict(db.execute('''
+        SELECT 
+            COUNT(*) as total,
+            COUNT(CASE WHEN created_at >= date('now', '-30 days') THEN 1 END) as new_this_month
+        FROM customers
+    ''').fetchone() or {'total': 0, 'new_this_month': 0})
+    
+    # Location Stats
+    loc_stats = db.execute('''
+        SELECT 
+            COUNT(*) as total_locs,
+            COUNT(CASE WHEN zone IS NOT NULL AND zone != '' THEN 1 END) as occupied
+        FROM locations
+    ''').fetchone()
+    occupied_locations = loc_stats['occupied'] if loc_stats else 0
+    total_locations = loc_stats['total_locs'] if loc_stats else 0
+    
+    # Vehicle Stats
+    vehicle_stats = db.execute('''
+        SELECT 
+            COUNT(*) as total,
+            COUNT(CASE WHEN status = 'Active' THEN 1 END) as active
+        FROM vehicles
+    ''').fetchone()
+    total_vehicles = vehicle_stats['total'] if vehicle_stats else 0
+    active_vehicles = vehicle_stats['active'] if vehicle_stats else 0
+    
+    # Department Performance (mock data - can be replaced with real HR data)
+    department_performance = [
+        {'name': 'Warehouse Operations', 'tasks': 45, 'completion_rate': 82, 'performance_score': 78, 'color': 'cyan', 'icon': 'warehouse'},
+        {'name': 'Sales & Marketing', 'tasks': 38, 'completion_rate': 91, 'performance_score': 88, 'color': 'emerald', 'icon': 'chart-line'},
+        {'name': 'Logistics & Delivery', 'tasks': 52, 'completion_rate': 87, 'performance_score': 85, 'color': 'amber', 'icon': 'truck-fast'},
+        {'name': 'HR & Administration', 'tasks': 18, 'completion_rate': 95, 'performance_score': 92, 'color': 'purple', 'icon': 'users'},
+        {'name': 'Finance & Accounting', 'tasks': 24, 'completion_rate': 89, 'performance_score': 86, 'color': 'brand', 'icon': 'file-invoice-dollar'},
+    ]
+    
+    # System Health
+    system_health = [
+        {'name': 'Google Workspace', 'status': 'Connected', 'color': 'emerald', 'icon': 'google'},
+        {'name': 'Peyvast Sync', 'status': 'Active', 'color': 'emerald', 'icon': 'cloud'},
+        {'name': 'Email System', 'status': 'Operational', 'color': 'emerald', 'icon': 'envelope'},
+        {'name': 'Database', 'status': 'Healthy', 'color': 'emerald', 'icon': 'database'},
+        {'name': 'API Services', 'status': 'Operational', 'color': 'emerald', 'icon': 'server'},
+    ]
+    
+    kpi = {
+        'total_revenue': fin_stats.get('total_value', 0),
+        'revenue_growth': 15000,
+        'total_tasks': total_tasks,
+        'tasks_completed': tasks_completed,
+        'tasks_not_started': task_status.get('Not Started', 0),
+        'tasks_in_progress': task_status.get('In Progress', 0),
+        'tasks_blocked': task_status.get('Blocked', 0),
+        'open_issues': open_issues,
+        'high_priority_issues': high_priority_issues,
+        'total_employees': total_employees,
+        'active_employees': active_employees,
+        'employee_retention': 94,
+        'attendance_rate': 96,
+        'avg_salary': 8500,
+        'turnover_rate': 4,
+        'total_deliveries': total_deliveries,
+        'delivery_success_rate': delivery_success,
+        'fleet_utilization': 78,
+        'on_time_delivery': 92,
+        'avg_delivery_time': 45,
+        'inventory_value': fin_stats.get('total_value', 0),
+        'inventory_items': inv_stats.get('item_count', 0),
+        'stock_normal_pct': 72,
+        'stock_low_pct': 18,
+        'stock_out_pct': 10,
+        'total_customers': customer_stats.get('total', 0),
+        'active_customers': int(customer_stats.get('total', 0) * 0.75),
+        'new_customers': customer_stats.get('new_this_month', 0),
+        'avg_order_value': 4500,
+        'warehouse_occupancy': int((occupied_locations / total_locations * 100) if total_locations > 0 else 75),
+        'occupied_locations': occupied_locations,
+        'available_locations': total_locations - occupied_locations,
+        'active_vehicles': active_vehicles,
+        'total_vehicles': total_vehicles,
+        'issues_critical_open': sum(1 for r in issue_rows if r['priority'] == 'Critical' and r['status'] != 'Closed'),
+        'issues_high_open': sum(1 for r in issue_rows if r['priority'] == 'High' and r['status'] != 'Closed'),
+        'issues_medium_open': sum(1 for r in issue_rows if r['priority'] == 'Medium' and r['status'] != 'Closed'),
+        'issues_low_open': sum(1 for r in issue_rows if r['priority'] == 'Low' and r['status'] != 'Closed'),
+        'issues_critical_resolved': sum(1 for r in issue_rows if r['priority'] == 'Critical' and r['status'] == 'Closed'),
+        'issues_high_resolved': sum(1 for r in issue_rows if r['priority'] == 'High' and r['status'] == 'Closed'),
+        'issues_medium_resolved': sum(1 for r in issue_rows if r['priority'] == 'Medium' and r['status'] == 'Closed'),
+        'issues_low_resolved': sum(1 for r in issue_rows if r['priority'] == 'Low' and r['status'] == 'Closed'),
+        'sales_by_region': ['Dubai', 'Abu Dhabi', 'Sharjah', 'Al Ain', 'Other'],
+        'sales_by_region_value': [45000, 38000, 22000, 15000, 10000],
+        'revenue_trend': [65000, 72000, 68000, 85000, 92000, 88000, 95000, 102000, 98000, 115000, 125000, 135000],
+    }
+    
+    return render_template('executive_dashboard.html', title="Executive Command Center",
+                           kpi=kpi,
+                           department_performance=department_performance,
+                           system_health=system_health,
+                           period=period)
+
 @app.route('/api/inventory', methods=['GET'])
 def api_inventory():
     db = get_db()
@@ -3412,7 +4858,23 @@ def api_inventory():
             'height': float(f"{float(row['height'] or 0):.2f}")
         })
         
-    return jsonify({'status': 'success', 'data': data})
+    # Pagination
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 100, type=int)
+    total = len(data)
+    total_pages = (total + per_page - 1) // per_page
+    start = (page - 1) * per_page
+    end = start + per_page
+    page_data = data[start:end]
+
+    return jsonify({
+        'status': 'success',
+        'data': page_data,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': total_pages
+    })
 
 @app.route('/export', methods=['POST'])
 def export():
@@ -3543,7 +5005,12 @@ def delivery():
     
     activities = []
     total_count = 0
-    customers = [dict(r) for r in db.execute("SELECT * FROM customers ORDER BY name").fetchall()]
+    role_name = session.get('role_name', '')
+    is_admin = role_name == 'admin'
+    if is_admin:
+        customers = [dict(r) for r in db.execute("SELECT * FROM customers ORDER BY name").fetchall()]
+    else:
+        customers = [dict(r) for r in db.execute("SELECT * FROM customers WHERE salesperson_id = ? ORDER BY name", (user_id,)).fetchall()]
     activities_list = [dict(r) for r in db.execute("SELECT * FROM delivery_activities ORDER BY name").fetchall()]
     vehicles = [dict(r) for r in db.execute("SELECT * FROM vehicles WHERE status = 'Active' ORDER BY name").fetchall()]
     
@@ -3558,13 +5025,13 @@ def delivery():
             ORDER BY l.sequence_order DESC, l.timestamp DESC LIMIT ? OFFSET ?
         ''', (trip['id'], per_page, offset)).fetchall()
     
-    return render_template('delivery.html', title="Strategic Logistics Hub", 
+    return render_template('delivery.html', title="Strategic Logistics Hub",
                            trip=trip, activities=[dict(r) for r in activities],
                            customers=customers, activities_list=activities_list,
                            vehicles=vehicles,
-                           total_count=total_count, per_page=per_page, page=page, 
+                           total_count=total_count, per_page=per_page, page=page,
                            total_pages=(total_count + per_page - 1) // per_page,
-                           offset=offset)
+                           offset=offset, is_admin=is_admin)
 
 @app.route('/api/delivery/update_vehicle', methods=['POST'])
 def delivery_update_vehicle():
@@ -4441,19 +5908,65 @@ def customers():
         flash("Enterprise Client Registered Successfully", "success")
         return redirect(url_for('customers'))
 
-    # Load customers with salesperson names
+    # Load all customers from local database (sdad_customers table - already synced data)
     customers_rows = db.execute('''
-        SELECT c.*, u.username as salesperson_name
-        FROM customers c
-        LEFT JOIN users u ON c.salesperson_id = u.id
-        ORDER BY c.name ASC
+        SELECT
+            s.id as sdad_id,
+            s.customer_id as sdad_customer_id,
+            s.name,
+            s.username,
+            s.email,
+            s.phone,
+            s.whatsapp_phone,
+            s.location,
+            s.country,
+            s.city,
+            s.state,
+            s.address,
+            s.postal_code,
+            s.total_orders,
+            s.total_payments,
+            s.total_debt,
+            s.credit_limit,
+            s.credit_status,
+            s.has_credit_enabled,
+            s.payment_method,
+            s.payment_deadline_days,
+            s.last_purchase_date,
+            s.salesperson_name,
+            s.sales_team,
+            s.brand_names,
+            s.customer_group,
+            s.customer_code,
+            s.trn_number,
+            s.is_credit_blocked,
+            s.active,
+            s.created_at,
+            s.updated_at,
+            s.local_customer_id
+        FROM sdad_customers s
+        ORDER BY s.total_orders DESC
     ''').fetchall()
-    
+
+    # Summary stats
+    total_customers = db.execute("SELECT COUNT(*) as cnt FROM sdad_customers").fetchone()['cnt']
+    active_customers = db.execute("SELECT COUNT(*) as cnt FROM sdad_customers WHERE active = 1").fetchone()['cnt']
+    total_debt = db.execute("SELECT COALESCE(SUM(total_debt), 0) as t FROM sdad_customers").fetchone()['t']
+    total_orders_sum = db.execute("SELECT COALESCE(SUM(total_orders), 0) as t FROM sdad_customers").fetchone()['t']
+    countries_count = db.execute("SELECT COUNT(DISTINCT country) as cnt FROM sdad_customers WHERE country != ''").fetchone()['cnt']
+
     users_rows = db.execute("SELECT id, username FROM users ORDER BY username").fetchall()
-    
-    return render_template('customers.html', title="Client Registry", 
+
+    return render_template('customers.html', title="Client Registry",
                            customers=[dict(r) for r in customers_rows],
-                           users=[dict(r) for r in users_rows])
+                           users=[dict(r) for r in users_rows],
+                           stats={
+                               'total': total_customers,
+                               'active': active_customers,
+                               'total_debt': total_debt,
+                               'total_orders': total_orders_sum,
+                               'countries': countries_count
+                           })
 
 @app.route('/customers/edit/<int:id>', methods=['POST'])
 @admin_required
@@ -4468,7 +5981,7 @@ def edit_customer(id):
     working_days = request.form.get('working_days')
     
     db.execute('''
-        UPDATE customers 
+        UPDATE sdad_customers
         SET name = ?, phone = ?, location = ?, type = ?, salesperson_id = ?, working_hours = ?, working_days = ?
         WHERE id = ?
     ''', (name, phone, location, c_type, salesperson_id, working_hours, working_days, id))
@@ -4480,7 +5993,7 @@ def edit_customer(id):
 @admin_required
 def delete_customer(id):
     db = get_db()
-    db.execute("DELETE FROM customers WHERE id = ?", (id,))
+    db.execute("DELETE FROM sdad_customers WHERE id = ?", (id,))
     db.commit()
     flash("Client Profile Removed", "success")
     return redirect(url_for('customers'))
@@ -4769,6 +6282,14 @@ def build_inventory_dashboard_sql(report_mode, q_part='', q_hs='', f_warehouses=
 @admin_required
 def inventory_dashboard():
     db = get_db()
+
+    # Auto-sync with Peyvast on every page load
+    try:
+        sync_manager = PeyvastSyncManager()
+        sync_manager.ensure_sync_schema()
+        sync_manager.sync_all()
+    except Exception as e:
+        pass  # Silent fail, show existing data
 
     q_part = request.args.get('q_part', '').strip()
     q_hs = request.args.get('q_hs', '').strip()
@@ -5264,6 +6785,533 @@ def hs_codes():
                            hs_summary=hs_summary, hs_company=hs_company,
                            hs_warehouse=hs_warehouse, hs_parts=hs_parts)
 
+# ─── Peyvast Stock Sync Routes ──────────────────────────────────────────────
+
+@app.route('/stock-sync')
+@stock_admin_required
+def stock_sync():
+    """Main stock sync interface - auto-syncs with Peyvast Panel on every page load."""
+    sync_manager = PeyvastSyncManager()
+    sync_manager.ensure_sync_schema()
+
+    auto_sync = request.args.get('auto_sync', 'false').lower() == 'true'
+    sync_triggered = False
+
+    # Always auto-sync on page load (GET request)
+    if request.method == 'GET' and not auto_sync:
+        auto_sync = True
+
+    if request.method == 'POST' or auto_sync:
+        result = sync_manager.sync_all()
+        sync_triggered = True
+        if result['success']:
+            flash(f"Successfully synced {result['items_synced']} items from Peyvast Panel!", "success")
+        else:
+            flash(f"Sync completed with errors: {', '.join(result['errors'])}", "warning")
+
+        if auto_sync and request.method == 'GET':
+            # For auto-sync on page load, don't redirect, just show updated data
+            pass
+        elif request.method == 'POST' and not auto_sync:
+            return redirect(url_for('stock_sync'))
+
+    # Get current sync status and products
+    exclude_out_of_stock = request.args.get('exclude_out_of_stock', 'false').lower() == 'true'
+    filters = {'exclude_out_of_stock': exclude_out_of_stock} if exclude_out_of_stock else {}
+    products = sync_manager.get_all_products(filters=filters)
+    all_products_count = sync_manager.get_all_products_count()
+    warehouses = sync_manager.get_warehouses()
+    categories = sync_manager.get_categories()
+    brands = sync_manager.get_brands()
+    summary = sync_manager.get_stock_summary()
+    sync_logs = sync_manager.get_sync_status()
+    summary['active_products'] = summary['total_products'] - summary['low_stock'] - summary['out_of_stock']
+
+    return render_template('stock_sync.html', title="Stock Sync",
+                           products=products, warehouses=warehouses,
+                           categories=categories, brands=brands, summary=summary,
+                           sync_logs=sync_logs, auto_sync=auto_sync,
+                           exclude_out_of_stock=exclude_out_of_stock,
+                           all_products_count=all_products_count)
+
+@app.route('/sync-status')
+@stock_admin_required
+def sync_status():
+    """View sync history and status."""
+    sync_manager = PeyvastSyncManager()
+    sync_manager.ensure_sync_schema()
+
+    logs = sync_manager.get_sync_status()
+    summary = sync_manager.get_stock_summary()
+
+    return render_template('sync_status.html', title="Sync Status",
+                           sync_logs=logs, summary=summary)
+
+@app.route('/low-stock-alerts')
+@stock_admin_required
+def low_stock_alerts():
+    """View items below minimum stock level."""
+    sync_manager = PeyvastSyncManager()
+    sync_manager.ensure_sync_schema()
+
+    low_stock = sync_manager.get_low_stock_items()
+    out_of_stock = sync_manager.get_out_of_stock_items()
+
+    return render_template('low_stock_alerts.html', title="Low Stock Alerts",
+                           low_stock=low_stock, out_of_stock=out_of_stock)
+
+@app.route('/out-of-stock')
+@stock_admin_required
+def out_of_stock():
+    """View items that are out of stock."""
+    sync_manager = PeyvastSyncManager()
+    sync_manager.ensure_sync_schema()
+
+    items = sync_manager.get_out_of_stock_items()
+
+    return render_template('out_of_stock.html', title="Out of Stock Items",
+                           items=items)
+
+@app.route('/stock-summary-report')
+@stock_admin_required
+def stock_summary_report():
+    """View overall stock summary report."""
+    sync_manager = PeyvastSyncManager()
+    sync_manager.ensure_sync_schema()
+
+    summary = sync_manager.get_stock_summary()
+    products = sync_manager.get_all_products()
+    by_warehouse = sync_manager.get_stock_by_warehouse()
+
+    return render_template('stock_summary_report.html', title="Stock Summary",
+                           summary=summary, products=products,
+                           by_warehouse=by_warehouse)
+
+@app.route('/category-report')
+@stock_admin_required
+def category_report():
+    """View stock by category."""
+    sync_manager = PeyvastSyncManager()
+    sync_manager.ensure_sync_schema()
+
+    summary = sync_manager.get_stock_summary()
+    categories = sync_manager.get_categories()
+    products = sync_manager.get_all_products()
+
+    # Group products by category
+    category_data = {}
+    for cat in categories:
+        cat_products = [p for p in products if p.get('category') == cat['name']]
+        if cat_products:
+            category_data[cat['name']] = {
+                'products': cat_products,
+                'count': len(cat_products),
+                'total_qty': sum(p.get('current_stock', 0) for p in cat_products)
+            }
+
+    return render_template('category_report.html', title="Category Report",
+                           category_data=category_data, summary=summary)
+
+@app.route('/api/sync/trigger', methods=['POST'])
+@stock_admin_required
+def api_sync_trigger():
+    """API endpoint to trigger sync."""
+    sync_manager = PeyvastSyncManager()
+    try:
+        result = sync_manager.sync_all()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'success': False, 'errors': [str(e)]}), 500
+
+@app.route('/api/sync/products', methods=['GET'])
+@stock_admin_required
+def api_sync_products():
+    """API endpoint to get synced products."""
+    sync_manager = PeyvastSyncManager()
+    products = sync_manager.get_all_products()
+    return jsonify({'success': True, 'products': products})
+
+@app.route('/api/sync/low-stock', methods=['GET'])
+@stock_admin_required
+def api_sync_low_stock():
+    """API endpoint to get low stock items."""
+    sync_manager = PeyvastSyncManager()
+    low_stock = sync_manager.get_low_stock_items()
+    return jsonify({'success': True, 'items': low_stock})
+
+@app.route('/customers-reports')
+@app.route('/customers-reports/<report_type>')
+@stock_admin_required
+def customers_reports(report_type=None):
+    """Customer reports dashboard with various report types."""
+    if not report_type:
+        report_type = request.args.get('type', 'summary')
+
+    # Get filters from request
+    filters = {}
+    country = request.args.get('country')
+    city = request.args.get('city')
+    customer_type = request.args.get('customer_type')
+    search = request.args.get('search')
+    salesperson = request.args.get('salesperson')
+
+    if country:
+        filters['country'] = country
+    if city:
+        filters['city'] = city
+    if customer_type:
+        filters['customer_type'] = customer_type
+    if search:
+        filters['search'] = search
+    if salesperson:
+        filters['salesperson_id'] = salesperson
+
+    # Get data based on report type
+    data = {}
+    report_title = "Customer Reports"
+
+    if report_type == 'summary':
+        data = get_customers_summary_from_db()
+        report_title = "Customers Summary"
+    elif report_type == 'by_country':
+        data['countries'] = get_customers_by_country_from_db()
+        report_title = "Customers by Country"
+    elif report_type == 'by_city':
+        db = get_db()
+        try:
+            if country:
+                data['cities'] = [dict(r) for r in db.execute('''
+                    SELECT city, country, COUNT(*) as customer_count,
+                           SUM(total_orders) as total_sales, SUM(total_debt) as total_debt
+                    FROM sdad_customers WHERE city != '' AND country = ?
+                    GROUP BY city, country ORDER BY customer_count DESC
+                ''', (country,)).fetchall()]
+            else:
+                data['cities'] = [dict(r) for r in db.execute('''
+                    SELECT city, country, COUNT(*) as customer_count,
+                           SUM(total_orders) as total_sales, SUM(total_debt) as total_debt
+                    FROM sdad_customers WHERE city != '' GROUP BY city, country ORDER BY customer_count DESC
+                ''').fetchall()]
+        finally:
+            db.close()
+        report_title = "Customers by City"
+    elif report_type == 'by_locale':
+        db = get_db()
+        try:
+            data['locales'] = [dict(r) for r in db.execute('''
+                SELECT location, COUNT(*) as customer_count, SUM(total_orders) as total_sales, SUM(total_debt) as total_debt
+                FROM sdad_customers GROUP BY location ORDER BY customer_count DESC
+            ''').fetchall()]
+        finally:
+            db.close()
+        report_title = "Customers by Locale/Area"
+    elif report_type == 'by_type':
+        db = get_db()
+        try:
+            data['types'] = [dict(r) for r in db.execute('''
+                SELECT location as customer_type, COUNT(*) as customer_count,
+                       SUM(total_orders) as total_sales, SUM(total_debt) as total_debt, AVG(credit_limit) as avg_credit_limit
+                FROM sdad_customers GROUP BY location ORDER BY customer_count DESC
+            ''').fetchall()]
+        finally:
+            db.close()
+        report_title = "Customers by Type"
+    elif report_type == 'by_salesperson':
+        data['salespersons'] = get_salesperson_performance_from_db()
+        report_title = "Salesperson Performance"
+    elif report_type == 'export':
+        data['customers'] = get_customers_from_db({'is_export': True})
+        report_title = "Export Customers"
+    elif report_type == 'domestic':
+        data['customers'] = get_customers_from_db({'is_export': False})
+        report_title = "Domestic Customers"
+    elif report_type == 'top_purchases':
+        db = get_db()
+        try:
+            data['customers'] = [dict(r) for r in db.execute('''
+                SELECT * FROM sdad_customers ORDER BY total_orders DESC LIMIT 50
+            ''').fetchall()]
+        finally:
+            db.close()
+        report_title = "Top Customers by Purchases"
+    elif report_type == 'top_outstanding':
+        db = get_db()
+        try:
+            data['customers'] = [dict(r) for r in db.execute('''
+                SELECT * FROM sdad_customers ORDER BY total_debt DESC LIMIT 50
+            ''').fetchall()]
+        finally:
+            db.close()
+        report_title = "Top Customers by Outstanding"
+    elif report_type == 'credit_overdue':
+        db = get_db()
+        try:
+            data['customers'] = [dict(r) for r in db.execute('''
+                SELECT * FROM sdad_customers
+                WHERE credit_status IN ('overdue', 'blocked') OR is_credit_blocked = 1
+                ORDER BY total_debt DESC
+            ''').fetchall()]
+        finally:
+            db.close()
+        report_title = "Customers with Credit Overdue"
+    elif report_type == 'activity':
+        db = get_db()
+        try:
+            cutoff = datetime.now().strftime('%Y-%m-%d')
+            days = 90
+            active = db.execute('''
+                SELECT COUNT(*) as cnt FROM sdad_customers
+                WHERE last_purchase_date >= date('now', '-' || ? || ' days')
+            ''', (days,)).fetchone()['cnt']
+            
+            inactive = db.execute('''
+                SELECT COUNT(*) as cnt FROM sdad_customers
+                WHERE last_purchase_date < date('now', '-' || ? || ' days') OR last_purchase_date = ''
+            ''', (days,)).fetchone()['cnt']
+            
+            new = db.execute('''
+                SELECT COUNT(*) as cnt FROM sdad_customers
+                WHERE created_at >= datetime('now', '-' || ? || ' days')
+            ''', (days,)).fetchone()['cnt']
+            
+            data = {
+                'active_customers': active,
+                'inactive_customers': inactive,
+                'new_customers': new,
+                'period_days': days
+            }
+        finally:
+            db.close()
+        report_title = "Customer Activity Report"
+    elif report_type == 'new':
+        days = int(request.args.get('days', 30))
+        db = get_db()
+        try:
+            data['customers'] = [dict(r) for r in db.execute('''
+                SELECT * FROM sdad_customers
+                WHERE created_at >= datetime('now', '-' || ? || ' days')
+                ORDER BY created_at DESC
+            ''', (days,)).fetchall()]
+        finally:
+            db.close()
+        report_title = f"New Customers (Last {days} days)"
+    elif report_type == 'all':
+        data['customers'] = get_customers_from_db(filters=filters)
+        report_title = "All Customers"
+
+    # Get filter options for dropdowns
+    summary = get_customers_summary_from_db()
+
+    return render_template('customers_reports.html', title=report_title,
+                           report_type=report_type, data=data,
+                           filters=filters, summary=summary,
+                           countries=[c['country'] for c in summary.get('by_country', [])],
+                           salespersons=summary.get('by_salesperson', []))
+
+@app.route('/customers-by-country')
+@stock_admin_required
+def customers_by_country():
+    """Detailed view of customers grouped by country."""
+    countries = get_customers_by_country_from_db()
+    summary = get_customers_summary_from_db()
+    
+    return render_template('customers_by_country.html', title="Customers by Country",
+                           countries=countries, summary=summary)
+
+@app.route('/customers-by-salesperson')
+@stock_admin_required
+def customers_by_salesperson():
+    """Detailed view of customers grouped by salesperson."""
+    salespersons = get_salesperson_performance_from_db()
+    summary = get_customers_summary_from_db()
+    
+    return render_template('customers_by_salesperson.html', title="Customers by Salesperson",
+                           salespersons=salespersons, summary=summary)
+
+@app.route('/api/customers/all', methods=['GET'])
+@stock_admin_required
+def api_customers_all():
+    """API endpoint to get all customers from local database."""
+    db = get_db()
+    try:
+        customers = db.execute("SELECT * FROM sdad_customers ORDER BY total_orders DESC").fetchall()
+        return jsonify({'success': True, 'customers': [dict(c) for c in customers]})
+    finally:
+        db.close()
+
+@app.route('/api/customers/summary', methods=['GET'])
+@stock_admin_required
+def api_customers_summary():
+    """API endpoint to get customers summary from local database."""
+    db = get_db()
+    try:
+        total = db.execute("SELECT COUNT(*) as cnt FROM sdad_customers").fetchone()['cnt']
+        total_orders = db.execute("SELECT COALESCE(SUM(total_orders), 0) as t FROM sdad_customers").fetchone()['t']
+        total_debt = db.execute("SELECT COALESCE(SUM(total_debt), 0) as t FROM sdad_customers").fetchone()['t']
+        export_count = db.execute("SELECT COUNT(*) as cnt FROM sdad_customers WHERE location = 'export'").fetchone()['cnt']
+        active_count = db.execute("SELECT COUNT(*) as cnt FROM sdad_customers WHERE active = 1").fetchone()['cnt']
+        
+        countries = db.execute("SELECT country, COUNT(*) as cnt, SUM(total_orders) as total_sales FROM sdad_customers WHERE country != '' GROUP BY country ORDER BY cnt DESC").fetchall()
+        
+        summary = {
+            'total_customers': total,
+            'total_orders': total_orders,
+            'total_debt': total_debt,
+            'export_customers': export_count,
+            'domestic_customers': total - export_count,
+            'active_customers': active_count,
+            'inactive_customers': total - active_count,
+            'by_country': [dict(c) for c in countries]
+        }
+        return jsonify({'success': True, 'summary': summary})
+    finally:
+        db.close()
+
+@app.route('/api/customers/export/<format>', methods=['GET'])
+@stock_admin_required
+def api_customers_export(format):
+    """Export customers data in various formats."""
+    db = get_db()
+    try:
+        query = "SELECT * FROM sdad_customers WHERE 1=1"
+        params = []
+
+        if request.args.get('country'):
+            query += " AND country = ?"
+            params.append(request.args.get('country'))
+        if request.args.get('customer_type'):
+            query += " AND location = ?"
+            params.append(request.args.get('customer_type'))
+        if request.args.get('is_export'):
+            query += " AND location = 'export'" if request.args.get('is_export') == 'true' else " AND location = 'local'"
+
+        query += " ORDER BY total_orders DESC"
+        customers = db.execute(query, params).fetchall()
+        customers = [dict(c) for c in customers]
+    finally:
+        db.close()
+
+    if format == 'csv':
+        output = io.StringIO()
+        if customers:
+            writer = csv.DictWriter(output, fieldnames=customers[0].keys())
+            writer.writeheader()
+            writer.writerows(customers)
+        return Response(output.getvalue(), mimetype='text/csv',
+                       headers={'Content-Disposition': 'attachment; filename=customers.csv'})
+
+    elif format == 'json':
+        return jsonify({'success': True, 'customers': customers})
+
+    elif format == 'excel':
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Customers"
+
+        if customers:
+            # Headers
+            headers = list(customers[0].keys())
+            ws.append(headers)
+
+            # Data
+            for customer in customers:
+                ws.append(list(customer.values()))
+
+            # Auto-adjust column widths
+            for col in ws.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                ws.column_dimensions[col_letter].width = min(max_length + 2, 50)
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        as_attachment=True, download_name='customers.xlsx')
+
+    return jsonify({'success': False, 'message': 'Invalid format'}), 400
+
+@app.route('/api/sync/import-csv', methods=['POST'])
+@stock_admin_required
+def api_sync_import_csv():
+    """API endpoint to import stock data from CSV file."""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'message': 'No file selected'}), 400
+
+    if not file.filename.endswith('.csv'):
+        return jsonify({'success': False, 'message': 'File must be a CSV'}), 400
+
+    try:
+        # Save uploaded file temporarily
+        import os
+        import tempfile
+        from werkzeug.utils import secure_filename
+
+        filename = secure_filename(file.filename)
+        temp_path = os.path.join(tempfile.gettempdir(), filename)
+        file.save(temp_path)
+
+        # Import using sync manager
+        sync_manager = PeyvastSyncManager()
+        sync_manager.ensure_sync_schema()
+        result = sync_manager.import_from_csv(temp_path)
+
+        # Clean up temp file
+        os.remove(temp_path)
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+@app.route('/api/sync/import-excel', methods=['POST'])
+@stock_admin_required
+def api_sync_import_excel():
+    """API endpoint to import stock data from Excel file."""
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'message': 'No file selected'}), 400
+
+    allowed_extensions = {'xlsx', 'xls'}
+    if not any(file.filename.endswith(ext) for ext in allowed_extensions):
+        return jsonify({'success': False, 'message': 'File must be an Excel file (.xlsx or .xls)'}), 400
+
+    try:
+        # Save uploaded file temporarily
+        import os
+        import tempfile
+        from werkzeug.utils import secure_filename
+
+        filename = secure_filename(file.filename)
+        temp_path = os.path.join(tempfile.gettempdir(), filename)
+        file.save(temp_path)
+
+        # Import using sync manager
+        sync_manager = PeyvastSyncManager()
+        sync_manager.ensure_sync_schema()
+        result = sync_manager.import_from_excel(temp_path)
+
+        # Clean up temp file
+        os.remove(temp_path)
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.route('/api/inventory/update_hs', methods=['POST'])
 @admin_required
 def update_hs_group():
@@ -5523,83 +7571,965 @@ def export_hs_reports():
     
     return send_file(path, as_attachment=True)
 
-@app.route('/procurement', methods=['GET', 'POST'])
-@admin_required
-def procurement():
+# ════════════════════════════════════════════════════════════════════════════
+# SUBTASK ROUTES
+# ════════════════════════════════════════════════════════════════════════════
+
+@app.route('/subtasks/<int:parent_task_id>')
+def get_subtasks(parent_task_id):
+    """Get all subtasks for a parent task"""
     db = get_db()
-    if request.method == 'POST':
-        action = request.form.get('action')
-        
-        if action == 'add':
-            name = request.form.get('name', '').strip()
-            code = request.form.get('code', '').strip()
-            contact_person = request.form.get('contact_person', '').strip()
-            email = request.form.get('email', '').strip()
-            phone = request.form.get('phone', '').strip()
-            address = request.form.get('address', '').strip()
-            city = request.form.get('city', '').strip()
-            country = request.form.get('country', '').strip()
-            region = request.form.get('region', '').strip()
-            payment_terms = request.form.get('payment_terms', 'Net 30').strip()
-            lead_time = request.form.get('lead_time', '').strip()
-            currency = request.form.get('currency', 'USD').strip()
-            margin = request.form.get('margin', '').strip()
-            rating = request.form.get('rating', 0, type=int)
-            status = request.form.get('status', 'Active').strip()
-            notes = request.form.get('notes', '').strip()
-            
-            if name and code:
-                try:
-                    db.execute('''INSERT INTO suppliers (name,code,contact_person,email,phone,address,city,country,region,payment_terms,lead_time,currency,margin,rating,status,notes)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                        (name,code,contact_person,email,phone,address,city,country,region,payment_terms,lead_time,currency,margin,rating,status,notes))
-                    db.commit()
-                    flash(f'Supplier "{name}" registered successfully.', 'success')
-                except Exception as e:
-                    flash(f'Error: Supplier code "{code}" may already exist.', 'error')
-            else:
-                flash('Supplier Name and Code are required.', 'error')
-                
-        elif action == 'edit':
-            sid = request.form.get('supplier_id', type=int)
-            if sid:
-                db.execute('''UPDATE suppliers SET 
-                    name=?, code=?, contact_person=?, email=?, phone=?, address=?, city=?, country=?, region=?,
-                    payment_terms=?, lead_time=?, currency=?, margin=?, rating=?, status=?, notes=?
-                    WHERE id=?''',
-                    (request.form.get('name','').strip(), request.form.get('code','').strip(),
-                     request.form.get('contact_person','').strip(), request.form.get('email','').strip(),
-                     request.form.get('phone','').strip(), request.form.get('address','').strip(),
-                     request.form.get('city','').strip(), request.form.get('country','').strip(),
-                     request.form.get('region','').strip(), request.form.get('payment_terms','Net 30').strip(),
-                     request.form.get('lead_time','').strip(), request.form.get('currency','USD').strip(),
-                     request.form.get('margin','').strip(), request.form.get('rating',0,type=int),
-                     request.form.get('status','Active').strip(), request.form.get('notes','').strip(), sid))
-                db.commit()
-                flash('Supplier updated successfully.', 'success')
-                
+    subtasks = db.execute('''
+        SELECT s.*,
+               a.username AS assigned_to_name,
+               creator.username AS created_by_name,
+               t.task_name AS parent_task_name
+        FROM task_subtasks s
+        LEFT JOIN users a ON s.assigned_to_user_id = a.id
+        LEFT JOIN users creator ON s.created_by_user_id = creator.id
+        LEFT JOIN task_items t ON s.parent_task_id = t.id
+        WHERE s.parent_task_id = ?
+        ORDER BY s.priority DESC, s.created_at ASC
+    ''', (parent_task_id,)).fetchall()
+    return jsonify([dict(row) for row in subtasks])
+
+
+@app.route('/subtasks/save', methods=['POST'])
+def save_subtask():
+    """Create or update a subtask"""
+    if not user_can_create_subtasks():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    data = request.get_json() or {}
+    subtask_id = data.get('id')
+    parent_task_id = data.get('parent_task_id')
+
+    if not parent_task_id:
+        return jsonify({'success': False, 'message': 'Parent task is required'}), 400
+
+    subtask_title = (data.get('subtask_title') or '').strip()
+    if not subtask_title:
+        return jsonify({'success': False, 'message': 'Subtask title is required'}), 400
+
+    description = (data.get('description') or '').strip()
+    assigned_to_user_id = data.get('assigned_to_user_id')
+    priority = normalize_subtask_priority(data.get('priority'))
+    status = normalize_subtask_status(data.get('status'))
+    progress = max(0, min(100, int(data.get('progress', 0))))
+    due_at = data.get('due_at') or None
+    reminder_days = max(0, int(data.get('reminder_days', 0) or 0))
+    reminder_hours = max(0, int(data.get('reminder_hours', 0) or 0))
+
+    try:
+        if subtask_id:
+            existing = db.execute('SELECT id FROM task_subtasks WHERE id = ?', (subtask_id,)).fetchone()
+            if not existing:
+                return jsonify({'success': False, 'message': 'Subtask not found'}), 404
+
+            db.execute('''
+                UPDATE task_subtasks SET
+                    subtask_title = ?, description = ?, assigned_to_user_id = ?,
+                    priority = ?, status = ?, progress = ?, due_at = ?,
+                    reminder_days = ?, reminder_hours = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (subtask_title, description, assigned_to_user_id, priority,
+                  status, progress, due_at, reminder_days, reminder_hours, subtask_id))
+            db.commit()
+            recalculate_task_progress_from_subtasks(db, parent_task_id)
+            update_task_progress_if_not_manual(db, parent_task_id)
+            db.commit()
+            return jsonify({'success': True, 'message': 'Subtask updated', 'id': subtask_id})
+        else:
+            cursor = db.execute('''
+                INSERT INTO task_subtasks
+                    (parent_task_id, subtask_title, description, assigned_to_user_id,
+                     priority, status, progress, due_at, reminder_days, reminder_hours,
+                     created_by_user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (parent_task_id, subtask_title, description, assigned_to_user_id,
+                  priority, status, progress, due_at, reminder_days, reminder_hours,
+                  session.get('user_id')))
+            new_subtask_id = cursor.lastrowid
+            db.commit()
+            recalculate_task_progress_from_subtasks(db, parent_task_id)
+            update_task_progress_if_not_manual(db, parent_task_id)
+            db.commit()
+            return jsonify({'success': True, 'message': 'Subtask created', 'id': new_subtask_id})
+    except Exception as e:
+        db.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/subtasks/delete', methods=['POST'])
+def delete_subtask():
+    """Delete a subtask"""
+    if not user_can_delete_subtasks():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    data = request.get_json() or {}
+    subtask_id = data.get('id')
+
+    if not subtask_id:
+        return jsonify({'success': False, 'message': 'Subtask ID is required'}), 400
+
+    try:
+        parent = db.execute('SELECT parent_task_id FROM task_subtasks WHERE id = ?', (subtask_id,)).fetchone()
+        db.execute('DELETE FROM task_subtasks WHERE id = ?', (subtask_id,))
+        db.commit()
+        if parent:
+            recalculate_task_progress_from_subtasks(db, parent['parent_task_id'])
+            update_task_progress_if_not_manual(db, parent['parent_task_id'])
+            db.commit()
+        return jsonify({'success': True, 'message': 'Subtask deleted'})
+    except Exception as e:
+        db.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/subtasks/bulk_action', methods=['POST'])
+def subtask_bulk_action():
+    """Bulk update subtasks (status, priority, delete)"""
+    if not user_can_edit_subtasks():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    data = request.get_json() or {}
+    action = (data.get('action') or '').strip().lower()
+    subtask_ids = [int(x) for x in data.get('subtask_ids', []) if str(x).isdigit()]
+
+    if not subtask_ids:
+        return jsonify({'success': False, 'message': 'No subtasks selected'}), 400
+
+    affected = 0
+    parent_task_ids = set()
+    try:
+        if action == 'status':
+            new_status = normalize_subtask_status(data.get('status'))
+            for sid in subtask_ids:
+                parent = db.execute('SELECT parent_task_id FROM task_subtasks WHERE id = ?', (sid,)).fetchone()
+                if parent:
+                    parent_task_ids.add(parent['parent_task_id'])
+                db.execute('UPDATE task_subtasks SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                           (new_status, sid))
+                affected += 1
+        elif action == 'priority':
+            for sid in subtask_ids:
+                db.execute('UPDATE task_subtasks SET priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                           (new_priority, sid))
+                affected += 1
         elif action == 'delete':
-            sid = request.form.get('supplier_id', type=int)
-            if sid:
-                db.execute('DELETE FROM suppliers WHERE id = ?', (sid,))
-                db.commit()
-                flash('Supplier removed from the system.', 'success')
-                
-        elif action == 'toggle_status':
-            sid = request.form.get('supplier_id', type=int)
-            new_status = request.form.get('new_status', 'Active').strip()
-            if sid:
-                db.execute('UPDATE suppliers SET status = ? WHERE id = ?', (new_status, sid))
-                db.commit()
-                flash(f'Supplier status changed to {new_status}.', 'success')
-        
-        return redirect(url_for('procurement'))
-    
-    suppliers = [dict(r) for r in db.execute('SELECT * FROM suppliers ORDER BY status ASC, name ASC').fetchall()]
-    return render_template('procurement.html', title="Supplier Management", suppliers=suppliers)
+            if not user_can_delete_subtasks():
+                return jsonify({'success': False, 'message': 'Permission denied'}), 403
+            for sid in subtask_ids:
+                parent = db.execute('SELECT parent_task_id FROM task_subtasks WHERE id = ?', (sid,)).fetchone()
+                if parent:
+                    parent_task_ids.add(parent['parent_task_id'])
+                db.execute('DELETE FROM task_subtasks WHERE id = ?', (sid,))
+                affected += 1
+        else:
+            return jsonify({'success': False, 'message': 'Invalid action'}), 400
+
+        db.commit()
+        for pid in parent_task_ids:
+            recalculate_task_progress_from_subtasks(db, pid)
+            update_task_progress_if_not_manual(db, pid)
+        db.commit()
+        return jsonify({'success': True, 'message': f'{affected} subtask(s) updated'})
+    except Exception as e:
+        db.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/subtasks/toggle_complete/<int:subtask_id>', methods=['POST'])
+def toggle_subtask_complete(subtask_id):
+    """Toggle subtask completion status"""
+    if not user_can_edit_subtasks():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    subtask = db.execute('SELECT id, status, progress, parent_task_id FROM task_subtasks WHERE id = ?',
+                         (subtask_id,)).fetchone()
+
+    if not subtask:
+        return jsonify({'success': False, 'message': 'Subtask not found'}), 404
+
+    current_status = subtask['status']
+    new_status = 'Completed' if current_status != 'Completed' else 'In Progress'
+    new_progress = 100 if new_status == 'Completed' else subtask['progress']
+
+    db.execute('UPDATE task_subtasks SET status = ?, progress = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+               (new_status, new_progress, subtask_id))
+    db.commit()
+    recalculate_task_progress_from_subtasks(db, subtask['parent_task_id'])
+    update_task_progress_if_not_manual(db, subtask['parent_task_id'])
+    db.commit()
+    return jsonify({'success': True, 'status': new_status, 'progress': new_progress})
+
+
+@app.route('/subtasks/all')
+def list_all_subtasks():
+    """Get all subtasks with optional filters"""
+    db = get_db()
+    parent_task_id = request.args.get('parent_task_id', type=int)
+    status = request.args.get('status')
+    priority = request.args.get('priority')
+    assigned_to = request.args.get('assigned_to_user_id', type=int)
+
+    query = '''
+        SELECT s.*,
+               a.username AS assigned_to_name,
+               creator.username AS created_by_name,
+               t.task_name AS parent_task_name
+        FROM task_subtasks s
+        LEFT JOIN users a ON s.assigned_to_user_id = a.id
+        LEFT JOIN users creator ON s.created_by_user_id = creator.id
+        LEFT JOIN task_items t ON s.parent_task_id = t.id
+        WHERE 1=1
+    '''
+    params = []
+
+    if parent_task_id:
+        query += ' AND s.parent_task_id = ?'
+        params.append(parent_task_id)
+    if status:
+        query += ' AND s.status = ?'
+        params.append(status)
+    if priority:
+        query += ' AND s.priority = ?'
+        params.append(priority)
+    if assigned_to:
+        query += ' AND s.assigned_to_user_id = ?'
+        params.append(assigned_to)
+
+    query += ' ORDER BY s.priority DESC, s.created_at ASC'
+
+    subtasks = db.execute(query, params).fetchall()
+    return jsonify([dict(row) for row in subtasks])
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TASK TRANSACTION ROUTES
+# ════════════════════════════════════════════════════════════════════════════
+
+@app.route('/task-transactions')
+def task_transactions():
+    """Main transactions list page"""
+    db = get_db()
+
+    # Ensure session has required fields
+    if 'profile_pic' not in session:
+        session['profile_pic'] = 'default.png'
+
+    page = max(request.args.get('page', 1, type=int), 1)
+    per_page = 50
+    task_id_filter = request.args.get('task_id', type=int)
+    category_filter = request.args.get('category_id', type=int)
+    type_filter = request.args.get('type')
+
+    where_clause = 'WHERE 1=1'
+    params = []
+
+    if task_id_filter:
+        where_clause += ' AND t.task_id = ?'
+        params.append(task_id_filter)
+    if category_filter:
+        where_clause += ' AND t.category_id = ?'
+        params.append(category_filter)
+    if type_filter:
+        where_clause += ' AND t.transaction_type = ?'
+        params.append(type_filter)
+
+    total = db.execute(f'SELECT COUNT(*) FROM task_transactions t {where_clause}', params).fetchone()[0]
+    total_pages = max((total + per_page - 1) // per_page, 1) if total else 1
+    if page > total_pages:
+        page = total_pages
+    offset = (page - 1) * per_page
+
+    transactions = db.execute(f'''
+        SELECT t.*,
+               c.name AS category_name, c.color AS category_color, c.icon AS category_icon,
+               ti.task_name,
+               u.username AS created_by_name
+        FROM task_transactions t
+        LEFT JOIN task_transaction_categories c ON t.category_id = c.id
+        LEFT JOIN task_items ti ON t.task_id = ti.id
+        LEFT JOIN users u ON t.created_by_user_id = u.id
+        {where_clause}
+        ORDER BY t.created_at DESC
+        LIMIT ? OFFSET ?
+    ''', params + [per_page, offset]).fetchall()
+
+    categories = db.execute('SELECT * FROM task_transaction_categories ORDER BY name').fetchall()
+    tasks = db.execute('SELECT id, task_name FROM task_items ORDER BY task_name').fetchall()
+
+    summary = db.execute(f'''
+        SELECT
+            COALESCE(SUM(CASE WHEN t.transaction_type = 'Expense' THEN t.amount * t.quantity ELSE 0 END), 0) AS total_expenses,
+            COALESCE(SUM(CASE WHEN t.transaction_type = 'Revenue' THEN t.amount * t.quantity ELSE 0 END), 0) AS total_revenue,
+            COALESCE(SUM(CASE WHEN t.transaction_type = 'Time' THEN t.quantity ELSE 0 END), 0) AS total_time_units,
+            COUNT(*) AS total_transactions
+        FROM task_transactions t {where_clause}
+    ''', params).fetchone()
+
+    return render_template(
+        'task_transactions.html',
+        title='Task Transactions',
+        transactions=[dict(row) for row in transactions],
+        categories=[dict(row) for row in categories],
+        tasks=[dict(row) for row in tasks],
+        summary=dict(summary),
+        filters={
+            'task_id': task_id_filter,
+            'category_id': category_filter,
+            'type': type_filter
+        },
+        page=page,
+        total_pages=total_pages,
+        total=total,
+        per_page=per_page,
+        transaction_types=TRANSACTION_TYPES
+    )
+
+
+@app.route('/task-transactions/save', methods=['POST'])
+def save_task_transaction():
+    """Create or update a task transaction"""
+    if not user_can_manage_task_transactions():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    data = request.get_json() or {}
+    transaction_id = data.get('id')
+
+    task_id = data.get('task_id')
+    if not task_id:
+        return jsonify({'success': False, 'message': 'Task is required'}), 400
+
+    transaction_type = (data.get('transaction_type') or '').strip()
+    if transaction_type not in TRANSACTION_TYPES:
+        return jsonify({'success': False, 'message': 'Invalid transaction type'}), 400
+
+    category_id = data.get('category_id')
+    amount = max(0, float(data.get('amount', 0)))
+    quantity = max(1, int(data.get('quantity', 1)))
+    unit = (data.get('unit') or 'unit').strip()
+    description = (data.get('description') or '').strip()
+    reference = (data.get('reference') or '').strip()
+    transaction_date = data.get('transaction_date') or None
+
+    try:
+        if transaction_id:
+            db.execute('''
+                UPDATE task_transactions SET
+                    task_id = ?, category_id = ?, transaction_type = ?,
+                    amount = ?, quantity = ?, unit = ?, description = ?,
+                    reference = ?, transaction_date = ?
+                WHERE id = ?
+            ''', (task_id, category_id, transaction_type, amount, quantity, unit,
+                  description, reference, transaction_date, transaction_id))
+            db.commit()
+            return jsonify({'success': True, 'message': 'Transaction updated', 'id': transaction_id})
+        else:
+            cursor = db.execute('''
+                INSERT INTO task_transactions
+                    (task_id, category_id, transaction_type, amount, quantity, unit,
+                     description, reference, transaction_date, created_by_user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (task_id, category_id, transaction_type, amount, quantity, unit,
+                  description, reference, transaction_date, session.get('user_id')))
+            db.commit()
+            return jsonify({'success': True, 'message': 'Transaction created', 'id': cursor.lastrowid})
+    except Exception as e:
+        db.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/task-transactions/delete', methods=['POST'])
+def delete_task_transaction():
+    """Delete a task transaction"""
+    if not user_can_manage_task_transactions():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    data = request.get_json() or {}
+    transaction_id = data.get('id')
+
+    if not transaction_id:
+        return jsonify({'success': False, 'message': 'Transaction ID is required'}), 400
+
+    try:
+        db.execute('DELETE FROM task_transactions WHERE id = ?', (transaction_id,))
+        db.commit()
+        return jsonify({'success': True, 'message': 'Transaction deleted'})
+    except Exception as e:
+        db.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/task-transactions/by-task/<int:task_id>')
+def get_task_transactions(task_id):
+    """Get all transactions for a specific task"""
+    db = get_db()
+    transactions = db.execute('''
+        SELECT t.*,
+               c.name AS category_name, c.color AS category_color, c.icon AS category_icon,
+               u.username AS created_by_name
+        FROM task_transactions t
+        LEFT JOIN task_transaction_categories c ON t.category_id = c.id
+        LEFT JOIN users u ON t.created_by_user_id = u.id
+        WHERE t.task_id = ?
+        ORDER BY t.transaction_date DESC, t.created_at DESC
+    ''', (task_id,)).fetchall()
+
+    summary = db.execute('''
+        SELECT
+            COALESCE(SUM(CASE WHEN transaction_type = 'Expense' THEN amount * quantity ELSE 0 END), 0) AS total_expenses,
+            COALESCE(SUM(CASE WHEN transaction_type = 'Revenue' THEN amount * quantity ELSE 0 END), 0) AS total_revenue,
+            COALESCE(SUM(CASE WHEN transaction_type = 'Time' THEN quantity ELSE 0 END), 0) AS total_time_units,
+            COUNT(*) AS total_count
+        FROM task_transactions
+        WHERE task_id = ?
+    ''', (task_id,)).fetchone()
+
+    return jsonify({
+        'transactions': [dict(row) for row in transactions],
+        'summary': dict(summary) if summary else {}
+    })
+
+
+@app.route('/task-transactions/summary')
+def get_transactions_summary():
+    """Get transactions summary/analytics"""
+    db = get_db()
+
+    by_category = db.execute('''
+        SELECT c.name, c.color,
+               COALESCE(SUM(CASE WHEN t.transaction_type = 'Expense' THEN t.amount * t.quantity ELSE 0 END), 0) AS total_expenses,
+               COALESCE(SUM(CASE WHEN t.transaction_type = 'Revenue' THEN t.amount * t.quantity ELSE 0 END), 0) AS total_revenue,
+               COUNT(t.id) AS transaction_count
+        FROM task_transaction_categories c
+        LEFT JOIN task_transactions t ON c.id = t.category_id
+        GROUP BY c.id
+        ORDER BY total_expenses DESC
+    ''').fetchall()
+
+    by_type = db.execute('''
+        SELECT transaction_type,
+               SUM(amount * quantity) AS total_amount,
+               SUM(quantity) AS total_quantity,
+               COUNT(*) AS count
+        FROM task_transactions
+        GROUP BY transaction_type
+    ''').fetchall()
+
+    by_month = db.execute('''
+        SELECT strftime('%Y-%m', transaction_date) AS month,
+               transaction_type,
+               SUM(amount * quantity) AS total_amount
+        FROM task_transactions
+        WHERE transaction_date IS NOT NULL
+        GROUP BY month, transaction_type
+        ORDER BY month DESC
+        LIMIT 12
+    ''').fetchall()
+
+    return jsonify({
+        'by_category': [dict(row) for row in by_category],
+        'by_type': [dict(row) for row in by_type],
+        'by_month': [dict(row) for row in by_month]
+    })
+
+
+@app.route('/task-transactions/export')
+def export_transactions():
+    """Export transactions to CSV"""
+    if not user_can_export_task_reports():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    task_id = request.args.get('task_id', type=int)
+
+    query = '''
+        SELECT t.*, c.name AS category_name, ti.task_name,
+               u.username AS created_by_name
+        FROM task_transactions t
+        LEFT JOIN task_transaction_categories c ON t.category_id = c.id
+        LEFT JOIN task_items ti ON t.task_id = ti.id
+        LEFT JOIN users u ON t.created_by_user_id = u.id
+    '''
+    params = []
+    if task_id:
+        query += ' WHERE t.task_id = ?'
+        params.append(task_id)
+    query += ' ORDER BY t.transaction_date DESC, t.created_at DESC'
+
+    transactions = db.execute(query, params).fetchall()
+
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['ID', 'Task', 'Category', 'Type', 'Amount', 'Quantity', 'Unit',
+                     'Description', 'Reference', 'Date', 'Created By'])
+
+    for t in transactions:
+        writer.writerow([
+            t['id'], t['task_name'], t['category_name'], t['transaction_type'],
+            t['amount'], t['quantity'], t['unit'], t['description'],
+            t['reference'], t['transaction_date'], t['created_by_name']
+        ])
+
+    output.seek(0)
+    return send_file(
+        io.BytesIO(output.getvalue().encode('utf-8')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f'task_transactions_{datetime.now().strftime("%Y%m%d")}.csv'
+    )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# TASK REPORT ROUTES
+# ════════════════════════════════════════════════════════════════════════════
+
+@app.route('/task-reports')
+def task_reports():
+    """Main task reports page"""
+    db = get_db()
+
+    # Ensure session has required fields
+    if 'profile_pic' not in session:
+        session['profile_pic'] = 'default.png'
+
+    companies = [dict(row) for row in db.execute('SELECT id, name FROM companies ORDER BY name').fetchall()]
+    departments = [dict(row) for row in db.execute(
+        "SELECT * FROM task_departments WHERE status = 'Active' ORDER BY name"
+    ).fetchall()]
+    task_users = [dict(row) for row in db.execute(
+        'SELECT id, username FROM users ORDER BY username'
+    ).fetchall()]
+
+    snapshots = []
+    if user_can_view_task_reports():
+        snapshots = db.execute('''
+            SELECT rs.*, u.username AS created_by_name
+            FROM task_report_snapshots rs
+            LEFT JOIN users u ON rs.created_by_user_id = u.id
+            ORDER BY rs.created_at DESC
+            LIMIT 20
+        ''').fetchall()
+
+    return render_template(
+        'task_reports.html',
+        title='Task Reports',
+        companies=companies,
+        departments=departments,
+        task_users=task_users,
+        snapshots=[dict(row) for row in snapshots] if snapshots else [],
+        report_types=REPORT_TYPES,
+        report_intervals=REPORT_INTERVALS,
+        task_priorities=TASK_PRIORITIES,
+        task_statuses=TASK_STATUSES
+    )
+
+
+@app.route('/task-reports/generate', methods=['POST'])
+def generate_task_report():
+    """Generate a new task report"""
+    if not user_can_view_task_reports():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    data = request.get_json() or {}
+    report_type = data.get('report_type')
+
+    if report_type not in REPORT_TYPES:
+        return jsonify({'success': False, 'message': 'Invalid report type'}), 400
+
+    filters = {
+        'company_id': data.get('company_id'),
+        'department_id': data.get('department_id'),
+        'user_id': data.get('user_id'),
+        'priority': data.get('priority'),
+        'status': data.get('status'),
+        'date_from': data.get('date_from'),
+        'date_to': data.get('date_to')
+    }
+
+    base_sql = 'FROM task_items t'
+    join_sql = ''
+    where_sql = 'WHERE 1=1'
+    params = []
+
+    if filters['company_id']:
+        where_sql += ' AND t.company_id = ?'
+        params.append(filters['company_id'])
+    if filters['department_id']:
+        where_sql += ' AND t.department_id = ?'
+        params.append(filters['department_id'])
+    if filters['user_id']:
+        where_sql += ' AND (t.assigned_to_user_id = ? OR t.report_to_user_id = ?)'
+        params.extend([filters['user_id'], filters['user_id']])
+    if filters['priority']:
+        where_sql += ' AND t.priority = ?'
+        params.append(filters['priority'])
+    if filters['status']:
+        where_sql += ' AND t.status = ?'
+        params.append(filters['status'])
+
+    full_sql = f'{base_sql} {where_sql}'
+
+    report_data = {}
+
+    if report_type == 'Status':
+        rows = db.execute(f'''
+            SELECT COALESCE(t.status, 'Open') AS label, COUNT(*) AS count
+            {full_sql}
+            GROUP BY label ORDER BY count DESC
+        ''', params).fetchall()
+        report_data = {'labels': [r['label'] for r in rows], 'values': [r['count'] for r in rows]}
+
+    elif report_type == 'Priority':
+        rows = db.execute(f'''
+            SELECT COALESCE(t.priority, 'Medium') AS label, COUNT(*) AS count
+            {full_sql}
+            GROUP BY label ORDER BY count DESC
+        ''', params).fetchall()
+        report_data = {'labels': [r['label'] for r in rows], 'values': [r['count'] for r in rows]}
+
+    elif report_type == 'Department':
+        rows = db.execute(f'''
+            SELECT COALESCE(d.name, 'Unassigned') AS label, COUNT(*) AS count
+            FROM task_items t
+            LEFT JOIN task_departments d ON t.department_id = d.id
+            {where_sql}
+            GROUP BY label ORDER BY count DESC
+        ''', params).fetchall()
+        report_data = {'labels': [r['label'] for r in rows], 'values': [r['count'] for r in rows]}
+
+    elif report_type == 'User':
+        rows = db.execute(f'''
+            SELECT COALESCE(u.username, 'Unassigned') AS label, COUNT(*) AS count
+            FROM task_items t
+            LEFT JOIN users u ON t.assigned_to_user_id = u.id
+            {where_sql}
+            GROUP BY label ORDER BY count DESC
+        ''', params).fetchall()
+        report_data = {'labels': [r['label'] for r in rows], 'values': [r['count'] for r in rows]}
+
+    elif report_type == 'Timeline':
+        rows = db.execute(f'''
+            SELECT strftime('%Y-%m', t.due_at) AS month, COUNT(*) AS count
+            {full_sql}
+            AND t.due_at IS NOT NULL
+            GROUP BY month ORDER BY month DESC LIMIT 12
+        ''', params).fetchall()
+        report_data = {'labels': [r['month'] for r in rows], 'values': [r['count'] for r in rows]}
+
+    elif report_type == 'Financial':
+        trans_data = db.execute('''
+            SELECT
+                COALESCE(SUM(CASE WHEN tt.transaction_type = 'Expense' THEN tt.amount * tt.quantity ELSE 0 END), 0) AS total_expenses,
+                COALESCE(SUM(CASE WHEN tt.transaction_type = 'Revenue' THEN tt.amount * tt.quantity ELSE 0 END), 0) AS total_revenue,
+                COUNT(DISTINCT tt.task_id) AS tasks_with_transactions
+            FROM task_transactions tt
+            JOIN task_items t ON tt.task_id = t.id
+            WHERE 1=1
+        ''' + ''.join([f' AND t.{k} = ?' for k, v in filters.items() if v]), params).fetchone()
+        report_data = {
+            'total_expenses': float(trans_data['total_expenses']) if trans_data else 0,
+            'total_revenue': float(trans_data['total_revenue']) if trans_data else 0,
+            'tasks_with_transactions': trans_data['tasks_with_transactions'] if trans_data else 0
+        }
+
+    elif report_type == 'Productivity':
+        rows = db.execute(f'''
+            SELECT
+                u.username,
+                COUNT(*) AS tasks_completed,
+                AVG(t.progress) AS avg_progress
+            FROM task_items t
+            LEFT JOIN users u ON t.assigned_to_user_id = u.id
+            {where_sql}
+            AND t.status = 'Completed'
+            GROUP BY u.id ORDER BY tasks_completed DESC
+        ''', params).fetchall()
+        report_data = {
+            'users': [{'username': r['username'], 'tasks_completed': r['tasks_completed'],
+                       'avg_progress': float(r['avg_progress'])} for r in rows]
+        }
+
+    return jsonify({'success': True, 'report_type': report_type, 'data': report_data, 'filters': filters})
+
+
+@app.route('/task-reports/save-snapshot', methods=['POST'])
+def save_task_report_snapshot():
+    """Save a report snapshot for later viewing"""
+    if not user_can_view_task_reports():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    data = request.get_json() or {}
+    report_name = (data.get('report_name') or '').strip()
+    report_type = data.get('report_type')
+    filters_applied = json.dumps(data.get('filters', {}), ensure_ascii=False)
+    snapshot_data = json.dumps(data.get('snapshot_data', {}), ensure_ascii=False)
+
+    if not report_name or not report_type:
+        return jsonify({'success': False, 'message': 'Report name and type are required'}), 400
+
+    try:
+        cursor = db.execute('''
+            INSERT INTO task_report_snapshots
+                (report_name, report_type, filters_applied, snapshot_data, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (report_name, report_type, filters_applied, snapshot_data, session.get('user_id')))
+        db.commit()
+        return jsonify({'success': True, 'message': 'Snapshot saved', 'id': cursor.lastrowid})
+    except Exception as e:
+        db.rollback()
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/task-reports/snapshots')
+def get_report_snapshots():
+    """Get saved report snapshots"""
+    if not user_can_view_task_reports():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    snapshots = db.execute('''
+        SELECT rs.*, u.username AS created_by_name
+        FROM task_report_snapshots rs
+        LEFT JOIN users u ON rs.created_by_user_id = u.id
+        ORDER BY rs.created_at DESC
+    ''').fetchall()
+    return jsonify([dict(row) for row in snapshots])
+
+
+@app.route('/task-reports/export/<report_type>')
+def export_task_report(report_type):
+    """Export a task report"""
+    if not user_can_export_task_reports():
+        return jsonify({'success': False, 'message': 'Permission denied'}), 403
+
+    db = get_db()
+    import csv
+    import io
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    if report_type == 'Status':
+        writer.writerow(['Status', 'Count'])
+        rows = db.execute('SELECT COALESCE(status, "Open") AS label, COUNT(*) AS count FROM task_items GROUP BY label').fetchall()
+        for r in rows:
+            writer.writerow([r['label'], r['count']])
+
+    elif report_type == 'Priority':
+        writer.writerow(['Priority', 'Count'])
+        rows = db.execute('SELECT COALESCE(priority, "Medium") AS label, COUNT(*) AS count FROM task_items GROUP BY label').fetchall()
+        for r in rows:
+            writer.writerow([r['label'], r['count']])
+
+    elif report_type == 'Financial':
+        writer.writerow(['Metric', 'Value'])
+        summary = db.execute('''
+            SELECT
+                COALESCE(SUM(CASE WHEN transaction_type = 'Expense' THEN amount * quantity ELSE 0 END), 0) AS total_expenses,
+                COALESCE(SUM(CASE WHEN transaction_type = 'Revenue' THEN amount * quantity ELSE 0 END), 0) AS total_revenue
+            FROM task_transactions
+        ''').fetchone()
+        writer.writerow(['Total Expenses', summary['total_expenses']])
+        writer.writerow(['Total Revenue', summary['total_revenue']])
+
+    else:
+        writer.writerow(['Report Type', report_type, 'Generated', datetime.now().isoformat()])
+
+    output.seek(0)
+    return send_file(
+        io.BytesIO(output.getvalue().encode('utf-8')),
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f'task_report_{report_type}_{datetime.now().strftime("%Y%m%d")}.csv'
+    )
+
+
+@app.route('/task-reports/analytics')
+def get_task_analytics():
+    """Get analytics data for dashboard widgets"""
+    db = get_db()
+
+    stats = db.execute('''
+        SELECT
+            COUNT(*) AS total_tasks,
+            SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed_tasks,
+            SUM(CASE WHEN status = 'In Progress' THEN 1 ELSE 0 END) AS in_progress_tasks,
+            SUM(CASE WHEN status = 'Open' THEN 1 ELSE 0 END) AS open_tasks,
+            AVG(COALESCE(progress, 0)) AS avg_progress
+        FROM task_items
+    ''').fetchone()
+
+    subtask_stats = db.execute('''
+        SELECT
+            COUNT(*) AS total_subtasks,
+            SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) AS completed_subtasks,
+            AVG(COALESCE(progress, 0)) AS avg_subtask_progress
+        FROM task_subtasks
+    ''').fetchone()
+
+    return jsonify({
+        'tasks': dict(stats) if stats else {},
+        'subtasks': dict(subtask_stats) if subtask_stats else {}
+    })
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# PAGE ROUTES FOR NEW TEMPLATES
+# ════════════════════════════════════════════════════════════════════════════
+
+@app.route('/subtasks-page')
+def subtasks_page():
+    """Subtasks management page"""
+    db = get_db()
+
+    # Ensure session has required fields
+    if 'profile_pic' not in session:
+        session['profile_pic'] = 'default.png'
+
+    tasks = db.execute('''
+        SELECT t.id, t.task_name, t.status AS task_status,
+               (SELECT COUNT(*) FROM task_subtasks WHERE parent_task_id = t.id) AS subtask_count,
+               (SELECT COUNT(*) FROM task_subtasks WHERE parent_task_id = t.id AND status = 'Completed') AS completed_count
+        FROM task_items t
+        WHERE t.is_archived = 0
+        ORDER BY t.task_name
+    ''').fetchall()
+
+    subtask_users = [dict(row) for row in db.execute(
+        'SELECT id, username FROM users ORDER BY username'
+    ).fetchall()]
+
+    return render_template(
+        'subtasks.html',
+        title='Sub Tasks',
+        tasks=[dict(row) for row in tasks],
+        subtask_users=subtask_users,
+        subtask_priorities=SUBTASK_PRIORITIES,
+        subtask_statuses=SUBTASK_STATUSES,
+        subtask_column_options=SUBTASK_COLUMN_OPTIONS
+    )
+
+
+@app.route('/task-list')
+def task_list_page():
+    """Combined task + subtask view with column visibility"""
+    db = get_db()
+
+    if 'profile_pic' not in session:
+        session['profile_pic'] = 'default.png'
+
+    # Get all active tasks
+    tasks = db.execute('''
+        SELECT t.id, t.task_name, t.description, t.priority, t.status, t.progress,
+               t.due_at, t.assigned_to_user_id, t.latest_note,
+               t.reminder_days, t.reminder_hours,
+               a.username AS assigned_to_name
+        FROM task_items t
+        LEFT JOIN users a ON t.assigned_to_user_id = a.id
+        WHERE t.is_archived = 0
+        ORDER BY t.updated_at DESC
+    ''').fetchall()
+
+    # Get all subtasks
+    subtasks = db.execute('''
+        SELECT s.id, s.parent_task_id, s.subtask_title, s.description, s.priority,
+               s.status, s.progress, s.due_at, s.assigned_to_user_id,
+               s.reminder_days, s.reminder_hours,
+               a.username AS assigned_to_name
+        FROM task_subtasks s
+        LEFT JOIN users a ON s.assigned_to_user_id = a.id
+        ORDER BY s.updated_at DESC
+    ''').fetchall()
+
+    task_users = [dict(row) for row in db.execute(
+        'SELECT id, username FROM users ORDER BY username'
+    ).fetchall()]
+
+    # Get saved column preferences
+    user_id = session.get('user_id')
+    visible_columns = TASK_LIST_DEFAULT_COLUMNS[:]
+    if user_id:
+        row = db.execute(
+            "SELECT task_list_columns FROM user_task_preferences WHERE user_id = ?",
+            (user_id,)
+        ).fetchone()
+        if row and row['task_list_columns']:
+            saved = row['task_list_columns']
+            if isinstance(saved, str) and saved.strip():
+                try:
+                    saved = json.loads(saved)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    saved = []
+            if isinstance(saved, list):
+                visible_columns = [c for c in TASK_LIST_DEFAULT_COLUMNS if c in saved]
+            if not visible_columns:
+                visible_columns = TASK_LIST_DEFAULT_COLUMNS[:]
+
+    return render_template(
+        'task_list.html',
+        title='Task List',
+        tasks=[dict(row) for row in tasks],
+        subtasks=[dict(row) for row in subtasks],
+        task_users=task_users,
+        task_priorities=TASK_PRIORITIES,
+        task_statuses=TASK_STATUSES,
+        subtask_priorities=SUBTASK_PRIORITIES,
+        subtask_statuses=SUBTASK_STATUSES,
+        column_options=TASK_LIST_COLUMN_OPTIONS,
+        column_keys=TASK_LIST_COLUMN_KEYS,
+        default_columns=TASK_LIST_DEFAULT_COLUMNS,
+        visible_columns=visible_columns
+    )
+
+
+@app.route('/task-list/columns', methods=['POST'])
+def save_task_list_columns():
+    """Save task list column visibility preferences"""
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Please sign in.'}), 403
+
+    db = get_db()
+    data = request.get_json() or {}
+    columns = data.get('visible_columns', [])
+
+    # Validate columns
+    columns = [c for c in columns if c in TASK_LIST_COLUMN_KEYS]
+    if not columns:
+        columns = TASK_LIST_DEFAULT_COLUMNS[:]
+
+    db.execute('''
+        INSERT INTO user_task_preferences (user_id, task_list_columns, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(user_id) DO UPDATE SET
+            task_list_columns = excluded.task_list_columns,
+            updated_at = CURRENT_TIMESTAMP
+    ''', (user_id, json.dumps(columns)))
+    db.commit()
+    return jsonify({'success': True, 'message': 'Column preferences saved.', 'visible_columns': columns})
+
 
 if __name__ == '__main__':
-    debug_mode = os.environ.get('FLASK_DEBUG', '0') == '1'
-    host = os.environ.get('FLASK_RUN_HOST', '127.0.0.1')
-    port = int(os.environ.get('PORT', '5000'))
-    app.run(debug=debug_mode, host=host, port=port, use_reloader=False)
+    # Always enable debug mode for local development
+    os.environ['FLASK_DEBUG'] = '1'
+    app.debug = True
+    host = '127.0.0.1'
+    port = 5000
+    print(f"Starting Flask server on http://{host}:{port}")
+    print(f"Debug mode: ON")
+    app.run(host=host, port=port, debug=True, use_reloader=True)
+    print(f"Server stopped")

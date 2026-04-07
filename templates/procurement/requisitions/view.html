@@ -1,0 +1,123 @@
+{% extends "procurement/base.html" %}
+
+{% block proc_content %}
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem;">
+    <div>
+        <h2 style="margin: 0 0 0.5rem 0;">Requisition: {{ requisition.requisition_number }}</h2>
+        <div style="display: flex; gap: 0.5rem;">
+            <span class="proc-badge proc-badge-{% if requisition.priority == 'CRITICAL' %}danger{% elif requisition.priority == 'HIGH' %}danger{% elif requisition.priority == 'MEDIUM' %}warning{% else %}gray{% endif %}">
+                {{ requisition.priority }}
+            </span>
+            <span class="proc-badge proc-badge-{% if requisition.status == 'APPROVED' %}success{% elif requisition.status == 'REJECTED' %}danger{% elif requisition.status == 'PENDING_APPROVAL' %}warning{% elif requisition.status == 'DRAFT' %}gray{% else %}info{% endif %}">
+                {{ requisition.status }}
+            </span>
+            {% if requisition.urgency == 'URGENT' or requisition.urgency == 'EMERGENCY' %}
+            <span class="proc-badge proc-badge-danger">{{ requisition.urgency }}</span>
+            {% endif %}
+        </div>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+        {% if requisition.status == 'DRAFT' %}
+        <form method="POST" action="{{ url_for('procurement_requisitions_status', requisition_id=requisition.id) }}" style="display: inline;">
+            <input type="hidden" name="status" value="SUBMITTED">
+            <button type="submit" class="proc-btn proc-btn-primary">
+                <i class="fa fa-paper-plane"></i> Submit
+            </button>
+        </form>
+        {% endif %}
+        {% if requisition.status == 'PENDING_APPROVAL' %}
+        <form method="POST" action="{{ url_for('procurement_requisitions_status', requisition_id=requisition.id) }}" style="display: inline;">
+            <input type="hidden" name="status" value="APPROVED">
+            <button type="submit" class="proc-btn proc-btn-success">
+                <i class="fa fa-check"></i> Approve
+            </button>
+        </form>
+        {% endif %}
+        {% if requisition.status == 'APPROVED' %}
+        <form method="POST" action="{{ url_for('procurement_requisitions_to_rfq', requisition_id=requisition.id) }}" style="display: inline;">
+            <button type="submit" class="proc-btn proc-btn-primary">
+                <i class="fa fa-paper-plane"></i> Convert to RFQ
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="proc-grid-3" style="margin-bottom: 1.5rem;">
+    <div class="proc-stat-card">
+        <div class="proc-stat-label">Requester</div>
+        <div class="proc-stat-value" style="font-size: 1rem;">{{ requisition.requester_name or '-' }}</div>
+    </div>
+    <div class="proc-stat-card">
+        <div class="proc-stat-label">Department</div>
+        <div class="proc-stat-value" style="font-size: 1rem;">{{ requisition.department or '-' }}</div>
+    </div>
+    <div class="proc-stat-card">
+        <div class="proc-stat-label">Source</div>
+        <div class="proc-stat-value" style="font-size: 1rem;">{{ requisition.source_type or 'MANUAL' }}</div>
+    </div>
+    <div class="proc-stat-card">
+        <div class="proc-stat-label">Date</div>
+        <div class="proc-stat-value" style="font-size: 1rem;">{{ requisition.requisition_date[:10] if requisition.requisition_date else '-' }}</div>
+    </div>
+    <div class="proc-stat-card">
+        <div class="proc-stat-label">Total Amount</div>
+        <div class="proc-stat-value" style="font-size: 1rem;">{{ "%.2f"|format(requisition.total_estimated_amount or 0) }} {{ requisition.currency or 'AED' }}</div>
+    </div>
+    <div class="proc-stat-card">
+        <div class="proc-stat-label">Lines</div>
+        <div class="proc-stat-value" style="font-size: 1rem;">{{ requisition.lines|length if requisition.lines else 0 }}</div>
+    </div>
+</div>
+
+<div class="proc-card">
+    <div class="proc-card-header">
+        <h3 class="proc-card-title">Line Items</h3>
+    </div>
+    <table class="proc-table">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Item Code</th>
+                <th>Item Name</th>
+                <th>Brand</th>
+                <th>Qty</th>
+                <th>Required Date</th>
+                <th>Est. Price</th>
+                <th>Total</th>
+                <th>Preferred Supplier</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for line in requisition.lines %}
+            <tr>
+                <td>{{ line.line_number or loop.index }}</td>
+                <td>{{ line.item_code or '-' }}</td>
+                <td>{{ line.item_name or '-' }}</td>
+                <td>{{ line.brand or '-' }}</td>
+                <td>{{ line.requested_qty }} {{ line.unit_of_measure or 'PCS' }}</td>
+                <td>{{ line.required_date[:10] if line.required_date else '-' }}</td>
+                <td>{{ "%.2f"|format(line.estimated_unit_price or 0) }}</td>
+                <td>{{ "%.2f"|format(line.estimated_total_price or 0) }}</td>
+                <td>{{ line.preferred_supplier_name or '-' }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="9" style="text-align: center; color: #64748b;">No line items</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% if requisition.notes %}
+<div class="proc-card" style="margin-top: 1rem;">
+    <div class="proc-card-header">
+        <h3 class="proc-card-title">Notes</h3>
+    </div>
+    <div class="proc-card-body">
+        {{ requisition.notes }}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,246 @@
+{% extends "profile/base.html" %}
+
+{% set page_title = 'Security' %}
+{% set page_description = 'Manage your password and security settings.' %}
+
+{% block profile_content %}
+<!-- Password Status -->
+<div class="glass-panel rounded-2xl border border-white/5 p-6 mb-6">
+    <h3 class="text-lg font-bold text-white mb-6">
+        <i class="fas fa-key mr-2 text-yellow-400"></i>Password Status
+    </h3>
+
+    <div class="flex items-center justify-between p-4 rounded-xl {% if last_change and ((last_change.created_at and ((now - last_change.created_at).days > 90)) or (last_change.created_at and 'days' in last_change.created_at|lower)) %}bg-red-500/10 border border-red-500/20{% else %}bg-green-500/10 border border-green-500/20{% endif %}">
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl {% if last_change and ((last_change.created_at and ((now - last_change.created_at).days > 90)) or (last_change.created_at and 'days' in last_change.created_at|lower)) %}bg-red-500/20 text-red-400{% else %}bg-green-500/20 text-green-400{% endif %} flex items-center justify-center">
+                <i class="fas fa-shield-alt text-xl"></i>
+            </div>
+            <div>
+                <p class="font-bold text-white">
+                    {% if last_change %}
+                    Password last changed {{ last_change.created_at }}
+                    {% else %}
+                    Password never changed
+                    {% endif %}
+                </p>
+                <p class="text-sm text-slate-400">
+                    {% if last_change and ((now - last_change.created_at).days > 90) %}
+                    <span class="text-red-400">Your password is older than 90 days. Consider changing it.</span>
+                    {% else %}
+                    Your password meets security requirements.
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+        <span class="px-4 py-2 rounded-full text-xs font-bold {% if last_change and ((now - last_change.created_at).days > 90) %}bg-red-500/20 text-red-300{% else %}bg-green-500/20 text-green-300{% endif %}">
+            {% if last_change and ((now - last_change.created_at).days > 90) %}Consider Change{% else %}Strong{% endif %}
+        </span>
+    </div>
+</div>
+
+<!-- Change Password Form -->
+<div class="glass-panel rounded-2xl border border-white/5 p-6 mb-6">
+    <h3 class="text-lg font-bold text-white mb-2">Change Password</h3>
+    <p class="text-sm text-slate-400 mb-6">Ensure your account stays secure by using a strong, unique password.</p>
+
+    <form method="POST" class="space-y-6">
+        <input type="hidden" name="action" value="change_password">
+
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Current Password</label>
+            <input type="password" name="current_password" required
+                   class="w-full px-4 py-3 rounded-xl border border-white/10 bg-slate-900/50 text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition"
+                   placeholder="Enter current password">
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">New Password</label>
+            <input type="password" name="new_password" id="new_password" required
+                   class="w-full px-4 py-3 rounded-xl border border-white/10 bg-slate-900/50 text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition"
+                   placeholder="Enter new password">
+            <div id="password_strength" class="mt-2"></div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">Confirm New Password</label>
+            <input type="password" name="confirm_password" id="confirm_password" required
+                   class="w-full px-4 py-3 rounded-xl border border-white/10 bg-slate-900/50 text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 transition"
+                   placeholder="Confirm new password">
+            <p id="password_match" class="mt-2 text-sm"></p>
+        </div>
+
+        <div class="bg-slate-800/50 rounded-xl p-4 border border-white/5">
+            <h4 class="text-sm font-bold text-white mb-3">Password Requirements</h4>
+            <ul class="space-y-2 text-sm text-slate-400">
+                <li class="flex items-center gap-2" id="req_len">
+                    <i class="fas fa-circle text-xs"></i>
+                    <span>At least 8 characters long</span>
+                </li>
+                <li class="flex items-center gap-2" id="req_upper">
+                    <i class="fas fa-circle text-xs"></i>
+                    <span>At least one uppercase letter (A-Z)</span>
+                </li>
+                <li class="flex items-center gap-2" id="req_lower">
+                    <i class="fas fa-circle text-xs"></i>
+                    <span>At least one lowercase letter (a-z)</span>
+                </li>
+                <li class="flex items-center gap-2" id="req_digit">
+                    <i class="fas fa-circle text-xs"></i>
+                    <span>At least one number (0-9)</span>
+                </li>
+                <li class="flex items-center gap-2" id="req_special">
+                    <i class="fas fa-circle text-xs"></i>
+                    <span>At least one special character (!@#$%^&*)</span>
+                </li>
+            </ul>
+        </div>
+
+        <div class="flex justify-end">
+            <button type="submit" id="change_pwd_btn" disabled
+                    class="px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-bold transition">
+                <i class="fas fa-key mr-2"></i>Change Password
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Security Actions -->
+<div class="glass-panel rounded-2xl border border-white/5 p-6 mb-6">
+    <h3 class="text-lg font-bold text-white mb-6">
+        <i class="fas fa-shield-alt mr-2 text-brand-400"></i>Security Actions
+    </h3>
+
+    <div class="space-y-4">
+        <div class="flex items-center justify-between p-4 rounded-xl bg-white/5">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 flex items-center justify-center">
+                    <i class="fas fa-sign-out-alt"></i>
+                </div>
+                <div>
+                    <p class="font-medium text-white">Logout Other Sessions</p>
+                    <p class="text-sm text-slate-400">Sign out from all other devices and sessions</p>
+                </div>
+            </div>
+            <form method="POST">
+                <input type="hidden" name="action" value="force_logout">
+                <button type="submit" onclick="return confirm('This will logout all other sessions. Continue?')"
+                        class="px-4 py-2 rounded-xl border border-red-500/50 text-red-400 text-sm hover:bg-red-500/10 transition">
+                    Logout All
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Password Change History -->
+{% if password_history and password_history|length > 0 %}
+<div class="glass-panel rounded-2xl border border-white/5 p-6">
+    <h3 class="text-lg font-bold text-white mb-6">Password Change History</h3>
+
+    <div class="space-y-3">
+        {% for change in password_history %}
+        <div class="flex items-center gap-4 p-3 rounded-xl bg-white/5">
+            <div class="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                <i class="fas fa-key text-yellow-400 text-sm"></i>
+            </div>
+            <div class="flex-1">
+                <p class="text-sm text-white">Password changed</p>
+                <p class="text-xs text-slate-500">{{ change.created_at }}</p>
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-bold bg-green-500/20 text-green-300">
+                Success
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const newPwd = document.getElementById('new_password');
+    const confirmPwd = document.getElementById('confirm_password');
+    const strengthDiv = document.getElementById('password_strength');
+    const matchP = document.getElementById('password_match');
+    const changeBtn = document.getElementById('change_pwd_btn');
+
+    // Requirements
+    const reqs = {
+        len: document.getElementById('req_len'),
+        upper: document.getElementById('req_upper'),
+        lower: document.getElementById('req_lower'),
+        digit: document.getElementById('req_digit'),
+        special: document.getElementById('req_special')
+    };
+
+    function updateReq(el, valid) {
+        el.className = valid ? 'flex items-center gap-2 text-green-400' : 'flex items-center gap-2 text-slate-400';
+        el.querySelector('i').className = valid ? 'fas fa-check-circle text-xs' : 'fas fa-circle text-xs';
+    }
+
+    function checkPassword() {
+        const pwd = newPwd.value;
+
+        // Check requirements
+        const hasLen = pwd.length >= 8;
+        const hasUpper = /[A-Z]/.test(pwd);
+        const hasLower = /[a-z]/.test(pwd);
+        const hasDigit = /\d/.test(pwd);
+        const hasSpecial = /[!@#$%^&*(),.?":{}|<>]/.test(pwd);
+
+        updateReq(reqs.len, hasLen);
+        updateReq(reqs.upper, hasUpper);
+        updateReq(reqs.lower, hasLower);
+        updateReq(reqs.digit, hasDigit);
+        updateReq(reqs.special, hasSpecial);
+
+        // Check strength
+        const score = [hasLen, hasUpper, hasLower, hasDigit, hasSpecial].filter(Boolean).length;
+
+        if (pwd.length === 0) {
+            strengthDiv.innerHTML = '';
+            changeBtn.disabled = true;
+            return;
+        }
+
+        let strengthText = '';
+        let strengthColor = 'text-red-400';
+
+        if (score <= 2) {
+            strengthText = '<span class="text-red-400">Weak</span>';
+        } else if (score <= 3) {
+            strengthText = '<span class="text-yellow-400">Fair</span>';
+            strengthColor = 'text-yellow-400';
+        } else if (score <= 4) {
+            strengthText = '<span class="text-green-400">Strong</span>';
+            strengthColor = 'text-green-400';
+        } else {
+            strengthText = '<span class="text-green-400">Very Strong</span>';
+            strengthColor = 'text-green-400';
+        }
+
+        strengthDiv.innerHTML = `<p class="text-sm ${strengthColor}">Password strength: ${strengthText}</p>`;
+
+        // Check match
+        if (confirmPwd.value) {
+            if (pwd === confirmPwd.value) {
+                matchP.innerHTML = '<span class="text-green-400">Passwords match</span>';
+            } else {
+                matchP.innerHTML = '<span class="text-red-400">Passwords do not match</span>';
+            }
+        }
+
+        // Enable button if all requirements met and passwords match
+        const allReqsMet = hasLen && hasUpper && hasLower && hasDigit && hasSpecial;
+        const passwordsMatch = pwd && confirmPwd.value && pwd === confirmPwd.value;
+        changeBtn.disabled = !(allReqsMet && passwordsMatch);
+    }
+
+    newPwd.addEventListener('input', checkPassword);
+    confirmPwd.addEventListener('input', checkPassword);
+});
+</script>
+{% endblock %}

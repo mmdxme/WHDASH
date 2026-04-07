@@ -1,0 +1,137 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">Lost Sales & Service Risk</h2>
+        <p class="text-slate-400 text-sm">Track unmet demand and lost sales opportunities</p>
+    </div>
+    <div class="flex gap-3">
+        <button onclick="document.getElementById('recordModal').classList.remove('hidden')"
+                class="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm font-medium transition">
+            <i class="fas fa-plus mr-2"></i>Record Lost Sale
+        </button>
+    </div>
+</div>
+
+<!-- Lost Sales Summary -->
+<div class="grid grid-cols-3 gap-4 mb-6">
+    <div class="glass-panel rounded-xl p-5 text-center">
+        <p class="text-slate-400 text-xs mb-1">Total Lost Value</p>
+        <p class="text-red-400 text-2xl font-bold">${{ "{:,.0f}".format(total_lost_value|default(0)) }}</p>
+    </div>
+    <div class="glass-panel rounded-xl p-5 text-center">
+        <p class="text-slate-400 text-xs mb-1">Total Lost Quantity</p>
+        <p class="text-orange-400 text-2xl font-bold">{{ "{:,.0f}".format(total_lost_qty|default(0)) }}</p>
+    </div>
+    <div class="glass-panel rounded-xl p-5 text-center">
+        <p class="text-slate-400 text-xs mb-1">Lost Sale Records</p>
+        <p class="text-white text-2xl font-bold">{{ lost_sales|length }}</p>
+    </div>
+</div>
+
+<!-- Lost Sales Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+        <table class="w-full text-sm" id="lostSalesTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Item</th>
+                    <th class="text-left py-3 px-3">Customer</th>
+                    <th class="text-left py-3 px-3">Date</th>
+                    <th class="text-right py-3 px-3">Requested</th>
+                    <th class="text-right py-3 px-3">Fulfilled</th>
+                    <th class="text-right py-3 px-3">Lost Qty</th>
+                    <th class="text-right py-3 px-3">Unit Price</th>
+                    <th class="text-right py-3 px-3">Lost Value</th>
+                    <th class="text-left py-3 px-3">Reason</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for ls in lost_sales %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ ls.item_code }}</div>
+                        <div class="text-slate-400 text-xs">{{ ls.item_name }}</div>
+                    </td>
+                    <td class="py-3 px-3 text-slate-300 text-sm">{{ ls.customer_name|default('-') }}</td>
+                    <td class="py-3 px-3 text-slate-300 text-sm">{{ ls.lost_date }}</td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ ls.requested_quantity|default(0)|int }}</td>
+                    <td class="py-3 px-3 text-right text-emerald-400">{{ ls.fulfilled_quantity|default(0)|int }}</td>
+                    <td class="py-3 px-3 text-right text-red-400 font-bold">{{ ls.lost_quantity|default(0)|int }}</td>
+                    <td class="py-3 px-3 text-right text-slate-300">${{ ls.unit_price|default(0) }}</td>
+                    <td class="py-3 px-3 text-right text-red-500 font-bold">${{ "{:,.0f}".format(ls.lost_value|default(0)) }}</td>
+                    <td class="py-3 px-3 text-slate-400 text-xs">{{ ls.lost_reason|default('-') }}</td>
+                </tr>
+                {% endfor %}
+                {% if not lost_sales %}
+                <tr>
+                    <td colspan="9" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-chart-area text-4xl mb-3 text-slate-600"></i>
+                        <p>No lost sales recorded yet.</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Record Lost Sale Modal -->
+<div id="recordModal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+    <div class="glass-panel rounded-xl p-6 w-full max-w-md mx-4">
+        <h3 class="text-lg font-semibold text-white mb-4">Record Lost Sale</h3>
+        <form action="{{ url_for('lost_sales_record') }}" method="POST">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Item</label>
+                    <select name="item_id" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm" required>
+                        <option value="">Select item...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Customer</label>
+                    <select name="customer_id" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                        <option value="">Select customer...</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Requested Qty</label>
+                        <input type="number" name="requested_quantity" min="0" step="1" required
+                               class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Fulfilled Qty</label>
+                        <input type="number" name="fulfilled_quantity" min="0" step="1" value="0"
+                               class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Unit Price</label>
+                        <input type="number" name="unit_price" min="0" step="0.01" value="0"
+                               class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-slate-300 text-sm mb-1">Lost Date</label>
+                        <input type="date" name="lost_date" required
+                               class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-slate-300 text-sm mb-1">Reason</label>
+                    <textarea name="lost_reason" rows="2"
+                              class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm"
+                              placeholder="Why was the sale lost?"></textarea>
+                </div>
+            </div>
+            <div class="flex gap-3 mt-6">
+                <button type="button" onclick="document.getElementById('recordModal').classList.add('hidden')"
+                        class="flex-1 px-4 py-2 rounded-lg bg-slate-700 text-slate-300 text-sm hover:bg-slate-600">Cancel</button>
+                <button type="submit" class="flex-1 px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600">Record</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

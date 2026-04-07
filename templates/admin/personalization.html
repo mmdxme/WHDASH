@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - {{ get_setting('platform_name', 'WHDASH') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        {% include 'theme_variables.html' %}
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+
+{% include 'admin_sidebar.html' %}
+
+<div class="ml-64 min-h-screen">
+    {% include 'admin_header.html' %}
+
+    <main class="p-6">
+        <!-- Page Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
+            <p class="text-slate-600 dark:text-slate-400 mt-1">Configure default preferences for users, roles, and the platform</p>
+        </div>
+
+        <!-- Info Banner -->
+        <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-4 mb-6">
+            <div class="flex items-start gap-3">
+                <i class="fas fa-info-circle text-blue-600 dark:text-blue-400 mt-0.5"></i>
+                <div>
+                    <p class="text-sm font-medium text-blue-800 dark:text-blue-300">Preference Hierarchy</p>
+                    <p class="text-sm text-blue-700 dark:text-blue-400 mt-1">
+                        Preferences are applied in this order: System Default → Role Default → Company Default → User Override.
+                        Users can override their own preferences from the Preferences page.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="border-b border-slate-200 dark:border-slate-700 mb-6">
+            <nav class="flex gap-4">
+                <button onclick="showTab('theme')" id="tab-theme" class="px-4 py-2 border-b-2 border-blue-600 text-blue-600 font-medium">
+                    <i class="fas fa-palette mr-2"></i>Theme & Appearance
+                </button>
+                <button onclick="showTab('locale')" id="tab-locale" class="px-4 py-2 border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white">
+                    <i class="fas fa-globe mr-2"></i>Language & Region
+                </button>
+                <button onclick="showTab('layout')" id="tab-layout" class="px-4 py-2 border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white">
+                    <i class="fas fa-desktop mr-2"></i>Layout & Density
+                </button>
+                <button onclick="showTab('defaults')" id="tab-defaults" class="px-4 py-2 border-b-2 border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white">
+                    <i class="fas fa-sliders-h mr-2"></i>Module Defaults
+                </button>
+            </nav>
+        </div>
+
+        <!-- Theme Tab -->
+        <div id="content-theme" class="tab-content">
+            <form method="post" action="{{ url_for('admin_save_personalization') }}">
+                <input type="hidden" name="action" value="update_theme_defaults">
+
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4">Default Theme Settings</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Theme</label>
+                            <select name="default_theme" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                {% for theme in available_themes %}
+                                <option value="{{ theme.id }}" {% if preferences.default_theme == theme.id %}selected{% endif %}>{{ theme.label }}</option>
+                                {% endfor %}
+                            </select>
+                            <p class="text-xs text-slate-500 mt-1">Users can override this in their personal preferences</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Theme Override</label>
+                            <div class="flex items-center gap-4 mt-2">
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="allow_theme_override" value="1" {% if preferences.allow_theme_override %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Allow users to override</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="allow_theme_override" value="0" {% if not preferences.allow_theme_override %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Force default theme</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Font Family</label>
+                            <select name="default_font_family" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="Outfit" {% if preferences.default_font_family == 'Outfit' %}selected{% endif %}>Outfit (Default)</option>
+                                <option value="Manrope" {% if preferences.default_font_family == 'Manrope' %}selected{% endif %}>Manrope</option>
+                                <option value="Space Grotesk" {% if preferences.default_font_family == 'Space Grotesk' %}selected{% endif %}>Space Grotesk</option>
+                                <option value="Tajawal" {% if preferences.default_font_family == 'Tajawal' %}selected{% endif %}>Tajawal</option>
+                                <option value="Vazirmatn" {% if preferences.default_font_family == 'Vazirmatn' %}selected{% endif %}>Vazirmatn</option>
+                                <option value="Noto Sans" {% if preferences.default_font_family == 'Noto Sans' %}selected{% endif %}>Noto Sans</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Font Size</label>
+                            <select name="default_font_size" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="small" {% if preferences.default_font_size == 'small' %}selected{% endif %}>Small</option>
+                                <option value="medium" {% if preferences.default_font_size == 'medium' %}selected{% endif %}>Medium (Default)</option>
+                                <option value="large" {% if preferences.default_font_size == 'large' %}selected{% endif %}>Large</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Theme Preview -->
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4">Theme Preview</h2>
+                    <div class="grid grid-cols-3 md:grid-cols-6 gap-4">
+                        {% for theme in available_themes %}
+                        <div class="text-center">
+                            <div class="w-full h-16 rounded-lg mb-2 border-2 {{ 'border-blue-500' if preferences.default_theme == theme.id else 'border-transparent' }} flex items-center justify-center text-white text-xs font-medium" style="background-color: {{ theme.preview_bg }}; color: {{ theme.preview_text }};">
+                                Preview
+                            </div>
+                            <p class="text-sm text-slate-600 dark:text-slate-400">{{ theme.label }}</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                        <i class="fas fa-save mr-2"></i>Save Theme Settings
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Language & Region Tab -->
+        <div id="content-locale" class="tab-content hidden">
+            <form method="post" action="{{ url_for('admin_save_personalization') }}">
+                <input type="hidden" name="action" value="update_locale_defaults">
+
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4">Language Settings</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Language</label>
+                            <select name="default_language" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="en" {% if preferences.default_language == 'en' %}selected{% endif %}>English</option>
+                                <option value="ar" {% if preferences.default_language == 'ar' %}selected{% endif %}>العربية (Arabic)</option>
+                                <option value="fa" {% if preferences.default_language == 'fa' %}selected{% endif %}>فارسی (Persian)</option>
+                                <option value="ru" {% if preferences.default_language == 'ru' %}selected{% endif %}>Русский (Russian)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Available Languages</label>
+                            <div class="flex flex-wrap gap-2 mt-2">
+                                <label class="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                                    <input type="checkbox" name="available_languages" value="en" {% if 'en' in preferences.available_languages %}checked{% endif %} class="w-4 h-4 text-blue-600 rounded">
+                                    <span>English</span>
+                                </label>
+                                <label class="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                                    <input type="checkbox" name="available_languages" value="ar" {% if 'ar' in preferences.available_languages %}checked{% endif %} class="w-4 h-4 text-blue-600 rounded">
+                                    <span>العربية</span>
+                                </label>
+                                <label class="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                                    <input type="checkbox" name="available_languages" value="fa" {% if 'fa' in preferences.available_languages %}checked{% endif %} class="w-4 h-4 text-blue-600 rounded">
+                                    <span>فارسی</span>
+                                </label>
+                                <label class="flex items-center gap-2 px-3 py-2 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                                    <input type="checkbox" name="available_languages" value="ru" {% if 'ru' in preferences.available_languages %}checked{% endif %} class="w-4 h-4 text-blue-600 rounded">
+                                    <span>Русский</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">RTL Support</label>
+                            <div class="flex items-center gap-4 mt-2">
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="enable_rtl" value="1" {% if preferences.enable_rtl %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Enable RTL for Arabic/Persian</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="enable_rtl" value="0" {% if not preferences.enable_rtl %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Disable RTL</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Language Override</label>
+                            <div class="flex items-center gap-4 mt-2">
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="allow_language_override" value="1" {% if preferences.allow_language_override %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Allow users to change</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="allow_language_override" value="0" {% if not preferences.allow_language_override %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Force default</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4">Regional Settings</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Timezone</label>
+                            <select name="default_timezone" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="Asia/Dubai" {% if preferences.default_timezone == 'Asia/Dubai' %}selected{% endif %}>Asia/Dubai (UTC+4)</option>
+                                <option value="Asia/Riyadh" {% if preferences.default_timezone == 'Asia/Riyadh' %}selected{% endif %}>Asia/Riyadh (UTC+3)</option>
+                                <option value="Asia/Tehran" {% if preferences.default_timezone == 'Asia/Tehran' %}selected{% endif %}>Asia/Tehran (UTC+3:30)</option>
+                                <option value="Europe/London" {% if preferences.default_timezone == 'Europe/London' %}selected{% endif %}>Europe/London (UTC+0)</option>
+                                <option value="America/New_York" {% if preferences.default_timezone == 'America/New_York' %}selected{% endif %}>America/New_York (UTC-5)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Date Format</label>
+                            <select name="date_format" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="DD/MM/YYYY" {% if preferences.date_format == 'DD/MM/YYYY' %}selected{% endif %}>DD/MM/YYYY (31/12/2026)</option>
+                                <option value="MM/DD/YYYY" {% if preferences.date_format == 'MM/DD/YYYY' %}selected{% endif %}>MM/DD/YYYY (12/31/2026)</option>
+                                <option value="YYYY-MM-DD" {% if preferences.date_format == 'YYYY-MM-DD' %}selected{% endif %}>YYYY-MM-DD (2026-12-31)</option>
+                                <option value="DD-MM-YYYY" {% if preferences.date_format == 'DD-MM-YYYY' %}selected{% endif %}>DD-MM-YYYY (31-12-2026)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Time Format</label>
+                            <select name="time_format" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="24h" {% if preferences.time_format == '24h' %}selected{% endif %}>24-hour (14:30)</option>
+                                <option value="12h" {% if preferences.time_format == '12h' %}selected{% endif %}>12-hour (2:30 PM)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Number Format</label>
+                            <select name="number_format" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="1,234.56" {% if preferences.number_format == '1,234.56' %}selected{% endif %}>1,234.56 (Default)</option>
+                                <option value="1.234,56" {% if preferences.number_format == '1.234,56' %}selected{% endif %}>1.234,56</option>
+                                <option value="1 234.56" {% if preferences.number_format == '1 234.56' %}selected{% endif %}>1 234.56</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Decimal Precision</label>
+                            <select name="decimal_precision" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="0" {% if preferences.decimal_precision == '0' %}selected{% endif %}>0 decimals</option>
+                                <option value="1" {% if preferences.decimal_precision == '1' %}selected{% endif %}>1 decimal</option>
+                                <option value="2" {% if preferences.decimal_precision == '2' %}selected{% endif %}>2 decimals</option>
+                                <option value="3" {% if preferences.decimal_precision == '3' %}selected{% endif %}>3 decimals</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Currency</label>
+                            <select name="default_currency" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="AED" {% if preferences.default_currency == 'AED' %}selected{% endif %}>AED - UAE Dirham</option>
+                                <option value="USD" {% if preferences.default_currency == 'USD' %}selected{% endif %}>USD - US Dollar</option>
+                                <option value="EUR" {% if preferences.default_currency == 'EUR' %}selected{% endif %}>EUR - Euro</option>
+                                <option value="GBP" {% if preferences.default_currency == 'GBP' %}selected{% endif %}>GBP - British Pound</option>
+                                <option value="SAR" {% if preferences.default_currency == 'SAR' %}selected{% endif %}>SAR - Saudi Riyal</option>
+                                <option value="IRR" {% if preferences.default_currency == 'IRR' %}selected{% endif %}>IRR - Iranian Rial</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                        <i class="fas fa-save mr-2"></i>Save Locale Settings
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Layout & Density Tab -->
+        <div id="content-layout" class="tab-content hidden">
+            <form method="post" action="{{ url_for('admin_save_personalization') }}">
+                <input type="hidden" name="action" value="update_layout_defaults">
+
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4">Sidebar & Navigation</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Sidebar State</label>
+                            <select name="default_sidebar_collapsed" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="0" {% if preferences.default_sidebar_collapsed == '0' %}selected{% endif %}>Expanded</option>
+                                <option value="1" {% if preferences.default_sidebar_collapsed == '1' %}selected{% endif %}>Collapsed</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Compact Sidebar</label>
+                            <div class="flex items-center gap-4 mt-2">
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="compact_sidebar_default" value="1" {% if preferences.compact_sidebar_default %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Compact mode</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="compact_sidebar_default" value="0" {% if not preferences.compact_sidebar_default %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Normal mode</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Table Density</label>
+                            <select name="table_density_default" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="compact" {% if preferences.table_density_default == 'compact' %}selected{% endif %}>Compact (more rows)</option>
+                                <option value="comfortable" {% if preferences.table_density_default == 'comfortable' %}selected{% endif %}>Comfortable (default)</option>
+                                <option value="spacious" {% if preferences.table_density_default == 'spacious' %}selected{% endif %}>Spacious (fewer rows)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Items Per Page</label>
+                            <select name="items_per_page_default" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="10" {% if preferences.items_per_page_default == '10' %}selected{% endif %}>10 items</option>
+                                <option value="25" {% if preferences.items_per_page_default == '25' %}selected{% endif %}>25 items</option>
+                                <option value="50" {% if preferences.items_per_page_default == '50' %}selected{% endif %}>50 items</option>
+                                <option value="100" {% if preferences.items_per_page_default == '100' %}selected{% endif %}>100 items</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4">Animation & Motion</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Reduced Motion</label>
+                            <div class="flex items-center gap-4 mt-2">
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="reduced_motion_default" value="1" {% if preferences.reduced_motion_default %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Reduced (accessibility)</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="reduced_motion_default" value="0" {% if not preferences.reduced_motion_default %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Normal animations</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                        <i class="fas fa-save mr-2"></i>Save Layout Settings
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Module Defaults Tab -->
+        <div id="content-defaults" class="tab-content hidden">
+            <form method="post" action="{{ url_for('admin_save_personalization') }}">
+                <input type="hidden" name="action" value="update_module_defaults">
+
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4">Default Landing Pages</h2>
+                    <p class="text-sm text-slate-600 dark:text-slate-400 mb-4">Set the default dashboard/page users see when they log in or click the Dashboard menu.</p>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Dashboard</label>
+                            <select name="default_dashboard" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="/" {% if preferences.default_dashboard == '/' %}selected{% endif %}>Main Dashboard</option>
+                                <option value="/sales/dashboard" {% if preferences.default_dashboard == '/sales/dashboard' %}selected{% endif %}>Sales Dashboard</option>
+                                <option value="/warehouse/dashboard" {% if preferences.default_dashboard == '/warehouse/dashboard' %}selected{% endif %}>Warehouse Dashboard</option>
+                                <option value="/hr/dashboard" {% if preferences.default_dashboard == '/hr/dashboard' %}selected{% endif %}>HR Dashboard</option>
+                                <option value="/logistics/dashboard" {% if preferences.default_dashboard == '/logistics/dashboard' %}selected{% endif %}>Logistics Dashboard</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Dashboard Override</label>
+                            <div class="flex items-center gap-4 mt-2">
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="allow_dashboard_override" value="1" {% if preferences.allow_dashboard_override %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Allow users to customize</span>
+                                </label>
+                                <label class="flex items-center gap-2">
+                                    <input type="radio" name="allow_dashboard_override" value="0" {% if not preferences.allow_dashboard_override %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                    <span class="text-sm">Force default</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4">Module-Specific Defaults</h2>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Company</label>
+                            <select name="default_company_id" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="">None</option>
+                                {% for company in companies %}
+                                <option value="{{ company.id }}" {% if preferences.default_company_id == company.id|string %}selected{% endif %}>{{ company.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Warehouse</label>
+                            <select name="default_warehouse_id" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="">None</option>
+                                {% for warehouse in warehouses %}
+                                <option value="{{ warehouse.id }}" {% if preferences.default_warehouse_id == warehouse.id|string %}selected{% endif %}>{{ warehouse.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default View Mode</label>
+                            <select name="default_view_mode" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                <option value="list" {% if preferences.default_view_mode == 'list' %}selected{% endif %}>List View</option>
+                                <option value="grid" {% if preferences.default_view_mode == 'grid' %}selected{% endif %}>Grid View</option>
+                                <option value="kanban" {% if preferences.default_view_mode == 'kanban' %}selected{% endif %}>Kanban View</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                        <i class="fas fa-save mr-2"></i>Save Module Defaults
+                    </button>
+                </div>
+            </form>
+        </div>
+    </main>
+</div>
+
+{% include 'admin_scripts.html' %}
+
+<script>
+function showTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('[id^="tab-"]').forEach(el => {
+        el.classList.remove('border-blue-600', 'text-blue-600');
+        el.classList.add('border-transparent', 'text-slate-600', 'dark:text-slate-400');
+    });
+    document.getElementById('content-' + tab).classList.remove('hidden');
+    document.getElementById('tab-' + tab).classList.remove('border-transparent', 'text-slate-600', 'dark:text-slate-400');
+    document.getElementById('tab-' + tab).classList.add('border-blue-600', 'text-blue-600');
+}
+</script>
+</body>
+</html>

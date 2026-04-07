@@ -1,0 +1,137 @@
+{% extends "planning/base_planning.html" %}
+
+{% block planning_content %}
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">Inventory Health</h2>
+        <p class="text-slate-400 text-sm">Stock health status and coverage analysis</p>
+    </div>
+</div>
+
+<!-- Status Summary Cards -->
+<div class="grid grid-cols-3 md:grid-cols-6 gap-4 mb-6">
+    <div class="stat-card glass-panel rounded-xl p-4 text-center">
+        <div class="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center mx-auto mb-2">
+            <i class="fas fa-times-circle text-red-400"></i>
+        </div>
+        <p class="text-white text-xl font-bold">{{ status_counts.STOCKOUT|default(0) }}</p>
+        <p class="text-slate-400 text-xs">Stockout</p>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4 text-center">
+        <div class="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center mx-auto mb-2">
+            <i class="fas fa-exclamation-triangle text-orange-400"></i>
+        </div>
+        <p class="text-white text-xl font-bold">{{ status_counts.BELOW_SAFETY|default(0) }}</p>
+        <p class="text-slate-400 text-xs">Below Safety</p>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4 text-center">
+        <div class="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-2">
+            <i class="fas fa-arrow-down text-yellow-400"></i>
+        </div>
+        <p class="text-white text-xl font-bold">{{ status_counts.BELOW_ROP|default(0) }}</p>
+        <p class="text-slate-400 text-xs">Below ROP</p>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4 text-center">
+        <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center mx-auto mb-2">
+            <i class="fas fa-arrow-up text-purple-400"></i>
+        </div>
+        <p class="text-white text-xl font-bold">{{ status_counts.OVERSTOCK|default(0) }}</p>
+        <p class="text-slate-400 text-xs">Overstock</p>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4 text-center">
+        <div class="w-10 h-10 rounded-full bg-pink-500/20 flex items-center justify-center mx-auto mb-2">
+            <i class="fas fa-exclamation-circle text-pink-400"></i>
+        </div>
+        <p class="text-white text-xl font-bold">{{ status_counts.EXCESS|default(0) }}</p>
+        <p class="text-slate-400 text-xs">Excess</p>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4 text-center">
+        <div class="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-2">
+            <i class="fas fa-check-circle text-green-400"></i>
+        </div>
+        <p class="text-white text-xl font-bold">{{ status_counts.HEALTHY|default(0) }}</p>
+        <p class="text-slate-400 text-xs">Healthy</p>
+    </div>
+</div>
+
+<!-- Inventory Items Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <table class="w-full text-sm" id="healthTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">Item</th>
+                    <th class="text-center py-3 px-2">Status</th>
+                    <th class="text-right py-3 px-3">Current</th>
+                    <th class="text-right py-3 px-3">Safety</th>
+                    <th class="text-right py-3 px-3">ROP</th>
+                    <th class="text-right py-3 px-3">Min</th>
+                    <th class="text-right py-3 px-3">Max</th>
+                    <th class="text-center py-3 px-2">ABC</th>
+                    <th class="text-center py-3 px-2">XYZ</th>
+                    <th class="text-center py-3 px-2">Critical</th>
+                    <th class="text-right py-3 px-3">Avg Daily</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in health_items %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                    <td class="py-3 px-4">
+                        <div class="text-white font-medium">{{ item.item_code }}</div>
+                        <div class="text-slate-400 text-xs">{{ item.name }}</div>
+                    </td>
+                    <td class="py-3 px-2 text-center">
+                        {% if item.health_status == 'STOCKOUT' %}
+                        <span class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs font-bold">STOCKOUT</span>
+                        {% elif item.health_status == 'BELOW_SAFETY' %}
+                        <span class="px-2 py-1 rounded bg-orange-500/20 text-orange-400 text-xs font-bold">BELOW SS</span>
+                        {% elif item.health_status == 'BELOW_ROP' %}
+                        <span class="px-2 py-1 rounded bg-yellow-500/20 text-yellow-400 text-xs font-bold">BELOW ROP</span>
+                        {% elif item.health_status == 'OVERSTOCK' %}
+                        <span class="px-2 py-1 rounded bg-purple-500/20 text-purple-400 text-xs font-bold">OVER</span>
+                        {% elif item.health_status == 'EXCESS' %}
+                        <span class="px-2 py-1 rounded bg-pink-500/20 text-pink-400 text-xs font-bold">EXCESS</span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs font-bold">HEALTHY</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-3 text-right font-bold {% if item.health_status == 'STOCKOUT' %}text-red-400{% elif item.health_status in ('BELOW_SAFETY', 'BELOW_ROP') %}text-orange-400{% elif item.health_status in ('OVERSTOCK', 'EXCESS') %}text-purple-400{% else %}text-white{% endif %}">
+                        {{ item.current_stock|default(0)|int }}
+                    </td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ item.safety_stock|default(0)|int }}</td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ item.reorder_point|default(0)|int }}</td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ item.min_stock_level|default(0)|int }}</td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ item.max_stock_level|default(0)|int }}</td>
+                    <td class="py-3 px-2 text-center">
+                        <span class="px-2 py-0.5 rounded text-xs font-bold
+                            {% if item.abc_class == 'A' %}bg-emerald-500/20 text-emerald-400
+                            {% elif item.abc_class == 'B' %}bg-yellow-500/20 text-yellow-400
+                            {% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                            {{ item.abc_class|default('-') }}
+                        </span>
+                    </td>
+                    <td class="py-3 px-2 text-center">
+                        <span class="px-2 py-0.5 rounded text-xs font-bold
+                            {% if item.xyz_class == 'X' %}bg-sky-500/20 text-sky-400
+                            {% elif item.xyz_class == 'Y' %}bg-amber-500/20 text-amber-400
+                            {% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                            {{ item.xyz_class|default('-') }}
+                        </span>
+                    </td>
+                    <td class="py-3 px-2 text-center">
+                        {% if item.criticality_level == 'HIGH' %}
+                        <i class="fas fa-fire text-red-400"></i>
+                        {% elif item.criticality_level == 'MEDIUM' %}
+                        <i class="fas fa-warning text-yellow-400"></i>
+                        {% else %}
+                        <i class="fas fa-minus text-slate-500"></i>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ "{:.1f}".format(item.avg_daily_demand|default(0)) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

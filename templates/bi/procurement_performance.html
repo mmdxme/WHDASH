@@ -1,0 +1,178 @@
+{% extends "bi/base_bi.html" %}
+
+{% block title %}Procurement Performance Dashboard{% endblock %}
+
+{% block bi_content %}
+<!-- Procurement Header -->
+<section class="executive-hero mb-4">
+    <h1>Procurement & Supplier Dashboard</h1>
+    <div class="subtitle">Purchase orders, supplier performance, and spend analysis</div>
+    
+    <div class="hero-kpi-grid">
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="proc-po-count">0</div>
+            <div class="hero-kpi-label">PO Count</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="proc-total-spend">AED 0</div>
+            <div class="hero-kpi-label">Total Spend</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="proc-suppliers">0</div>
+            <div class="hero-kpi-label">Active Suppliers</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="proc-delayed">0</div>
+            <div class="hero-kpi-label">Delayed POs</div>
+        </div>
+    </div>
+</section>
+
+<!-- PO Status -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Purchase Orders by Status</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Count</th>
+                    <th>Value</th>
+                    <th>% of Total</th>
+                </tr>
+            </thead>
+            <tbody id="po-by-status"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Top Suppliers -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Top Suppliers by Spend</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Supplier</th>
+                    <th>Total Spend</th>
+                    <th>PO Count</th>
+                    <th>Avg PO Value</th>
+                    <th>Delayed</th>
+                </tr>
+            </thead>
+            <tbody id="top-suppliers"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Emergency Purchases -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Emergency Purchases</h2>
+    </div>
+    <div class="bi-grid-4">
+        <div class="bi-card">
+            <div class="bi-card-value text-danger" id="emergency-count">0</div>
+            <div class="bi-card-label">Emergency POs</div>
+        </div>
+        <div class="bi-card">
+            <div class="bi-card-value text-danger" id="emergency-value">AED 0</div>
+            <div class="bi-card-label">Emergency Value</div>
+        </div>
+        <div class="bi-card">
+            <div class="bi-card-value text-warning" id="avg-lead-time">0 days</div>
+            <div class="bi-card-label">Avg Lead Time</div>
+        </div>
+        <div class="bi-card">
+            <div class="bi-card-value text-info" id="open-pos">0</div>
+            <div class="bi-card-label">Open POs</div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadProcurementData();
+});
+
+async function loadProcurementData() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        params.set('format', 'json');
+        
+        const response = await fetch(`/api/bi/kpis/procurement?${params.toString()}`);
+        const data = await response.json();
+        
+        updateProcurementKPIs(data);
+        updatePOByStatus(data.by_status || []);
+        updateTopSuppliers(data.top_suppliers || []);
+        updateEmergencyStats(data);
+        
+    } catch (error) {
+        console.error('Error loading procurement data:', error);
+    }
+}
+
+function updateProcurementKPIs(data) {
+    document.getElementById('proc-po-count').textContent = formatNumber(data.po_count || 0);
+    document.getElementById('proc-total-spend').textContent = formatCurrency(data.total_spend || 0);
+    document.getElementById('proc-suppliers').textContent = formatNumber(data.supplier_count || 0);
+    document.getElementById('proc-delayed').textContent = formatNumber(data.delayed_count || 0);
+}
+
+function updatePOByStatus(statuses) {
+    const tbody = document.getElementById('po-by-status');
+    tbody.innerHTML = statuses.map(s => `
+        <tr>
+            <td><span class="status-badge status-${(s.status || 'unknown').toLowerCase()}">${s.status || 'Unknown'}</span></td>
+            <td>${formatNumber(s.po_count || 0)}</td>
+            <td class="font-bold">${formatCurrency(s.total_value || 0)}</td>
+            <td>${formatPercent(s.pct || 0)}</td>
+        </tr>
+    `).join('');
+}
+
+function updateTopSuppliers(suppliers) {
+    const tbody = document.getElementById('top-suppliers');
+    tbody.innerHTML = suppliers.slice(0, 10).map((s, i) => `
+        <tr>
+            <td><span class="top-list-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
+            <td>${s.supplier_name || 'Unknown'}</td>
+            <td class="font-bold">${formatCurrency(s.total_spend || 0)}</td>
+            <td>${formatNumber(s.po_count || 0)}</td>
+            <td>${formatCurrency(s.avg_po_value || 0)}</td>
+            <td class="text-danger">${formatNumber(s.delayed_count || 0)}</td>
+        </tr>
+    `).join('');
+}
+
+function updateEmergencyStats(data) {
+    document.getElementById('emergency-count').textContent = formatNumber(data.emergency_count || 0);
+    document.getElementById('emergency-value').textContent = formatCurrency(data.emergency_value || 0);
+    document.getElementById('avg-lead-time').textContent = (data.avg_lead_time_days || 0) + ' days';
+    document.getElementById('open-pos').textContent = formatNumber(data.open_pos || 0);
+}
+
+function formatNumber(num, decimals = 0) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function formatCurrency(num) {
+    if (num === null || num === undefined) return '-';
+    return 'AED ' + parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function formatPercent(num) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+</script>
+{% endblock %}

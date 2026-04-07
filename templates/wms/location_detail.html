@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <div class="flex items-center justify-between">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('wms_locations') }}" class="text-slate-400 hover:text-white"><i class="fa-solid fa-arrow-left"></i></a>
+                <h1 class="text-2xl font-bold text-white">{{ location.code }}</h1>
+                <span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider bg-brand-500/10 text-brand-400">{{ location.location_type }}</span>
+            </div>
+            <p class="text-slate-400 text-sm mt-1 ml-10">{{ location.warehouse_name }} / {{ location.zone_name or 'No Zone' }}</p>
+        </div>
+        <a href="{{ url_for('wms_locations_edit', location_id=location.id) }}" class="px-4 py-2 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400 hover:bg-amber-500/20 text-sm font-medium">
+            <i class="fa-solid fa-pen mr-2"></i>Edit
+        </a>
+    </div>
+
+    <!-- Summary -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Current Stock</p>
+            <p class="text-3xl font-extrabold text-white">{{ (location.current_stock or 0)|int|abs }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Utilization</p>
+            {% if location.capacity_volume_m3 %}
+                {% set pct = ((location.current_volume_m3|default(0) / location.capacity_volume_m3) * 100)|int %}
+                <p class="text-3xl font-extrabold {% if pct > 85 %}text-red-400{% elif pct > 70 %}text-amber-400{% else %}text-emerald-400{% endif %}">{{ pct }}%</p>
+            {% else %}
+                <p class="text-3xl font-extrabold text-slate-400">-</p>
+            {% endif %}
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Capacity (m³)</p>
+            <p class="text-3xl font-extrabold text-brand-400">{{ location.capacity_volume_m3|default('-') }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Status</p>
+            <p class="text-lg font-bold {% if location.is_locked %}text-red-400{% elif location.is_empty %}text-slate-400{% else %}text-emerald-400{% endif %}">
+                {% if location.is_locked %}Locked{% elif location.is_empty %}Empty{% else %}Active{% endif %}
+            </p>
+        </div>
+    </div>
+
+    <!-- Details -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">Details</h3>
+            <dl class="space-y-3 text-sm">
+                <div class="flex justify-between"><dt class="text-slate-400">Code</dt><dd class="text-white font-medium">{{ location.code }}</dd></div>
+                <div class="flex justify-between"><dt class="text-slate-400">Name</dt><dd class="text-white">{{ location.name or '-' }}</dd></div>
+                <div class="flex justify-between"><dt class="text-slate-400">Barcode</dt><dd class="text-white">{{ location.barcode or '-' }}</dd></div>
+                <div class="flex justify-between"><dt class="text-slate-400">Warehouse</dt><dd class="text-white">{{ location.warehouse_name }}</dd></div>
+                <div class="flex justify-between"><dt class="text-slate-400">Zone</dt><dd class="text-white">{{ location.zone_name or '-' }}</dd></div>
+                <div class="flex justify-between"><dt class="text-slate-400">Level</dt><dd class="text-white">{{ location.level or 0 }}</dd></div>
+                {% if location.coordinates_rack %}
+                <div class="flex justify-between"><dt class="text-slate-400">Coordinates</dt><dd class="text-white font-mono text-xs">{{ location.coordinates_rack }}-{{ location.coordinates_bay }}-{{ location.coordinates_level }}-{{ location.coordinates_position }}-{{ location.coordinates_bin }}</dd></div>
+                {% endif %}
+            </dl>
+        </div>
+
+        <!-- Stock at Location -->
+        <div class="lg:col-span-2 glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">Stock at Location</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                            <th class="text-left py-3 px-4">Item</th>
+                            <th class="text-left py-3 px-4">Lot</th>
+                            <th class="text-center py-3 px-4">Expiry</th>
+                            <th class="text-right py-3 px-4">Qty</th>
+                            <th class="text-left py-3 px-4">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in stock %}
+                        <tr class="border-b border-white/5">
+                            <td class="py-3 px-4">
+                                <span class="text-white font-medium">{{ s.item_code }}</span>
+                                <span class="text-slate-400 text-xs ml-2">{{ s.item_name[:30] }}</span>
+                            </td>
+                            <td class="py-3 px-4 text-slate-300">{{ s.lot_number or '-' }}</td>
+                            <td class="py-3 px-4 text-slate-300">{{ s.expiry_date or '-' }}</td>
+                            <td class="py-3 px-4 text-right text-emerald-400 font-bold tabular-nums">{{ s.quantity|int|abs }}</td>
+                            <td class="py-3 px-4"><span class="px-2 py-1 rounded text-xs bg-brand-500/10 text-brand-400">{{ s.status }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="py-8 text-center text-slate-500">No stock at this location</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Movements -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Recent Movements</h3>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="text-left py-3 px-4">Date</th>
+                        <th class="text-left py-3 px-4">Item</th>
+                        <th class="text-right py-3 px-4">Moved</th>
+                        <th class="text-left py-3 px-4">User</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in movements %}
+                    <tr class="border-b border-white/5">
+                        <td class="py-3 px-4 text-slate-400 text-xs">{{ m.created_at[:16] if m.created_at else '' }}</td>
+                        <td class="py-3 px-4 text-white">{{ m.item_code }} <span class="text-slate-400 text-xs">{{ m.item_name[:25] }}</span></td>
+                        <td class="py-3 px-4 text-right {% if m.quantity_moved > 0 %}text-emerald-400{% else %}text-red-400{% endif %} font-bold tabular-nums">{% if m.quantity_moved > 0 %}+{% endif %}{{ "%.0f"|format(m.quantity_moved) }}</td>
+                        <td class="py-3 px-4 text-slate-400">{{ m.username or 'System' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="py-8 text-center text-slate-500">No movements</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

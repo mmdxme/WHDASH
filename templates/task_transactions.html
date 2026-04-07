@@ -1,0 +1,468 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .type-expense { color: #ef4444; }
+    .type-revenue { color: #22c55e; }
+    .type-time { color: #3b82f6; }
+    .type-resource { color: #a855f7; }
+</style>
+
+<div class="space-y-8 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">Task Transactions</h1>
+            <p class="mt-1 text-sm text-slate-400">Track expenses, revenue, time, and resources for tasks.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            {% if session.get('can_manage_users') or session.get('can_edit_stock') %}
+            <button type="button" onclick="openTransactionModal()" class="rounded-xl bg-brand-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                <i class="fa-solid fa-plus mr-2"></i>Add Transaction
+            </button>
+            {% endif %}
+            <a href="{{ url_for('export_transactions') }}" class="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-emerald-300 transition-all hover:bg-emerald-500 hover:text-white">
+                <i class="fa-solid fa-file-export mr-2"></i>Export CSV
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Expenses</p>
+            <h3 class="mt-3 text-4xl font-black text-rose-400">{{ user_preferences.currency or 'AED' }} {{ "%.2f"|format(summary.total_expenses) }}</h3>
+            <p class="mt-2 text-xs text-slate-500">Sum of all expense transactions.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Revenue</p>
+            <h3 class="mt-3 text-4xl font-black text-emerald-400">{{ user_preferences.currency or 'AED' }} {{ "%.2f"|format(summary.total_revenue) }}</h3>
+            <p class="mt-2 text-xs text-slate-500">Sum of all revenue transactions.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Time Spent</p>
+            <h3 class="mt-3 text-4xl font-black text-blue-400">{{ summary.total_time_units|int }}</h3>
+            <p class="mt-2 text-xs text-slate-500">Total time units recorded.</p>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Transactions</p>
+            <h3 class="mt-3 text-4xl font-black text-white">{{ summary.total_transactions|int }}</h3>
+            <p class="mt-2 text-xs text-slate-500">All recorded transactions.</p>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 gap-8 xl:grid-cols-2">
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <h3 class="text-lg font-bold text-white">Expenses by Category</h3>
+            <p class="mt-1 text-xs text-slate-500">Distribution of expenses across categories.</p>
+            <div class="mt-6 flex items-center justify-center" style="height: 280px;">
+                <canvas id="categoryChart"></canvas>
+            </div>
+        </div>
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <h3 class="text-lg font-bold text-white">By Transaction Type</h3>
+            <p class="mt-1 text-xs text-slate-500">Volume breakdown by type.</p>
+            <div class="mt-6 flex items-center justify-center" style="height: 280px;">
+                <canvas id="typeChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-3xl border border-white/5 p-6">
+        <div class="mb-6 flex items-center justify-between">
+            <div>
+                <h3 class="text-lg font-bold text-white">Filters</h3>
+                <p class="mt-1 text-xs text-slate-500">Filter transactions by task, category, or type.</p>
+            </div>
+        </div>
+        <form method="GET" action="{{ url_for('task_transactions') }}" class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Task</label>
+                <select name="task_id" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    <option value="">All Tasks</option>
+                    {% for task in tasks %}
+                    <option value="{{ task.id }}" {% if filters.task_id == task.id %}selected{% endif %}>{{ task.task_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Category</label>
+                <select name="category_id" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    <option value="">All Categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat.id }}" {% if filters.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Type</label>
+                <select name="type" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    <option value="">All Types</option>
+                    {% for t in transaction_types %}
+                    <option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end">
+                <button type="submit" class="w-full rounded-xl bg-brand-600 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                    <i class="fa-solid fa-filter mr-2"></i>Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="glass-panel overflow-hidden rounded-3xl border border-white/5">
+        <div class="border-b border-white/5 bg-white/[0.02] p-6">
+            <h3 class="text-lg font-bold text-white">Transactions</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-[1200px] w-full text-left">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-800/50 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <th class="px-4 py-4">Task</th>
+                        <th class="px-4 py-4">Category</th>
+                        <th class="px-4 py-4">Type</th>
+                        <th class="px-4 py-4">Amount</th>
+                        <th class="px-4 py-4">Qty</th>
+                        <th class="px-4 py-4">Unit</th>
+                        <th class="px-4 py-4">Description</th>
+                        <th class="px-4 py-4">Reference</th>
+                        <th class="px-4 py-4">Date</th>
+                        <th class="px-4 py-4 w-24">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/10">
+                    {% for txn in transactions %}
+                    <tr class="hover:bg-white/[0.02]">
+                        <td class="px-4 py-4 text-sm font-bold text-white">{{ txn.task_name or 'N/A' }}</td>
+                        <td class="px-4 py-4">
+                            <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold" style="background-color: {{ txn.category_color }}20; color: {{ txn.category_color }}">
+                                <i class="fa-solid {{ txn.category_icon or 'fa-circle' }} text-[8px]"></i>
+                                {{ txn.category_name or 'Uncategorized' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4 text-sm type-{{ txn.transaction_type|lower }}">
+                            {{ txn.transaction_type }}
+                        </td>
+                        <td class="px-4 py-4 text-sm font-bold {% if txn.transaction_type == 'Expense' %}text-rose-400{% elif txn.transaction_type == 'Revenue' %}text-emerald-400{% else %}text-white{% endif %}">
+                            {{ user_preferences.currency or 'AED' }} {{ "%.2f"|format(txn.amount) }}
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-300">{{ txn.quantity }}</td>
+                        <td class="px-4 py-4 text-sm text-slate-300">{{ txn.unit }}</td>
+                        <td class="px-4 py-4 text-sm text-slate-300 max-w-xs truncate">{{ txn.description or '-' }}</td>
+                        <td class="px-4 py-4 text-sm text-slate-400">{{ txn.reference or '-' }}</td>
+                        <td class="px-4 py-4 text-sm text-slate-300">{{ txn.transaction_date or txn.created_at[:10] }}</td>
+                        <td class="px-4 py-4">
+                            {% if session.get('can_manage_users') or session.get('can_edit_stock') %}
+                            <div class="flex items-center gap-2">
+                                <button onclick="editTransaction({{ txn.id }})" class="rounded-lg bg-blue-600/20 p-2 text-blue-400 hover:bg-blue-600/40">
+                                    <i class="fa-solid fa-pen text-xs"></i>
+                                </button>
+                                <button onclick="deleteTransaction({{ txn.id }})" class="rounded-lg bg-red-600/20 p-2 text-red-400 hover:bg-red-600/40">
+                                    <i class="fa-solid fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="10" class="px-4 py-12 text-center text-xs font-black uppercase tracking-widest text-slate-500">
+                            No transactions found.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="border-t border-white/5 bg-slate-900/50 p-4">
+            <div class="flex items-center justify-between">
+                <p class="text-xs text-slate-500">Page {{ page }} of {{ total_pages }} ({{ total }} total)</p>
+                <div class="flex items-center gap-2">
+                    {% if page > 1 %}
+                    <a href="{{ url_for('task_transactions', page=page-1, task_id=filters.task_id or '', category_id=filters.category_id or '', type=filters.type or '') }}"
+                       class="rounded-lg bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10">
+                        <i class="fa-solid fa-chevron-left mr-1"></i>Prev
+                    </a>
+                    {% endif %}
+                    <span class="px-3 py-1.5 text-xs text-slate-400">Page {{ page }}</span>
+                    {% if page < total_pages %}
+                    <a href="{{ url_for('task_transactions', page=page+1, task_id=filters.task_id or '', category_id=filters.category_id or '', type=filters.type or '') }}"
+                       class="rounded-lg bg-white/5 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/10">
+                        Next<i class="fa-solid fa-chevron-right ml-1"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Transaction Modal -->
+<div id="transaction-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div class="glass-panel m-4 max-w-2xl rounded-3xl border border-white/10 p-8">
+        <div class="mb-6 flex items-center justify-between">
+            <h3 class="text-xl font-bold text-white" id="modal-title">Add Transaction</h3>
+            <button onclick="closeTransactionModal()" class="text-slate-400 hover:text-white">
+                <i class="fa-solid fa-times text-xl"></i>
+            </button>
+        </div>
+        <form id="transaction-form" onsubmit="saveTransaction(event)">
+            <input type="hidden" id="transaction-id" value="">
+            <div class="space-y-4">
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Task *</label>
+                    <select id="modal-task-id" required class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                        <option value="">-- Select Task --</option>
+                        {% for task in tasks %}
+                        <option value="{{ task.id }}">{{ task.task_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Transaction Type *</label>
+                        <select id="modal-type" required class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            {% for t in transaction_types %}
+                            <option value="{{ t }}">{{ t }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Category</label>
+                        <select id="modal-category" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            <option value="">-- Select Category --</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Amount</label>
+                        <input type="number" id="modal-amount" min="0" step="0.01" value="0"
+                               class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Quantity</label>
+                        <input type="number" id="modal-quantity" min="1" value="1"
+                               class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Unit</label>
+                        <input type="text" id="modal-unit" placeholder="unit, hour, kg..."
+                               class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                </div>
+                <div>
+                    <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Description</label>
+                    <textarea id="modal-description" rows="2" placeholder="Optional description..."
+                              class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Reference</label>
+                        <input type="text" id="modal-reference" placeholder="Invoice #, Receipt #..."
+                               class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Transaction Date</label>
+                        <input type="date" id="modal-date"
+                               class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                    </div>
+                </div>
+            </div>
+            <div class="mt-8 flex justify-end gap-3">
+                <button type="button" onclick="closeTransactionModal()" class="rounded-xl border border-white/10 bg-white/5 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                    Cancel
+                </button>
+                <button type="submit" class="rounded-xl bg-brand-600 px-6 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                    <i class="fa-solid fa-save mr-2"></i>Save Transaction
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let categoryChart = null;
+let typeChart = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    loadChartData();
+});
+
+function loadChartData() {
+    fetch('/task-transactions/summary')
+        .then(r => r.json())
+        .then(data => {
+            renderCategoryChart(data.by_category);
+            renderTypeChart(data.by_type);
+        });
+}
+
+function renderCategoryChart(data) {
+    if (categoryChart) categoryChart.destroy();
+    const ctx = document.getElementById('categoryChart').getContext('2d');
+    categoryChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: data.map(d => d.name),
+            datasets: [{
+                data: data.map(d => d.total_expenses || 0),
+                backgroundColor: data.map(d => d.color || '#6366f1'),
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'right', labels: { color: '#94a3b8', boxWidth: 12, padding: 8 } }
+            }
+        }
+    });
+}
+
+function renderTypeChart(data) {
+    if (typeChart) typeChart.destroy();
+    const typeColors = { 'Expense': '#ef4444', 'Revenue': '#22c55e', 'Time': '#3b82f6', 'Resource': '#a855f7' };
+    const ctx = document.getElementById('typeChart').getContext('2d');
+    typeChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.map(d => d.transaction_type),
+            datasets: [{
+                label: 'Amount',
+                data: data.map(d => d.total_amount || 0),
+                backgroundColor: data.map(d => typeColors[d.transaction_type] || '#6366f1'),
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                x: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+}
+
+function openTransactionModal(transactionId = null) {
+    document.getElementById('transaction-modal').classList.remove('hidden');
+    document.getElementById('transaction-modal').classList.add('flex');
+    document.getElementById('transaction-form').reset();
+    document.getElementById('transaction-id').value = '';
+    document.getElementById('modal-date').value = new Date().toISOString().slice(0, 10);
+
+    if (transactionId) {
+        document.getElementById('modal-title').textContent = 'Edit Transaction';
+        loadTransaction(transactionId);
+    } else {
+        document.getElementById('modal-title').textContent = 'Add Transaction';
+    }
+}
+
+function closeTransactionModal() {
+    document.getElementById('transaction-modal').classList.add('hidden');
+    document.getElementById('transaction-modal').classList.remove('flex');
+}
+
+function loadTransaction(id) {
+    fetch(`/task-transactions/by-task/0`)
+        .then(r => r.json())
+        .then(data => {
+            // Find the transaction in existing page data
+            const txn = {{ transactions|tojson }}.find(t => t.id === id);
+            if (txn) {
+                document.getElementById('transaction-id').value = txn.id;
+                document.getElementById('modal-task-id').value = txn.task_id;
+                document.getElementById('modal-type').value = txn.transaction_type;
+                document.getElementById('modal-category').value = txn.category_id || '';
+                document.getElementById('modal-amount').value = txn.amount;
+                document.getElementById('modal-quantity').value = txn.quantity;
+                document.getElementById('modal-unit').value = txn.unit;
+                document.getElementById('modal-description').value = txn.description || '';
+                document.getElementById('modal-reference').value = txn.reference || '';
+                document.getElementById('modal-date').value = txn.transaction_date || '';
+            }
+        });
+}
+
+function saveTransaction(e) {
+    e.preventDefault();
+    const id = document.getElementById('transaction-id').value;
+    const data = {
+        id: id || null,
+        task_id: parseInt(document.getElementById('modal-task-id').value),
+        transaction_type: document.getElementById('modal-type').value,
+        category_id: document.getElementById('modal-category').value || null,
+        amount: parseFloat(document.getElementById('modal-amount').value) || 0,
+        quantity: parseInt(document.getElementById('modal-quantity').value) || 1,
+        unit: document.getElementById('modal-unit').value || 'unit',
+        description: document.getElementById('modal-description').value,
+        reference: document.getElementById('modal-reference').value,
+        transaction_date: document.getElementById('modal-date').value || null
+    };
+
+    fetch('/task-transactions/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            closeTransactionModal();
+            window.location.reload();
+        } else {
+            showToast(res.message, 'error');
+        }
+    })
+    .catch(err => showToast('Error saving transaction', 'error'));
+}
+
+function editTransaction(id) {
+    openTransactionModal(id);
+}
+
+function deleteTransaction(id) {
+    if (!confirm('Delete this transaction?')) return;
+    fetch('/task-transactions/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: id })
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.success) {
+            window.location.reload();
+        } else {
+            showToast(res.message, 'error');
+        }
+    });
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 z-50 rounded-xl px-6 py-3 text-sm font-bold ${
+        type === 'success' ? 'bg-emerald-600 text-white' : type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-700 text-white'
+    }`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+</script>
+{% endblock %}

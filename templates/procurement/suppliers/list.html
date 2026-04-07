@@ -1,0 +1,164 @@
+{% extends "procurement/base.html" %}
+
+{% block proc_content %}
+<!-- Filters -->
+<div class="proc-filters">
+    <form method="get" class="proc-filter-row">
+        <div class="proc-filter-group">
+            <label class="proc-filter-label">Search</label>
+            <input type="text" name="search" class="proc-filter-input" placeholder="Code, Name..." value="{{ filters.search or '' }}">
+        </div>
+        <div class="proc-filter-group">
+            <label class="proc-filter-label">Status</label>
+            <select name="status" class="proc-filter-select">
+                <option value="">All</option>
+                <option value="Active" {% if filters.status == 'Active' %}selected{% endif %}>Active</option>
+                <option value="Inactive" {% if filters.status == 'Inactive' %}selected{% endif %}>Inactive</option>
+            </select>
+        </div>
+        <div class="proc-filter-group">
+            <label class="proc-filter-label">Type</label>
+            <select name="type" class="proc-filter-select">
+                <option value="">All</option>
+                <option value="LOCAL" {% if filters.supplier_type == 'LOCAL' %}selected{% endif %}>Local</option>
+                <option value="INTERNATIONAL" {% if filters.supplier_type == 'INTERNATIONAL' %}selected{% endif %}>International</option>
+                <option value="STRATEGIC" {% if filters.supplier_type == 'STRATEGIC' %}selected{% endif %}>Strategic</option>
+                <option value="EMERGENCY" {% if filters.supplier_type == 'EMERGENCY' %}selected{% endif %}>Emergency</option>
+            </select>
+        </div>
+        <div class="proc-filter-group">
+            <label class="proc-filter-label">Country</label>
+            <select name="country" class="proc-filter-select">
+                <option value="">All</option>
+                {% for c in countries %}
+                <option value="{{ c }}" {% if filters.country == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="proc-filter-group" style="align-self: flex-end;">
+            <button type="submit" class="proc-btn proc-btn-primary">
+                <i class="fa fa-search"></i> Filter
+            </button>
+        </div>
+    </form>
+</div>
+
+<!-- Actions Bar -->
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+    <div style="color: #64748b;">
+        Showing {{ suppliers|length }} of {{ total }} suppliers
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+        <a href="{{ url_for('procurement_export_suppliers') }}" class="proc-btn proc-btn-secondary">
+            <i class="fa fa-download"></i> Export
+        </a>
+        <a href="{{ url_for('procurement_suppliers_new') }}" class="proc-btn proc-btn-primary">
+            <i class="fa fa-plus"></i> New Supplier
+        </a>
+    </div>
+</div>
+
+<!-- Supplier Table -->
+<table class="proc-table">
+    <thead>
+        <tr>
+            <th>Code</th>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Country</th>
+            <th>Contact</th>
+            <th>Payment Terms</th>
+            <th>MOQ</th>
+            <th>Preferred</th>
+            <th>Status</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for supplier in suppliers %}
+        <tr>
+            <td>
+                <a href="{{ url_for('procurement_suppliers_view', supplier_id=supplier.id) }}" style="font-weight: 600; color: #3b82f6;">
+                    {{ supplier.code }}
+                </a>
+            </td>
+            <td>
+                <div style="font-weight: 500;">{{ supplier.name }}</div>
+                {% if supplier.trade_name %}
+                <div style="font-size: 0.75rem; color: #64748b;">{{ supplier.trade_name }}</div>
+                {% endif %}
+            </td>
+            <td>
+                <span class="proc-badge proc-badge-{% if supplier.supplier_type == 'INTERNATIONAL' %}info{% elif supplier.supplier_type == 'STRATEGIC' %}success{% else %}gray{% endif %}">
+                    {{ supplier.supplier_type or 'LOCAL' }}
+                </span>
+            </td>
+            <td>{{ supplier.country or '-' }}</td>
+            <td>
+                <div>{{ supplier.contact_person or '-' }}</div>
+                <div style="font-size: 0.75rem; color: #64748b;">{{ supplier.email or '' }}</div>
+            </td>
+            <td>{{ supplier.payment_terms or '-' }}</td>
+            <td>{{ supplier.moq or 1 }}</td>
+            <td>
+                {% if supplier.is_preferred %}
+                <span class="proc-badge proc-badge-success">Preferred</span>
+                {% else %}
+                <span class="proc-badge proc-badge-gray">-</span>
+                {% endif %}
+            </td>
+            <td>
+                <span class="proc-badge proc-badge-{% if supplier.status == 'Active' %}success{% else %}danger{% endif %}">
+                    {{ supplier.status or 'Active' }}
+                </span>
+            </td>
+            <td>
+                <div style="display: flex; gap: 0.25rem;">
+                    <a href="{{ url_for('procurement_suppliers_view', supplier_id=supplier.id) }}" class="proc-btn proc-btn-sm proc-btn-secondary">
+                        View
+                    </a>
+                    <a href="{{ url_for('procurement_suppliers_edit', supplier_id=supplier.id) }}" class="proc-btn proc-btn-sm proc-btn-secondary">
+                        Edit
+                    </a>
+                </div>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="10" style="text-align: center; color: #64748b; padding: 3rem;">
+                <i class="fa fa-boxes" style="font-size: 3rem; display: block; margin-bottom: 1rem; opacity: 0.3;"></i>
+                No suppliers found
+                <div style="margin-top: 0.5rem;">
+                    <a href="{{ url_for('procurement_suppliers_new') }}" class="proc-btn proc-btn-primary">
+                        <i class="fa fa-plus"></i> Add First Supplier
+                    </a>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Pagination -->
+{% if pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="?page={{ page - 1 }}&search={{ filters.search or '' }}&status={{ filters.status or '' }}&type={{ filters.supplier_type or '' }}&country={{ filters.country or '' }}">&laquo; Prev</a>
+    {% endif %}
+
+    {% for p in range(1, pages + 1) %}
+        {% if p >= page - 2 and p <= page + 2 %}
+            {% if p == page %}
+            <span class="current">{{ p }}</span>
+            {% else %}
+            <a href="?page={{ p }}&search={{ filters.search or '' }}&status={{ filters.status or '' }}&type={{ filters.supplier_type or '' }}&country={{ filters.country or '' }}">{{ p }}</a>
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+
+    {% if page < pages %}
+    <a href="?page={{ page + 1 }}&search={{ filters.search or '' }}&status={{ filters.status or '' }}&type={{ filters.supplier_type or '' }}&country={{ filters.country or '' }}">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,237 @@
+{% extends "bi/base_bi.html" %}
+
+{% block title %}Sales Performance Dashboard{% endblock %}
+
+{% block bi_content %}
+<!-- Sales Header -->
+<section class="executive-hero mb-4">
+    <h1>Sales Performance Dashboard</h1>
+    <div class="subtitle">Sales KPIs, trends, and performance analytics</div>
+    
+    <div class="hero-kpi-grid">
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="sales-total">AED 0</div>
+            <div class="hero-kpi-label">Total Sales</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="sales-net">AED 0</div>
+            <div class="hero-kpi-label">Net Sales</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="sales-orders">0</div>
+            <div class="hero-kpi-label">Orders</div>
+        </div>
+        <div class="hero-kpi">
+            <div class="hero-kpi-value" id="sales-aov">AED 0</div>
+            <div class="hero-kpi-label">Avg Order Value</div>
+        </div>
+    </div>
+</section>
+
+<!-- Inquiry to Order Funnel -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Inquiry to Order Funnel</h2>
+    </div>
+    
+    <div class="funnel-container">
+        <div class="funnel-step">
+            <div class="funnel-value" id="funnel-inquiries">0</div>
+            <div class="funnel-label">Inquiries</div>
+            <div class="funnel-rate" id="funnel-inq-rate">-</div>
+        </div>
+        <div class="funnel-arrow"><i class="fas fa-arrow-right"></i></div>
+        <div class="funnel-step">
+            <div class="funnel-value" id="funnel-quotations">0</div>
+            <div class="funnel-label">Quotations</div>
+            <div class="funnel-rate" id="funnel-quo-rate">-</div>
+        </div>
+        <div class="funnel-arrow"><i class="fas fa-arrow-right"></i></div>
+        <div class="funnel-step">
+            <div class="funnel-value" id="funnel-orders">0</div>
+            <div class="funnel-label">Orders</div>
+            <div class="funnel-rate" id="funnel-ord-rate">-</div>
+        </div>
+        <div class="funnel-arrow"><i class="fas fa-arrow-right"></i></div>
+        <div class="funnel-step">
+            <div class="funnel-value" id="funnel-revenue">AED 0</div>
+            <div class="funnel-label">Revenue</div>
+        </div>
+    </div>
+</section>
+
+<!-- Sales by Status -->
+<section class="bi-grid-2">
+    <div class="bi-section">
+        <div class="bi-section-header">
+            <h2 class="bi-section-title">Orders by Status</h2>
+        </div>
+        <div class="bi-table-wrapper">
+            <table class="bi-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Count</th>
+                        <th>Value</th>
+                        <th>% of Total</th>
+                    </tr>
+                </thead>
+                <tbody id="orders-by-status"></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <div class="bi-section">
+        <div class="bi-section-header">
+            <h2 class="bi-section-title">Sales by Salesperson</h2>
+        </div>
+        <div class="bi-table-wrapper">
+            <table class="bi-table">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Salesperson</th>
+                        <th>Sales</th>
+                        <th>Orders</th>
+                        <th>AOV</th>
+                    </tr>
+                </thead>
+                <tbody id="sales-by-salesperson"></tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<!-- Top Customers -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Top Customers</h2>
+    </div>
+    <div class="bi-table-wrapper">
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Customer</th>
+                    <th>Total Sales</th>
+                    <th>Orders</th>
+                    <th>AOV</th>
+                    <th>Last Order</th>
+                </tr>
+            </thead>
+            <tbody id="top-customers"></tbody>
+        </table>
+    </div>
+</section>
+
+<!-- Sales Trend -->
+<section class="bi-section">
+    <div class="bi-section-header">
+        <h2 class="bi-section-title">Sales Trend (Last 12 Months)</h2>
+    </div>
+    <div class="bi-chart" style="height: 300px;">
+        <canvas id="sales-trend-chart"></canvas>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadSalesData();
+});
+
+async function loadSalesData() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        params.set('format', 'json');
+        
+        const response = await fetch(`/api/bi/drilldown/sales?${params.toString()}`);
+        const data = await response.json();
+        
+        updateSalesKPIs(data);
+        updateFunnel(data.funnel || {});
+        updateOrdersByStatus(data.by_status || []);
+        updateSalespeople(data.by_salesperson || []);
+        updateTopCustomers(data.top_customers || []);
+        
+    } catch (error) {
+        console.error('Error loading sales data:', error);
+    }
+}
+
+function updateSalesKPIs(data) {
+    document.getElementById('sales-total').textContent = formatCurrency(data.total_sales || 0);
+    document.getElementById('sales-net').textContent = formatCurrency(data.net_sales || 0);
+    document.getElementById('sales-orders').textContent = formatNumber(data.order_count || 0);
+    document.getElementById('sales-aov').textContent = formatCurrency(data.avg_order_value || 0);
+}
+
+function updateFunnel(funnel) {
+    document.getElementById('funnel-inquiries').textContent = formatNumber(funnel.inquiries || 0);
+    document.getElementById('funnel-quotations').textContent = formatNumber(funnel.quotations || 0);
+    document.getElementId('funnel-orders').textContent = formatNumber(funnel.orders || 0);
+    document.getElementById('funnel-revenue').textContent = formatCurrency(funnel.revenue || 0);
+    
+    const inqToQuo = funnel.inquiries > 0 ? ((funnel.quotations / funnel.inquiries) * 100).toFixed(1) + '%' : '-';
+    const quoToOrd = funnel.quotations > 0 ? ((funnel.orders / funnel.quotations) * 100).toFixed(1) + '%' : '-';
+    document.getElementById('funnel-inq-rate').textContent = inqToQuo;
+    document.getElementById('funnel-quo-rate').textContent = quoToOrd;
+}
+
+function updateOrdersByStatus(statuses) {
+    const tbody = document.getElementById('orders-by-status');
+    tbody.innerHTML = statuses.map(s => `
+        <tr>
+            <td><span class="status-badge status-${(s.status || 'unknown').toLowerCase()}">${s.status || 'Unknown'}</span></td>
+            <td>${formatNumber(s.count || 0)}</td>
+            <td class="font-bold">${formatCurrency(s.total || 0)}</td>
+            <td>${formatPercent(s.pct || 0)}</td>
+        </tr>
+    `).join('');
+}
+
+function updateSalespeople(salespeople) {
+    const tbody = document.getElementById('sales-by-salesperson');
+    tbody.innerHTML = salespeople.slice(0, 10).map((sp, i) => `
+        <tr>
+            <td><span class="top-list-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
+            <td>${sp.salesperson_name || 'Unknown'}</td>
+            <td class="font-bold">${formatCurrency(sp.total_sales || 0)}</td>
+            <td>${formatNumber(sp.order_count || 0)}</td>
+            <td>${formatCurrency(sp.avg_order_value || 0)}</td>
+        </tr>
+    `).join('');
+}
+
+function updateTopCustomers(customers) {
+    const tbody = document.getElementById('top-customers');
+    tbody.innerHTML = customers.slice(0, 10).map((c, i) => `
+        <tr>
+            <td><span class="top-list-rank ${i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : ''}">${i + 1}</span></td>
+            <td>${c.customer_name || 'Unknown'}</td>
+            <td class="font-bold">${formatCurrency(c.total_sales || 0)}</td>
+            <td>${formatNumber(c.order_count || 0)}</td>
+            <td>${formatCurrency(c.avg_order_value || 0)}</td>
+            <td>${c.last_order_date || '-'}</td>
+        </tr>
+    `).join('');
+}
+
+function formatNumber(num, decimals = 0) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function formatCurrency(num) {
+    if (num === null || num === undefined) return '-';
+    return 'AED ' + parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function formatPercent(num) {
+    if (num === null || num === undefined) return '-';
+    return parseFloat(num).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+}
+</script>
+{% endblock %}

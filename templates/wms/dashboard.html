@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ t('wms_dashboard_desc', 'Real-time warehouse operations overview') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="refreshDashboard()" class="px-4 py-2 bg-brand-500/10 border border-brand-500/20 rounded-xl text-brand-400 hover:bg-brand-500/20 transition-all text-sm font-medium">
+                <i class="fa-solid fa-rotate-right mr-2"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards Row 1 -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        <!-- Total SKUs -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('active_skus', 'Active SKUs') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-brand-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-cube text-brand-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-white tabular-nums">{{ total_skus|default(0)|int }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('in_item_master', 'in item master') }}</p>
+        </div>
+
+        <!-- Available Stock -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('available_stock', 'Available') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-check-circle text-emerald-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-emerald-400 tabular-nums">{{ available_stock|default(0)|int|abs }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('ready_to_pick', 'ready to pick') }}</p>
+        </div>
+
+        <!-- Reserved Stock -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('reserved', 'Reserved') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-lock text-amber-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-amber-400 tabular-nums">{{ reserved_stock|default(0)|int|abs }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('allocated', 'allocated') }}</p>
+        </div>
+
+        <!-- Blocked Stock -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('blocked', 'Blocked') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-ban text-red-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-red-400 tabular-nums">{{ blocked_stock|default(0)|int|abs }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('hold_quarantine', 'hold / quarantine') }}</p>
+        </div>
+
+        <!-- Near Expiry -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('near_expiry', 'Near Expiry') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-clock text-orange-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-orange-400 tabular-nums">{{ near_expiry|default(0)|int|abs }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('within_30_days', 'within 30 days') }}</p>
+        </div>
+
+        <!-- Expired -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('expired', 'Expired') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-rose-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-triangle-exclamation text-rose-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-rose-400 tabular-nums">{{ expired_stock|default(0)|int|abs }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('past_expiry', 'past expiry date') }}</p>
+        </div>
+    </div>
+
+    <!-- Pending Operations Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('receiving', 'Receiving') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-truck-ramp-box text-cyan-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-cyan-400 tabular-nums">{{ pending_receiving|default(0) }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('pending_receiving', 'pending inbound') }}</p>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('putaway', 'Putaway') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-box text-violet-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-violet-400 tabular-nums">{{ pending_putaway|default(0) }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('pending_putaway', 'pending putaway tasks') }}</p>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('picking', 'Picking') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-hand text-blue-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-blue-400 tabular-nums">{{ pending_picking|default(0) }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('pending_picking', 'pending pick tasks') }}</p>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('packing', 'Packing') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-pink-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-boxes-packing text-pink-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-pink-400 tabular-nums">{{ pending_packing|default(0) }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('pending_packing', 'pending pack tasks') }}</p>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('transfers', 'Transfers') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-teal-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-right-left text-teal-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-teal-400 tabular-nums">{{ pending_transfers|default(0) }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('in_progress', 'in progress') }}</p>
+        </div>
+    </div>
+
+    <!-- Alerts and Status Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Alerts -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('active_alerts', 'Active Alerts') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-rose-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-bell text-rose-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-rose-400 tabular-nums">{{ active_alerts|default(0) }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('need_attention', 'need attention') }}</p>
+        </div>
+
+        <!-- Zero Stock -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('zero_stock', 'Zero Stock') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-slate-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-circle-xmark text-slate-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-slate-300 tabular-nums">{{ zero_stock|default(0) }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('skus_zero_qty', 'SKUs with zero qty') }}</p>
+        </div>
+
+        <!-- Negative Stock -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('negative_stock', 'Negative Stock') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-red-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-circle-minus text-red-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-red-400 tabular-nums">{{ negative_stock|default(0) }}</p>
+            <p class="text-xs text-slate-500 mt-1">{{ t('count_discrepancies', 'count discrepancies') }}</p>
+        </div>
+
+        <!-- Empty Locations -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('empty_locations', 'Empty Locations') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-slate-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-empty-set text-slate-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-slate-300 tabular-nums">
+                {{ empty_locations|default(0) }}<span class="text-lg text-slate-500">/{{ total_locations|default(0) }}</span>
+            </p>
+            <div class="w-full bg-slate-700 rounded-full h-1.5 mt-2">
+                <div class="bg-brand-500 h-1.5 rounded-full" style="width: {% if total_locations %}{{ (empty_locations / total_locations * 100)|int }}{% else %}0{% endif %}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Space Utilization by Warehouse -->
+        <div class="lg:col-span-2 glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('space_utilization', 'Space Utilization by Warehouse') }}</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-white/5">
+                            <th class="text-left py-3 px-4 font-semibold">{{ t('warehouse', 'Warehouse') }}</th>
+                            <th class="text-center py-3 px-4 font-semibold">{{ t('locations', 'Locations') }}</th>
+                            <th class="text-center py-3 px-4 font-semibold">{{ t('empty', 'Empty') }}</th>
+                            <th class="text-center py-3 px-4 font-semibold">{{ t('utilization', 'Utilization') }}</th>
+                            <th class="text-right py-3 px-4 font-semibold">{{ t('used_m3', 'Used m³') }}</th>
+                            <th class="text-right py-3 px-4 font-semibold">{{ t('capacity_m3', 'Capacity m³') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for ws in warehouse_stats %}
+                        <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td class="py-3 px-4">
+                                <span class="text-white font-medium">{{ ws.name }}</span>
+                            </td>
+                            <td class="py-3 px-4 text-center text-slate-300">{{ ws.total_locations }}</td>
+                            <td class="py-3 px-4 text-center text-slate-400">{{ ws.empty_locations }}</td>
+                            <td class="py-3 px-4">
+                                {% set util = ((ws.total_locations - ws.empty_locations) / ws.total_locations * 100)|int if ws.total_locations > 0 else 0 %}
+                                <div class="flex items-center gap-2">
+                                    <div class="flex-1 bg-slate-700 rounded-full h-2 max-w-[100px]">
+                                        <div class="h-2 rounded-full {% if util > 85 %}bg-red-500{% elif util > 70 %}bg-amber-500{% else %}bg-emerald-500{% endif %}" style="width: {{ util }}%"></div>
+                                    </div>
+                                    <span class="text-xs text-slate-400 tabular-nums">{{ util }}%</span>
+                                </div>
+                            </td>
+                            <td class="py-3 px-4 text-right text-slate-300 tabular-nums">{{ "%.2f"|format(ws.used_volume or 0) }}</td>
+                            <td class="py-3 px-4 text-right text-slate-400 tabular-nums">{{ "%.2f"|format(ws.total_capacity or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-slate-500">
+                                <i class="fa-solid fa-warehouse text-4xl mb-3 block opacity-30"></i>
+                                No warehouses configured
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Top Alerts -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-bold text-white">{{ t('top_alerts', 'Top Alerts') }}</h3>
+                <a href="{{ url_for('wms_alerts') }}" class="text-xs text-brand-400 hover:text-brand-300 font-medium">View All</a>
+            </div>
+            <div class="space-y-3">
+                {% for alert in top_alerts %}
+                <div class="p-4 rounded-xl border {% if alert.severity == 'CRITICAL' %}bg-red-500/5 border-red-500/20{% elif alert.severity == 'HIGH' %}bg-orange-500/5 border-orange-500/20{% elif alert.severity == 'MEDIUM' %}bg-amber-500/5 border-amber-500/20{% else %}bg-slate-500/5 border-slate-500/20{% endif %}">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-white truncate">{{ alert.title }}</p>
+                            <p class="text-xs text-slate-400 mt-1 line-clamp-2">{{ alert.message }}</p>
+                        </div>
+                        <span class="px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider
+                            {% if alert.severity == 'CRITICAL' %}bg-red-500/20 text-red-400{% elif alert.severity == 'HIGH' %}bg-orange-500/20 text-orange-400{% elif alert.severity == 'MEDIUM' %}bg-amber-500/20 text-amber-400{% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                            {{ alert.severity }}
+                        </span>
+                    </div>
+                    <p class="text-[10px] text-slate-500 mt-2">{{ alert.created_at[:16] if alert.created_at else '' }}</p>
+                </div>
+                {% else %}
+                <div class="text-center py-8 text-slate-500">
+                    <i class="fa-solid fa-check-circle text-3xl mb-2 text-emerald-400/50"></i>
+                    <p class="text-sm">No active alerts</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Movements -->
+    <div class="glass-panel rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-white">{{ t('recent_movements', 'Recent Stock Movements') }}</h3>
+            <a href="{{ url_for('wms_movements') }}" class="text-xs text-brand-400 hover:text-brand-300 font-medium">View All</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-4 font-semibold">{{ t('time', 'Time') }}</th>
+                        <th class="text-left py-3 px-4 font-semibold">{{ t('type', 'Type') }}</th>
+                        <th class="text-left py-3 px-4 font-semibold">{{ t('item', 'Item') }}</th>
+                        <th class="text-center py-3 px-4 font-semibold">{{ t('warehouse', 'Warehouse') }}</th>
+                        <th class="text-right py-3 px-4 font-semibold">{{ t('quantity', 'Quantity') }}</th>
+                        <th class="text-left py-3 px-4 font-semibold">{{ t('user', 'User') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in recent_movements %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-4 text-slate-400 text-xs tabular-nums">{{ m.created_at[:16] if m.created_at else '' }}</td>
+                        <td class="py-3 px-4">
+                            <span class="px-2 py-1 rounded-lg text-xs font-medium bg-brand-500/10 text-brand-400">{{ m.transaction_type }}</span>
+                        </td>
+                        <td class="py-3 px-4">
+                            <span class="text-white font-medium">{{ m.item_code }}</span>
+                            <span class="text-slate-400 text-xs ml-2">{{ m.item_name[:30] }}</span>
+                        </td>
+                        <td class="py-3 px-4 text-center text-slate-300">{{ m.warehouse_name }}</td>
+                        <td class="py-3 px-4 text-right">
+                            <span class="text-emerald-400 font-bold tabular-nums {% if m.quantity_moved < 0 %}text-red-400{% endif %}">
+                                {% if m.quantity_moved > 0 %}+{% endif %}{{ "%.0f"|format(m.quantity_moved) }}
+                            </span>
+                        </td>
+                        <td class="py-3 px-4 text-slate-400">{{ m.username or 'System' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="py-8 text-center text-slate-500">
+                            <i class="fa-solid fa-arrows-left-right text-3xl mb-2 block opacity-30"></i>
+                            No movements recorded yet
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+        <a href="{{ url_for('wms_items_new') }}" class="glass-panel rounded-xl p-4 hover:bg-brand-500/10 border border-transparent hover:border-brand-500/20 transition-all text-center group">
+            <i class="fa-solid fa-plus text-brand-400 text-xl mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300 group-hover:text-brand-400">{{ t('new_item', 'New Item') }}</span>
+        </a>
+        <a href="{{ url_for('wms_receiving_new') }}" class="glass-panel rounded-xl p-4 hover:bg-cyan-500/10 border border-transparent hover:border-cyan-500/20 transition-all text-center group">
+            <i class="fa-solid fa-truck-ramp-box text-cyan-400 text-xl mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300 group-hover:text-cyan-400">{{ t('new_receipt', 'New Receipt') }}</span>
+        </a>
+        <a href="{{ url_for('wms_movements_new') }}" class="glass-panel rounded-xl p-4 hover:bg-violet-500/10 border border-transparent hover:border-violet-500/20 transition-all text-center group">
+            <i class="fa-solid fa-right-left text-violet-400 text-xl mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300 group-hover:text-violet-400">{{ t('new_transfer', 'New Transfer') }}</span>
+        </a>
+        <a href="{{ url_for('wms_transfers_new') }}" class="glass-panel rounded-xl p-4 hover:bg-teal-500/10 border border-transparent hover:border-teal-500/20 transition-all text-center group">
+            <i class="fa-solid fa-warehouse text-teal-400 text-xl mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300 group-hover:text-teal-400">{{ t('wh_transfer', 'WH Transfer') }}</span>
+        </a>
+        <a href="{{ url_for('wms_stock_counts_new') }}" class="glass-panel rounded-xl p-4 hover:bg-amber-500/10 border border-transparent hover:border-amber-500/20 transition-all text-center group">
+            <i class="fa-solid fa-clipboard-list text-amber-400 text-xl mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300 group-hover:text-amber-400">{{ t('new_count', 'New Count') }}</span>
+        </a>
+        <a href="{{ url_for('wms_settings') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-500/10 border border-transparent hover:border-slate-500/20 transition-all text-center group">
+            <i class="fa-solid fa-gear text-slate-400 text-xl mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300 group-hover:text-slate-400">{{ t('settings', 'Settings') }}</span>
+        </a>
+    </div>
+</div>
+
+<script>
+async function refreshDashboard() {
+    try {
+        const res = await fetch('/wms/api/dashboard/stats');
+        if (res.ok) {
+            window.toast('Dashboard refreshed!', 'success');
+            setTimeout(() => location.reload(), 300);
+        }
+    } catch (e) {
+        window.toast('Refresh failed', 'error');
+    }
+}
+</script>
+{% endblock %}
