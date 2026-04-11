@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        :root { --primary: #6366f1; --success: #10b981; --danger: #ef4444; --warning: #f59e0b; }
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .bg-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .bg-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .bg-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .text-gray-500 { color: #6b7280; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        .type-asset { color: #3b82f6; }
+        .type-liability { color: #ef4444; }
+        .type-equity { color: #8b5cf6; }
+        .type-revenue { color: #10b981; }
+        .type-expense { color: #f59e0b; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Manage your chart of accounts</p>
+            </div>
+            <a href="/finance/accounts/create" class="btn btn-primary">
+                <i class="fas fa-plus"></i> New Account
+            </a>
+        </div>
+
+        <!-- Filters -->
+        <div class="card mb-6">
+            <form method="get" class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Category</label>
+                    <select name="category_id" class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
+                        <option value="">All Categories</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}" {% if filters.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Status</label>
+                    <select name="active_only" class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
+                        <option value="1" {% if filters.active_only %}selected{% endif %}>Active Only</option>
+                        <option value="0" {% if not filters.active_only %}selected{% endif %}>All</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-outline">
+                    <i class="fas fa-filter"></i> Filter
+                </button>
+            </form>
+        </div>
+
+        <!-- Accounts Table -->
+        <div class="card">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Account Name</th>
+                            <th>Type</th>
+                            <th>Category</th>
+                            <th class="text-center">Posting</th>
+                            <th class="text-center">Control</th>
+                            <th class="text-right">Balance</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for account in accounts %}
+                        <tr>
+                            <td class="font-mono font-semibold">{{ account.code }}</td>
+                            <td>
+                                <a href="/finance/accounts/{{ account.id }}" class="text-white hover:text-primary">{{ account.name }}</a>
+                                {% if account.name_ar %}
+                                <span class="text-gray-500 text-sm block">{{ account.name_ar }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="type-{{ account.account_type.lower() }}">{{ account.account_type }}</span>
+                            </td>
+                            <td class="text-gray-400">{{ account.category_id }}</td>
+                            <td class="text-center">
+                                {% if account.is_posting_allowed %}
+                                <span class="badge bg-success">Allowed</span>
+                                {% else %}
+                                <span class="badge bg-danger">No</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                {% if account.is_control_account %}
+                                <span class="badge bg-warning">Yes</span>
+                                {% else %}
+                                <span class="text-gray-500">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right amount">
+                                {% set balance = namespace(debit=0, credit=0) %}
+                                {% for a in accounts %}
+                                    {% if a.id == account.id %}
+                                    {% endif %}
+                                {% endfor %}
+                                <span class="text-gray-400">-</span>
+                            </td>
+                            <td class="text-center">
+                                <a href="/finance/accounts/{{ account.id }}" class="text-primary hover:text-primary-dark mx-1" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <a href="/finance/accounts/{{ account.id }}/edit" class="text-warning hover:text-warning mx-1" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center text-gray-500 py-8">
+                                No accounts found. <a href="/finance/accounts/create" class="text-primary hover:underline">Create your first account</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        label { display: block; margin-bottom: 0.5rem; color: #9ca3af; font-size: 0.875rem; }
+        input, select, textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.75rem; color: white; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #6366f1; }
+        .btn { padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        .btn-sm { padding: 0.5rem 1rem; font-size: 0.875rem; }
+        .amount { font-family: 'Courier New', monospace; }
+        .line-row { display: grid; grid-template-columns: 40px 1fr 120px 120px 120px 120px 40px; gap: 0.5rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #334155; }
+        .totals { display: flex; justify-content: flex-end; gap: 2rem; padding: 1rem 0; border-top: 2px solid #334155; }
+        .error { color: #ef4444; font-size: 0.875rem; margin-top: 0.25rem; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Create a new journal entry</p>
+            </div>
+            <a href="/finance/journals" class="btn btn-outline">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+        </div>
+
+        {% if flash_message %}
+        <div class="bg-red-500/20 border border-red-500/50 rounded-lg p-4 mb-6 text-red-400">
+            {{ flash_message }}
+        </div>
+        {% endif %}
+
+        <form method="POST" id="journalForm">
+            <div class="card mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="form-group">
+                        <label for="journal_type">Journal Type *</label>
+                        <select id="journal_type" name="journal_type" required>
+                            <option value="General">General</option>
+                            <option value="Adjustment">Adjustment</option>
+                            <option value="Opening">Opening</option>
+                            <option value="Closing">Closing</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="journal_date">Journal Date *</label>
+                        <input type="date" id="journal_date" name="journal_date" required value="{{ default_date or '' }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="reference">Reference</label>
+                        <input type="text" id="reference" name="reference" placeholder="e.g., INV-001">
+                    </div>
+
+                    <div class="form-group md:col-span-2">
+                        <label for="description">Description</label>
+                        <input type="text" id="description" name="description" placeholder="Brief description of this journal">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="memo">Memo / Notes</label>
+                        <textarea id="memo" name="memo" rows="2" placeholder="Additional notes..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Journal Lines -->
+            <div class="card mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-white">Journal Lines</h3>
+                    <button type="button" onclick="addLine()" class="btn btn-outline btn-sm">
+                        <i class="fas fa-plus"></i> Add Line
+                    </button>
+                </div>
+
+                <div class="hidden md:grid grid-cols-12 gap-2 text-gray-400 text-sm mb-2 px-1">
+                    <div class="col-span-1">#</div>
+                    <div class="col-span-4">Account</div>
+                    <div class="col-span-3">Description</div>
+                    <div class="col-span-2 text-right">Debit</div>
+                    <div class="col-span-2 text-right">Credit</div>
+                    <div class="col-span-1"></div>
+                </div>
+
+                <div id="linesContainer">
+                    <!-- Lines will be added here dynamically -->
+                </div>
+
+                <div class="totals">
+                    <div class="text-right">
+                        <span class="text-gray-400 mr-4">Total Debit:</span>
+                        <span id="totalDebit" class="amount text-success font-bold">0.00</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-gray-400 mr-4">Total Credit:</span>
+                        <span id="totalCredit" class="amount text-danger font-bold">0.00</span>
+                    </div>
+                </div>
+
+                <div class="text-center mt-4">
+                    <span id="balanceStatus" class="text-sm"></span>
+                </div>
+
+                <input type="hidden" name="line_count" id="lineCount" value="0">
+            </div>
+
+            <!-- Options -->
+            <div class="card mb-6">
+                <div class="flex items-center gap-4">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" name="auto_post" value="1" class="w-4 h-4 rounded">
+                        <span class="text-gray-300">Auto-post after creation</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex justify-end gap-4">
+                <a href="/finance/journals" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Create Journal Entry
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        let lineCount = 0;
+        const accounts = {{ accounts|tojson }};
+        const costCenters = {{ cost_centers|tojson }};
+
+        function addLine() {
+            lineCount++;
+            const container = document.getElementById('linesContainer');
+            const div = document.createElement('div');
+            div.className = 'line-row';
+            div.id = `line-${lineCount}`;
+            div.innerHTML = `
+                <div class="text-gray-400 text-center">${lineCount}</div>
+                <div>
+                    <select name="account_id_${lineCount - 1}" required class="w-full text-sm" onchange="calculateTotals()">
+                        <option value="">Select Account</option>
+                        ${accounts.map(a => `<option value="${a.id}">${a.code} - ${a.name}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <input type="text" name="description_${lineCount - 1}" placeholder="Description" class="w-full text-sm">
+                </div>
+                <div>
+                    <input type="number" step="0.01" name="debit_${lineCount - 1}" value="0" min="0" class="w-full text-sm text-right" onchange="calculateTotals()">
+                </div>
+                <div>
+                    <input type="number" step="0.01" name="credit_${lineCount - 1}" value="0" min="0" class="w-full text-sm text-right" onchange="calculateTotals()">
+                </div>
+                <div class="text-center">
+                    <button type="button" onclick="removeLine(${lineCount})" class="text-red-400 hover:text-red-300">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            container.appendChild(div);
+            document.getElementById('lineCount').value = lineCount;
+        }
+
+        function removeLine(id) {
+            document.getElementById(`line-${id}`).remove();
+            calculateTotals();
+            // Renumber remaining lines
+            let idx = 1;
+            document.querySelectorAll('.line-row').forEach(row => {
+                row.id = `line-${idx + 1}`;
+                row.querySelector('.text-gray-400').textContent = idx;
+                idx++;
+            });
+            lineCount--;
+            document.getElementById('lineCount').value = lineCount;
+        }
+
+        function calculateTotals() {
+            let totalDebit = 0;
+            let totalCredit = 0;
+
+            for (let i = 0; i < lineCount; i++) {
+                const debitInput = document.querySelector(`[name="debit_${i}"]`);
+                const creditInput = document.querySelector(`[name="credit_${i}"]`);
+                if (debitInput) totalDebit += parseFloat(debitInput.value) || 0;
+                if (creditInput) totalCredit += parseFloat(creditInput.value) || 0;
+            }
+
+            document.getElementById('totalDebit').textContent = totalDebit.toFixed(2);
+            document.getElementById('totalCredit').textContent = totalCredit.toFixed(2);
+
+            const status = document.getElementById('balanceStatus');
+            const diff = Math.abs(totalDebit - totalCredit);
+            if (totalDebit === 0 && totalCredit === 0) {
+                status.textContent = '';
+                status.className = 'text-sm';
+            } else if (diff < 0.01) {
+                status.textContent = '✓ Journal is balanced';
+                status.className = 'text-sm text-success';
+            } else {
+                status.textContent = `✗ Journal is not balanced (difference: ${diff.toFixed(2)})`;
+                status.className = 'text-sm text-danger';
+            }
+        }
+
+        // Add initial lines
+        addLine();
+        addLine();
+    </script>
+    {% endblock %}
+</body>
+</html>

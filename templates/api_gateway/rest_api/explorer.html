@@ -1,0 +1,188 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">API Explorer</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Interactive API Explorer</h3>
+    </div>
+    <div style="padding: 20px;">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Version</label>
+                <select id="api-version">
+                    {% for version in versions %}
+                    <option value="{{ version.id }}" {% if version.is_default %}selected{% endif %}>{{ version.version_code }} - {{ version.version_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Module</label>
+                <select id="api-module">
+                    <option value="">All Modules</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Method</label>
+                <select id="api-method">
+                    <option value="">All Methods</option>
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="DELETE">DELETE</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Search</label>
+            <input type="text" id="api-search" placeholder="Search endpoints...">
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Available Endpoints</h3>
+        <span class="badge badge-info">{{ routes|length }} endpoints</span>
+    </div>
+
+    {% if routes %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Path</th>
+                    <th>Module</th>
+                    <th>Description</th>
+                    <th>Auth</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for route in routes %}
+                <tr data-module="{{ route.module }}" data-method="{{ route.method }}" data-path="{{ route.path }}">
+                    <td><span class="method-badge method-{{ route.method|lower }}">{{ route.method }}</span></td>
+                    <td style="font-family: monospace; font-size: 0.85rem;">{{ route.path }}</td>
+                    <td>{{ route.module|title }}</td>
+                    <td>{{ route.description or 'N/A' }}</td>
+                    <td>
+                        {% if route.auth_required %}
+                        <span class="badge badge-info">Required</span>
+                        {% else %}
+                        <span class="badge badge-secondary">Optional</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button onclick="testEndpoint('{{ route.method }}', '{{ route.path }}')" class="btn btn-sm btn-primary">
+                            <i class="fas fa-play"></i> Test
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-compass"></i>
+        <h3>No endpoints registered</h3>
+        <p>API endpoints will appear here once routes are registered.</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">API Testing Console</h3>
+    </div>
+    <div style="padding: 20px;">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Endpoint</label>
+                <input type="text" id="test-endpoint" placeholder="/api/v1/customers" style="font-family: monospace;">
+            </div>
+            <div class="form-group">
+                <label>Method</label>
+                <select id="test-method">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="DELETE">DELETE</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Headers (JSON)</label>
+            <textarea id="test-headers" rows="3" class="form-control" placeholder='{"Authorization": "Bearer YOUR_TOKEN", "Content-Type": "application/json"}'></textarea>
+        </div>
+
+        <div class="form-group">
+            <label>Request Body (JSON)</label>
+            <textarea id="test-body" rows="5" class="form-control" placeholder='{"key": "value"}'></textarea>
+        </div>
+
+        <button onclick="sendTestRequest()" class="btn btn-primary">
+            <i class="fas fa-paper-plane"></i> Send Request
+        </button>
+
+        <div id="test-response" style="margin-top: 20px; display: none;">
+            <h4>Response</h4>
+            <div id="test-response-status" class="badge"></div>
+            <div id="test-response-time"></div>
+            <pre id="test-response-body" class="code-block" style="max-height: 300px; overflow-y: auto;"></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+function testEndpoint(method, path) {
+    document.getElementById('test-endpoint').value = path;
+    document.getElementById('test-method').value = method;
+    window.scrollTo(0, document.getElementById('test-response').offsetTop);
+}
+
+function sendTestRequest() {
+    const endpoint = document.getElementById('test-endpoint').value;
+    const method = document.getElementById('test-method').value;
+    const headers = document.getElementById('test-headers').value;
+    const body = document.getElementById('test-body').value;
+
+    const responseDiv = document.getElementById('test-response');
+    const statusDiv = document.getElementById('test-response-status');
+    const timeDiv = document.getElementById('test-response-time');
+    const bodyDiv = document.getElementById('test-response-body');
+
+    responseDiv.style.display = 'block';
+    statusDiv.textContent = 'Loading...';
+    statusDiv.className = 'badge badge-secondary';
+    bodyDiv.textContent = '';
+
+    fetch(endpoint, {
+        method: method,
+        headers: headers ? JSON.parse(headers) : {},
+        body: ['POST', 'PUT', 'PATCH'].includes(method) ? body : undefined
+    })
+    .then(async r => {
+        const elapsed = Date.now();
+        statusDiv.textContent = r.status + ' ' + r.statusText;
+        statusDiv.className = 'badge badge-' + (r.ok ? 'success' : 'danger');
+        const text = await r.text();
+        bodyDiv.textContent = text;
+        timeDiv.textContent = 'Response time: ' + (Date.now() - elapsed) + 'ms';
+    })
+    .catch(e => {
+        statusDiv.textContent = 'Error';
+        statusDiv.className = 'badge badge-danger';
+        bodyDiv.textContent = e.message;
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        label { display: block; margin-bottom: 0.5rem; color: #9ca3af; font-size: 0.875rem; }
+        input, select, textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.75rem; color: white; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: #6366f1; }
+        .btn { padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        .form-group { margin-bottom: 1.5rem; }
+        .amount { font-family: 'Courier New', monospace; }
+        .line-row { display: grid; grid-cols-12 gap-2; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid #334155; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Create a new customer invoice</p>
+            </div>
+            <a href="/finance/ar/invoices" class="btn btn-outline"><i class="fas fa-arrow-left"></i> Back</a>
+        </div>
+
+        <form method="POST" id="invoiceForm">
+            <div class="card mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="form-group">
+                        <label for="customer_id">Customer *</label>
+                        <select id="customer_id" name="customer_id" required>
+                            <option value="">Select Customer</option>
+                            {% for c in customers %}
+                            <option value="{{ c.id }}">{{ c.code }} - {{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="invoice_date">Invoice Date *</label>
+                        <input type="date" id="invoice_date" name="invoice_date" required value="">
+                    </div>
+                    <div class="form-group">
+                        <label for="due_date">Due Date *</label>
+                        <input type="date" id="due_date" name="due_date" required value="">
+                    </div>
+                    <div class="form-group">
+                        <label for="currency">Currency</label>
+                        <select id="currency" name="currency">
+                            <option value="AED">AED - UAE Dirham</option>
+                            <option value="USD">USD - US Dollar</option>
+                            <option value="EUR">EUR - Euro</option>
+                            <option value="GBP">GBP - British Pound</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="tax_code_id">Tax Code</label>
+                        <select id="tax_code_id" name="tax_code_id">
+                            <option value="">No Tax</option>
+                            {% for tc in tax_codes %}
+                            <option value="{{ tc.id }}">{{ tc.code }} - {{ tc.name }} ({{ tc.rate }}%)</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="payment_terms">Payment Terms</label>
+                        <select id="payment_terms" name="payment_terms">
+                            <option value="Due on Receipt">Due on Receipt</option>
+                            <option value="Net 15">Net 15</option>
+                            <option value="Net 30" selected>Net 30</option>
+                            <option value="Net 60">Net 60</option>
+                            <option value="Net 90">Net 90</option>
+                        </select>
+                    </div>
+                    <div class="form-group md:col-span-3">
+                        <label for="notes">Notes</label>
+                        <textarea id="notes" name="notes" rows="2" placeholder="Optional notes..."></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-white">Invoice Lines</h3>
+                    <button type="button" onclick="addLine()" class="btn btn-outline btn-sm">
+                        <i class="fas fa-plus"></i> Add Line
+                    </button>
+                </div>
+                <div class="hidden md:grid grid-cols-12 gap-2 text-gray-400 text-sm mb-2 px-1">
+                    <div class="col-span-5">Product / Description</div>
+                    <div class="col-span-1 text-right">Qty</div>
+                    <div class="col-span-2 text-right">Unit Price</div>
+                    <div class="col-span-1 text-right">Disc %</div>
+                    <div class="col-span-2 text-right">Total</div>
+                    <div class="col-span-1"></div>
+                </div>
+                <div id="linesContainer"></div>
+                <input type="hidden" name="line_count" id="lineCount" value="0">
+            </div>
+
+            <div class="flex justify-end gap-4">
+                <a href="/finance/ar/invoices" class="btn btn-outline">Cancel</a>
+                <button type="submit" name="auto_post" value="1" class="btn btn-primary">
+                    <i class="fas fa-check"></i> Create & Post
+                </button>
+                <button type="submit" class="btn btn-outline">
+                    <i class="fas fa-save"></i> Create Draft
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        let lineCount = 0;
+        const products = {{ products|tojson }};
+        const taxCodes = {{ tax_codes|tojson }};
+
+        function addLine() {
+            lineCount++;
+            const container = document.getElementById('linesContainer');
+            const div = document.createElement('div');
+            div.className = 'line-row';
+            div.id = `line-${lineCount}`;
+            div.innerHTML = `
+                <div class="col-span-5">
+                    <input type="text" name="description_${lineCount - 1}" placeholder="Description" class="w-full text-sm" required>
+                </div>
+                <div class="col-span-1">
+                    <input type="number" name="quantity_${lineCount - 1}" value="1" min="1" class="w-full text-sm text-right" onchange="calculateLine(${lineCount - 1})">
+                </div>
+                <div class="col-span-2">
+                    <input type="number" step="0.01" name="unit_price_${lineCount - 1}" value="0" min="0" class="w-full text-sm text-right" onchange="calculateLine(${lineCount - 1})">
+                </div>
+                <div class="col-span-1">
+                    <input type="number" name="discount_percent_${lineCount - 1}" value="0" min="0" max="100" class="w-full text-sm text-right" onchange="calculateLine(${lineCount - 1})">
+                </div>
+                <div class="col-span-2 text-right">
+                    <span id="line_total_${lineCount - 1}" class="amount">0.00</span>
+                    <input type="hidden" name="line_total_${lineCount - 1}" id="line_total_input_${lineCount - 1}" value="0">
+                </div>
+                <div class="col-span-1 text-center">
+                    <button type="button" onclick="removeLine(${lineCount})" class="text-red-400 hover:text-red-300">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `;
+            container.appendChild(div);
+            document.getElementById('lineCount').value = lineCount;
+        }
+
+        function removeLine(id) {
+            document.getElementById(`line-${id}`).remove();
+            lineCount--;
+            document.getElementById('lineCount').value = lineCount;
+        }
+
+        function calculateLine(idx) {
+            const qty = parseFloat(document.querySelector(`[name="quantity_${idx}"]`).value) || 0;
+            const price = parseFloat(document.querySelector(`[name="unit_price_${idx}"]`).value) || 0;
+            const disc = parseFloat(document.querySelector(`[name="discount_percent_${idx}"]`).value) || 0;
+            const total = qty * price * (1 - disc / 100);
+            document.getElementById(`line_total_${idx}`).textContent = total.toFixed(2);
+            document.getElementById(`line_total_input_${idx}`).value = total.toFixed(2);
+        }
+
+        addLine();
+    </script>
+    {% endblock %}
+</body>
+</html>

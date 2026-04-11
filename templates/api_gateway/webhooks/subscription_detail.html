@@ -1,0 +1,232 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Webhook: {{ subscription.endpoint_name }}</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('api_gateway_webhook_edit', sub_id=subscription.id) }}" class="btn btn-primary">
+            <i class="fas fa-edit"></i> Edit
+        </a>
+        <a href="{{ url_for('api_gateway_webhook_subscriptions') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Subscription Details</h3>
+            </div>
+            <table style="width: 100%;">
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary); width: 150px;"><strong>Code</strong></td>
+                    <td style="padding: 10px;"><code>{{ subscription.subscription_code }}</code></td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Target URL</strong></td>
+                    <td style="padding: 10px; font-family: monospace;">{{ subscription.target_url }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Status</strong></td>
+                    <td style="padding: 10px;">
+                        {% if subscription.active %}
+                        <span class="badge badge-success">Active</span>
+                        {% else %}
+                        <span class="badge badge-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Auth Method</strong></td>
+                    <td style="padding: 10px;">{{ subscription.auth_method or 'None' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Timeout</strong></td>
+                    <td style="padding: 10px;">{{ subscription.timeout_seconds }}s</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Max Retries</strong></td>
+                    <td style="padding: 10px;">{{ subscription.max_retries }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Owner</strong></td>
+                    <td style="padding: 10px;">{{ subscription.owner_name or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Created</strong></td>
+                    <td style="padding: 10px;">{{ subscription.created_at[:16] }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Subscribed Events</h3>
+            </div>
+            <div style="padding: 15px;">
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    {% for event in subscription.events_list %}
+                    <span class="badge badge-primary">{{ event }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Recent Deliveries</h3>
+            </div>
+            {% if deliveries %}
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Delivery ID</th>
+                            <th>Event</th>
+                            <th>Status</th>
+                            <th>HTTP Code</th>
+                            <th>Time (ms)</th>
+                            <th>Delivered</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for delivery in deliveries[:20] %}
+                        <tr>
+                            <td><code style="font-size: 0.75rem;">{{ delivery.delivery_id[:16] }}...</code></td>
+                            <td>{{ delivery.event_code }}</td>
+                            <td>
+                                <span class="badge badge-{% if delivery.delivery_status == 'success' %}success{% else %}danger{% endif %}">
+                                    {{ delivery.delivery_status }}
+                                </span>
+                            </td>
+                            <td>{{ delivery.http_status_code or 'N/A' }}</td>
+                            <td>{{ delivery.response_time_ms or 'N/A' }}</td>
+                            <td>{{ delivery.delivered_at[:16] if delivery.delivered_at else 'N/A' }}</td>
+                            <td>
+                                {% if delivery.delivery_status == 'failed' and delivery.attempt_number < delivery.max_attempts %}
+                                <button onclick="retryDelivery('{{ delivery.delivery_id }}')" class="btn btn-sm btn-warning">
+                                    <i class="fas fa-redo"></i> Retry
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state" style="padding: 30px;">
+                <i class="fas fa-paper-plane"></i>
+                <h3>No deliveries yet</h3>
+                <p>Webhook deliveries will appear here once events are triggered.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Delivery Statistics</h3>
+            </div>
+            <table style="width: 100%;">
+                <tr>
+                    <td style="padding: 12px;"><strong>Total Deliveries</strong></td>
+                    <td>{{ subscription.total_deliveries }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px;"><strong>Successful</strong></td>
+                    <td style="color: var(--success);">{{ subscription.successful_deliveries }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px;"><strong>Failed</strong></td>
+                    <td style="color: var(--danger);">{{ subscription.failed_deliveries }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px;"><strong>Success Rate</strong></td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="metric-bar" style="width: 80px;">
+                                <div class="metric-bar-fill {% if subscription.success_rate >= 90 %}green{% elif subscription.success_rate >= 70 %}yellow{% else %}red{% endif %}"
+                                     style="width: {{ subscription.success_rate or 0 }}%;"></div>
+                            </div>
+                            <span>{{ "%.1f"|format(subscription.success_rate) if subscription.success_rate else '0' }}%</span>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Last Delivery</h3>
+            </div>
+            <table style="width: 100%; font-size: 0.9rem;">
+                <tr>
+                    <td style="padding: 8px;"><strong>Status</strong></td>
+                    <td>
+                        {% if subscription.last_delivery_status == 'success' %}
+                        <span class="badge badge-success">Success</span>
+                        {% else %}
+                        <span class="badge badge-danger">Failed</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>HTTP Code</strong></td>
+                    <td>{{ subscription.last_response_code or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>At</strong></td>
+                    <td>{{ subscription.last_delivery_at[:16] if subscription.last_delivery_at else 'Never' }}</td>
+                </tr>
+                {% if subscription.last_error_message %}
+                <tr>
+                    <td style="padding: 8px;"><strong>Error</strong></td>
+                    <td style="color: var(--danger);">{{ subscription.last_error_message[:100] }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Test Webhook</h3>
+            </div>
+            <div style="padding: 15px;">
+                <p style="font-size: 0.9rem; color: var(--secondary); margin-bottom: 15px;">
+                    Send a test payload to verify the webhook endpoint is working correctly.
+                </p>
+                <button onclick="testWebhook()" class="btn btn-primary" style="width: 100%;">
+                    <i class="fas fa-paper-plane"></i> Send Test Event
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function retryDelivery(deliveryId) {
+    fetch(`/api-gateway/api/webhooks/deliveries/${deliveryId}/retry/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            alert('Retry queued successfully');
+            location.reload();
+        } else {
+            alert('Failed to retry: ' + (d.error || 'Unknown error'));
+        }
+    });
+}
+
+function testWebhook() {
+    alert('Test webhook feature - in production this would send a test event to the endpoint.');
+}
+</script>
+{% endblock %}

@@ -123,6 +123,7 @@ def allowed_file(filename, allowed_extensions=None):
 @mkt_bp.route('/')
 @mkt_bp.route('/dashboard')
 @mkt_login_required
+@mkt_permission_required('dashboard')
 def marketing_dashboard():
     """Main marketing dashboard with KPIs and summaries."""
     db = get_db()
@@ -453,6 +454,7 @@ def brands_delete(id):
 
 @mkt_bp.route('/market-intelligence')
 @mkt_login_required
+@mkt_permission_required('view_market_intel')
 def market_intelligence_list():
     """List market intelligence entries."""
     db = get_db()
@@ -564,6 +566,7 @@ def market_intelligence_new():
 
 @mkt_bp.route('/market-intelligence/view/<int:id>')
 @mkt_login_required
+@mkt_permission_required('view_market_intel')
 def market_intelligence_view(id):
     """View market intelligence entry."""
     db = get_db()
@@ -650,6 +653,7 @@ def market_intelligence_edit(id):
 
 @mkt_bp.route('/segments')
 @mkt_login_required
+@mkt_permission_required('view_segments')
 def segments_list():
     """List customer segments."""
     db = get_db()
@@ -768,6 +772,7 @@ def segments_new():
 
 @mkt_bp.route('/segments/view/<int:id>')
 @mkt_login_required
+@mkt_permission_required('view_segments')
 def segments_view(id):
     """View segment details."""
     db = get_db()
@@ -868,6 +873,7 @@ def segments_edit(id):
 
 @mkt_bp.route('/channels')
 @mkt_login_required
+@mkt_permission_required('view_channels')
 def channels_list():
     """List marketing channels."""
     db = get_db()
@@ -982,6 +988,7 @@ def channels_edit(id):
 
 @mkt_bp.route('/campaigns')
 @mkt_login_required
+@mkt_permission_required('view_campaigns')
 def campaigns_list():
     """List marketing campaigns."""
     db = get_db()
@@ -1150,6 +1157,7 @@ def campaigns_new():
 
 @mkt_bp.route('/campaigns/view/<int:id>')
 @mkt_login_required
+@mkt_permission_required('view_campaigns')
 def campaigns_view(id):
     """View campaign details."""
     db = get_db()
@@ -1356,6 +1364,7 @@ def campaigns_delete(id):
 
 @mkt_bp.route('/advertisements')
 @mkt_login_required
+@mkt_permission_required('view_advertisements')
 def advertisements_list():
     """List advertisements."""
     db = get_db()
@@ -1555,6 +1564,7 @@ def advertisements_edit(id):
 
 @mkt_bp.route('/content')
 @mkt_login_required
+@mkt_permission_required('view_content')
 def content_list():
     """List content items."""
     db = get_db()
@@ -1749,6 +1759,7 @@ def content_edit(id):
 
 @mkt_bp.route('/content-calendar')
 @mkt_login_required
+@mkt_permission_required('view_content')
 def content_calendar():
     """Content calendar view."""
     db = get_db()
@@ -1793,6 +1804,7 @@ def content_calendar():
 
 @mkt_bp.route('/leads')
 @mkt_login_required
+@mkt_permission_required('view_leads')
 def leads_list():
     """List marketing leads."""
     db = get_db()
@@ -1951,6 +1963,7 @@ def leads_new():
 
 @mkt_bp.route('/leads/view/<int:id>')
 @mkt_login_required
+@mkt_permission_required('view_leads')
 def leads_view(id):
     """View lead details."""
     db = get_db()
@@ -2124,6 +2137,7 @@ def leads_assign():
 
 @mkt_bp.route('/funnel')
 @mkt_login_required
+@mkt_permission_required('view_reports')
 def funnel_view():
     """View marketing funnel."""
     db = get_db()
@@ -2196,6 +2210,7 @@ def funnel_view():
 
 @mkt_bp.route('/offers')
 @mkt_login_required
+@mkt_permission_required('view_offers')
 def offers_list():
     """List offers and promotions."""
     db = get_db()
@@ -2370,6 +2385,7 @@ def offers_edit(id):
 
 @mkt_bp.route('/budgets')
 @mkt_login_required
+@mkt_permission_required('view_budgets')
 def budgets_list():
     """List marketing budgets."""
     db = get_db()
@@ -2438,6 +2454,7 @@ def budgets_new():
 
 @mkt_bp.route('/costs')
 @mkt_login_required
+@mkt_permission_required('view_budgets')
 def costs_list():
     """List marketing costs."""
     db = get_db()
@@ -2546,6 +2563,7 @@ def costs_new():
 
 @mkt_bp.route('/analytics')
 @mkt_login_required
+@mkt_permission_required('view_reports')
 def analytics():
     """Marketing performance analytics."""
     db = get_db()
@@ -2634,6 +2652,7 @@ def analytics():
 
 @mkt_bp.route('/alerts')
 @mkt_login_required
+@mkt_permission_required('view_alerts')
 def alerts_list():
     """List marketing alerts."""
     db = get_db()
@@ -2757,6 +2776,7 @@ def run_insights():
 
 @mkt_bp.route('/reports')
 @mkt_login_required
+@mkt_permission_required('view_reports')
 def reports_menu():
     """Marketing reports menu."""
     return render_template('marketing/reports.html', title='Marketing Reports')
@@ -2764,6 +2784,7 @@ def reports_menu():
 
 @mkt_bp.route('/reports/campaign-report')
 @mkt_login_required
+@mkt_permission_required('view_reports')
 def campaign_report():
     """Campaign performance report."""
     db = get_db()
@@ -2823,6 +2844,7 @@ def campaign_report():
 
 @mkt_bp.route('/reports/lead-report')
 @mkt_login_required
+@mkt_permission_required('view_reports')
 def lead_report():
     """Lead report."""
     db = get_db()
@@ -2878,6 +2900,7 @@ def lead_report():
 
 @mkt_bp.route('/reports/channel-report')
 @mkt_login_required
+@mkt_permission_required('view_reports')
 def channel_report():
     """Channel performance report."""
     db = get_db()
@@ -3285,6 +3308,7 @@ def settings_update():
 
 @mkt_bp.route('/seasonality')
 @mkt_login_required
+@mkt_permission_required('view_reports')
 def seasonality():
     """Seasonality management."""
     db = get_db()

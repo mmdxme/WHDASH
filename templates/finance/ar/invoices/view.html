@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .bg-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .bg-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        .info-item { padding: 0.75rem; background: #0f172a; border-radius: 0.5rem; }
+        .info-label { color: #6b7280; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.25rem; }
+        .info-value { color: white; font-weight: 500; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div class="flex items-center gap-4">
+                <a href="/finance/ar/invoices" class="text-gray-400 hover:text-white"><i class="fas fa-arrow-left"></i></a>
+                <div>
+                    <h1 class="text-3xl font-bold text-white">{{ invoice.invoice_number }}</h1>
+                    <p class="text-gray-400">Customer Invoice</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                {% if invoice.status == 'Draft' %}
+                <form method="POST" action="/finance/ar/invoices/{{ invoice.id }}/post">
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Post Invoice</button>
+                </form>
+                {% endif %}
+                <a href="/finance/ar/receipts/create?customer_id={{ invoice.customer_id }}&invoice_id={{ invoice.id }}" class="btn btn-outline">
+                    <i class="fas fa-hand-holding-usd"></i> Record Receipt
+                </a>
+            </div>
+        </div>
+
+        <div class="card mb-6">
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Invoice Number</div>
+                    <div class="info-value font-mono">{{ invoice.invoice_number }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Customer</div>
+                    <div class="info-value">{{ invoice.customer_name }} ({{ invoice.customer_code }})</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Invoice Date</div>
+                    <div class="info-value">{{ invoice.invoice_date }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Due Date</div>
+                    <div class="info-value">{{ invoice.due_date }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Status</div>
+                    <div class="info-value">
+                        {% if invoice.status == 'Paid' %}<span class="badge bg-success">Paid</span>
+                        {% elif invoice.status == 'PartiallyPaid' %}<span class="badge bg-warning">Partially Paid</span>
+                        {% elif invoice.status == 'Posted' %}<span class="badge bg-info">Posted</span>
+                        {% else %}<span class="badge bg-gray">Draft</span>{% endif %}
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Currency</div>
+                    <div class="info-value">{{ invoice.currency }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-6">
+            <h3 class="text-lg font-semibold text-white mb-4">Invoice Lines</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Description</th>
+                        <th class="text-right">Quantity</th>
+                        <th class="text-right">Unit Price</th>
+                        <th class="text-right">Discount</th>
+                        <th class="text-right">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for line in invoice.lines %}
+                    <tr>
+                        <td>{{ line.line_number }}</td>
+                        <td>{{ line.description }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(line.quantity) }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(line.unit_price) }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(line.discount_amount or 0) }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(line.line_total) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="bg-gray-800/50">
+                    <tr>
+                        <td colspan="5" class="text-right font-semibold">Subtotal:</td>
+                        <td class="text-right amount">{{ "%.2f"|format(invoice.subtotal) }}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" class="text-right font-semibold">Tax:</td>
+                        <td class="text-right amount text-warning">{{ "%.2f"|format(invoice.tax_amount) }}</td>
+                    </tr>
+                    <tr class="text-xl font-bold">
+                        <td colspan="5" class="text-right">Total:</td>
+                        <td class="text-right amount text-success">{{ "%.2f"|format(invoice.total_amount) }}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" class="text-right">Amount Paid:</td>
+                        <td class="text-right amount text-info">{{ "%.2f"|format(invoice.amount_paid) }}</td>
+                    </tr>
+                    <tr class="text-xl font-bold text-warning">
+                        <td colspan="5" class="text-right">Amount Due:</td>
+                        <td class="text-right amount">{{ "%.2f"|format(invoice.amount_due) }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

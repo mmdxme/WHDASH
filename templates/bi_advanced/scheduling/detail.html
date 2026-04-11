@@ -1,0 +1,144 @@
+{% extends "bi_advanced/base.html" %}
+
+{% block content %}
+<aside class="bi-sidebar">
+    <div class="bi-sidebar-header">
+        <h2><i class="fas fa-analytics"></i> Advanced BI</h2>
+    </div>
+    <div class="bi-nav-section">
+        <div class="bi-nav-section-title">Scheduling</div>
+        <a href="{{ url_for('bi_schedules') }}" class="bi-nav-item active"><i class="fas fa-clock"></i> Schedules</a>
+    </div>
+</aside>
+
+<main class="bi-main">
+    <div class="bi-breadcrumb">
+        <a href="{{ url_for('index') }}">Home</a>
+        <i class="fas fa-chevron-right"></i>
+        <a href="{{ url_for('bi_advanced_dashboard') }}">BI</a>
+        <i class="fas fa-chevron-right"></i>
+        <a href="{{ url_for('bi_schedules') }}">Schedules</a>
+        <i class="fas fa-chevron-right"></i>
+        <span>{{ schedule.schedule_name }}</span>
+    </div>
+    
+    <div class="bi-header">
+        <h1>{{ page_title }}</h1>
+        <div class="bi-actions">
+            <button class="bi-btn bi-btn-secondary" onclick="toggleSchedule()">
+                <i class="fas fa-pause"></i> {{ 'Pause' if schedule.is_active else 'Resume' }}
+            </button>
+        </div>
+    </div>
+    
+    <div class="bi-stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 20px;">
+        <div class="bi-stat-card">
+            <div class="icon blue"><i class="fas fa-play"></i></div>
+            <div class="value">{{ schedule.run_count or 0 }}</div>
+            <div class="label">Total Runs</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon green"><i class="fas fa-clock"></i></div>
+            <div class="value">{{ schedule.next_run_at or 'N/A' }}</div>
+            <div class="label">Next Run</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon orange"><i class="fas fa-history"></i></div>
+            <div class="value">{{ schedule.last_run_at or 'Never' }}</div>
+            <div class="label">Last Run</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon purple"><i class="fas fa-signal"></i></div>
+            <div class="value">
+                {% if schedule.is_active %}
+                <span class="bi-badge bi-badge-success">Active</span>
+                {% else %}
+                <span class="bi-badge bi-badge-warning">Paused</span>
+                {% endif %}
+            </div>
+            <div class="label">Status</div>
+        </div>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div class="bi-card">
+            <div class="bi-card-header">
+                <span class="bi-card-title">Schedule Details</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                <div>
+                    <label style="font-size: 12px; color: #888; display: block;">Frequency</label>
+                    <div><span class="bi-badge bi-badge-info">{{ schedule.frequency }}</span></div>
+                </div>
+                <div>
+                    <label style="font-size: 12px; color: #888; display: block;">Run Time</label>
+                    <div>{{ schedule.run_time }} ({{ schedule.timezone }})</div>
+                </div>
+                <div>
+                    <label style="font-size: 12px; color: #888; display: block;">Output Format</label>
+                    <div>{{ schedule.output_formats | join(', ') if schedule.output_formats else 'N/A' }}</div>
+                </div>
+                <div>
+                    <label style="font-size: 12px; color: #888; display: block;">Recipients</label>
+                    <div>{{ schedule.recipient_emails | length if schedule.recipient_emails else 0 }} email(s)</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bi-card">
+            <div class="bi-card-header">
+                <span class="bi-card-title">Delivery History</span>
+            </div>
+            {% if delivery_logs %}
+            <table class="bi-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Status</th>
+                        <th>Format</th>
+                        <th>Recipient</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in delivery_logs[:10] %}
+                    <tr>
+                        <td>{{ log.run_at }}</td>
+                        <td>
+                            {% if log.status == 'success' %}
+                            <span class="bi-badge bi-badge-success">Success</span>
+                            {% else %}
+                            <span class="bi-badge bi-badge-danger">Failed</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ log.output_format }}</td>
+                        <td>{{ log.recipient_email or 'N/A' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="bi-empty-state">
+                <i class="fas fa-truck"></i>
+                <h3>No Delivery History</h3>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</main>
+
+<script>
+const scheduleId = {{ schedule.id }};
+
+async function toggleSchedule() {
+    const response = await fetch(`/bi/schedules/api/toggle/${scheduleId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+        window.location.reload();
+    }
+}
+</script>
+{% endblock %}

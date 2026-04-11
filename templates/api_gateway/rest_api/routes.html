@@ -1,0 +1,146 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Route Registry</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('api_gateway_explorer') }}" class="btn btn-secondary">
+            <i class="fas fa-compass"></i> API Explorer
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Filter Routes</h3>
+    </div>
+    <form method="get" style="padding: 15px;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Search</label>
+                <input type="text" name="search" value="{{ filters.search or '' }}" placeholder="Search routes...">
+            </div>
+            <div class="filter-group">
+                <label>Module</label>
+                <select name="module">
+                    <option value="">All Modules</option>
+                    {% for mod_code, mod_name in modules %}
+                    <option value="{{ mod_code }}" {% if filters.module == mod_code %}selected{% endif %}>{{ mod_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Method</label>
+                <select name="method">
+                    <option value="">All Methods</option>
+                    <option value="GET" {% if filters.method == 'GET' %}selected{% endif %}>GET</option>
+                    <option value="POST" {% if filters.method == 'POST' %}selected{% endif %}>POST</option>
+                    <option value="PUT" {% if filters.method == 'PUT' %}selected{% endif %}>PUT</option>
+                    <option value="PATCH" {% if filters.method == 'PATCH' %}selected{% endif %}>PATCH</option>
+                    <option value="DELETE" {% if filters.method == 'DELETE' %}selected{% endif %}>DELETE</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Version</label>
+                <select name="version_id">
+                    <option value="">All Versions</option>
+                    {% for version in versions %}
+                    <option value="{{ version.id }}" {% if filters.version_id|int == version.id %}selected{% endif %}>{{ version.version_code }} - {{ version.version_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group" style="align-self: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+                <a href="{{ url_for('api_gateway_routes') }}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Registered API Routes ({{ total }})</h3>
+        <div style="display: flex; gap: 10px;">
+            <a href="{{ url_for('api_gateway_export_logs_csv') }}" class="btn btn-sm btn-secondary">
+                <i class="fas fa-download"></i> Export
+            </a>
+        </div>
+    </div>
+
+    {% if routes %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Path</th>
+                    <th>Module</th>
+                    <th>Resource</th>
+                    <th>Auth</th>
+                    <th>Version</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for route in routes %}
+                <tr>
+                    <td><span class="method-badge method-{{ route.method|lower }}">{{ route.method }}</span></td>
+                    <td style="font-family: monospace; font-size: 0.85rem;">{{ route.path }}</td>
+                    <td>{{ route.module|title }}</td>
+                    <td>{{ route.resource }}</td>
+                    <td>
+                        {% if route.auth_required %}
+                        <span class="badge badge-info">Required</span>
+                        {% else %}
+                        <span class="badge badge-secondary">Optional</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ route.version_code or 'N/A' }}</td>
+                    <td>
+                        {% if route.is_deprecated %}
+                        <span class="badge badge-danger">Deprecated</span>
+                        {% elif route.is_active %}
+                        <span class="badge badge-success">Active</span>
+                        {% else %}
+                        <span class="badge badge-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ (page - 1) * per_page + 1 }} to {{ [page * per_page, total]|min }} of {{ total }} routes
+        </div>
+        <div class="pagination-links">
+            {% if page > 1 %}
+            <a href="{{ url_for('api_gateway_routes', page=page-1, **filters) }}">&laquo; Prev</a>
+            {% endif %}
+            {% for p in range([1, page-2]|max, ([page+3, pages+1]|min)) %}
+                {% if p == page %}
+                <span class="active">{{ p }}</span>
+                {% else %}
+                <a href="{{ url_for('api_gateway_routes', page=p, **filters) }}">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if page < pages %}
+            <a href="{{ url_for('api_gateway_routes', page=page+1, **filters) }}">Next &raquo;</a>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-route"></i>
+        <h3>No routes found</h3>
+        <p>No API routes match your filters. Try adjusting your search criteria.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

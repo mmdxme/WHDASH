@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .bg-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .bg-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .bg-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .bg-gray { background: rgba(107, 114, 128, 0.1); color: #6b7280; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Manage journal entries</p>
+            </div>
+            <a href="/finance/journals/create" class="btn btn-primary">
+                <i class="fas fa-plus"></i> New Journal Entry
+            </a>
+        </div>
+
+        <!-- Filters -->
+        <div class="card mb-6">
+            <form method="get" class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Status</label>
+                    <select name="status" class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
+                        <option value="">All Status</option>
+                        <option value="Draft" {% if filters.status == 'Draft' %}selected{% endif %}>Draft</option>
+                        <option value="Posted" {% if filters.status == 'Posted' %}selected{% endif %}>Posted</option>
+                        <option value="Reversed" {% if filters.status == 'Reversed' %}selected{% endif %}>Reversed</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Journal Type</label>
+                    <select name="journal_type" class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
+                        <option value="">All Types</option>
+                        <option value="General" {% if filters.journal_type == 'General' %}selected{% endif %}>General</option>
+                        <option value="Sales" {% if filters.journal_type == 'Sales' %}selected{% endif %}>Sales</option>
+                        <option value="Purchase" {% if filters.journal_type == 'Purchase' %}selected{% endif %}>Purchase</option>
+                        <option value="Payment" {% if filters.journal_type == 'Payment' %}selected{% endif %}>Payment</option>
+                        <option value="Receipt" {% if filters.journal_type == 'Receipt' %}selected{% endif %}>Receipt</option>
+                        <option value="Depreciation" {% if filters.journal_type == 'Depreciation' %}selected{% endif %}>Depreciation</option>
+                        <option value="Adjustment" {% if filters.journal_type == 'Adjustment' %}selected{% endif %}>Adjustment</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">From Date</label>
+                    <input type="date" name="start_date" value="{{ filters.start_date or '' }}" class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">To Date</label>
+                    <input type="date" name="end_date" value="{{ filters.end_date or '' }}" class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white">
+                </div>
+                <button type="submit" class="btn btn-outline">
+                    <i class="fas fa-filter"></i> Filter
+                </button>
+            </form>
+        </div>
+
+        <!-- Journals Table -->
+        <div class="card">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Journal #</th>
+                            <th>Date</th>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Reference</th>
+                            <th>Status</th>
+                            <th class="text-right">Total</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for journal in journals %}
+                        <tr>
+                            <td>
+                                <a href="/finance/journals/{{ journal.id }}" class="text-primary hover:underline font-mono">
+                                    {{ journal.journal_number }}
+                                </a>
+                            </td>
+                            <td>{{ journal.journal_date }}</td>
+                            <td>{{ journal.journal_type }}</td>
+                            <td class="max-w-xs truncate">{{ journal.description or '-' }}</td>
+                            <td class="text-gray-400">{{ journal.reference or '-' }}</td>
+                            <td>
+                                {% if journal.status == 'Posted' %}
+                                <span class="badge bg-success">Posted</span>
+                                {% elif journal.status == 'Draft' %}
+                                <span class="badge bg-warning">Draft</span>
+                                {% elif journal.status == 'Reversed' %}
+                                <span class="badge bg-danger">Reversed</span>
+                                {% else %}
+                                <span class="badge bg-gray">{{ journal.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right amount">{{ "%.2f"|format(journal.total_debit) }}</td>
+                            <td class="text-center">
+                                <a href="/finance/journals/{{ journal.id }}" class="text-primary hover:text-primary-dark mx-1" title="View">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                {% if journal.status == 'Draft' %}
+                                <form method="POST" action="/finance/journals/{{ journal.id }}/post" style="display:inline;">
+                                    <button type="submit" class="text-success hover:text-green-400 mx-1" title="Post">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center text-gray-500 py-8">
+                                No journal entries found.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

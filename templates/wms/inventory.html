@@ -9,9 +9,55 @@
             <p class="text-slate-400 text-sm mt-1">{{ total_count }} {{ t('records_found', 'records found') }}</p>
         </div>
         <div class="flex items-center gap-3">
-            <a href="{{ url_for('wms_export_inventory') }}?warehouse_id={{ warehouse_id }}" class="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 hover:bg-emerald-500/20 text-sm font-medium">
-                <i class="fa-solid fa-file-excel mr-2"></i>Export
-            </a>
+            <button onclick="exportSelected()" class="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 hover:bg-emerald-500/20 text-sm font-medium">
+                <i class="fa-solid fa-file-arrow-down mr-2"></i><span id="export-btn-text">Export Selected (0)</span>
+            </button>
+            <div class="relative">
+                <button id="columnToggleBtn" class="px-4 py-2 bg-sky-500/10 border border-sky-500/20 rounded-xl text-sky-400 hover:bg-sky-500/20 text-sm font-medium">
+                    <i class="fa-solid fa-table-columns mr-2"></i>{{ t('columns', 'Columns') }}
+                </button>
+                <div id="columnToggleMenu" class="hidden absolute left-0 mt-2 w-56 glass-panel rounded-xl border border-white/10 shadow-xl z-50 p-3">
+                    <p class="text-xs text-slate-400 mb-2 uppercase tracking-wider">{{ t('select_columns', 'Select Columns') }}</p>
+                    <div class="space-y-2 max-h-64 overflow-y-auto" id="columnCheckboxes">
+                        <label class="flex items-center gap-2 cursor-pointer hover:bg-white/5 rounded px-2 py-1">
+                            <input type="checkbox" class="col-toggle" value="item" checked data-label="Item">
+                            <span class="text-sm text-slate-300">Item</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer hover:bg-white/5 rounded px-2 py-1">
+                            <input type="checkbox" class="col-toggle" value="warehouse" checked data-label="Warehouse">
+                            <span class="text-sm text-slate-300">Warehouse</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer hover:bg-white/5 rounded px-2 py-1">
+                            <input type="checkbox" class="col-toggle" value="location" checked data-label="Location">
+                            <span class="text-sm text-slate-300">Location</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer hover:bg-white/5 rounded px-2 py-1">
+                            <input type="checkbox" class="col-toggle" value="lot" checked data-label="Lot">
+                            <span class="text-sm text-slate-300">Lot</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer hover:bg-white/5 rounded px-2 py-1">
+                            <input type="checkbox" class="col-toggle" value="expiry" checked data-label="Expiry">
+                            <span class="text-sm text-slate-300">Expiry</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer hover:bg-white/5 rounded px-2 py-1">
+                            <input type="checkbox" class="col-toggle" value="quantity" checked data-label="Available">
+                            <span class="text-sm text-slate-300">Available</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer hover:bg-white/5 rounded px-2 py-1">
+                            <input type="checkbox" class="col-toggle" value="reserved" checked data-label="Reserved">
+                            <span class="text-sm text-slate-300">Reserved</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer hover:bg-white/5 rounded px-2 py-1">
+                            <input type="checkbox" class="col-toggle" value="allocated" checked data-label="Allocated">
+                            <span class="text-sm text-slate-300">Allocated</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer hover:bg-white/5 rounded px-2 py-1">
+                            <input type="checkbox" class="col-toggle" value="status" checked data-label="Status">
+                            <span class="text-sm text-slate-300">Status</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -51,45 +97,48 @@
 
     <!-- Filters -->
     <div class="glass-panel rounded-2xl p-5">
-        <form method="GET" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
+        <form method="GET" id="filterForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
             <div class="lg:col-span-2">
                 <input type="text" name="search" value="{{ search }}" placeholder="Item code, name, barcode..." class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
             </div>
             <div>
-                <select name="warehouse_id" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
-                    <option value="">All Warehouses</option>
+                <select name="warehouse_id" id="warehouseSelect" multiple class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white multi-select" data-placeholder="All Warehouses">
                     {% for wh in warehouses %}
-                    <option value="{{ wh.id }}" {% if warehouse_id|int == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                    <option value="{{ wh.id }}" {% if warehouse_ids and wh.id|string in warehouse_ids %}selected{% endif %}>{{ wh.name }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div>
-                <select name="category_id" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
-                    <option value="">All Categories</option>
+                <select name="category_id" id="categorySelect" multiple class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white multi-select" data-placeholder="All Categories">
                     {% for cat in categories %}
-                    <option value="{{ cat.id }}" {% if category_id|int == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                    <option value="{{ cat.id }}" {% if category_ids and cat.id|string in category_ids %}selected{% endif %}>{{ cat.name }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div>
-                <select name="status" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
-                    <option value="">All Status</option>
-                    <option value="AVAILABLE" {% if status=='AVAILABLE' %}selected{% endif %}>Available</option>
-                    <option value="RESERVED" {% if status=='RESERVED' %}selected{% endif %}>Reserved</option>
-                    <option value="BLOCKED" {% if status=='BLOCKED' %}selected{% endif %}>Blocked</option>
-                    <option value="QUARANTINE" {% if status=='QUARANTINE' %}selected{% endif %}>Quarantine</option>
-                    <option value="DAMAGED" {% if status=='DAMAGED' %}selected{% endif %}>Damaged</option>
+                <select name="brand_id" id="brandSelect" multiple class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white multi-select" data-placeholder="All Brands">
+                    {% for br in brands %}
+                    <option value="{{ br.id }}" {% if brand_id and br.id|string == brand_id %}selected{% endif %}>{{ br.name }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <div>
-                <select name="stock_filter" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
-                    <option value="">All Stock</option>
-                    <option value="available_only" {% if stock_filter=='available_only' %}selected{% endif %}>Available Only</option>
-                    <option value="reserved" {% if stock_filter=='reserved' %}selected{% endif %}>Has Reserved</option>
-                    <option value="zero" {% if stock_filter=='zero' %}selected{% endif %}>Zero Stock</option>
-                    <option value="negative" {% if stock_filter=='negative' %}selected{% endif %}>Negative</option>
-                    <option value="low" {% if stock_filter=='low' %}selected{% endif %}>Below Min Stock</option>
-                    <option value="below_reorder" {% if stock_filter=='below_reorder' %}selected{% endif %}>Below Reorder Point</option>
+                <select name="status" id="statusSelect" multiple class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white multi-select" data-placeholder="All Status">
+                    <option value="AVAILABLE" {% if statuses and 'AVAILABLE' in statuses %}selected{% endif %}>Available</option>
+                    <option value="RESERVED" {% if statuses and 'RESERVED' in statuses %}selected{% endif %}>Reserved</option>
+                    <option value="BLOCKED" {% if statuses and 'BLOCKED' in statuses %}selected{% endif %}>Blocked</option>
+                    <option value="QUARANTINE" {% if statuses and 'QUARANTINE' in statuses %}selected{% endif %}>Quarantine</option>
+                    <option value="DAMAGED" {% if statuses and 'DAMAGED' in statuses %}selected{% endif %}>Damaged</option>
+                </select>
+            </div>
+            <div>
+                <select name="stock_filter" id="stockFilterSelect" multiple class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white multi-select" data-placeholder="All Stock">
+                    <option value="available_only" {% if stock_filters and 'available_only' in stock_filters %}selected{% endif %}>Available Only</option>
+                    <option value="reserved" {% if stock_filters and 'reserved' in stock_filters %}selected{% endif %}>Has Reserved</option>
+                    <option value="zero" {% if stock_filters and 'zero' in stock_filters %}selected{% endif %}>Zero Stock</option>
+                    <option value="negative" {% if stock_filters and 'negative' in stock_filters %}selected{% endif %}>Negative</option>
+                    <option value="low" {% if stock_filters and 'low' in stock_filters %}selected{% endif %}>Below Min Stock</option>
+                    <option value="below_reorder" {% if stock_filters and 'below_reorder' in stock_filters %}selected{% endif %}>Below Reorder Point</option>
                 </select>
             </div>
             <div class="flex items-end gap-2">
@@ -97,40 +146,83 @@
                 <a href="{{ url_for('wms_inventory') }}" class="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-slate-400"><i class="fa-solid fa-xmark"></i></a>
             </div>
         </form>
+
+        <!-- Active Filters Tags -->
+        {% if warehouse_ids or category_ids or statuses or stock_filters or search %}
+        <div class="flex flex-wrap items-center gap-2 mt-3">
+            <span class="text-xs text-slate-500">Active filters:</span>
+            {% if search %}
+            <span class="inline-flex items-center gap-1 px-3 py-1 bg-brand-500/10 border border-brand-500/20 rounded-full text-brand-400 text-xs">
+                Search: {{ search }}
+            </span>
+            {% endif %}
+            {% for w in warehouse_ids %}
+            <span class="inline-flex items-center gap-1 px-3 py-1 bg-sky-500/10 border border-sky-500/20 rounded-full text-sky-400 text-xs">
+                Warehouse: {{ w }}
+            </span>
+            {% endfor %}
+            {% for c in category_ids %}
+            <span class="inline-flex items-center gap-1 px-3 py-1 bg-purple-500/10 border border-purple-500/20 rounded-full text-purple-400 text-xs">
+                Category: {{ c }}
+            </span>
+            {% endfor %}
+            {% for s in statuses %}
+            <span class="inline-flex items-center gap-1 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full text-amber-400 text-xs">
+                Status: {{ s }}
+            </span>
+            {% endfor %}
+            {% for sf in stock_filters %}
+            <span class="inline-flex items-center gap-1 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-xs">
+                Stock: {{ sf }}
+            </span>
+            {% endfor %}
+            <a href="{{ url_for('wms_inventory') }}" class="px-2 py-1 text-xs text-slate-400 hover:text-white transition-colors">
+                <i class="fa-solid fa-xmark mr-1"></i>Clear all
+            </a>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Table -->
     <div class="glass-panel rounded-2xl overflow-hidden">
         <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="w-full text-sm" id="inventoryTable">
                 <thead>
                     <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
-                        <th class="text-left py-3 px-4 font-semibold">Item</th>
-                        <th class="text-left py-3 px-4 font-semibold">Warehouse</th>
-                        <th class="text-left py-3 px-4 font-semibold">Location</th>
-                        <th class="text-left py-3 px-4 font-semibold">Lot</th>
-                        <th class="text-center py-3 px-4 font-semibold">Expiry</th>
-                        <th class="text-right py-3 px-4 font-semibold">Available</th>
-                        <th class="text-right py-3 px-4 font-semibold">Reserved</th>
-                        <th class="text-right py-3 px-4 font-semibold">Allocated</th>
-                        <th class="text-left py-3 px-4 font-semibold">Status</th>
+                        <th class="text-center py-3 px-3 font-semibold w-12">
+                            <input type="checkbox" id="selectAllRows" class="rounded border-white/20">
+                        </th>
+                        <th class="text-center py-3 px-4 font-semibold w-14">#</th>
+                        <th class="text-left py-3 px-4 font-semibold col-item">Item</th>
+                        <th class="text-left py-3 px-4 font-semibold col-warehouse">Warehouse</th>
+                        <th class="text-left py-3 px-4 font-semibold col-location">Location</th>
+                        <th class="text-left py-3 px-4 font-semibold col-lot">Lot</th>
+                        <th class="text-center py-3 px-4 font-semibold col-expiry">Expiry</th>
+                        <th class="text-right py-3 px-4 font-semibold col-quantity">Available</th>
+                        <th class="text-right py-3 px-4 font-semibold col-reserved">Reserved</th>
+                        <th class="text-right py-3 px-4 font-semibold col-allocated">Allocated</th>
+                        <th class="text-left py-3 px-4 font-semibold col-status">Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for inv in inventory %}
-                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
-                        <td class="py-3 px-4">
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors" data-row-id="{{ inv.id }}">
+                        <td class="py-3 px-3 text-center">
+                            <input type="checkbox" class="row-checkbox rounded border-white/20" value="{{ inv.id }}">
+                        </td>
+                        <td class="py-3 px-4 text-center text-slate-500 text-xs">{{ loop.index + (page-1)*per_page }}</td>
+                        <td class="py-3 px-4 col-item">
                             <a href="{{ url_for('wms_item_detail', item_id=inv.item_id) }}" class="text-brand-400 hover:text-brand-300 font-medium">{{ inv.item_code }}</a>
                             <p class="text-xs text-slate-500">{{ inv.item_name[:35] }}</p>
                         </td>
-                        <td class="py-3 px-4 text-slate-300">{{ inv.warehouse_name }}</td>
-                        <td class="py-3 px-4 text-slate-400">{{ inv.location_code or '-' }}</td>
-                        <td class="py-3 px-4 text-slate-400">{{ inv.lot_number or '-' }}</td>
-                        <td class="py-3 px-4 text-center text-slate-400">{{ inv.expiry_date[:10] if inv.expiry_date else '-' }}</td>
-                        <td class="py-3 px-4 text-right font-bold tabular-nums {% if inv.quantity < 0 %}text-red-400{% else %}text-emerald-400{% endif %}">{{ inv.quantity|int|abs }}</td>
-                        <td class="py-3 px-4 text-right text-amber-400 tabular-nums">{{ inv.reserved_quantity|default(0)|int|abs }}</td>
-                        <td class="py-3 px-4 text-right text-cyan-400 tabular-nums">{{ inv.allocated_quantity|default(0)|int|abs }}</td>
-                        <td class="py-3 px-4">
+                        <td class="py-3 px-4 text-slate-300 col-warehouse">{{ inv.warehouse_name }}</td>
+                        <td class="py-3 px-4 text-slate-400 col-location">{{ inv.location_code or '-' }}</td>
+                        <td class="py-3 px-4 text-slate-400 col-lot">{{ inv.lot_number or '-' }}</td>
+                        <td class="py-3 px-4 text-center text-slate-400 col-expiry">{{ inv.expiry_date[:10] if inv.expiry_date else '-' }}</td>
+                        <td class="py-3 px-4 text-right font-bold tabular-nums col-quantity {% if inv.quantity < 0 %}text-red-400{% else %}text-emerald-400{% endif %}">{{ inv.quantity|int|abs }}</td>
+                        <td class="py-3 px-4 text-right text-amber-400 tabular-nums col-reserved">{{ inv.reserved_quantity|default(0)|int|abs }}</td>
+                        <td class="py-3 px-4 text-right text-cyan-400 tabular-nums col-allocated">{{ inv.allocated_quantity|default(0)|int|abs }}</td>
+                        <td class="py-3 px-4 col-status">
                             <span class="px-2 py-1 rounded text-xs font-bold uppercase tracking-wider
                                 {% if inv.status == 'AVAILABLE' %}bg-emerald-500/10 text-emerald-400
                                 {% elif inv.status == 'RESERVED' %}bg-amber-500/10 text-amber-400
@@ -144,7 +236,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="9" class="py-16 text-center text-slate-500">
+                        <td colspan="11" class="py-16 text-center text-slate-500">
                             <i class="fa-solid fa-boxes-stacked text-5xl mb-4 block opacity-20"></i>
                             <p class="text-lg font-medium">No inventory records found</p>
                         </td>
@@ -159,15 +251,142 @@
             <p class="text-sm text-slate-400">Showing {{ (page-1)*per_page+1 }} to {{ [page*per_page, total_count]|min }} of {{ total_count }}</p>
             <div class="flex items-center gap-2">
                 {% if page > 1 %}
-                <a href="?page={{ page-1 }}&warehouse_id={{ warehouse_id }}&search={{ search }}&status={{ status }}&stock_filter={{ stock_filter }}" class="px-3 py-2 rounded-lg bg-white/5 text-slate-400 text-sm"><i class="fa-solid fa-chevron-left"></i></a>
+                <a href="?page={{ page-1 }}{% for w in warehouse_ids %}&warehouse_id={{ w }}{% endfor %}{% for c in category_ids %}&category_id={{ c }}{% endfor %}{% for s in statuses %}&status={{ s }}{% endfor %}{% for sf in stock_filters %}&stock_filter={{ sf }}{% endfor %}{% if search %}&search={{ search }}{% endif %}" class="px-3 py-2 rounded-lg bg-white/5 text-slate-400 text-sm"><i class="fa-solid fa-chevron-left"></i></a>
                 {% endif %}
                 <span class="px-4 py-2 bg-brand-500/10 text-brand-400 rounded-lg text-sm font-medium">Page {{ page }}/{{ total_pages }}</span>
                 {% if page < total_pages %}
-                <a href="?page={{ page+1 }}&warehouse_id={{ warehouse_id }}&search={{ search }}&status={{ status }}&stock_filter={{ stock_filter }}" class="px-3 py-2 rounded-lg bg-white/5 text-slate-400 text-sm"><i class="fa-solid fa-chevron-right"></i></a>
+                <a href="?page={{ page+1 }}{% for w in warehouse_ids %}&warehouse_id={{ w }}{% endfor %}{% for c in category_ids %}&category_id={{ c }}{% endfor %}{% for s in statuses %}&status={{ s }}{% endfor %}{% for sf in stock_filters %}&stock_filter={{ sf }}{% endfor %}{% if search %}&search={{ search }}{% endif %}" class="px-3 py-2 rounded-lg bg-white/5 text-slate-400 text-sm"><i class="fa-solid fa-chevron-right"></i></a>
                 {% endif %}
             </div>
         </div>
         {% endif %}
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize multi-select with Choices.js
+    const warehouseSelect = new Choices('#warehouseSelect', {
+        removeItemButton: true,
+        searchEnabled: true,
+        searchResultLimit: 50,
+        placeholderValue: 'All Warehouses',
+        searchPlaceholderValue: 'Search...',
+    });
+    const categorySelect = new Choices('#categorySelect', {
+        removeItemButton: true,
+        searchEnabled: true,
+        searchResultLimit: 50,
+        placeholderValue: 'All Categories',
+        searchPlaceholderValue: 'Search...',
+    });
+    const brandSelect = new Choices('#brandSelect', {
+        removeItemButton: true,
+        searchEnabled: true,
+        searchResultLimit: 50,
+        placeholderValue: 'All Brands',
+        searchPlaceholderValue: 'Search...',
+    });
+    const statusSelect = new Choices('#statusSelect', {
+        removeItemButton: true,
+        searchEnabled: false,
+        placeholderValue: 'All Status',
+        searchPlaceholderValue: 'Search...',
+    });
+    const stockFilterSelect = new Choices('#stockFilterSelect', {
+        removeItemButton: true,
+        searchEnabled: false,
+        placeholderValue: 'All Stock',
+        searchPlaceholderValue: 'Search...',
+    });
+
+    // Column toggle
+    const colToggleBtn = document.getElementById('columnToggleBtn');
+    const colToggleMenu = document.getElementById('columnToggleMenu');
+    
+    colToggleBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        colToggleMenu.classList.toggle('hidden');
+    });
+    
+    document.addEventListener('click', function(e) {
+        if (!colToggleMenu.contains(e.target) && e.target !== colToggleBtn) {
+            colToggleMenu.classList.add('hidden');
+        }
+    });
+
+    // Column visibility
+    document.querySelectorAll('.col-toggle').forEach(function(toggle) {
+        toggle.addEventListener('change', function() {
+            const col = this.value;
+            const show = this.checked;
+            const tds = document.querySelectorAll('td.col-' + col + ', th.col-' + col);
+            tds.forEach(function(el) {
+                el.style.display = show ? '' : 'none';
+            });
+        });
+    });
+
+    // Select all rows
+    document.getElementById('selectAllRows').addEventListener('change', function() {
+        const checked = this.checked;
+        document.querySelectorAll('.row-checkbox').forEach(function(cb) {
+            cb.checked = checked;
+        });
+        updateSelectedCount();
+    });
+
+    // Individual row selection
+    document.querySelectorAll('.row-checkbox').forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            updateSelectedCount();
+            updateSelectAllState();
+        });
+    });
+
+    function updateSelectedCount() {
+        var count = document.querySelectorAll('.row-checkbox:checked').length;
+        document.getElementById('export-btn-text').textContent = 'Export Selected (' + count + ')';
+    }
+
+    function updateSelectAllState() {
+        var total = document.querySelectorAll('.row-checkbox').length;
+        var checked = document.querySelectorAll('.row-checkbox:checked').length;
+        var selectAll = document.getElementById('selectAllRows');
+        selectAll.checked = checked === total && total > 0;
+        selectAll.indeterminate = checked > 0 && checked < total;
+    }
+
+    // Export selected rows
+    window.exportSelected = function() {
+        var selectedIds = [];
+        document.querySelectorAll('.row-checkbox:checked').forEach(function(cb) {
+            selectedIds.push(cb.value);
+        });
+
+        if (selectedIds.length === 0) {
+            alert('Please select at least one row to export.');
+            return;
+        }
+
+        // Get visible columns
+        var visibleCols = [];
+        document.querySelectorAll('.col-toggle:checked').forEach(function(toggle) {
+            visibleCols.push(toggle.value);
+        });
+
+        // Build export URL
+        var params = new URLSearchParams();
+        selectedIds.forEach(function(id) {
+            params.append('ids', id);
+        });
+        visibleCols.forEach(function(col) {
+            params.append('cols', col);
+        });
+        params.append('export', 'selected');
+
+        window.location.href = '{{ url_for("wms_export_inventory") }}?' + params.toString();
+    };
+});
+</script>
 {% endblock %}

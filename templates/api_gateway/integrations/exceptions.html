@@ -1,0 +1,99 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Integration Exceptions</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Filter Exceptions</h3>
+    </div>
+    <form method="get" style="padding: 15px;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Integration</label>
+                <select name="integration_id">
+                    <option value="">All Integrations</option>
+                    {% for profile in profiles %}
+                    <option value="{{ profile.id }}" {% if filters.integration_id|int == profile.id %}selected{% endif %}>{{ profile.integration_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Status</label>
+                <select name="is_resolved">
+                    <option value="">All</option>
+                    <option value="0" {% if filters.is_resolved == '0' %}selected{% endif %}>Unresolved</option>
+                    <option value="1" {% if filters.is_resolved == '1' %}selected{% endif %}>Resolved</option>
+                </select>
+            </div>
+            <div class="filter-group" style="align-self: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+                <a href="{{ url_for('api_gateway_integration_exceptions') }}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Exceptions ({{ total }})</h3>
+    </div>
+
+    {% if exceptions %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Integration</th>
+                    <th>Type</th>
+                    <th>Error</th>
+                    <th>Retries</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for exc in exceptions %}
+                <tr>
+                    <td><code style="font-size: 0.75rem;">{{ exc.exception_code[:16] }}...</code></td>
+                    <td>{{ exc.integration_name }}</td>
+                    <td>{{ exc.exception_type }}</td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ exc.error_message }}">
+                        {{ exc.error_message[:50] }}
+                    </td>
+                    <td>{{ exc.retry_count }}/{{ exc.max_retries }}</td>
+                    <td>
+                        {% if exc.is_resolved %}
+                        <span class="badge badge-success">Resolved</span>
+                        {% else %}
+                        <span class="badge badge-danger">Unresolved</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ exc.created_at[:16] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ (page - 1) * per_page + 1 }} to {{ [page * per_page, total]|min }} of {{ total }} exceptions
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-check-circle"></i>
+        <h3>No exceptions</h3>
+        <p>Integration exceptions will appear here when errors occur.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

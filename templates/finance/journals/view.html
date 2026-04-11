@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .bg-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .bg-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .bg-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        .btn-danger { background: #dc2626; color: white; }
+        .btn-danger:hover { background: #b91c1c; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+        .info-item { padding: 0.75rem; background: #0f172a; border-radius: 0.5rem; }
+        .info-label { color: #6b7280; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.25rem; }
+        .info-value { color: white; font-weight: 500; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div class="flex items-center gap-4">
+                <a href="/finance/journals" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <div>
+                    <h1 class="text-3xl font-bold text-white font-mono">{{ journal.journal_number }}</h1>
+                    <p class="text-gray-400 mt-1">{{ journal.journal_type }} Journal Entry</p>
+                </div>
+            </div>
+            <div class="flex gap-3">
+                {% if journal.status == 'Draft' %}
+                <form method="POST" action="/finance/journals/{{ journal.id }}/post" style="display:inline;">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-check"></i> Post Journal
+                    </button>
+                </form>
+                {% elif journal.status == 'Posted' %}
+                <form method="POST" action="/finance/journals/{{ journal.id }}/reverse" style="display:inline;" onsubmit="return confirm('Are you sure you want to reverse this journal?');">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-undo"></i> Reverse
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Journal Info -->
+        <div class="card mb-6">
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Journal Number</div>
+                    <div class="info-value font-mono">{{ journal.journal_number }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Date</div>
+                    <div class="info-value">{{ journal.journal_date }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Type</div>
+                    <div class="info-value">{{ journal.journal_type }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Status</div>
+                    <div class="info-value">
+                        {% if journal.status == 'Posted' %}
+                        <span class="badge bg-success">Posted</span>
+                        {% elif journal.status == 'Draft' %}
+                        <span class="badge bg-warning">Draft</span>
+                        {% elif journal.status == 'Reversed' %}
+                        <span class="badge bg-danger">Reversed</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Reference</div>
+                    <div class="info-value">{{ journal.reference or '-' }}</div>
+                </div>
+                {% if journal.is_reversed %}
+                <div class="info-item">
+                    <div class="info-label">Reversal Of</div>
+                    <div class="info-value">{{ journal.reversal_of_id }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% if journal.description %}
+            <div class="mt-4 pt-4 border-t border-gray-700">
+                <div class="info-label">Description</div>
+                <div class="info-value">{{ journal.description }}</div>
+            </div>
+            {% endif %}
+            {% if journal.memo %}
+            <div class="mt-4 pt-4 border-t border-gray-700">
+                <div class="info-label">Memo</div>
+                <div class="info-value">{{ journal.memo }}</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Journal Lines -->
+        <div class="card">
+            <h3 class="text-lg font-semibold text-white mb-4">Journal Lines</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Account</th>
+                        <th>Description</th>
+                        <th>Cost Center</th>
+                        <th class="text-right">Debit</th>
+                        <th class="text-right">Credit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for line in journal.lines %}
+                    <tr>
+                        <td>{{ line.line_number }}</td>
+                        <td>
+                            <div class="font-semibold">{{ line.account_code }}</div>
+                            <div class="text-gray-400 text-sm">{{ line.account_name }}</div>
+                        </td>
+                        <td>{{ line.description or '-' }}</td>
+                        <td>{{ line.cost_center_id or '-' }}</td>
+                        <td class="text-right amount {% if line.debit > 0 %}text-success{% endif %}">
+                            {% if line.debit > 0 %}{{ "%.2f"|format(line.debit) }}{% else %}-{% endif %}
+                        </td>
+                        <td class="text-right amount {% if line.credit > 0 %}text-danger{% endif %}">
+                            {% if line.credit > 0 %}{{ "%.2f"|format(line.credit) }}{% else %}-{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="font-bold bg-gray-800/50">
+                        <td colspan="4" class="text-right">Totals:</td>
+                        <td class="text-right amount text-success">{{ "%.2f"|format(journal.total_debit) }}</td>
+                        <td class="text-right amount text-danger">{{ "%.2f"|format(journal.total_credit) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

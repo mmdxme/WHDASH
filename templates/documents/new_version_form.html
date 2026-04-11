@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome-6.4.0/css/all.min.css" rel="stylesheet">
+    <style>body{font-family:'Segoe UI',system-ui,sans-serif;background:#F9FAFB}.card{border:none;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,.1)}.card-header{background:#fff;border-bottom:2px solid #E5E7EB;font-weight:600}.drop-zone{border:2px dashed #CBD5E1;border-radius:12px;padding:3rem;text-align:center;cursor:pointer;transition:all .2s}.drop-zone:hover,.drop-zone.dragover{border-color:#4F46E5;background:#EEF2FF}</style>
+</head>
+<body>
+{% include 'base.html' %}
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header"><i class="fas fa-upload me-2"></i>{{ page_title }}</div>
+                <div class="card-body">
+                    <div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>Document: <strong>{{ document.title }}</strong> | Current version: <strong>{{ current_version.version_number if current_version else '1.0' }}</strong> | New version: <strong>{{ next_version }}</strong></div>
+                    <form id="versionForm" method="post" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label class="form-label">Version Number</label>
+                            <input type="text" name="version_number" class="form-control" value="{{ next_version }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Change Summary</label>
+                            <textarea name="change_summary" class="form-control" rows="3" placeholder="Describe what changed in this version"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">New File <span class="text-danger">*</span></label>
+                            <div class="drop-zone" id="dropZone">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-secondary mb-3"></i>
+                                <p class="mb-1 fw-medium">Drop file here or click to browse</p>
+                                <p class="small text-muted">PDF, DOC, DOCX, XLS, XLSX, PNG, JPG up to 50MB</p>
+                                <input type="file" name="file" id="fileInput" class="d-none" accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.txt,.csv,.zip,.rar">
+                            </div>
+                            <div id="filePreview" class="mt-2 d-none">
+                                <div class="d-flex align-items-center p-2 bg-light rounded">
+                                    <i class="fas fa-file-alt me-2 text-primary"></i>
+                                    <div class="flex-grow-1"><div class="fw-medium" id="fileName"></div><div class="small text-muted" id="fileSize"></div></div>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFile()"><i class="fas fa-times"></i></button>
+                                </div>
+                            </div>
+                            <input type="hidden" name="stored_filename" id="stored_filename">
+                            <input type="hidden" name="storage_path" id="storage_path">
+                            <input type="hidden" name="original_filename" id="original_filename">
+                            <input type="hidden" name="checksum" id="checksum">
+                            <input type="hidden" name="file_size" id="file_size">
+                            <input type="hidden" name="mime_type" id="mime_type">
+                        </div>
+                        <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                            <a href="{{ url_for('documents_detail', document_id=document.id) }}" class="btn btn-outline-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary"><i class="fas fa-upload me-1"></i> Upload New Version</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+const dropZone=document.getElementById('dropZone'),fileInput=document.getElementById('fileInput'),filePreview=document.getElementById('filePreview');
+dropZone.addEventListener('click',()=>fileInput.click());
+dropZone.addEventListener('dragover',e=>{e.preventDefault();dropZone.classList.add('dragover')});
+dropZone.addEventListener('dragleave',()=>dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop',e=>{e.preventDefault();dropZone.classList.remove('dragover');if(e.dataTransfer.files.length)handleFileUpload(e.dataTransfer.files[0])});
+fileInput.addEventListener('change',()=>{if(fileInput.files.length)handleFileUpload(fileInput.files[0])});
+function handleFileUpload(file){
+    const formData=new FormData();formData.append('file',file);
+    fetch('{{ url_for("documents_upload") }}',{method:'POST',body:formData})
+    .then(res=>res.json())
+    .then(data=>{
+        if(data.success){
+            document.getElementById('stored_filename').value=data.stored_filename;
+            document.getElementById('storage_path').value=data.storage_path;
+            document.getElementById('original_filename').value=data.original_filename;
+            document.getElementById('checksum').value=data.checksum;
+            document.getElementById('file_size').value=data.file_size;
+            document.getElementById('mime_type').value=data.mime_type;
+            document.getElementById('fileName').textContent=data.original_filename;
+            document.getElementById('fileSize').textContent=formatBytes(data.file_size);
+            filePreview.classList.remove('d-none');dropZone.classList.add('d-none');
+        }else{alert('Upload failed: '+data.message);}
+    }).catch(err=>{console.error(err);alert('Upload failed')});
+}
+function removeFile(){fileInput.value='';['stored_filename','storage_path','original_filename','checksum','file_size','mime_type'].forEach(id=>document.getElementById(id).value='');filePreview.classList.add('d-none');dropZone.classList.remove('d-none');}
+function formatBytes(bytes){if(bytes<1024)return bytes+' B';if(bytes<1024*1024)return(bytes/1024).toFixed(1)+' KB';return(bytes/(1024*1024)).toFixed(1)+' MB';}
+</script>
+</body>
+</html>

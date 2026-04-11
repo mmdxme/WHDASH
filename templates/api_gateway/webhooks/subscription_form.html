@@ -1,0 +1,127 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if subscription %}Edit{% else %}Create{% endif %} Webhook Subscription</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('api_gateway_webhook_subscriptions') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <form method="POST">
+        <div class="form-row">
+            <div class="form-group">
+                <label>Endpoint Name *</label>
+                <input type="text" name="endpoint_name" value="{{ subscription.endpoint_name if subscription else '' }}" required placeholder="e.g., Production Order Notifications">
+            </div>
+            <div class="form-group">
+                <label>Target URL *</label>
+                <input type="url" name="target_url" value="{{ subscription.target_url if subscription else '' }}" required placeholder="https://your-endpoint.com/webhook">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Owner Name</label>
+                <input type="text" name="owner_name" value="{{ subscription.owner_name if subscription else '' }}">
+            </div>
+            <div class="form-group">
+                <label>Owner Email</label>
+                <input type="email" name="owner_email" value="{{ subscription.owner_email if subscription else '' }}">
+            </div>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Authentication Method</label>
+                <select name="auth_method">
+                    <option value="none" {% if subscription and subscription.auth_method == 'none' %}selected{% endif %}>None</option>
+                    <option value="secret" {% if subscription and subscription.auth_method == 'secret' %}selected{% endif %}>HMAC Signature</option>
+                    <option value="header" {% if subscription and subscription.auth_method == 'header' %}selected{% endif %}>Custom Header</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Auth Secret (for HMAC)</label>
+                <input type="password" name="auth_secret" value="{{ subscription.auth_secret if subscription else '' }}" placeholder="Leave empty to auto-generate">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Authentication Header Name</label>
+            <input type="text" name="auth_header_name" value="{{ subscription.auth_header_name if subscription else 'X-Webhook-Signature' }}">
+        </div>
+
+        <div class="form-group">
+            <label>Subscribed Events *</label>
+            <div style="max-height: 300px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px;">
+                {% for event in events %}
+                <label style="display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 6px; margin-bottom: 5px;">
+                    <input type="checkbox" name="subscribed_events" value="{{ event.event_code }}"
+                           {% if subscription and event.event_code in subscription.events_list %}checked{% endif %}>
+                    <div>
+                        <code style="font-size: 0.85rem;">{{ event.event_code }}</code>
+                        <span style="color: var(--secondary); font-size: 0.8rem; margin-left: 8px;">{{ event.event_name }}</span>
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+            <p style="font-size: 0.8rem; color: var(--secondary); margin-top: 5px;">
+                Select the events this webhook should receive. Leave all unchecked to receive all events.
+            </p>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Timeout (seconds)</label>
+                <input type="number" name="timeout_seconds" value="{{ subscription.timeout_seconds if subscription else 30 }}">
+            </div>
+            <div class="form-group">
+                <label>Max Retries</label>
+                <input type="number" name="max_retries" value="{{ subscription.max_retries if subscription else 3 }}">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Retry Backoff Strategy</label>
+            <select name="retry_backoff">
+                <option value="exponential" selected>Exponential</option>
+                <option value="linear">Linear</option>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label>Environment Tag</label>
+                <select name="environment_tag">
+                    <option value="">None</option>
+                    <option value="production">Production</option>
+                    <option value="staging">Staging</option>
+                    <option value="development">Development</option>
+                    <option value="testing">Testing</option>
+                </select>
+            </div>
+            <div class="form-group" style="align-self: flex-end;">
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" name="active" {% if subscription is none or subscription.active %}checked{% endif %}>
+                    Active
+                </label>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Notes</label>
+            <textarea name="notes" rows="3">{{ subscription.notes if subscription else '' }}</textarea>
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+            <a href="{{ url_for('api_gateway_webhook_subscriptions') }}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i> {% if subscription %}Update{% else %}Create{% endif %} Subscription
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

@@ -24,8 +24,45 @@
                     </div>
                     <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
                         <div>
-                            <label class="mb-2 block text-[10px] font-black uppercase tracking-widest text-slate-500">Theme</label>
-                            <select id="prefTheme" name="theme" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none transition-all focus:border-brand-500">
+                            <label class="mb-3 block text-[10px] font-black uppercase tracking-widest text-slate-500">Theme</label>
+                            <div id="themePickerGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                {% for theme in available_themes %}
+                                <button type="button"
+                                        data-theme-id="{{ theme.id }}"
+                                        class="theme-preview-card group relative rounded-2xl border-2 p-4 text-left transition-all duration-200 hover:scale-[1.02] hover:shadow-lg cursor-pointer outline-none
+                                            {% if preferences.theme == theme.id %}border-brand-500 ring-2 ring-brand-500/30{% else %}border-white/10 hover:border-white/30{% endif %}"
+                                        onclick="selectThemePreview('{{ theme.id }}')"
+                                        aria-label="Select {{ theme.label }} theme">
+                                    <div class="mb-3 h-16 w-full rounded-xl overflow-hidden relative" style="background: {{ theme.preview.background }};">
+                                        <div class="absolute inset-0 flex flex-col">
+                                            <div class="h-5 w-full" style="background: {{ theme.preview.surface }};"></div>
+                                            <div class="flex-1 flex items-center justify-center">
+                                                <div class="flex gap-1.5">
+                                                    <div class="w-3 h-3 rounded-full" style="background: {{ theme.preview.primary }};"></div>
+                                                    <div class="w-3 h-3 rounded-full" style="background: {{ theme.preview.secondary }};"></div>
+                                                    <div class="w-3 h-3 rounded-full" style="background: {{ theme.preview.accent }};"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="absolute top-1 right-1.5 flex gap-1">
+                                            <div class="w-2 h-2 rounded-full opacity-30" style="background: {{ theme.preview.surface }};"></div>
+                                            <div class="w-2 h-2 rounded-full opacity-30" style="background: {{ theme.preview.surface }};"></div>
+                                        </div>
+                                    </div>
+                                    <div class="text-[10px] font-black uppercase tracking-widest mb-0.5" style="color: {{ theme.preview.primary }};">{{ theme.category }}</div>
+                                    <div class="font-bold text-sm leading-tight" style="color: {% if theme.is_dark %}rgba(255,255,255,0.95){% else %}#1e293b{% endif %};">{{ theme.label }}</div>
+                                    <div class="mt-1 text-[10px] text-slate-500 leading-tight line-clamp-2">{{ theme.description }}</div>
+                                    {% if preferences.theme == theme.id %}
+                                    <div class="absolute top-2 left-2">
+                                        <div class="w-5 h-5 rounded-full bg-brand-500 flex items-center justify-center">
+                                            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                </button>
+                                {% endfor %}
+                            </div>
+                            <select id="prefTheme" name="theme" class="hidden">
                                 {% for option in theme_options %}
                                 <option value="{{ option.value }}" {% if preferences.theme == option.value %}selected{% endif %}>{{ option.label }}</option>
                                 {% endfor %}
@@ -274,5 +311,31 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     updatePreferencesPreview();
 });
+
+function selectThemePreview(themeId) {
+    document.querySelectorAll('.theme-preview-card').forEach((card) => {
+        card.classList.remove('border-brand-500', 'ring-2', 'ring-brand-500/30');
+        card.classList.add('border-white/10');
+        const checkmark = card.querySelector('.bg-brand-500');
+        if (checkmark) checkmark.parentElement.remove();
+    });
+
+    const selectedCard = document.querySelector(`[data-theme-id="${themeId}"]`);
+    if (selectedCard) {
+        selectedCard.classList.remove('border-white/10');
+        selectedCard.classList.add('border-brand-500', 'ring-2', 'ring-brand-500/30');
+        const checkmark = document.createElement('div');
+        checkmark.className = 'absolute top-2 left-2 w-5 h-5 rounded-full bg-brand-500 flex items-center justify-center';
+        checkmark.innerHTML = '<svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>';
+        selectedCard.appendChild(checkmark);
+    }
+
+    const themeSelect = document.getElementById('prefTheme');
+    if (themeSelect) {
+        themeSelect.value = themeId;
+        themeSelect.dispatchEvent(new Event('change'));
+    }
+    updatePreferencesPreview();
+}
 </script>
 {% endblock %}

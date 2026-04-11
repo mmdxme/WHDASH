@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 fade-in">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-100">Asset Disposal</h1>
+            <p class="text-slate-400 text-sm mt-1">Manage asset disposal requests and approvals</p>
+        </div>
+        <a href="{{ url_for('assets.disposal_request') }}" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition-colors">
+            <i class="fas fa-plus mr-2"></i>New Disposal Request
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Pending Requests -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4">Pending Approval ({{ pending_requests|length }})</h2>
+            <div class="space-y-3">
+                {% for req in pending_requests %}
+                <div class="p-4 bg-slate-800/50 rounded-lg border border-orange-500/20">
+                    <div class="flex items-center justify-between mb-2">
+                        <div>
+                            <a href="{{ url_for('assets.disposal_request_detail', request_id=req.id) }}" class="text-brand-400 hover:text-brand-300 font-medium">{{ req.request_number }}</a>
+                            <span class="text-slate-400 text-sm ml-2">{{ req.asset_name }} ({{ req.asset_code }})</span>
+                        </div>
+                        <span class="px-2 py-1 bg-orange-500/20 text-orange-400 rounded text-xs">{{ req.disposal_type }}</span>
+                    </div>
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-slate-400">NBV: <span class="text-yellow-400">{{ req.net_book_value | round(2) }}</span></span>
+                        <span class="text-slate-500">{{ req.request_date }}</span>
+                    </div>
+                    <div class="flex gap-2 mt-3">
+                        <button onclick="approveRequest({{ req.id }})" class="flex-1 px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded text-xs font-medium">Approve</button>
+                        <button onclick="rejectRequest({{ req.id }})" class="flex-1 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-medium">Reject</button>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No pending disposal requests</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Recent Disposals -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4">Completed Disposals</h2>
+            <div class="space-y-3">
+                {% for disp in recent_disposals %}
+                <div class="p-3 bg-slate-800/50 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <span class="text-slate-200">{{ disp.asset_name }}</span>
+                            <span class="text-slate-500 text-xs ml-2">{{ disp.asset_code }}</span>
+                        </div>
+                        <span class="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs">{{ disp.disposal_type }}</span>
+                    </div>
+                    <div class="flex items-center justify-between mt-2 text-sm">
+                        <span class="text-slate-400">Proceeds: <span class="text-green-400">{{ disp.proceeds | round(2) }}</span></span>
+                        <span class="text-slate-500">{{ disp.disposal_date }}</span>
+                    </div>
+                    {% if disp.gain_loss > 0 %}
+                    <div class="text-xs text-green-400 mt-1">Gain: {{ disp.gain_loss | round(2) }}</div>
+                    {% elif disp.gain_loss < 0 %}
+                    <div class="text-xs text-red-400 mt-1">Loss: {{ disp.gain_loss | round(2) }}</div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No completed disposals</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function approveRequest(id) {
+    if (!confirm('Approve this disposal request?')) return;
+    try {
+        const res = await fetch(`/assets/disposal/request/${id}/approve`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) location.reload();
+        else alert(data.error);
+    } catch (e) { alert('Error approving request'); }
+}
+
+async function rejectRequest(id) {
+    const reason = prompt('Rejection reason:');
+    if (!reason) return;
+    try {
+        const res = await fetch(`/assets/disposal/request/${id}/reject`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason })
+        });
+        const data = await res.json();
+        if (data.success) location.reload();
+        else alert(data.error);
+    } catch (e) { alert('Error rejecting request'); }
+}
+</script>
+{% endblock %}

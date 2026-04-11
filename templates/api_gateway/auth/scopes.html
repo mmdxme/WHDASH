@@ -1,0 +1,96 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">API Scopes</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Filter Scopes</h3>
+    </div>
+    <form method="get" style="padding: 15px;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Search</label>
+                <input type="text" name="search" value="{{ filters.search or '' }}" placeholder="Search scopes...">
+            </div>
+            <div class="filter-group">
+                <label>Module</label>
+                <select name="module">
+                    <option value="">All Modules</option>
+                    {% for mod_code, mod_name in modules %}
+                    <option value="{{ mod_code }}" {% if filters.module == mod_code %}selected{% endif %}>{{ mod_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group" style="align-self: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+                <a href="{{ url_for('api_gateway_scopes') }}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Scopes by Module</h3>
+    </div>
+
+    {% for module, module_scopes in scopes_by_module.items() %}
+    <div style="margin-bottom: 25px;">
+        <h4 style="padding: 10px 15px; background: #f8fafc; border-radius: 8px; margin-bottom: 10px;">
+            <i class="fas fa-module"></i> {{ module|title }} ({{ module_scopes|length }} scopes)
+        </h4>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Scope Code</th>
+                        <th>Name</th>
+                        <th>Resource</th>
+                        <th>Action</th>
+                        <th>Danger Level</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for scope in module_scopes %}
+                    <tr>
+                        <td><code>{{ scope.scope_code }}</code></td>
+                        <td>{{ scope.scope_name }}</td>
+                        <td>{{ scope.resource or 'N/A' }}</td>
+                        <td>{{ scope.action or '*' }}</td>
+                        <td>
+                            <span class="badge badge-{% if scope.danger_level == 'critical' %}danger{% elif scope.danger_level == 'high' %}warning{% elif scope.danger_level == 'medium' %}info{% else %}secondary{% endif %}">
+                                {{ scope.danger_level|title }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if scope.is_active %}
+                            <span class="badge badge-success">Active</span>
+                            {% else %}
+                            <span class="badge badge-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if not scopes_by_module %}
+    <div class="empty-state">
+        <i class="fas fa-key"></i>
+        <h3>No scopes found</h3>
+        <p>No API scopes match your filters.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,174 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Integration Profiles</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('api_gateway_integration_new') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> New Integration
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Filter Integrations</h3>
+    </div>
+    <form method="get" style="padding: 15px;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Search</label>
+                <input type="text" name="search" value="{{ filters.search or '' }}" placeholder="Search integrations...">
+            </div>
+            <div class="filter-group">
+                <label>Type</label>
+                <select name="integration_type">
+                    <option value="">All Types</option>
+                    <option value="ecommerce" {% if filters.integration_type == 'ecommerce' %}selected{% endif %}>E-commerce</option>
+                    <option value="accounting" {% if filters.integration_type == 'accounting' %}selected{% endif %}>Accounting</option>
+                    <option value="shipping" {% if filters.integration_type == 'shipping' %}selected{% endif %}>Shipping</option>
+                    <option value="crm" {% if filters.integration_type == 'crm' %}selected{% endif %}>CRM</option>
+                    <option value="bi" {% if filters.integration_type == 'bi' %}selected{% endif %}>Business Intelligence</option>
+                    <option value="partner" {% if filters.integration_type == 'partner' %}selected{% endif %}>Partner</option>
+                    <option value="mobile" {% if filters.integration_type == 'mobile' %}selected{% endif %}>Mobile</option>
+                    <option value="custom" {% if filters.integration_type == 'custom' %}selected{% endif %}>Custom</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Module</label>
+                <select name="module">
+                    <option value="">All Modules</option>
+                    <option value="sales" {% if filters.module == 'sales' %}selected{% endif %}>Sales</option>
+                    <option value="inventory" {% if filters.module == 'inventory' %}selected{% endif %}>Inventory</option>
+                    <option value="procurement" {% if filters.module == 'procurement' %}selected{% endif %}>Procurement</option>
+                    <option value="finance" {% if filters.module == 'finance' %}selected{% endif %}>Finance</option>
+                    <option value="ecommerce" {% if filters.module == 'ecommerce' %}selected{% endif %}>E-commerce</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Status</label>
+                <select name="is_active">
+                    <option value="">All</option>
+                    <option value="1" {% if filters.is_active == '1' %}selected{% endif %}>Active</option>
+                    <option value="0" {% if filters.is_active == '0' %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+            <div class="filter-group" style="align-self: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+                <a href="{{ url_for('api_gateway_integrations') }}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Integration Profiles ({{ total }})</h3>
+    </div>
+
+    {% if profiles %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Module</th>
+                    <th>Direction</th>
+                    <th>Runs</th>
+                    <th>Last Run</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for profile in profiles %}
+                <tr>
+                    <td><code>{{ profile.integration_code }}</code></td>
+                    <td>
+                        <a href="{{ url_for('api_gateway_integration_detail', profile_id=profile.id) }}">{{ profile.integration_name }}</a>
+                    </td>
+                    <td>{{ profile.integration_type|title }}</td>
+                    <td>{{ profile.module|title }}</td>
+                    <td>{{ profile.direction|title }}</td>
+                    <td>{{ profile.total_runs }}</td>
+                    <td>
+                        {% if profile.last_successful_run %}
+                        {{ profile.last_successful_run[:16] }}
+                        {% else %}
+                        Never
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if profile.is_active %}
+                        <span class="badge badge-success">Active</span>
+                        {% else %}
+                        <span class="badge badge-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 5px;">
+                            <a href="{{ url_for('api_gateway_integration_detail', profile_id=profile.id) }}" class="btn btn-sm btn-secondary">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <button onclick="toggleIntegration({{ profile.id }}, {{ profile.is_active }})" class="btn btn-sm {% if profile.is_active %}btn-warning{% else %}btn-success{% endif %}">
+                                <i class="fas fa-{% if profile.is_active %}pause{% else %}play{% endif %}"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ (page - 1) * per_page + 1 }} to {{ [page * per_page, total]|min }} of {{ total }} integrations
+        </div>
+        <div class="pagination-links">
+            {% if page > 1 %}
+            <a href="{{ url_for('api_gateway_integrations', page=page-1, **filters) }}">&laquo; Prev</a>
+            {% endif %}
+            {% for p in range([1, page-2]|max, ([page+3, pages+1]|min)) %}
+                {% if p == page %}
+                <span class="active">{{ p }}</span>
+                {% else %}
+                <a href="{{ url_for('api_gateway_integrations', page=p, **filters) }}">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if page < pages %}
+            <a href="{{ url_for('api_gateway_integrations', page=page+1, **filters) }}">Next &raquo;</a>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-plug"></i>
+        <h3>No integrations</h3>
+        <p>Create your first integration profile to connect with external systems.</p>
+        <a href="{{ url_for('api_gateway_integration_new') }}" class="btn btn-primary" style="margin-top: 15px;">
+            <i class="fas fa-plus"></i> Create Integration
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleIntegration(profileId, isActive) {
+    fetch(`/api-gateway/api/integrations/${profileId}/toggle/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) location.reload();
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if rtl else 'en' }}" dir="{{ 'rtl' if rtl else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% trans %}New Submission{% endtrans %}: {{ template.form_title }} - MMDx</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.js.cloudflare.com/ajax/libs/SignaturePad/1.5.0/signaturepad.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .glass-panel { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    {% include 'admin_sidebar.html' %}
+    
+    <div class="ml-64 min-h-screen">
+        {% include 'admin_header.html' %}
+        
+        <main class="p-6">
+            <!-- Page Header -->
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <div class="flex items-center gap-3">
+                        <a href="{{ url_for('forms.templates_view', template_id=template.id) }}" class="text-gray-400 hover:text-white">
+                            <i class="fas fa-arrow-left"></i>
+                        </a>
+                        <div>
+                            <span class="text-xs font-mono text-gray-500">{{ template.template_code }}</span>
+                            <h1 class="text-2xl font-bold text-white">{{ template.form_title }}</h1>
+                        </div>
+                    </div>
+                    {% if template.instructions %}
+                    <div class="mt-2 ml-8 p-3 bg-blue-900/30 border border-blue-700/50 rounded-lg text-sm text-blue-300">
+                        <i class="fas fa-info-circle mr-2"></i>{{ template.instructions }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <form method="POST" enctype="multipart/form-data" id="submission-form">
+                <!-- Form Sections -->
+                {% for section in sections %}
+                <div class="glass-panel rounded-xl p-6 mb-6 {% if section.is_collapsible %}collapsible{% endif %}" data-section-id="{{ section.id }}">
+                    <div class="flex justify-between items-center mb-4 cursor-pointer" onclick="toggleSection(this)">
+                        <h2 class="text-xl font-semibold text-white">
+                            {{ section.title }}
+                            {% if section.is_required %}<span class="text-red-400">*</span>{% endif %}
+                        </h2>
+                        {% if section.is_collapsible %}
+                        <i class="fas fa-chevron-down text-gray-400 transition-transform"></i>
+                        {% endif %}
+                    </div>
+                    
+                    {% if section.description %}
+                    <p class="text-gray-400 text-sm mb-4">{{ section.description }}</p>
+                    {% endif %}
+                    
+                    <div class="space-y-4 section-content">
+                        {% for field in section.fields %}
+                        <div class="field-wrapper {% if field.field_width < 12 %}md:w-1/{{ field.field_width }}{% endif %}">
+                            <label class="block text-sm font-medium text-gray-300 mb-2" for="field_{{ field.id }}">
+                                {{ field.label }}
+                                {% if field.is_required %}<span class="text-red-400">*</span>{% endif %}
+                            </label>
+                            
+                            <!-- TEXT -->
+                            {% if field.field_type == 'text' %}
+                            <input type="text" 
+                                   id="field_{{ field.id }}" 
+                                   name="field_{{ field.id }}" 
+                                   placeholder="{{ field.placeholder or '' }}"
+                                   value="{{ field.default_value or '' }}"
+                                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                   {% if field.is_required %}required{% endif %}
+                                   {% if field.is_readonly %}readonly{% endif %}>
+                            
+                            <!-- TEXTAREA -->
+                            {% elif field.field_type == 'textarea' %}
+                            <textarea id="field_{{ field.id }}" 
+                                      name="field_{{ field.id }}"
+                                      placeholder="{{ field.placeholder or '' }}"
+                                      rows="4"
+                                      class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                      {% if field.is_required %}required{% endif %}
+                                      {% if field.is_readonly %}readonly{% endif %}>{{ field.default_value or '' }}</textarea>
+                            
+                            <!-- NUMBER -->
+                            {% elif field.field_type == 'number' %}
+                            <input type="number" 
+                                   id="field_{{ field.id }}" 
+                                   name="field_{{ field.id }}"
+                                   placeholder="{{ field.placeholder or '0' }}"
+                                   value="{{ field.default_value or '' }}"
+                                   min="{{ field.min_value or '' }}"
+                                   max="{{ field.max_value or '' }}"
+                                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                   {% if field.is_required %}required{% endif %}
+                                   {% if field.is_readonly %}readonly{% endif %}>
+                            
+                            <!-- DECIMAL / CURRENCY / PERCENTAGE -->
+                            {% elif field.field_type in ['decimal', 'currency', 'percentage'] %}
+                            <div class="relative">
+                                {% if field.field_type == 'currency' %}
+                                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                                {% endif %}
+                                <input type="number" 
+                                       id="field_{{ field.id }}" 
+                                       name="field_{{ field.id }}"
+                                       placeholder="0.00"
+                                       value="{{ field.default_value or '' }}"
+                                       step="0.01"
+                                       min="{{ field.min_value or '' }}"
+                                       max="{{ field.max_value or '' }}"
+                                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent {% if field.field_type == 'currency' %}pl-8{% endif %} {% if field.field_type == 'percentage' %}pr-8{% endif %}"
+                                       {% if field.is_required %}required{% endif %}
+                                       {% if field.is_readonly %}readonly{% endif %}>
+                                {% if field.field_type == 'percentage' %}
+                                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">%</span>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- DATE -->
+                            {% elif field.field_type == 'date' %}
+                            <input type="date" 
+                                   id="field_{{ field.id }}" 
+                                   name="field_{{ field.id }}"
+                                   value="{{ field.default_value or '' }}"
+                                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                   {% if field.is_required %}required{% endif %}
+                                   {% if field.is_readonly %}readonly{% endif %}>
+                            
+                            <!-- TIME -->
+                            {% elif field.field_type == 'time' %}
+                            <input type="time" 
+                                   id="field_{{ field.id }}" 
+                                   name="field_{{ field.id }}"
+                                   value="{{ field.default_value or '' }}"
+                                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                   {% if field.is_required %}required{% endif %}
+                                   {% if field.is_readonly %}readonly{% endif %}>
+                            
+                            <!-- DATETIME -->
+                            {% elif field.field_type == 'datetime' %}
+                            <input type="datetime-local" 
+                                   id="field_{{ field.id }}" 
+                                   name="field_{{ field.id }}"
+                                   value="{{ field.default_value or '' }}"
+                                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                   {% if field.is_required %}required{% endif %}
+                                   {% if field.is_readonly %}readonly{% endif %}>
+                            
+                            <!-- DROPDOWN -->
+                            {% elif field.field_type == 'dropdown' %}
+                            <select id="field_{{ field.id }}" 
+                                    name="field_{{ field.id }}"
+                                    class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    {% if field.is_required %}required{% endif %}
+                                    {% if field.is_readonly %}disabled{% endif %}>
+                                <option value="">{% trans %}Select...{% endtrans %}</option>
+                                {% for option in field.options %}
+                                <option value="{{ option.option_value }}" {% if option.is_default %}selected{% endif %}>{{ option.option_label }}</option>
+                                {% endfor %}
+                            </select>
+                            
+                            <!-- RADIO -->
+                            {% elif field.field_type == 'radio' %}
+                            <div class="space-y-2">
+                                {% for option in field.options %}
+                                <label class="flex items-center p-3 bg-gray-800/50 rounded-lg cursor-pointer hover:bg-gray-800 transition-colors">
+                                    <input type="radio" 
+                                           name="field_{{ field.id }}" 
+                                           value="{{ option.option_value }}"
+                                           {% if option.is_default %}checked{% endif %}
+                                           class="w-4 h-4 mr-3 text-blue-600"
+                                           {% if field.is_required %}required{% endif %}
+                                           {% if field.is_readonly %}disabled{% endif %}>
+                                    <span class="text-white">{{ option.option_label }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                            
+                            <!-- CHECKBOX -->
+                            {% elif field.field_type == 'checkbox' %}
+                            <div class="space-y-2">
+                                {% for option in field.options %}
+                                <label class="flex items-center p-3 bg-gray-800/50 rounded-lg cursor-pointer hover:bg-gray-800 transition-colors">
+                                    <input type="checkbox" 
+                                           name="field_{{ field.id }}_{{ loop.index0 }}" 
+                                           value="{{ option.option_value }}"
+                                           class="w-4 h-4 mr-3 text-blue-600 rounded"
+                                           {% if field.is_readonly %}disabled{% endif %}>
+                                    <span class="text-white">{{ option.option_label }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                            
+                            <!-- TOGGLE -->
+                            {% elif field.field_type == 'toggle' %}
+                            <div class="flex items-center">
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" 
+                                           id="field_{{ field.id }}" 
+                                           name="field_{{ field.id }}"
+                                           value="1"
+                                           class="sr-only peer"
+                                           {% if field.default_value == '1' %}checked{% endif %}
+                                           {% if field.is_readonly %}disabled{% endif %}>
+                                    <div class="w-11 h-6 bg-gray-700 peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
+                                <span class="ml-3 text-sm text-gray-400">{% trans %}Enable/Disable{% endtrans %}</span>
+                            </div>
+                            
+                            <!-- EMAIL -->
+                            {% elif field.field_type == 'email' %}
+                            <input type="email" 
+                                   id="field_{{ field.id }}" 
+                                   name="field_{{ field.id }}"
+                                   placeholder="email@example.com"
+                                   value="{{ field.default_value or '' }}"
+                                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                   {% if field.is_required %}required{% endif %}
+                                   {% if field.is_readonly %}readonly{% endif %}>
+                            
+                            <!-- PHONE -->
+                            {% elif field.field_type == 'phone' %}
+                            <input type="tel" 
+                                   id="field_{{ field.id }}" 
+                                   name="field_{{ field.id }}"
+                                   placeholder="+966 XX XXX XXXX"
+                                   value="{{ field.default_value or '' }}"
+                                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                   {% if field.is_required %}required{% endif %}
+                                   {% if field.is_readonly %}readonly{% endif %}>
+                            
+                            <!-- URL -->
+                            {% elif field.field_type == 'url' %}
+                            <input type="url" 
+                                   id="field_{{ field.id }}" 
+                                   name="field_{{ field.id }}"
+                                   placeholder="https://"
+                                   value="{{ field.default_value or '' }}"
+                                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                   {% if field.is_required %}required{% endif %}
+                                   {% if field.is_readonly %}readonly{% endif %}>
+                            
+                            <!-- FILE -->
+                            {% elif field.field_type == 'file' %}
+                            <div class="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center hover:border-gray-600 transition-colors">
+                                <input type="file" 
+                                       id="field_{{ field.id }}" 
+                                       name="field_{{ field.id }}"
+                                       class="hidden"
+                                       accept="{{ field.accepted_file_types or '*' }}"
+                                       {% if field.is_required %}required{% endif %}
+                                       {% if field.is_readonly %}disabled{% endif %}
+                                       onchange="handleFileSelect(this)">
+                                <label for="field_{{ field.id }}" class="cursor-pointer">
+                                    <i class="fas fa-cloud-upload-alt text-4xl text-gray-600 mb-2"></i>
+                                    <p class="text-gray-400 text-sm">{% trans %}Click to upload or drag and drop{% endtrans %}</p>
+                                    <p class="text-gray-500 text-xs mt-1">{{ field.help_text or 'Any file type' }}</p>
+                                </label>
+                                <div id="file-preview-{{ field.id }}" class="mt-3 hidden">
+                                    <p class="text-green-400 text-sm"><i class="fas fa-check mr-1"></i><span class="filename"></span></p>
+                                </div>
+                            </div>
+                            
+                            <!-- IMAGE -->
+                            {% elif field.field_type == 'image' %}
+                            <div class="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center hover:border-gray-600 transition-colors">
+                                <input type="file" 
+                                       id="field_{{ field.id }}" 
+                                       name="field_{{ field.id }}"
+                                       class="hidden"
+                                       accept="image/*"
+                                       {% if field.is_required %}required{% endif %}
+                                       {% if field.is_readonly %}disabled{% endif %}
+                                       onchange="handleImageSelect(this)">
+                                <label for="field_{{ field.id }}" class="cursor-pointer">
+                                    <i class="fas fa-image text-4xl text-gray-600 mb-2"></i>
+                                    <p class="text-gray-400 text-sm">{% trans %}Click to upload image{% endtrans %}</p>
+                                </label>
+                                <img id="image-preview-{{ field.id }}" class="mt-3 max-h-32 mx-auto hidden">
+                            </div>
+                            
+                            <!-- SIGNATURE -->
+                            {% elif field.field_type == 'signature' %}
+                            <div class="border-2 border-dashed border-gray-700 rounded-lg p-4 bg-gray-800/50">
+                                <canvas id="signature-canvas-{{ field.id }}" class="w-full h-32 bg-white rounded cursor-crosshair"></canvas>
+                                <div class="flex justify-between items-center mt-2">
+                                    <p class="text-gray-500 text-xs">{% trans %}Draw your signature above{% endtrans %}</p>
+                                    <button type="button" onclick="clearSignature({{ field.id }})" class="text-sm text-red-400 hover:text-red-300">
+                                        <i class="fas fa-eraser mr-1"></i>{% trans %}Clear{% endtrans %}
+                                    </button>
+                                </div>
+                                <input type="hidden" id="field_{{ field.id }}" name="field_{{ field.id }}" class="signature-data">
+                            </div>
+                            
+                            <!-- TABLE / LINE ITEMS -->
+                            {% elif field.field_type == 'table' %}
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm" id="table-{{ field.id }}">
+                                    <thead>
+                                        <tr class="border-b border-gray-700">
+                                            {% for col in field.columns %}
+                                            <th class="text-left py-2 px-3 text-gray-400 font-medium">{{ col.column_label }}</th>
+                                            {% endfor %}
+                                            <th class="w-10"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="table-body">
+                                        <tr class="border-b border-gray-800" data-row-index="0">
+                                            {% for col in field.columns %}
+                                            <td class="py-2 px-1">
+                                                {% if col.column_type == 'text' %}
+                                                <input type="text" name="table_{{ field.id }}_0_{{ col.id }}" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm" {% if col.is_required %}required{% endif %}>
+                                                {% elif col.column_type == 'number' or col.column_type == 'decimal' %}
+                                                <input type="number" name="table_{{ field.id }}_0_{{ col.id }}" step="0.01" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm" {% if col.is_required %}required{% endif %}>
+                                                {% elif col.column_type == 'dropdown' %}
+                                                <select name="table_{{ field.id }}_0_{{ col.id }}" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm">
+                                                    <option value="">--</option>
+                                                </select>
+                                                {% endif %}
+                                            </td>
+                                            {% endfor %}
+                                            <td class="py-2">
+                                                <button type="button" onclick="removeTableRow(this, {{ field.id }})" class="text-red-400 hover:text-red-300 p-1">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <input type="hidden" name="row_count_{{ field.id }}" id="row-count-{{ field.id }}" value="1">
+                                <button type="button" onclick="addTableRow({{ field.id }})" class="mt-2 text-sm text-blue-400 hover:text-blue-300">
+                                    <i class="fas fa-plus mr-1"></i>{% trans %}Add Row{% endtrans %}
+                                </button>
+                            </div>
+                            
+                            <!-- USER PICKER -->
+                            {% elif field.field_type == 'user_picker' %}
+                            <div class="relative">
+                                <input type="text" 
+                                       id="field_{{ field.id }}" 
+                                       name="field_{{ field.id }}"
+                                       placeholder="{% trans %}Search for user...{% endtrans %}"
+                                       class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                       {% if field.is_required %}required{% endif %}>
+                                <i class="fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+                            </div>
+                            
+                            <!-- APPROVAL DECISION -->
+                            {% elif field.field_type == 'approval_decision' %}
+                            <div class="flex gap-3">
+                                <button type="submit" name="action" value="approve" class="flex-1 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors">
+                                    <i class="fas fa-check mr-2"></i>{% trans %}Approve{% endtrans %}
+                                </button>
+                                <button type="button" onclick="showRejectModal()" class="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors">
+                                    <i class="fas fa-times mr-2"></i>{% trans %}Reject{% endtrans %}
+                                </button>
+                                <button type="button" onclick="showReturnModal()" class="flex-1 px-4 py-3 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg font-medium transition-colors">
+                                    <i class="fas fa-undo mr-2"></i>{% trans %}Return{% endtrans %}
+                                </button>
+                            </div>
+                            
+                            <!-- COMMENT -->
+                            {% elif field.field_type == 'comment' %}
+                            <div class="relative">
+                                <textarea id="field_{{ field.id }}" 
+                                          name="field_{{ field.id }}"
+                                          placeholder="{% trans %}Enter your comment...{% endtrans %}"
+                                          rows="3"
+                                          class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                          {% if field.is_required %}required{% endif %}></textarea>
+                            </div>
+                            
+                            {% else %}
+                            <input type="text" 
+                                   id="field_{{ field.id }}" 
+                                   name="field_{{ field.id }}"
+                                   class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white"
+                                   {% if field.is_required %}required{% endif %}>
+                            {% endif %}
+                            
+                            {% if field.help_text %}
+                            <p class="text-xs text-gray-500 mt-1">{{ field.help_text }}</p>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+                
+                <!-- Attachments Section -->
+                <div class="glass-panel rounded-xl p-6 mb-6">
+                    <h2 class="text-lg font-semibold text-white mb-4">
+                        <i class="fas fa-paperclip mr-2"></i>{% trans %}Attachments{% endtrans %}
+                    </h2>
+                    <div class="border-2 border-dashed border-gray-700 rounded-lg p-8 text-center hover:border-gray-600 transition-colors">
+                        <input type="file" id="attachments" name="attachments" class="hidden" multiple onchange="handleAttachmentSelect(this)">
+                        <label for="attachments" class="cursor-pointer">
+                            <i class="fas fa-cloud-upload-alt text-4xl text-gray-600 mb-3"></i>
+                            <p class="text-gray-400">{% trans %}Click to attach files or drag and drop{% endtrans %}</p>
+                            <p class="text-gray-500 text-sm mt-1">{% trans %}PDF, Images, Documents up to 10MB{% endtrans %}</p>
+                        </label>
+                        <div id="attachment-list" class="mt-4 space-y-2"></div>
+                    </div>
+                </div>
+                
+                <!-- Form Actions -->
+                <div class="flex justify-between items-center">
+                    <div class="flex gap-3">
+                        <button type="submit" name="action" value="draft" class="px-6 py-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors">
+                            <i class="fas fa-save mr-2"></i>{% trans %}Save as Draft{% endtrans %}
+                        </button>
+                    </div>
+                    <button type="submit" name="action" value="submit" class="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                        <i class="fas fa-paper-plane mr-2"></i>{% trans %}Submit for Approval{% endtrans %}
+                    </button>
+                </div>
+            </form>
+        </main>
+    </div>
+    
+    <script>
+        // Signature pads storage
+        const signaturePads = {};
+        
+        // Initialize signature pads
+        document.querySelectorAll('canvas[id^="signature-canvas-"]').forEach(canvas => {
+            const fieldId = canvas.id.replace('signature-canvas-', '');
+            const signaturePad = new SignaturePad(canvas, {
+                backgroundColor: 'rgb(255, 255, 255)',
+                penColor: 'rgb(0, 0, 0)'
+            });
+            signaturePads[fieldId] = signaturePad;
+            
+            // Save signature data on change
+            signaturePad.onEnd = () => {
+                const data = signaturePad.toDataURL();
+                document.querySelector(`input[name="field_${fieldId}"]`).value = data;
+            };
+        });
+        
+        function clearSignature(fieldId) {
+            if (signaturePads[fieldId]) {
+                signaturePads[fieldId].clear();
+                document.querySelector(`input[name="field_${fieldId}"]`).value = '';
+            }
+        }
+        
+        // Toggle collapsible sections
+        function toggleSection(header) {
+            const panel = header.nextElementSibling;
+            const icon = header.querySelector('i');
+            if (panel.classList.contains('hidden')) {
+                panel.classList.remove('hidden');
+                icon.style.transform = 'rotate(0deg)';
+            } else {
+                panel.classList.add('hidden');
+                icon.style.transform = 'rotate(-90deg)';
+            }
+        }
+        
+        // File handling
+        function handleFileSelect(input) {
+            if (input.files.length > 0) {
+                const preview = document.getElementById('file-preview-' + input.id.replace('field_', ''));
+                preview.classList.remove('hidden');
+                preview.querySelector('.filename').textContent = input.files[0].name;
+            }
+        }
+        
+        function handleImageSelect(input) {
+            if (input.files.length > 0) {
+                const preview = document.getElementById('image-preview-' + input.id.replace('field_', ''));
+                const file = input.files[0];
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    preview.src = e.target.result;
+                    preview.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+        
+        function handleAttachmentSelect(input) {
+            const list = document.getElementById('attachment-list');
+            list.innerHTML = '';
+            Array.from(input.files).forEach(file => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center justify-between p-2 bg-gray-800 rounded';
+                div.innerHTML = `
+                    <span class="text-sm text-white"><i class="fas fa-file mr-2"></i>${file.name}</span>
+                    <span class="text-xs text-gray-500">${(file.size / 1024).toFixed(1)} KB</span>
+                `;
+                list.appendChild(div);
+            });
+        }
+        
+        // Table row management
+        function addTableRow(fieldId) {
+            const table = document.getElementById(`table-${fieldId}`);
+            const tbody = table.querySelector('.table-body');
+            const rowCount = parseInt(document.getElementById(`row-count-${fieldId}`).value);
+            const columns = table.querySelectorAll('thead th').length - 1; // Exclude action column
+            
+            const tr = document.createElement('tr');
+            tr.className = 'border-b border-gray-800';
+            tr.dataset.rowIndex = rowCount;
+            
+            let html = '';
+            for (let i = 0; i < columns; i++) {
+                html += `<td class="py-2 px-1">
+                    <input type="text" name="table_${fieldId}_${rowCount}_${i}" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-white text-sm">
+                </td>`;
+            }
+            html += `<td class="py-2"><button type="button" onclick="removeTableRow(this, ${fieldId})" class="text-red-400 hover:text-red-300 p-1"><i class="fas fa-times"></i></button></td>`;
+            
+            tr.innerHTML = html;
+            tbody.appendChild(tr);
+            document.getElementById(`row-count-${fieldId}`).value = rowCount + 1;
+        }
+        
+        function removeTableRow(btn, fieldId) {
+            const table = document.getElementById(`table-${fieldId}`);
+            const tbody = table.querySelector('.table-body');
+            if (tbody.querySelectorAll('tr').length > 1) {
+                btn.closest('tr').remove();
+                // Reindex rows
+                tbody.querySelectorAll('tr').forEach((tr, idx) => {
+                    tr.dataset.rowIndex = idx;
+                    tr.querySelectorAll('input').forEach(input => {
+                        const nameParts = input.name.split('_');
+                        nameParts[2] = idx;
+                        input.name = nameParts.join('_');
+                    });
+                });
+                document.getElementById(`row-count-${fieldId}`).value = tbody.querySelectorAll('tr').length;
+            }
+        }
+        
+        // Form submission handling
+        document.getElementById('submission-form').addEventListener('submit', function(e) {
+            // Clear empty signature values if using SignaturePad
+            Object.keys(signaturePads).forEach(fieldId => {
+                const input = document.querySelector(`input[name="field_${fieldId}"]`);
+                if (input && !signaturePads[fieldId].toDataURL().includes('data:image')) {
+                    input.value = '';
+                }
+            });
+        });
+    </script>
+</body>
+</html>

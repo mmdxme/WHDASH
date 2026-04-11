@@ -1,20 +1,236 @@
 {% extends "base.html" %}
+
 {% block content %}
 <div class="space-y-6">
-    <div class="flex items-center justify-between"><div><h1 class="text-3xl font-bold text-white">{{ t('announcements', 'Announcements') }}</h1></div></div>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {% for a in announcements %}
-        <div class="glass-panel rounded-2xl p-6">
-            <div class="flex items-start justify-between mb-4">
-                <h3 class="text-lg font-bold text-white">{{ a.title }}</h3>
-                <span class="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full">{{ a.announcement_type }}</span>
-            </div>
-            <p class="text-slate-300 mb-4">{{ a.content }}</p>
-            <div class="text-xs text-slate-500">{{ a.created_at }} {% if a.created_by_name %}by {{ a.created_by_name }}{% endif %}</div>
+    <!-- Page Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ t('announcements', 'Announcements') }}</h1>
+            <p class="text-slate-400 mt-1">{{ total }} {{ t('announcements_found', 'announcements found') }}</p>
         </div>
-        {% else %}
-        <div class="col-span-full glass-panel rounded-2xl p-12 text-center text-slate-500">{{ t('no_announcements', 'No announcements found') }}</div>
+        <div class="flex items-center gap-3">
+            {% if session.user_role in ['Admin', 'HRManager'] %}
+            <a href="{{ url_for('hr.announcements_new') }}" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all flex items-center gap-2 shadow-lg shadow-brand-600/20">
+                <i class="fa-solid fa-plus"></i>
+                {{ t('create_announcement', 'Create Announcement') }}
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-6">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('search', 'Search') }}</label>
+                <input type="text" name="search" value="{{ search }}" placeholder="{{ t('search_announcements', 'Search title or content...') }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-600 focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/50 transition-all">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('type', 'Type') }}</label>
+                <select name="announcement_type" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/50 transition-all">
+                    <option value="">{{ t('all_types', 'All Types') }}</option>
+                    <option value="General" {% if announcement_type == 'General' %}selected{% endif %}>{{ t('general', 'General') }}</option>
+                    <option value="Policy" {% if announcement_type == 'Policy' %}selected{% endif %}>{{ t('policy', 'Policy') }}</option>
+                    <option value="Event" {% if announcement_type == 'Event' %}selected{% endif %}>{{ t('event', 'Event') }}</option>
+                    <option value="Urgent" {% if announcement_type == 'Urgent' %}selected{% endif %}>{{ t('urgent', 'Urgent') }}</option>
+                    <option value="HR" {% if announcement_type == 'HR' %}selected{% endif %}>{{ t('hr', 'HR') }}</option>
+                    <option value="IT" {% if announcement_type == 'IT' %}selected{% endif %}>{{ t('it', 'IT') }}</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('priority', 'Priority') }}</label>
+                <select name="priority" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/50 transition-all">
+                    <option value="">{{ t('all_priorities', 'All Priorities') }}</option>
+                    <option value="Low" {% if priority == 'Low' %}selected{% endif %}>{{ t('low', 'Low') }}</option>
+                    <option value="Normal" {% if priority == 'Normal' %}selected{% endif %}>{{ t('normal', 'Normal') }}</option>
+                    <option value="High" {% if priority == 'High' %}selected{% endif %}>{{ t('high', 'High') }}</option>
+                    <option value="Critical" {% if priority == 'Critical' %}selected{% endif %}>{{ t('critical', 'Critical') }}</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('status', 'Status') }}</label>
+                <select name="is_active" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/50 transition-all">
+                    <option value="">{{ t('all_statuses', 'All Statuses') }}</option>
+                    <option value="1" {% if is_active == '1' %}selected{% endif %}>{{ t('active', 'Active') }}</option>
+                    <option value="0" {% if is_active == '0' %}selected{% endif %}>{{ t('inactive', 'Inactive') }}</option>
+                </select>
+            </div>
+            <div class="lg:col-span-4 flex items-end gap-3">
+                <button type="submit" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-search"></i>
+                    {{ t('filter', 'Filter') }}
+                </button>
+                <a href="{{ url_for('hr.announcements_list') }}" class="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-times"></i>
+                    {{ t('clear', 'Clear') }}
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Announcements Grid -->
+    {% if announcements %}
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {% for ann in announcements %}
+        <div class="glass-panel rounded-2xl p-6 hover:border-brand-500/30 hover:shadow-xl hover:shadow-brand-500/5 transition-all duration-300 group cursor-pointer" onclick="window.location.href='{{ url_for('hr.announcements_view', id=ann.id) }}'">
+            <!-- Header -->
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    {% if ann.announcement_type == 'Urgent' %}
+                    <div class="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                        <i class="fa-solid fa-exclamation-circle text-red-400"></i>
+                    </div>
+                    {% elif ann.announcement_type == 'Policy' %}
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                        <i class="fa-solid fa-file-contract text-blue-400"></i>
+                    </div>
+                    {% elif ann.announcement_type == 'Event' %}
+                    <div class="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                        <i class="fa-solid fa-calendar-star text-purple-400"></i>
+                    </div>
+                    {% elif ann.announcement_type == 'HR' %}
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                        <i class="fa-solid fa-users text-emerald-400"></i>
+                    </div>
+                    {% elif ann.announcement_type == 'IT' %}
+                    <div class="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+                        <i class="fa-solid fa-laptop-code text-cyan-400"></i>
+                    </div>
+                    {% else %}
+                    <div class="w-10 h-10 rounded-xl bg-brand-500/10 flex items-center justify-center">
+                        <i class="fa-solid fa-bullhorn text-brand-400"></i>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <h3 class="text-lg font-bold text-white group-hover:text-brand-400 transition-colors line-clamp-1">{{ ann.title }}</h3>
+                        <span class="inline-block px-2 py-0.5 {% if ann.announcement_type == 'Urgent' %}bg-red-500/10 text-red-400{% elif ann.announcement_type == 'Policy' %}bg-blue-500/10 text-blue-400{% elif ann.announcement_type == 'Event' %}bg-purple-500/10 text-purple-400{% elif ann.announcement_type == 'HR' %}bg-emerald-500/10 text-emerald-400{% elif ann.announcement_type == 'IT' %}bg-cyan-500/10 text-cyan-400{% else %}bg-brand-500/10 text-brand-400{% endif %} text-xs font-bold rounded-full mt-1">{{ t(ann.announcement_type|lower, ann.announcement_type) }}</span>
+                    </div>
+                </div>
+                {% if ann.is_active %}
+                <span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ t('active', 'Active') }}</span>
+                {% else %}
+                <span class="px-2 py-1 bg-slate-500/10 text-slate-400 text-xs font-bold rounded-full">{{ t('inactive', 'Inactive') }}</span>
+                {% endif %}
+            </div>
+
+            <!-- Content Preview -->
+            <p class="text-slate-300 text-sm mb-4 line-clamp-3">{{ ann.content }}</p>
+
+            <!-- Meta Info -->
+            <div class="space-y-2 mb-4">
+                {% if ann.valid_from or ann.valid_to %}
+                <div class="flex items-center gap-2 text-xs text-slate-500">
+                    <i class="fa-solid fa-calendar-alt"></i>
+                    <span>
+                        {% if ann.valid_from and ann.valid_to %}
+                        {{ ann.valid_from }} — {{ ann.valid_to }}
+                        {% elif ann.valid_from %}
+                        {{ t('from', 'From') }} {{ ann.valid_from }}
+                        {% elif ann.valid_to %}
+                        {{ t('until', 'Until') }} {{ ann.valid_to }}
+                        {% endif %}
+                    </span>
+                </div>
+                {% endif %}
+                {% if ann.created_by_name %}
+                <div class="flex items-center gap-2 text-xs text-slate-500">
+                    <i class="fa-solid fa-user"></i>
+                    <span>{{ ann.created_by_name }}</span>
+                </div>
+                {% endif %}
+                <div class="flex items-center gap-2 text-xs text-slate-500">
+                    <i class="fa-solid fa-clock"></i>
+                    <span>{{ ann.created_at }}</span>
+                </div>
+            </div>
+
+            <!-- Priority & Actions -->
+            <div class="flex items-center justify-between pt-4 border-t border-white/5">
+                <div class="flex items-center gap-2">
+                    {% if ann.priority == 'Critical' %}
+                    <span class="flex items-center gap-1 px-2 py-1 bg-red-500/10 text-red-400 text-xs font-bold rounded-lg">
+                        <i class="fa-solid fa-fire"></i> {{ t('critical', 'Critical') }}
+                    </span>
+                    {% elif ann.priority == 'High' %}
+                    <span class="flex items-center gap-1 px-2 py-1 bg-orange-500/10 text-orange-400 text-xs font-bold rounded-lg">
+                        <i class="fa-solid fa-arrow-up"></i> {{ t('high', 'High') }}
+                    </span>
+                    {% elif ann.priority == 'Low' %}
+                    <span class="flex items-center gap-1 px-2 py-1 bg-slate-500/10 text-slate-400 text-xs font-bold rounded-lg">
+                        <i class="fa-solid fa-arrow-down"></i> {{ t('low', 'Low') }}
+                    </span>
+                    {% else %}
+                    <span class="flex items-center gap-1 px-2 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-lg">
+                        {{ t('normal', 'Normal') }}
+                    </span>
+                    {% endif %}
+                </div>
+                <div class="flex items-center gap-1">
+                    {% if session.user_role in ['Admin', 'HRManager'] %}
+                    <a href="{{ url_for('hr.announcements_edit', id=ann.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="{{ t('edit', 'Edit') }}" onclick="event.stopPropagation()">
+                        <i class="fa-solid fa-edit"></i>
+                    </a>
+                    <form method="POST" action="{{ url_for('hr.announcements_delete', id=ann.id) }}" onclick="event.stopPropagation()" onsubmit="return confirm('{{ t('confirm_delete_announcement', 'Delete this announcement?') }}')">
+                        <button type="submit" class="p-2 hover:bg-red-500/10 rounded-lg text-slate-400 hover:text-red-400 transition-all" title="{{ t('delete', 'Delete') }}">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </form>
+                    {% endif %}
+                    <a href="{{ url_for('hr.announcements_view', id=ann.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="{{ t('view', 'View') }}" onclick="event.stopPropagation()">
+                        <i class="fa-solid fa-eye"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
         {% endfor %}
     </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="glass-panel rounded-2xl px-6 py-4 flex items-center justify-between">
+        <div class="text-sm text-slate-400">
+            {{ t('page', 'Page') }} {{ page }} {{ t('of', 'of') }} {{ total_pages }}
+        </div>
+        <div class="flex items-center gap-2">
+            {% if page > 1 %}
+            <a href="?page={{ page - 1 }}&search={{ search }}&announcement_type={{ announcement_type }}&priority={{ priority }}&is_active={{ is_active }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all">
+                <i class="fa-solid fa-chevron-left"></i>
+            </a>
+            {% endif %}
+            {% for p in range(1, total_pages + 1) %}
+                {% if p >= page - 2 and p <= page + 2 %}
+            <a href="?page={{ p }}&search={{ search }}&announcement_type={{ announcement_type }}&priority={{ priority }}&is_active={{ is_active }}" class="px-3 py-1.5 {% if p == page %}bg-brand-600 text-white{% else %}bg-white/5 hover:bg-white/10 text-white{% endif %} rounded-lg transition-all">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if page < total_pages %}
+            <a href="?page={{ page + 1 }}&search={{ search }}&announcement_type={{ announcement_type }}&priority={{ priority }}&is_active={{ is_active }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all">
+                <i class="fa-solid fa-chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <!-- Empty State -->
+    <div class="glass-panel rounded-2xl p-16 text-center">
+        <div class="w-20 h-20 rounded-2xl bg-brand-500/10 flex items-center justify-center mx-auto mb-6">
+            <i class="fa-solid fa-bullhorn text-4xl text-brand-400"></i>
+        </div>
+        <h3 class="text-xl font-bold text-white mb-2">{{ t('no_announcements', 'No Announcements') }}</h3>
+        <p class="text-slate-400 mb-6 max-w-md mx-auto">{{ t('no_announcements_desc', 'There are no announcements matching your filters. Try adjusting your search criteria or create a new announcement.') }}</p>
+        <div class="flex items-center justify-center gap-3">
+            <a href="{{ url_for('hr.announcements_list') }}" class="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all">
+                <i class="fa-solid fa-times mr-2"></i>{{ t('clear_filters', 'Clear Filters') }}
+            </a>
+            {% if session.user_role in ['Admin', 'HRManager'] %}
+            <a href="{{ url_for('hr.announcements_new') }}" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-plus"></i>
+                {{ t('create_announcement', 'Create Announcement') }}
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

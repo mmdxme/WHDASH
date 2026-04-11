@@ -1,7 +1,7 @@
 """
 Centralized Settings and Administration Data Model
 =================================================
-This module defines the comprehensive unified settings architecture for the entire WHDASH platform.
+This module defines the comprehensive unified settings architecture for the entire MMDx platform.
 
 SCOPING LEVELS:
 - Global (platform-wide defaults)
@@ -673,7 +673,7 @@ WORKFLOW_TEMPLATES = {
 # ============================================================================
 
 DEFAULT_GENERAL_SETTINGS = {
-    'platform_name': {'value': 'WHDASH', 'type': 'string', 'description': 'Platform display name'},
+    'platform_name': {'value': 'MMDx', 'type': 'string', 'description': 'Platform display name'},
     'platform_version': {'value': '2.0.0', 'type': 'string', 'description': 'Current platform version'},
     'company_name': {'value': 'My Company', 'type': 'string', 'description': 'Primary company name'},
     'company_address': {'value': '', 'type': 'string', 'description': 'Company address'},
@@ -687,7 +687,7 @@ DEFAULT_GENERAL_SETTINGS = {
 
 DEFAULT_LOCALIZATION_SETTINGS = {
     'default_language': {'value': 'en', 'type': 'string', 'description': 'Default system language'},
-    'available_languages': {'value': 'en,ar,fa', 'type': 'string', 'description': 'Available languages'},
+    'available_languages': {'value': 'en,ar,fa,ru,hi,es,zh,de', 'type': 'string', 'description': 'Available languages'},
     'default_timezone': {'value': 'Asia/Dubai', 'type': 'string', 'description': 'Default timezone'},
     'date_format': {'value': 'DD/MM/YYYY', 'type': 'string', 'description': 'Date format'},
     'time_format': {'value': '24h', 'type': 'string', 'description': 'Time format (12h or 24h)'},
@@ -772,15 +772,48 @@ DEFAULT_LOGISTICS_SETTINGS = {
 }
 
 DEFAULT_HR_SETTINGS = {
-    'hr_default_probation_months': {'value': '3', 'type': 'integer', 'description': 'Default probation period (months)'},
-    'hr_default_annual_leave_days': {'value': '21', 'type': 'integer', 'description': 'Default annual leave days'},
-    'hr_work_week_days': {'value': '5', 'type': 'integer', 'description': 'Working days per week'},
+    # General HR Settings
+    'hr_fiscal_year_start': {'value': '1', 'type': 'integer', 'description': 'Fiscal year start month (1-12)'},
+    'hr_default_currency': {'value': 'USD', 'type': 'string', 'description': 'Default currency for payroll'},
+    'hr_standard_work_hours': {'value': '8', 'type': 'integer', 'description': 'Standard work hours per day'},
+    'hr_work_days_per_week': {'value': '5', 'type': 'integer', 'description': 'Working days per week'},
+    'hr_default_department_id': {'value': '', 'type': 'string', 'description': 'Default department for new employees'},
+    'hr_probation_months': {'value': '3', 'type': 'integer', 'description': 'Default probation period (months)'},
+
+    # Attendance & Leave Settings
+    'hr_enable_attendance': {'value': '1', 'type': 'boolean', 'description': 'Enable attendance tracking'},
+    'hr_auto_deduct_leave': {'value': '1', 'type': 'boolean', 'description': 'Auto-deduct unused leave'},
+    'hr_allow_negative_leave': {'value': '0', 'type': 'boolean', 'description': 'Allow negative leave balance'},
+    'hr_late_tolerance_minutes': {'value': '15', 'type': 'integer', 'description': 'Late arrival tolerance (minutes)'},
+    'hr_max_leave_carryover': {'value': '5', 'type': 'integer', 'description': 'Max leave carryover (days)'},
+    'hr_leave_advance_days': {'value': '7', 'type': 'integer', 'description': 'Leave request advance days'},
+
+    # Payroll Settings
+    'hr_enable_payroll': {'value': '1', 'type': 'boolean', 'description': 'Enable payroll module'},
+    'hr_payroll_auto_calculate': {'value': '1', 'type': 'boolean', 'description': 'Auto-calculate salaries'},
+    'hr_enable_overtime': {'value': '1', 'type': 'boolean', 'description': 'Enable overtime tracking'},
+    'hr_overtime_multiplier': {'value': '1.5', 'type': 'float', 'description': 'Overtime rate multiplier'},
+    'hr_pay_frequency': {'value': 'monthly', 'type': 'string', 'description': 'Pay frequency (monthly/bi-weekly/weekly)'},
+    'hr_max_loan_amount': {'value': '5000', 'type': 'float', 'description': 'Maximum loan amount'},
+    'hr_loan_repayment_months': {'value': '12', 'type': 'integer', 'description': 'Default loan repayment months'},
+
+    # Overtime Rates (legacy)
     'hr_overtime_rate_weekday': {'value': '1.5', 'type': 'float', 'description': 'Weekday overtime multiplier'},
     'hr_overtime_rate_weekend': {'value': '2.0', 'type': 'float', 'description': 'Weekend overtime multiplier'},
     'hr_overtime_rate_holiday': {'value': '2.5', 'type': 'float', 'description': 'Holiday overtime multiplier'},
     'hr_lateness_threshold_minutes': {'value': '15', 'type': 'integer', 'description': 'Lateness threshold (minutes)'},
     'hr_leave_carry_forward_days': {'value': '5', 'type': 'integer', 'description': 'Leave carry-forward max days'},
+    'hr_default_probation_months': {'value': '3', 'type': 'integer', 'description': 'Default probation period (months)'},
+    'hr_default_annual_leave_days': {'value': '21', 'type': 'integer', 'description': 'Default annual leave days'},
+    'hr_work_week_days': {'value': '5', 'type': 'integer', 'description': 'Working days per week'},
     'hr_payroll_frequency': {'value': 'monthly', 'type': 'string', 'description': 'Payroll frequency'},
+
+    # Documents & Compliance
+    'hr_require_photo': {'value': '1', 'type': 'boolean', 'description': 'Require employee photo'},
+    'hr_require_id_copy': {'value': '1', 'type': 'boolean', 'description': 'Require ID copy'},
+    'hr_require_contract': {'value': '1', 'type': 'boolean', 'description': 'Require employment contract'},
+    'hr_enable_doc_expiry_alert': {'value': '1', 'type': 'boolean', 'description': 'Enable document expiry alerts'},
+    'hr_doc_expiry_alert_days': {'value': '30', 'type': 'integer', 'description': 'Document expiry alert days before'},
 }
 
 DEFAULT_MARKETING_SETTINGS = {
@@ -1537,6 +1570,9 @@ def _seed_default_settings():
                 ''
             )
     
+    # Seed notification rules
+    _seed_notification_rules()
+
     # Seed workflows
     for wf_type, wf_def in WORKFLOW_TEMPLATES.items():
         existing = get_workflow(wf_type)
@@ -1549,6 +1585,165 @@ def _seed_default_settings():
                 True,
                 []
             )
+
+
+def _seed_notification_rules():
+    """Seed default notification rules."""
+    rules = [
+        {
+            'rule_code': 'LOW_STOCK_ALERT',
+            'rule_name': 'Low Stock Alert',
+            'module': 'WMS',
+            'alert_type': 'STOCK',
+            'threshold_value': '20',
+            'severity': 'HIGH',
+            'recipients': 'warehouse_manager',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        },
+        {
+            'rule_code': 'REORDER_ALERT',
+            'rule_name': 'Reorder Threshold Alert',
+            'module': 'WMS',
+            'alert_type': 'STOCK',
+            'threshold_value': '30',
+            'severity': 'MEDIUM',
+            'recipients': 'purchasing_manager',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        },
+        {
+            'rule_code': 'INQUIRY_RESPONSE_SLA',
+            'rule_name': 'Inquiry Response SLA',
+            'module': 'SALES',
+            'alert_type': 'SLA',
+            'threshold_value': '24',
+            'severity': 'MEDIUM',
+            'recipients': 'sales_manager',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        },
+        {
+            'rule_code': 'QUOTATION_EXPIRY',
+            'rule_name': 'Quotation Expiry Alert',
+            'module': 'SALES',
+            'alert_type': 'EXPIRY',
+            'threshold_value': '7',
+            'severity': 'MEDIUM',
+            'recipients': 'sales_rep',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        },
+        {
+            'rule_code': 'DELIVERY_DELAY',
+            'rule_name': 'Delivery Delay Alert',
+            'module': 'LOGISTICS',
+            'alert_type': 'DELIVERY',
+            'threshold_value': '4',
+            'severity': 'HIGH',
+            'recipients': 'logistics_manager',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        },
+        {
+            'rule_code': 'CREDIT_LIMIT_EXCEEDED',
+            'rule_name': 'Credit Limit Exceeded',
+            'module': 'CRM',
+            'alert_type': 'CREDIT',
+            'threshold_value': '100',
+            'severity': 'HIGH',
+            'recipients': 'finance_manager',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        },
+        {
+            'rule_code': 'PAYMENT_OVERDUE',
+            'rule_name': 'Payment Overdue Alert',
+            'module': 'FINANCE',
+            'alert_type': 'PAYMENT',
+            'threshold_value': '30',
+            'severity': 'HIGH',
+            'recipients': 'finance_manager',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        },
+        {
+            'rule_code': 'EMPLOYEE_LEAVE_PENDING',
+            'rule_name': 'Pending Leave Request',
+            'module': 'HR',
+            'alert_type': 'APPROVAL',
+            'threshold_value': '3',
+            'severity': 'MEDIUM',
+            'recipients': 'hr_manager',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        },
+        {
+            'rule_code': 'CAMPAIGN_BUDGET_ALERT',
+            'rule_name': 'Campaign Budget Alert',
+            'module': 'MARKETING',
+            'alert_type': 'BUDGET',
+            'threshold_value': '80',
+            'severity': 'MEDIUM',
+            'recipients': 'marketing_manager',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        },
+        {
+            'rule_code': 'QUALITY_NCR',
+            'rule_name': 'Non-Conformance Reported',
+            'module': 'QUALITY',
+            'alert_type': 'QUALITY',
+            'threshold_value': '1',
+            'severity': 'HIGH',
+            'recipients': 'quality_manager',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        },
+        {
+            'rule_code': 'MAINTENANCE_DUE',
+            'rule_name': 'Maintenance Schedule Due',
+            'module': 'MAINTENANCE',
+            'alert_type': 'SCHEDULE',
+            'threshold_value': '7',
+            'severity': 'MEDIUM',
+            'recipients': 'maintenance_manager',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        },
+        {
+            'rule_code': 'API_RATE_LIMIT',
+            'rule_name': 'API Rate Limit Warning',
+            'module': 'INTEGRATIONS',
+            'alert_type': 'API',
+            'threshold_value': '80',
+            'severity': 'MEDIUM',
+            'recipients': 'system_admin',
+            'delivery_method': 'IN_APP',
+            'is_active': 1
+        }
+    ]
+
+    with get_db_context() as db:
+        for rule in rules:
+            existing = db.execute(
+                "SELECT id FROM notification_rules WHERE rule_code = ?",
+                (rule['rule_code'],)
+            ).fetchone()
+
+            if not existing:
+                db.execute("""
+                    INSERT INTO notification_rules
+                    (rule_code, rule_name, module, alert_type, threshold_value, severity,
+                     recipients, delivery_method, is_active)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    rule['rule_code'], rule['rule_name'], rule['module'], rule['alert_type'],
+                    rule['threshold_value'], rule['severity'], rule['recipients'],
+                    rule['delivery_method'], rule['is_active']
+                ))
+
+        db.commit()
 
 
 # ============================================================================

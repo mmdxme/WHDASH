@@ -1,10 +1,10 @@
 """
 ================================================================================
-WHDASH SYNTHETIC DATA SEEDING SYSTEM
+MMDx SYNTHETIC DATA SEEDING SYSTEM
 ================================================================================
 Enterprise-grade synthetic data generation for demo, testing, and QA.
 
-This system populates the WHDASH platform with realistic, relationally-correct,
+This system populates the MMDx platform with realistic, relationally-correct,
 cross-module-consistent synthetic data.
 
 USAGE:
@@ -1169,7 +1169,7 @@ class SyntheticDataSeeder:
         """Run all seeders."""
         self.start_time = datetime.now()
         print(f"\n{'='*60}")
-        print(f"WHDASH Synthetic Data Seeding System")
+        print(f"MMDx Synthetic Data Seeding System")
         print(f"Mode: {self.mode.upper()}")
         print(f"Started: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"{'='*60}\n")
@@ -1206,7 +1206,7 @@ HREmployeeSeeder = HRSeeder
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='WHDASH Synthetic Data Seeding System',
+        description='MMDx Synthetic Data Seeding System',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

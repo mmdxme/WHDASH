@@ -455,46 +455,57 @@ def register_ci_routes(app):
             search = request.args.get('search', '')
             customer_type = request.args.get('type', '')
             market = request.args.get('market', '')
-            salesperson = request.args.get('salesperson', '')
-            active_filter = request.args.get('active', '')
-            sort_by = request.args.get('sort', 'total_orders')
-            sort_dir = request.args.get('dir', 'desc')
-            
+            salesperson_list = request.args.getlist('salesperson') if request.args.getlist('salesperson') else ['']
+            active_filter_list = request.args.getlist('active') if request.args.getlist('active') else ['']
+            type_list = request.args.getlist('type') if request.args.getlist('type') else ['']
+            market_list = request.args.getlist('market') if request.args.getlist('market') else ['']
+
             query = "SELECT * FROM sdad_customers WHERE 1=1"
             count_query = "SELECT COUNT(*) as cnt FROM sdad_customers WHERE 1=1"
             params = []
-            
+
             if search:
                 query += " AND (name LIKE ? OR customer_code LIKE ? OR phone LIKE ?)"
                 count_query += " AND (name LIKE ? OR customer_code LIKE ? OR phone LIKE ?)"
                 params.extend([f'%{search}%', f'%{search}%', f'%{search}%'])
-            
-            if customer_type:
-                query += " AND location = ?"
-                count_query += " AND location = ?"
-                params.append(customer_type)
-            
-            if market == 'export':
-                query += " AND location = 'export'"
-                count_query += " AND location = 'export'"
-            elif market == 'local':
-                query += " AND location != 'export'"
-                count_query += " AND location != 'export'"
-            
-            if salesperson:
-                query += " AND salesperson_name = ?"
-                count_query += " AND salesperson_name = ?"
-                params.append(salesperson)
-            
-            if active_filter == 'active':
-                query += " AND active = 1"
-                count_query += " AND active = 1"
-            elif active_filter == 'inactive':
-                query += " AND active = 0"
-                count_query += " AND active = 0"
-            
+
+            if type_list and type_list != ['']:
+                placeholders = ','.join('?' * len(type_list))
+                query += f" AND location IN ({placeholders})"
+                count_query += f" AND location IN ({placeholders})"
+                params.extend(type_list)
+
+            if market_list and market_list != ['']:
+                market_clauses = []
+                for m in market_list:
+                    if m == 'export':
+                        market_clauses.append("location = 'export'")
+                    elif m == 'local':
+                        market_clauses.append("location != 'export'")
+                if market_clauses:
+                    clause = '(' + ' OR '.join(market_clauses) + ')'
+                    query += f" AND {clause}"
+                    count_query += f" AND {clause}"
+
+            if salesperson_list and salesperson_list != ['']:
+                placeholders = ','.join('?' * len(salesperson_list))
+                query += f" AND salesperson_name IN ({placeholders})"
+                count_query += f" AND salesperson_name IN ({placeholders})"
+                params.extend(salesperson_list)
+
+            if active_filter_list and active_filter_list != ['']:
+                active_clauses = []
+                for af in active_filter_list:
+                    if af == 'active':
+                        active_clauses.append('active = 1')
+                    elif af == 'inactive':
+                        active_clauses.append('active = 0')
+                if active_clauses:
+                    query += " AND (" + ' OR '.join(active_clauses) + ')'
+                    count_query += " AND (" + ' OR '.join(active_clauses) + ')'
+
             # Sorting
-            sort_col = 'total_orders' if sort_by == 'revenue' else 'name'
+            sort_col = 'total_orders' if sort_by == 'revenue' else sort_by if sort_by in ('name', 'total_orders', 'total_debt', 'credit_limit', 'last_purchase_date') else 'total_orders'
             query += f" ORDER BY {sort_col} {sort_dir} LIMIT {per_page} OFFSET {offset}"
             
             total_count = db.execute(count_query, params).fetchone()['cnt']
@@ -514,10 +525,10 @@ def register_ci_routes(app):
                 },
                 filters={
                     'search': search,
-                    'type': customer_type,
-                    'market': market,
-                    'salesperson': salesperson,
-                    'active': active_filter,
+                    'type': type_list,
+                    'market': market_list,
+                    'salesperson': salesperson_list,
+                    'active': active_filter_list,
                     'sort': sort_by,
                     'dir': sort_dir
                 }
@@ -623,6 +634,25 @@ def register_ci_routes(app):
         generate_alerts_for_customer(customer_id)
         flash("Customer profile enriched successfully.", "success")
         return redirect(url_for('ci_profile_detail', customer_id=customer_id))
+
+    @app.route('/customer-intelligence/profiles/delete', methods=['POST'])
+    @ci_permission_required('edit_profiles')
+    def ci_delete_customers():
+        """Delete multiple customers."""
+        import json
+        db = get_db()
+        try:
+            data = request.get_json()
+            customer_ids = data.get('customer_ids', [])
+            if not customer_ids:
+                return jsonify({'success': False, 'error': 'No customers selected'}), 400
+            placeholders = ','.join('?' * len(customer_ids))
+            db.execute(f"DELETE FROM sdad_customers WHERE id IN ({placeholders})", customer_ids)
+            return jsonify({'success': True, 'deleted': len(customer_ids)})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+        finally:
+            db.close()
 
     # ── Segments ──────────────────────────────────────────────────────────────
 

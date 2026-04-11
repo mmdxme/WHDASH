@@ -1,0 +1,144 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Request Logs</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('api_gateway_export_logs_csv') }}" class="btn btn-secondary">
+            <i class="fas fa-download"></i> Export CSV
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Filter Logs</h3>
+    </div>
+    <form method="get" style="padding: 15px;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Client</label>
+                <select name="client_id">
+                    <option value="">All Clients</option>
+                    {% for client in clients %}
+                    <option value="{{ client.id }}" {% if filters.client_id|int == client.id %}selected{% endif %}>{{ client.client_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Method</label>
+                <select name="method">
+                    <option value="">All Methods</option>
+                    <option value="GET" {% if filters.method == 'GET' %}selected{% endif %}>GET</option>
+                    <option value="POST" {% if filters.method == 'POST' %}selected{% endif %}>POST</option>
+                    <option value="PUT" {% if filters.method == 'PUT' %}selected{% endif %}>PUT</option>
+                    <option value="PATCH" {% if filters.method == 'PATCH' %}selected{% endif %}>PATCH</option>
+                    <option value="DELETE" {% if filters.method == 'DELETE' %}selected{% endif %}>DELETE</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Status</label>
+                <select name="status_code">
+                    <option value="">All</option>
+                    <option value="200" {% if filters.status_code == '200' %}selected{% endif %}>200 OK</option>
+                    <option value="201" {% if filters.status_code == '201' %}selected{% endif %}>201 Created</option>
+                    <option value="400" {% if filters.status_code == '400' %}selected{% endif %}>400 Bad Request</option>
+                    <option value="401" {% if filters.status_code == '401' %}selected{% endif %}>401 Unauthorized</option>
+                    <option value="403" {% if filters.status_code == '403' %}selected{% endif %}>403 Forbidden</option>
+                    <option value="404" {% if filters.status_code == '404' %}selected{% endif %}>404 Not Found</option>
+                    <option value="429" {% if filters.status_code == '429' %}selected{% endif %}>429 Rate Limited</option>
+                    <option value="500" {% if filters.status_code == '500' %}selected{% endif %}>500 Server Error</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Path Contains</label>
+                <input type="text" name="path" value="{{ filters.path or '' }}" placeholder="e.g., /api/v1/customers">
+            </div>
+            <div class="filter-group" style="align-self: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+                <a href="{{ url_for('api_gateway_request_logs') }}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">API Requests ({{ total }})</h3>
+    </div>
+
+    {% if logs %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Request ID</th>
+                    <th>Method</th>
+                    <th>Path</th>
+                    <th>Client</th>
+                    <th>User</th>
+                    <th>Status</th>
+                    <th>Time (ms)</th>
+                    <th>IP</th>
+                    <th>Timestamp</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td><code style="font-size: 0.7rem;">{{ log.request_id[:16] }}...</code></td>
+                    <td><span class="method-badge method-{{ log.method|lower }}">{{ log.method }}</span></td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ log.path }}">{{ log.path }}</td>
+                    <td>{{ log.client_code or 'N/A' }}</td>
+                    <td>{{ log.user_username or 'N/A' }}</td>
+                    <td>
+                        {% if log.response_status_code >= 200 and log.response_status_code < 300 %}
+                        <span class="badge badge-success">{{ log.response_status_code }}</span>
+                        {% elif log.response_status_code >= 400 and log.response_status_code < 500 %}
+                        <span class="badge badge-warning">{{ log.response_status_code }}</span>
+                        {% else %}
+                        <span class="badge badge-danger">{{ log.response_status_code or 'N/A' }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ log.response_time_ms }}ms</td>
+                    <td>{{ log.ip_address or 'N/A' }}</td>
+                    <td>{{ log.created_at[:19] }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ (page - 1) * per_page + 1 }} to {{ [page * per_page, total]|min }} of {{ total }} requests
+        </div>
+        <div class="pagination-links">
+            {% if page > 1 %}
+            <a href="{{ url_for('api_gateway_request_logs', page=page-1, **filters) }}">&laquo; Prev</a>
+            {% endif %}
+            {% for p in range([1, page-2]|max, ([page+3, pages+1]|min)) %}
+                {% if p == page %}
+                <span class="active">{{ p }}</span>
+                {% else %}
+                <a href="{{ url_for('api_gateway_request_logs', page=p, **filters) }}">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if page < pages %}
+            <a href="{{ url_for('api_gateway_request_logs', page=page+1, **filters) }}">Next &raquo;</a>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-history"></i>
+        <h3>No request logs</h3>
+        <p>API request logs will appear here once requests are made.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

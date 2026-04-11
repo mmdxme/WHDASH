@@ -1,0 +1,154 @@
+{% extends "bi_advanced/base.html" %}
+
+{% block content %}
+<aside class="bi-sidebar">
+    <div class="bi-sidebar-header">
+        <h2><i class="fas fa-analytics"></i> Advanced BI</h2>
+    </div>
+    <div class="bi-nav-section">
+        <div class="bi-nav-section-title">Analytics</div>
+        <a href="{{ url_for('bi_adhoc_query') }}" class="bi-nav-item active"><i class="fas fa-search"></i> Ad-hoc Query</a>
+        <a href="{{ url_for('bi_adhoc_queries') }}" class="bi-nav-item"><i class="fas fa-history"></i> My Queries</a>
+    </div>
+</aside>
+
+<main class="bi-main">
+    <div class="bi-breadcrumb">
+        <a href="{{ url_for('index') }}">Home</a>
+        <i class="fas fa-chevron-right"></i>
+        <a href="{{ url_for('bi_advanced_dashboard') }}">BI</a>
+        <i class="fas fa-chevron-right"></i>
+        <span>Ad-hoc Query Builder</span>
+    </div>
+    
+    <div class="bi-header">
+        <h1>{{ page_title }}</h1>
+    </div>
+    
+    <div class="bi-card">
+        <div class="bi-card-header">
+            <span class="bi-card-title">SQL Query</span>
+        </div>
+        <div style="margin-bottom: 15px;">
+            <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Enter your SQL query (SELECT only)</label>
+            <textarea id="sql_query" style="width: 100%; padding: 15px; border: 1px solid #ddd; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 14px; min-height: 200px;" placeholder="SELECT * FROM sales_orders WHERE ...">SELECT * FROM sales_orders LIMIT 100</textarea>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button class="bi-btn bi-btn-secondary" onclick="clearQuery()">
+                <i class="fas fa-times"></i> Clear
+            </button>
+            <button class="bi-btn bi-btn-primary" onclick="executeQuery()">
+                <i class="fas fa-play"></i> Execute Query
+            </button>
+        </div>
+    </div>
+    
+    <div class="bi-card">
+        <div class="bi-card-header">
+            <span class="bi-card-title">Results</span>
+            <span id="query_status" style="font-size: 12px; color: #888;"></span>
+        </div>
+        <div id="query_results" style="overflow-x: auto;">
+            <div class="bi-empty-state">
+                <i class="fas fa-search"></i>
+                <h3>No Query Executed</h3>
+                <p>Enter a SQL query above and click "Execute Query" to see results.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="bi-card">
+        <div class="bi-card-header">
+            <span class="bi-card-title">Available Tables</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px;">
+            {% for dataset in datasets %}
+            <div style="padding: 12px; background: #f8f9fa; border-radius: 6px; cursor: pointer;" onclick="insertTableName('{{ dataset.base_table or dataset.dataset_code }}')">
+                <strong>{{ dataset.dataset_name }}</strong><br>
+                <small style="color: #888;">{{ dataset.base_table or 'N/A' }}</small>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</main>
+
+<script>
+function insertTableName(tableName) {
+    const textarea = document.getElementById('sql_query');
+    const cursorPos = textarea.selectionStart;
+    const textBefore = textarea.value.substring(0, cursorPos);
+    const textAfter = textarea.value.substring(textarea.selectionEnd);
+    textarea.value = textBefore + tableName + textAfter;
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = cursorPos + tableName.length;
+}
+
+function clearQuery() {
+    document.getElementById('sql_query').value = '';
+    document.getElementById('query_results').innerHTML = '<div class="bi-empty-state"><i class="fas fa-search"></i><h3>No Query Executed</h3><p>Enter a SQL query above and click "Execute Query" to see results.</p></div>';
+    document.getElementById('query_status').textContent = '';
+}
+
+async function executeQuery() {
+    const sql = document.getElementById('sql_query').value.trim();
+    if (!sql) {
+        alert('Please enter a SQL query');
+        return;
+    }
+    
+    if (!sql.toUpperCase().startsWith('SELECT')) {
+        alert('Only SELECT queries are allowed for ad-hoc analysis');
+        return;
+    }
+    
+    document.getElementById('query_status').textContent = 'Executing...';
+    document.getElementById('query_results').innerHTML = '<div class="bi-empty-state"><i class="fas fa-spinner fa-spin"></i><h3>Executing Query...</h3></div>';
+    
+    try {
+        const response = await fetch('/bi/adhoc/api/execute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sql: sql,
+                name: 'Ad-hoc Query'
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.error) {
+            document.getElementById('query_results').innerHTML = `<div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> ${result.error}</div>`;
+            document.getElementById('query_status').textContent = `Error (${result.execution_time_ms}ms)`;
+            return;
+        }
+        
+        if (!result.data || result.data.length === 0) {
+            document.getElementById('query_results').innerHTML = '<div class="bi-empty-state"><i class="fas fa-inbox"></i><h3>No Results</h3></div>';
+            return;
+        }
+        
+        const cols = result.columns || [];
+        let tableHtml = '<table class="bi-table"><thead><tr>';
+        cols.forEach(col => { tableHtml += `<th>${col}</th>`; });
+        tableHtml += '</tr></thead><tbody>';
+        result.data.forEach(row => {
+            tableHtml += '<tr>';
+            cols.forEach(col => {
+                const val = row[col];
+                const formatted = typeof val === 'number' ? val.toLocaleString() : (val || '');
+                tableHtml += `<td>${formatted}</td>`;
+            });
+            tableHtml += '</tr>';
+        });
+        tableHtml += '</tbody></table>';
+        
+        const warning = result.is_slow ? '<div class="alert alert-warning"><i class="fas fa-exclamation-triangle"></i> This query is slow. Consider adding more filters.</div>' : '';
+        
+        document.getElementById('query_results').innerHTML = warning + tableHtml;
+        document.getElementById('query_status').textContent = `${result.row_count} rows (${result.execution_time_ms}ms)${result.has_more ? ' - limited' : ''}`;
+    } catch (error) {
+        document.getElementById('query_results').innerHTML = `<div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> Error: ${error.message}</div>`;
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,145 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Usage Metrics</h1>
+    <div class="header-actions">
+        <a href="?days=7" class="btn btn-sm {% if days == 7 %}btn-primary{% else %}btn-secondary{% endif %}">7 Days</a>
+        <a href="?days=30" class="btn btn-sm {% if days == 30 %}btn-primary{% else %}btn-secondary{% endif %}">30 Days</a>
+    </div>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="icon blue">
+            <i class="fas fa-paper-plane"></i>
+        </div>
+        <div class="value">{{ metrics[-1].requests|default(0) if metrics else 0|number_format }}</div>
+        <div class="label">Requests Today</div>
+    </div>
+    <div class="stat-card">
+        <div class="icon orange">
+            <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <div class="value">{{ metrics[-1].error_rate|default(0)|round(2) }}%</div>
+        <div class="label">Error Rate</div>
+    </div>
+    <div class="stat-card">
+        <div class="icon green">
+            <i class="fas fa-bolt"></i>
+        </div>
+        <div class="value">{{ metrics[-1].avg_response_ms|default(0) }}ms</div>
+        <div class="label">Avg Response Time</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">API Requests Over Time</h3>
+    </div>
+    <div style="padding: 20px;">
+        {% if metrics %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Requests</th>
+                    <th>Errors</th>
+                    <th>Error Rate</th>
+                    <th>Avg Response (ms)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for metric in metrics %}
+                <tr>
+                    <td>{{ metric.date }}</td>
+                    <td>{{ metric.requests|number_format }}</td>
+                    <td>{{ metric.errors }}</td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="metric-bar" style="width: 100px;">
+                                <div class="metric-bar-fill {% if metric.error_rate > 5 %}red{% elif metric.error_rate > 1 %}yellow{% else %}green{% endif %}"
+                                     style="width: {{ [metric.error_rate, 100]|min }}%;"></div>
+                            </div>
+                            <span>{{ "%.2f"|format(metric.error_rate) }}%</span>
+                        </div>
+                    </td>
+                    <td>{{ metric.avg_response_ms }}ms</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-chart-line"></i>
+            <h3>No data yet</h3>
+            <p>Usage metrics will appear here once API requests are made.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Top Clients</h3>
+        </div>
+        {% if top_clients %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Client</th>
+                        <th>Requests</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for client in top_clients %}
+                    <tr>
+                        <td>{{ client.client_name }}</td>
+                        <td>{{ client.request_count|number_format }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding: 30px;">
+            <p>No client data yet.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Top Endpoints</h3>
+        </div>
+        {% if top_endpoints %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Method</th>
+                        <th>Path</th>
+                        <th>Requests</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for endpoint in top_endpoints %}
+                    <tr>
+                        <td><span class="method-badge method-{{ endpoint.method|lower }}">{{ endpoint.method }}</span></td>
+                        <td style="font-family: monospace; font-size: 0.85rem;">{{ endpoint.path }}</td>
+                        <td>{{ endpoint.request_count|number_format }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state" style="padding: 30px;">
+            <p>No endpoint data yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

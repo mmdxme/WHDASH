@@ -33,6 +33,8 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from collections import defaultdict
 import re
 
+from permissions import user_has_permission
+
 
 def register_planning_routes(app, get_db):
     """Register all Planning routes with the Flask app."""
@@ -41,19 +43,17 @@ def register_planning_routes(app, get_db):
     # DECORATORS & HELPERS
     # ============================================================
 
-    def planning_permission_required(permission=None):
-        """Decorator to check Planning-specific permissions."""
+    def planning_permission_required(resource, action):
+        """Decorator to check Planning permissions using central permissions system."""
         def decorator(f):
             @wraps(f)
             def decorated_function(*args, **kwargs):
                 if 'user_id' not in session:
                     return redirect(url_for('login'))
-                if permission:
-                    user_perms = session.get('planning_permissions', [])
-                    if 'all' not in user_perms and permission not in user_perms:
-                        if not session.get('can_manage_users'):
-                            flash(f'You do not have Planning permission: {permission}', 'error')
-                            return redirect(url_for('planning_dashboard'))
+                user_id = session.get('user_id')
+                if not user_has_permission(user_id, 'planning', resource, action):
+                    flash(f"Access denied. You need '{action}' permission on '{resource}'.", "error")
+                    return redirect(url_for('planning_dashboard'))
                 return f(*args, **kwargs)
             return decorated_function
         return decorator
@@ -138,10 +138,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning')
+    @planning_permission_required('dashboard', 'view')
     def planning_dashboard():
         """Main Planning Dashboard."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -206,9 +205,10 @@ def register_planning_routes(app, get_db):
         """).fetchone()['cnt']
 
         in_transit_value = db.execute("""
-            SELECT SUM(COALESCE(ir.quantity, 0) * COALESCE(i.cost_price, 0)) as val
+            SELECT SUM(COALESCE(irl.received_quantity, 0) * COALESCE(irl.unit_cost, 0)) as val
             FROM wms_inbound_receipts ir
-            JOIN wms_items i ON ir.item_id = i.id
+            JOIN wms_inbound_receipt_lines irl ON ir.id = irl.receipt_id
+            JOIN wms_items i ON irl.item_id = i.id
             WHERE ir.status IN ('IN_TRANSIT', 'RECEIVING', 'APPROVED')
         """).fetchone()['val'] or 0
 
@@ -238,7 +238,7 @@ def register_planning_routes(app, get_db):
             WHERE alert_type IN ('STOCKOUT', 'STOCKOUT_RISK') AND is_acknowledged = 0
         """).fetchone()['cnt']
 
-        top_shortage_items = db.execute("""
+        top_shortage_items = [dict(r) for r in db.execute("""
             SELECT i.id, i.item_code, i.name,
                    COALESCE(ib.quantity, 0) as qty,
                    COALESCE(i.reorder_point, 0) as rop
@@ -248,9 +248,9 @@ def register_planning_routes(app, get_db):
               AND COALESCE(ib.quantity, 0) < COALESCE(i.reorder_point, 0)
             ORDER BY (COALESCE(i.reorder_point, 0) - COALESCE(ib.quantity, 0)) DESC
             LIMIT 10
-        """).fetchall()
+        """).fetchall()]
 
-        top_overstock_items = db.execute("""
+        top_overstock_items = [dict(r) for r in db.execute("""
             SELECT i.id, i.item_code, i.name,
                    COALESCE(ib.quantity, 0) as qty,
                    COALESCE(i.max_stock_level, 0) as max_stock
@@ -261,26 +261,26 @@ def register_planning_routes(app, get_db):
               AND COALESCE(ib.quantity, 0) > COALESCE(i.max_stock_level, 0) * 1.2
             ORDER BY (COALESCE(ib.quantity, 0) - COALESCE(i.max_stock_level, 0)) DESC
             LIMIT 10
-        """).fetchall()
+        """).fetchall()]
 
-        alert_breakdown = db.execute("""
+        alert_breakdown = [dict(r) for r in db.execute("""
             SELECT alert_type, COUNT(*) as cnt
             FROM planning_alerts
             WHERE is_acknowledged = 0
             GROUP BY alert_type
-        """).fetchall()
+        """).fetchall()]
 
-        recent_alerts = db.execute("""
+        recent_alerts = [dict(r) for r in db.execute("""
             SELECT a.*, i.item_code, i.name as item_name
             FROM planning_alerts a
             LEFT JOIN wms_items i ON a.item_id = i.id
             WHERE a.is_acknowledged = 0
             ORDER BY a.created_at DESC
             LIMIT 20
-        """).fetchall()
+        """).fetchall()]
 
-        warehouse_list = db.execute("SELECT id, name, code FROM wms_warehouses ORDER BY name").fetchall()
-        company_list = db.execute("SELECT id, name FROM companies ORDER BY name").fetchall()
+        warehouse_list = [dict(r) for r in db.execute("SELECT id, name, code FROM wms_warehouses ORDER BY name").fetchall()]
+        company_list = [dict(r) for r in db.execute("SELECT id, name FROM companies ORDER BY name").fetchall()]
 
         coverage_stats = []
         for days_range in [(7, '7 Days'), (14, '14 Days'), (30, '30 Days'), (60, '60 Days'), (90, '90 Days')]:
@@ -332,10 +332,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/forecast')
+    @planning_permission_required('forecasts', 'view')
     def forecast_center():
         """Forecast Center - list forecast runs and generate new ones."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -367,10 +366,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/forecast/generate', methods=['POST'])
+    @planning_permission_required('forecasts', 'create')
     def forecast_generate():
         """Generate a new forecast run."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         method = request.form.get('method', 'MOVING_AVERAGE')
@@ -489,10 +487,9 @@ def register_planning_routes(app, get_db):
         return redirect(url_for('forecast_detail', run_id=run_id))
 
     @app.route('/planning/forecast/<int:run_id>')
+    @planning_permission_required('forecasts', 'view')
     def forecast_detail(run_id):
         """View forecast run details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -525,10 +522,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/forecast/<int:run_id>/approve', methods=['POST'])
+    @planning_permission_required('forecasts', 'approve')
     def forecast_approve(run_id):
         """Approve a forecast run."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         db.execute("""
@@ -544,10 +540,9 @@ def register_planning_routes(app, get_db):
         return redirect(url_for('forecast_detail', run_id=run_id))
 
     @app.route('/planning/forecast/<int:run_id>/override', methods=['POST'])
+    @planning_permission_required('forecasts', 'edit')
     def forecast_override(run_id):
         """Override a forecast value."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         item_id = request.form.get('item_id', type=int)
@@ -586,10 +581,9 @@ def register_planning_routes(app, get_db):
         return redirect(url_for('forecast_detail', run_id=run_id))
 
     @app.route('/planning/forecast/api/summary/<int:run_id>')
+    @planning_permission_required('forecasts', 'view')
     def forecast_api_summary(run_id):
         """API endpoint for forecast summary data (for charts)."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
 
@@ -622,10 +616,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/demand')
+    @planning_permission_required('demand_analysis', 'view')
     def demand_analysis():
         """Demand Analysis page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -717,10 +710,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/demand/api/chart/<int:item_id>')
+    @planning_permission_required('demand_analysis', 'view')
     def demand_api_chart(item_id):
         """API for demand chart data for a specific item."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         months = request.args.get('months', 12, type=int)
@@ -746,10 +738,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/inventory-health')
+    @planning_permission_required('inventory_health', 'view')
     def inventory_health():
         """Inventory Health analysis page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -818,10 +809,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/replenishment')
+    @planning_permission_required('replenishment', 'view')
     def replenishment_planning():
         """Replenishment planning page - shows recommendations."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -862,10 +852,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/replenishment/generate', methods=['POST'])
+    @planning_permission_required('replenishment', 'create')
     def replenishment_generate():
         """Generate replenishment recommendations."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         settings = get_planning_settings(db)
@@ -919,10 +908,9 @@ def register_planning_routes(app, get_db):
         return redirect(url_for('replenishment_planning'))
 
     @app.route('/planning/replenishment/<int:rec_id>/approve', methods=['POST'])
+    @planning_permission_required('replenishment', 'approve')
     def replenishment_approve(rec_id):
         """Approve a replenishment recommendation."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         db.execute("""
@@ -938,10 +926,9 @@ def register_planning_routes(app, get_db):
         return redirect(url_for('replenishment_planning'))
 
     @app.route('/planning/replenishment/<int:rec_id>/dismiss', methods=['POST'])
+    @planning_permission_required('replenishment', 'edit')
     def replenishment_dismiss(rec_id):
         """Dismiss/dismiss a replenishment recommendation."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         db.execute("""
@@ -961,10 +948,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/purchase-suggestions')
+    @planning_permission_required('purchase_suggestions', 'view')
     def purchase_suggestions():
         """Purchase suggestions page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1008,10 +994,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/purchase-suggestions/generate', methods=['POST'])
+    @planning_permission_required('purchase_suggestions', 'create')
     def purchase_suggestions_generate():
         """Generate purchase recommendations from replenishment and item-supplier data."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         settings = get_planning_settings(db)
@@ -1097,10 +1082,9 @@ def register_planning_routes(app, get_db):
         return redirect(url_for('purchase_suggestions'))
 
     @app.route('/planning/purchase-suggestions/<int:rec_id>/approve', methods=['POST'])
+    @planning_permission_required('purchase_suggestions', 'approve')
     def purchase_approve(rec_id):
         """Approve a purchase recommendation."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         db.execute("""
@@ -1120,10 +1104,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/transfer-suggestions')
+    @planning_permission_required('transfer_suggestions', 'view')
     def transfer_suggestions():
         """Transfer suggestions page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1152,10 +1135,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/transfer-suggestions/generate', methods=['POST'])
+    @planning_permission_required('transfer_suggestions', 'create')
     def transfer_suggestions_generate():
         """Generate transfer recommendations to balance stock across warehouses."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         db.execute("DELETE FROM planning_transfer_recommendations WHERE status = 'OPEN'")
@@ -1224,10 +1206,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/safety-stock')
+    @planning_permission_required('safety_stock', 'view')
     def safety_stock_rules():
         """Safety Stock & Reorder Rules management page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1260,10 +1241,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/safety-stock/save', methods=['POST'])
+    @planning_permission_required('safety_stock', 'edit')
     def safety_stock_save():
         """Save safety stock / reorder parameters for an item."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         item_id = request.form.get('item_id', type=int)
@@ -1318,10 +1298,9 @@ def register_planning_routes(app, get_db):
         return redirect(url_for('safety_stock_rules'))
 
     @app.route('/planning/safety-stock/calculate', methods=['POST'])
+    @planning_permission_required('safety_stock', 'view')
     def safety_stock_calculate():
         """Calculate recommended safety stock for an item using formula."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         item_id = request.form.get('item_id', type=int)
@@ -1340,10 +1319,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/supplier-analysis')
+    @planning_permission_required('supplier_analysis', 'view')
     def supplier_analysis():
         """Supplier lead time and performance analysis."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1376,10 +1354,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/supplier-analysis/refresh', methods=['POST'])
+    @planning_permission_required('supplier_analysis', 'edit')
     def supplier_analysis_refresh():
         """Refresh supplier performance metrics."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         today = datetime.now().date()
@@ -1424,10 +1401,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/customer-patterns')
+    @planning_permission_required('customer_patterns', 'view')
     def customer_patterns():
         """Customer demand pattern analysis."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1461,10 +1437,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/customer-patterns/refresh', methods=['POST'])
+    @planning_permission_required('customer_patterns', 'edit')
     def customer_patterns_refresh():
         """Refresh customer demand pattern analysis."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
 
@@ -1523,10 +1498,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/lost-sales')
+    @planning_permission_required('lost_sales', 'view')
     def lost_sales():
         """Lost sales and service risk analysis."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1555,10 +1529,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/lost-sales/record', methods=['POST'])
+    @planning_permission_required('lost_sales', 'create')
     def lost_sales_record():
         """Record a lost sale."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         item_id = request.form.get('item_id', type=int)
@@ -1593,10 +1566,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/seasonality')
+    @planning_permission_required('seasonality', 'view')
     def seasonality_analysis():
         """Seasonality and trend analysis."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1635,10 +1607,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/seasonality/api/trend/<int:item_id>')
+    @planning_permission_required('seasonality', 'view')
     def seasonality_api(item_id):
         """API for seasonality/trend data for an item."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         rows = db.execute("""
@@ -1666,10 +1637,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/alerts')
+    @planning_permission_required('alerts', 'view')
     def planning_alerts():
         """Planning exceptions and alerts center."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1720,10 +1690,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/alerts/acknowledge/<int:alert_id>', methods=['POST'])
+    @planning_permission_required('alerts', 'edit')
     def alert_acknowledge(alert_id):
         """Acknowledge an alert."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         notes = request.form.get('notes', '')
@@ -1741,10 +1710,9 @@ def register_planning_routes(app, get_db):
         return redirect(url_for('planning_alerts'))
 
     @app.route('/planning/alerts/generate', methods=['POST'])
+    @planning_permission_required('alerts', 'create')
     def alerts_generate():
         """Generate planning alerts from current inventory state."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         generate_planning_alerts(db)
@@ -1756,10 +1724,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/scenarios')
+    @planning_permission_required('scenarios', 'view')
     def scenarios():
         """Scenario planning and simulation center."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1781,10 +1748,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/scenarios/create', methods=['POST'])
+    @planning_permission_required('scenarios', 'create')
     def scenarios_create():
         """Create a new planning scenario."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         name = request.form.get('name')
@@ -1808,10 +1774,9 @@ def register_planning_routes(app, get_db):
         return redirect(url_for('scenario_detail', scenario_id=scenario_id))
 
     @app.route('/planning/scenarios/<int:scenario_id>')
+    @planning_permission_required('scenarios', 'view')
     def scenario_detail(scenario_id):
         """View scenario details and impact."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1838,10 +1803,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/scenarios/<int:scenario_id>/run', methods=['POST'])
+    @planning_permission_required('scenarios', 'edit')
     def scenario_run(scenario_id):
         """Run a scenario simulation."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         scenario = db.execute(
@@ -1917,10 +1881,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/reports')
+    @planning_permission_required('reports', 'view')
     def planning_reports():
         """Planning reports and analytics center."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1941,10 +1904,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/reports/kpi-snapshot', methods=['POST'])
+    @planning_permission_required('reports', 'create')
     def kpi_snapshot():
         """Take a KPI snapshot."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         snapshot_kpis(db)
@@ -1952,10 +1914,9 @@ def register_planning_routes(app, get_db):
         return redirect(url_for('planning_reports'))
 
     @app.route('/planning/reports/forecast-accuracy')
+    @planning_permission_required('reports', 'view')
     def forecast_accuracy_report():
         """Forecast accuracy report."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -1992,10 +1953,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/reports/inventory-turnover')
+    @planning_permission_required('reports', 'view')
     def inventory_turnover_report():
         """Inventory turnover report."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         user_prefs = db.execute(
@@ -2032,10 +1992,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/reports/export/<string:report_type>')
+    @planning_permission_required('reports', 'view')
     def planning_report_export(report_type):
         """Export a planning report to Excel."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         wb = Workbook()
@@ -2146,10 +2105,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/settings')
+    @planning_permission_required('settings', 'view')
     def planning_settings():
         """Planning settings page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         if not session.get('can_manage_users'):
             flash('Access denied. Planning settings require admin rights.', 'error')
@@ -2179,10 +2137,9 @@ def register_planning_routes(app, get_db):
         )
 
     @app.route('/planning/settings/save', methods=['POST'])
+    @planning_permission_required('settings', 'edit')
     def planning_settings_save():
         """Save planning settings."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         if not session.get('can_manage_users'):
             return jsonify({'error': 'Permission denied'}), 403
@@ -2198,10 +2155,9 @@ def register_planning_routes(app, get_db):
         return redirect(url_for('planning_settings'))
 
     @app.route('/planning/settings/policy/save', methods=['POST'])
+    @planning_permission_required('settings', 'edit')
     def planning_policy_save():
         """Save a planning policy."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         policy_id = request.form.get('policy_id', type=int)
@@ -2257,10 +2213,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/aggregate-demand', methods=['POST'])
+    @planning_permission_required('demand_analysis', 'edit')
     def aggregate_demand():
         """Aggregate demand data from WMS ledger into planning_demand_history."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         months = int(request.form.get('months', 12))
@@ -2280,10 +2235,9 @@ def register_planning_routes(app, get_db):
     # ============================================================
 
     @app.route('/planning/api/dashboard-summary')
+    @planning_permission_required('dashboard', 'view')
     def api_dashboard_summary():
         """API: Dashboard summary numbers."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         today = datetime.now().date().strftime('%Y-%m-%d')
@@ -2302,10 +2256,9 @@ def register_planning_routes(app, get_db):
         return jsonify(summary)
 
     @app.route('/planning/api/net-requirement/<int:item_id>')
+    @planning_permission_required('replenishment', 'view')
     def api_net_requirement(item_id):
         """API: Get net requirement for an item."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         days = request.args.get('days', 30, type=int)
@@ -2313,10 +2266,9 @@ def register_planning_routes(app, get_db):
         return jsonify(req or {})
 
     @app.route('/planning/api/demand-summary/<int:item_id>')
+    @planning_permission_required('demand_analysis', 'view')
     def api_demand_summary(item_id):
         """API: Get demand summary for an item."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         stats = get_demand_stats(db, item_id)
@@ -2331,10 +2283,9 @@ def register_planning_routes(app, get_db):
         })
 
     @app.route('/planning/api/item-profile/<int:item_id>')
+    @planning_permission_required('demand_analysis', 'view')
     def api_item_profile(item_id):
         """API: Get planning profile for an item."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         profile = db.execute(

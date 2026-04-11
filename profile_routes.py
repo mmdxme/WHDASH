@@ -1,7 +1,7 @@
 """
 Personal Profile Management Module
 ================================
-Comprehensive profile management system for the WHDASH platform.
+Comprehensive profile management system for the MMDx platform.
 
 This module provides:
 - Profile overview and dashboard

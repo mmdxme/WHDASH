@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #F9FAFB; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card-header { background: white; border-bottom: 2px solid #E5E7EB; font-weight: 600; }
+        .badge-status { font-weight: 500; padding: 0.375rem 0.625rem; }
+        .badge-Draft { background: #F3F4F6; color: #374151; }
+        .badge-Under_Review { background: #DBEAFE; color: #1E40AF; }
+        .badge-Approved { background: #D1FAE5; color: #065F46; }
+        .badge-Published { background: #D1FAE5; color: #065F46; }
+        .badge-Signed { background: #D1FAE5; color: #065F46; }
+        .info-item { padding: 0.75rem 0; border-bottom: 1px solid #E5E7EB; }
+        .info-item:last-child { border-bottom: none; }
+        .info-label { color: #6B7280; font-size: 0.875rem; }
+        .info-value { font-weight: 500; }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <!-- Breadcrumb -->
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('documents_all') }}">Documents</a></li>
+                <li class="breadcrumb-item active">{{ document.title }}</li>
+            </ol>
+        </nav>
+
+        <div class="row">
+            <!-- Main Content -->
+            <div class="col-lg-8">
+                <!-- Document Header -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="d-flex align-items-start">
+                                <div class="me-3">
+                                    <div class="bg-primary text-white rounded d-flex align-items-center justify-content-center" style="width: 64px; height: 64px;">
+                                        <i class="fas fa-file-alt fa-2x"></i>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h2 class="h4 mb-1">{{ document.title }}</h2>
+                                    <p class="text-muted mb-2">{{ document.document_code }}</p>
+                                    <div class="d-flex gap-2">
+                                        <span class="badge badge-{{ document.status.replace(' ', '_') if document.status else 'Draft' }}">{{ document.status or 'Draft' }}</span>
+                                        <span class="badge bg-{% if document.signature_status == 'Signed' %}success{% elif document.signature_status == 'Pending' %}warning{% else %}secondary{% endif %}">
+                                            {{ document.signature_status or 'N/A' }}
+                                        </span>
+                                        {% if document.is_archived %}
+                                        <span class="badge bg-secondary">Archived</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="btn-group">
+                                <a href="{{ url_for('documents_download', document_id=document.id) }}" class="btn btn-outline-primary">
+                                    <i class="fas fa-download me-1"></i> Download
+                                </a>
+                                {% if not document.is_archived %}
+                                <a href="{{ url_for('documents_edit', document_id=document.id) }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-edit me-1"></i> Edit
+                                </a>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                        <i class="fas fa-ellipsis-v"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li><a class="dropdown-item" href="{{ url_for('documents_new_version', document_id=document.id) }}">
+                                            <i class="fas fa-upload me-2"></i> New Version
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="{{ url_for('documents_signatures_create', document_id=document.id) if document_has_permission else '#' }}">
+                                            <i class="fas fa-signature me-2"></i> Request Signature
+                                        </a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item" href="{{ url_for('documents_archive', document_id=document.id) }}" onclick="return confirm('Archive this document?')">
+                                            <i class="fas fa-archive me-2"></i> Archive
+                                        </a></li>
+                                    </ul>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if document.description %}
+                        <p class="mt-3 mb-0 text-muted">{{ document.description }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="card">
+                    <div class="card-header">
+                        <ul class="nav nav-tabs card-header-tabs" id="docTabs" role="tablist">
+                            <li class="nav-item">
+                                <button class="nav-link active" id="versions-tab" data-bs-toggle="tab" data-bs-target="#versions" type="button">
+                                    <i class="fas fa-history me-1"></i> Versions
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link" id="links-tab" data-bs-toggle="tab" data-bs-target="#links" type="button">
+                                    <i class="fas fa-link me-1"></i> Linked Records
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link" id="signatures-tab" data-bs-toggle="tab" data-bs-target="#signatures" type="button">
+                                    <i class="fas fa-signature me-1"></i> Signatures
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link" id="shares-tab" data-bs-toggle="tab" data-bs-target="#shares" type="button">
+                                    <i class="fas fa-share-alt me-1"></i> Shares
+                                </button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button">
+                                    <i class="fas fa-history me-1"></i> Access Log
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body">
+                        <div class="tab-content" id="docTabContent">
+                            <!-- Versions Tab -->
+                            <div class="tab-pane fade show active" id="versions">
+                                {% if versions %}
+                                <div class="list-group list-group-flush">
+                                    {% for version in versions %}
+                                    <div class="list-group-item d-flex justify-content-between align-items-center px-0">
+                                        <div class="d-flex align-items-center">
+                                            <div class="me-3">
+                                                <div class="rounded-circle bg-{% if version.is_current_version %}primary{% else %}secondary{% endif %} text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                                                    <i class="fas fa-{% if version.is_current_version %}star{% else %}file{% endif %}"></i>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <div class="fw-medium">
+                                                    Version {{ version.version_number }}
+                                                    {% if version.is_current_version %}<span class="badge bg-primary ms-2">Current</span>{% endif %}
+                                                </div>
+                                                <div class="small text-muted">
+                                                    {{ version.file_name }} - {{ (version.file_size / 1024)|round|int }} KB
+                                                </div>
+                                                <div class="small text-muted">
+                                                    By {{ version.created_by_username or 'Unknown' }} on {{ version.created_at[:10] if version.created_at else '-' }}
+                                                </div>
+                                                {% if version.change_summary %}
+                                                <div class="small mt-1"><em>"{{ version.change_summary }}"</em></div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <a href="{{ url_for('documents_version_download', version_id=version.id) }}" class="btn btn-sm btn-outline-secondary">
+                                                <i class="fas fa-download"></i>
+                                            </a>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <p class="text-muted text-center py-4 mb-0">No versions found</p>
+                                {% endif %}
+                            </div>
+
+                            <!-- Links Tab -->
+                            <div class="tab-pane fade" id="links">
+                                {% if links %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Module</th>
+                                                <th>Record ID</th>
+                                                <th>Link Type</th>
+                                                <th>Primary</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for link in links %}
+                                            <tr>
+                                                <td>{{ link.linked_module }}</td>
+                                                <td>{{ link.linked_record_id }}</td>
+                                                <td>{{ link.link_type }}</td>
+                                                <td>{% if link.is_primary %}<i class="fas fa-check text-success"></i>{% endif %}</td>
+                                                <td>
+                                                    <a href="{{ url_for('documents_delete_link', link_id=link.id) }}" class="btn btn-sm btn-outline-danger">
+                                                        <i class="fas fa-trash"></i>
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% else %}
+                                <p class="text-muted text-center py-4 mb-0">No linked records</p>
+                                {% endif %}
+                                <button class="btn btn-sm btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#addLinkModal">
+                                    <i class="fas fa-plus me-1"></i> Add Link
+                                </button>
+                            </div>
+
+                            <!-- Signatures Tab -->
+                            <div class="tab-pane fade" id="signatures">
+                                {% if signature_requests %}
+                                {% for req in signature_requests %}
+                                <div class="border rounded p-3 mb-3">
+                                    <div class="d-flex justify-content-between align-items-start mb-2">
+                                        <div>
+                                            <span class="fw-medium">{{ req.request_title }}</span>
+                                            <div class="small text-muted">{{ req.request_code }}</div>
+                                        </div>
+                                        <span class="badge bg-{% if req.status == 'Completed' %}success{% elif req.status == 'Pending' %}warning{% elif req.status == 'Rejected' %}danger{% else %}secondary{% endif %}">
+                                            {{ req.status }}
+                                        </span>
+                                    </div>
+                                    <div class="small mb-2">
+                                        Requested by {{ req.requestor_username }} on {{ req.created_at[:10] if req.created_at else '-' }}
+                                    </div>
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar" role="progressbar" style="width: {{ (req.signed_count / req.total_participants * 100)|round|int }}%;">
+                                            {{ req.signed_count }}/{{ req.total_participants }} Signed
+                                        </div>
+                                    </div>
+                                    <a href="{{ url_for('documents_signature_detail', request_id=req.id) }}" class="btn btn-sm btn-outline-primary mt-2">
+                                        View Details
+                                    </a>
+                                </div>
+                                {% endfor %}
+                                {% else %}
+                                <p class="text-muted text-center py-4 mb-0">No signature requests</p>
+                                {% endif %}
+                            </div>
+
+                            <!-- Shares Tab -->
+                            <div class="tab-pane fade" id="shares">
+                                {% if shares %}
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>User</th>
+                                                <th>Permission</th>
+                                                <th>Access Level</th>
+                                                <th>Expires</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for share in shares %}
+                                            <tr>
+                                                <td>{{ share.shared_with_username or 'Unknown' }}</td>
+                                                <td>{{ share.permission_level }}</td>
+                                                <td>{{ share.access_level }}</td>
+                                                <td>{{ share.expires_at[:10] if share.expires_at else 'Never' }}</td>
+                                                <td>
+                                                    <a href="{{ url_for('documents_revoke_share', share_id=share.id) }}" class="btn btn-sm btn-outline-danger">
+                                                        <i class="fas fa-ban"></i>
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {% else %}
+                                <p class="text-muted text-center py-4 mb-0">No shares</p>
+                                {% endif %}
+                                <button class="btn btn-sm btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#addShareModal">
+                                    <i class="fas fa-share-alt me-1"></i> Share Document
+                                </button>
+                            </div>
+
+                            <!-- Access Log Tab -->
+                            <div class="tab-pane fade" id="logs">
+                                {% if access_logs %}
+                                <div class="list-group list-group-flush">
+                                    {% for log in access_logs %}
+                                    <div class="list-group-item px-0">
+                                        <div class="d-flex justify-content-between">
+                                            <div>
+                                                <span class="fw-medium">{{ log.access_action }}</span>
+                                                <span class="text-muted">by {{ log.username or 'System' }}</span>
+                                            </div>
+                                            <div class="text-muted small">{{ log.created_at[:16] if log.created_at else '-' }}</div>
+                                        </div>
+                                        {% if log.ip_address %}
+                                        <div class="small text-muted">IP: {{ log.ip_address }}</div>
+                                        {% endif %}
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <p class="text-muted text-center py-4 mb-0">No access logs</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="col-lg-4">
+                <!-- Document Info -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-info-circle me-2"></i>Document Information
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="info-item px-3">
+                            <div class="info-label">Category</div>
+                            <div class="info-value">{{ document.category_name or 'Uncategorized' }}</div>
+                        </div>
+                        <div class="info-item px-3">
+                            <div class="info-label">Owner</div>
+                            <div class="info-value">{{ document.owner_username or document.created_by_username or 'Unknown' }}</div>
+                        </div>
+                        <div class="info-item px-3">
+                            <div class="info-label">Created</div>
+                            <div class="info-value">{{ document.created_at[:10] if document.created_at else '-' }}</div>
+                        </div>
+                        <div class="info-item px-3">
+                            <div class="info-label">Last Modified</div>
+                            <div class="info-value">{{ document.updated_at[:10] if document.updated_at else '-' }}</div>
+                        </div>
+                        <div class="info-item px-3">
+                            <div class="info-label">Visibility</div>
+                            <div class="info-value">{{ document.visibility or 'Private' }}</div>
+                        </div>
+                        {% if document.file_size %}
+                        <div class="info-item px-3">
+                            <div class="info-label">File Size</div>
+                            <div class="info-value">{{ (document.file_size / 1024)|round|int }} KB</div>
+                        </div>
+                        {% endif %}
+                        {% if document.mime_type %}
+                        <div class="info-item px-3">
+                            <div class="info-label">File Type</div>
+                            <div class="info-value">{{ document.mime_type }}</div>
+                        </div>
+                        {% endif %}
+                        {% if document.source_module %}
+                        <div class="info-item px-3">
+                            <div class="info-label">Source Module</div>
+                            <div class="info-value">{{ document.source_module }}</div>
+                        </div>
+                        {% endif %}
+                        {% if document.source_record_id %}
+                        <div class="info-item px-3">
+                            <div class="info-label">Source Record</div>
+                            <div class="info-value">#{{ document.source_record_id }}</div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Tags -->
+                {% if document.tags_json %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-tags me-2"></i>Tags
+                    </div>
+                    <div class="card-body">
+                        {% for tag in document.tags_json|from_json %}
+                        <span class="badge bg-secondary me-1 mb-1">{{ tag }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Quick Actions -->
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-bolt me-2"></i>Quick Actions
+                    </div>
+                    <div class="card-body">
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('documents_new_version', document_id=document.id) }}" class="btn btn-outline-primary">
+                                <i class="fas fa-upload me-1"></i> Upload New Version
+                            </a>
+                            <a href="{{ url_for('documents_signatures_create', document_id=document.id) }}" class="btn btn-outline-success">
+                                <i class="fas fa-signature me-1"></i> Request Signature
+                            </a>
+                            <a href="{{ url_for('documents_versions', document_id=document.id) }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-history me-1"></i> View All Versions
+                            </a>
+                            <a href="{{ url_for('documents_links', document_id=document.id) }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-link me-1"></i> Manage Links
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Link Modal -->
+    <div class="modal fade" id="addLinkModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" action="{{ url_for('documents_add_link', document_id=document.id) }}">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Add Linked Record</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Module</label>
+                            <input type="text" name="linked_module" class="form-control" required placeholder="e.g., sales, finance, hr">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Record ID</label>
+                            <input type="number" name="linked_record_id" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Link Type</label>
+                            <select name="link_type" class="form-select">
+                                <option value="Related">Related</option>
+                                <option value="Parent">Parent</option>
+                                <option value="Child">Child</option>
+                                <option value="Reference">Reference</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Add Link</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Share Modal -->
+    <div class="modal fade" id="addShareModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" action="{{ url_for('documents_add_share', document_id=document.id) }}">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Share Document</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">Share with User</label>
+                            <input type="number" name="share_with_user_id" class="form-control" required placeholder="User ID">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Permission Level</label>
+                            <select name="permission_level" class="form-select">
+                                <option value="View">View Only</option>
+                                <option value="Edit">View & Edit</option>
+                                <option value="Admin">Full Control</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Access Level</label>
+                            <select name="access_level" class="form-select">
+                                <option value="Read">Read</option>
+                                <option value="Write">Write</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Expires At (optional)</label>
+                            <input type="datetime-local" name="expires_at" class="form-control">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Share</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

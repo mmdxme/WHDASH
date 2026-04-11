@@ -1,0 +1,140 @@
+{% extends "bi_advanced/base.html" %}
+
+{% block content %}
+<aside class="bi-sidebar">
+    <div class="bi-sidebar-header">
+        <h2><i class="fas fa-analytics"></i> Advanced BI</h2>
+    </div>
+    <div class="bi-nav-section">
+        <div class="bi-nav-section-title">Overview</div>
+        <a href="{{ url_for('bi_advanced_dashboard') }}" class="bi-nav-item"><i class="fas fa-th-large"></i> BI Dashboard</a>
+    </div>
+    <div class="bi-nav-section">
+        <div class="bi-nav-section-title">Reports</div>
+        <a href="{{ url_for('bi_reports') }}" class="bi-nav-item active"><i class="fas fa-file-alt"></i> Saved Reports</a>
+        <a href="{{ url_for('bi_report_builder') }}" class="bi-nav-item"><i class="fas fa-tools"></i> Report Builder</a>
+    </div>
+</aside>
+
+<main class="bi-main">
+    <div class="bi-breadcrumb">
+        <a href="{{ url_for('index') }}">Home</a>
+        <i class="fas fa-chevron-right"></i>
+        <a href="{{ url_for('bi_advanced_dashboard') }}">BI</a>
+        <i class="fas fa-chevron-right"></i>
+        <a href="{{ url_for('bi_reports') }}">Reports</a>
+        <i class="fas fa-chevron-right"></i>
+        <span>{{ report.report_name }}</span>
+    </div>
+    
+    <div class="bi-header">
+        <h1>{{ page_title }}</h1>
+        <div class="bi-actions">
+            {% if can_export %}
+            <div style="display: flex; gap: 10px;">
+                <a href="{{ url_for('bi_export_report', report_id=report.id, format='csv') }}" class="bi-btn bi-btn-secondary">
+                    <i class="fas fa-file-csv"></i> CSV
+                </a>
+                <a href="{{ url_for('bi_export_report', report_id=report.id, format='excel') }}" class="bi-btn bi-btn-secondary">
+                    <i class="fas fa-file-excel"></i> Excel
+                </a>
+            </div>
+            {% endif %}
+            <a href="{{ url_for('bi_edit_report', report_id=report.id) }}" class="bi-btn bi-btn-primary">
+                <i class="fas fa-edit"></i> Edit Report
+            </a>
+        </div>
+    </div>
+    
+    <div class="bi-stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 20px;">
+        <div class="bi-stat-card">
+            <div class="icon blue"><i class="fas fa-play"></i></div>
+            <div class="value">{{ report.run_count or 0 }}</div>
+            <div class="label">Times Run</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon green"><i class="fas fa-clock"></i></div>
+            <div class="value">{{ report.last_run_at or 'Never' }}</div>
+            <div class="label">Last Run</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon orange"><i class="fas fa-filter"></i></div>
+            <div class="value">{{ report.selected_fields|length if report.selected_fields else 0 }}</div>
+            <div class="label">Fields</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon purple"><i class="fas fa-database"></i></div>
+            <div class="value">{{ dataset.dataset_name if dataset else 'N/A' }}</div>
+            <div class="label">Data Source</div>
+        </div>
+    </div>
+    
+    <div class="bi-card" id="report_results">
+        <div class="bi-card-header">
+            <span class="bi-card-title">Report Data</span>
+            <button class="bi-btn bi-btn-primary" style="padding: 8px 16px;" onclick="refreshReport()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+        <div id="results_container">
+            <div class="bi-empty-state">
+                <i class="fas fa-spinner fa-spin"></i>
+                <h3>Loading Report Data...</h3>
+                <p>Please wait while we fetch the report results.</p>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+const reportId = {{ report.id }};
+
+async function loadReport() {
+    const container = document.getElementById('results_container');
+    
+    try {
+        const response = await fetch(`/bi/reports/api/execute/${reportId}`);
+        const result = await response.json();
+        
+        if (result.error) {
+            container.innerHTML = `<div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> ${result.error}</div>`;
+            return;
+        }
+        
+        if (!result.data || result.data.length === 0) {
+            container.innerHTML = '<div class="bi-empty-state"><i class="fas fa-inbox"></i><h3>No Results</h3><p>This report returned no data.</p></div>';
+            return;
+        }
+        
+        const cols = result.columns || [];
+        let tableHtml = '<div style="overflow-x: auto;"><table class="bi-table"><thead><tr>';
+        cols.forEach(col => { tableHtml += `<th>${col}</th>`; });
+        tableHtml += '</tr></thead><tbody>';
+        result.data.forEach(row => {
+            tableHtml += '<tr>';
+            cols.forEach(col => {
+                const val = row[col];
+                const formatted = typeof val === 'number' ? val.toLocaleString() : (val || '');
+                tableHtml += `<td>${formatted}</td>`;
+            });
+            tableHtml += '</tr>';
+        });
+        tableHtml += '</tbody></table></div>';
+        tableHtml += `<div style="margin-top: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px; font-size: 13px; color: #666;">
+            <i class="fas fa-info-circle"></i> Showing ${result.row_count} rows (${result.execution_time_ms}ms)
+            {% if can_export %} | <a href="/bi/export/${reportId}?format=csv"><i class="fas fa-download"></i> Export CSV</a>{% endif %}
+        </div>`;
+        
+        container.innerHTML = tableHtml;
+    } catch (error) {
+        container.innerHTML = `<div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> Error loading report: ${error.message}</div>`;
+    }
+}
+
+function refreshReport() {
+    loadReport();
+}
+
+loadReport();
+</script>
+{% endblock %}

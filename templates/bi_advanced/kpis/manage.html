@@ -1,0 +1,171 @@
+{% extends "bi_advanced/base.html" %}
+
+{% block content %}
+<aside class="bi-sidebar">
+    <div class="bi-sidebar-header">
+        <h2><i class="fas fa-analytics"></i> Advanced BI</h2>
+    </div>
+    <div class="bi-nav-section">
+        <div class="bi-nav-section-title">Administration</div>
+        <a href="{{ url_for('bi_manage_kpis') }}" class="bi-nav-item active"><i class="fas fa-tachometer-alt"></i> Manage KPIs</a>
+        <a href="{{ url_for('bi_approvals') }}" class="bi-nav-item"><i class="fas fa-check-circle"></i> Approvals</a>
+        <a href="{{ url_for('bi_settings') }}" class="bi-nav-item"><i class="fas fa-sliders-h"></i> Settings</a>
+    </div>
+</aside>
+
+<main class="bi-main">
+    <div class="bi-breadcrumb">
+        <a href="{{ url_for('index') }}">Home</a>
+        <i class="fas fa-chevron-right"></i>
+        <a href="{{ url_for('bi_advanced_dashboard') }}">BI</a>
+        <i class="fas fa-chevron-right"></i>
+        <span>Manage KPIs</span>
+    </div>
+    
+    <div class="bi-header">
+        <h1>{{ page_title }}</h1>
+        <div class="bi-actions">
+            <button class="bi-btn bi-btn-primary" onclick="showCreateModal()">
+                <i class="fas fa-plus"></i> Create KPI
+            </button>
+        </div>
+    </div>
+    
+    <div class="bi-card">
+        {% if kpis %}
+        <table class="bi-table">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Category</th>
+                    <th>Unit</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for kpi in kpis %}
+                <tr>
+                    <td><code>{{ kpi.kpi_code }}</code></td>
+                    <td><strong>{{ kpi.kpi_name }}</strong></td>
+                    <td><span class="bi-badge bi-badge-info">{{ kpi.category }}</span></td>
+                    <td>{{ kpi.unit_of_measure }}</td>
+                    <td>
+                        {% if kpi.is_active %}
+                        <span class="bi-badge bi-badge-success">Active</span>
+                        {% else %}
+                        <span class="bi-badge bi-badge-warning">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="bi-btn bi-btn-secondary" style="padding: 5px 12px; font-size: 12px;" onclick="toggleKpi({{ kpi.id }}, {{ kpi.is_active }})">
+                            <i class="fas fa-toggle-on"></i> {{ 'Deactivate' if kpi.is_active else 'Activate' }}
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="bi-empty-state">
+            <i class="fas fa-tachometer-alt"></i>
+            <h3>No KPIs Defined</h3>
+            <p>Create KPIs to define standardized metrics.</p>
+            <button class="bi-btn bi-btn-primary" onclick="showCreateModal()">
+                <i class="fas fa-plus"></i> Create KPI
+            </button>
+        </div>
+        {% endif %}
+    </div>
+    
+    <div id="create_modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 30px; border-radius: 12px; max-width: 500px; width: 90%;">
+            <h3 style="margin-bottom: 20px;">Create New KPI</h3>
+            <div style="margin-bottom: 15px;">
+                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 5px;">KPI Code *</label>
+                <input type="text" id="kpi_code" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;" placeholder="e.g., sales.total_revenue">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 5px;">KPI Name *</label>
+                <input type="text" id="kpi_name" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;" placeholder="e.g., Total Revenue">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 5px;">Category *</label>
+                <select id="kpi_category" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                    <option value="Sales">Sales</option>
+                    <option value="Inventory">Inventory</option>
+                    <option value="Finance">Finance</option>
+                    <option value="HR">HR</option>
+                    <option value="Operations">Operations</option>
+                    <option value="Marketing">Marketing</option>
+                    <option value="Quality">Quality</option>
+                </select>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 5px;">Unit of Measure</label>
+                <input type="text" id="kpi_unit" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;" placeholder="e.g., AED, %, count">
+            </div>
+            <div style="margin-bottom: 20px;">
+                <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 5px;">Description</label>
+                <textarea id="kpi_description" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; min-height: 60px;" placeholder="Description..."></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="bi-btn bi-btn-secondary" onclick="hideCreateModal()">Cancel</button>
+                <button class="bi-btn bi-btn-primary" onclick="createKpi()">Create KPI</button>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+function showCreateModal() {
+    document.getElementById('create_modal').style.display = 'flex';
+}
+
+function hideCreateModal() {
+    document.getElementById('create_modal').style.display = 'none';
+}
+
+async function createKpi() {
+    const kpiCode = document.getElementById('kpi_code').value.trim();
+    const kpiName = document.getElementById('kpi_name').value.trim();
+    const category = document.getElementById('kpi_category').value;
+    
+    if (!kpiCode || !kpiName) {
+        alert('KPI code and name are required');
+        return;
+    }
+    
+    const response = await fetch('/bi/kpis/api/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            kpi_code: kpiCode,
+            kpi_name: kpiName,
+            category: category,
+            unit_of_measure: document.getElementById('kpi_unit').value,
+            description: document.getElementById('kpi_description').value
+        })
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+        window.location.reload();
+    } else {
+        alert('Error creating KPI: ' + (result.error || 'Unknown error'));
+    }
+}
+
+async function toggleKpi(id, isActive) {
+    const response = await fetch(`/bi/kpis/api/toggle/${id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (response.ok) {
+        window.location.reload();
+    }
+}
+</script>
+{% endblock %}

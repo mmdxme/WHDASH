@@ -1,7 +1,7 @@
 """
 Unified Settings Management System
 ================================
-Centralized settings management for the entire WHDASH platform.
+Centralized settings management for the entire MMDx platform.
 
 This module provides:
 - Single settings table for all platform settings
@@ -110,7 +110,7 @@ DEFAULT_SETTINGS = {
     
     # Localization
     'default_language': {'value': 'en', 'type': 'string', 'category': 'LOCALIZATION', 'description': 'Default system language'},
-    'available_languages': {'value': 'en,ar,fa', 'type': 'string', 'category': 'LOCALIZATION', 'description': 'Available languages (comma-separated)'},
+    'available_languages': {'value': 'en,ar,fa,ru,hi,es,zh,de', 'type': 'string', 'category': 'LOCALIZATION', 'description': 'Available languages (comma-separated)'},
     'default_timezone': {'value': 'Asia/Dubai', 'type': 'string', 'category': 'LOCALIZATION', 'description': 'Default timezone'},
     'date_format': {'value': 'DD/MM/YYYY', 'type': 'string', 'category': 'LOCALIZATION', 'description': 'Date format'},
     'time_format': {'value': '24h', 'type': 'string', 'category': 'LOCALIZATION', 'description': 'Time format (12h or 24h)'},

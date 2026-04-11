@@ -44,6 +44,7 @@ from hr_models import (
     get_department_employee_count, get_employee_with_employment,
     HR_TABLES
 )
+from permissions import user_has_permission
 
 hr_bp = Blueprint('hr', __name__, url_prefix='/hr')
 
@@ -65,26 +66,28 @@ def hr_login_required(f):
     return decorated_function
 
 
-def hr_permission_required(permission: str):
-    """Decorator to check HR-specific permissions."""
+def hr_permission_required(action: str):
+    """Decorator to check HR-specific permissions using central permissions system."""
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if 'user_id' not in session:
+                if request.is_json:
+                    return jsonify({'error': 'Authentication required'}), 401
                 flash('Please log in first.', 'error')
                 return redirect(url_for('login'))
-            
+
             # Super admin bypass
             if session.get('role_name') == 'Global Admin':
                 return f(*args, **kwargs)
-            
-            # Check specific HR permissions from session or role
-            hr_permissions = session.get('hr_permissions', [])
-            if 'all_hr' in hr_permissions or permission in hr_permissions:
-                return f(*args, **kwargs)
-            
-            flash('You do not have permission to access this HR module.', 'error')
-            return redirect(url_for('index'))
+
+            user_id = session['user_id']
+            if not user_has_permission(user_id, 'hr', 'hr', action):
+                if request.is_json:
+                    return jsonify({'error': 'Permission denied'}), 403
+                flash(f"You don't have permission to {action} HR records.", 'error')
+                return redirect(url_for('index'))
+            return f(*args, **kwargs)
         return decorated_function
     return decorator
 
@@ -116,6 +119,40 @@ def parse_date(date_str):
             return None
 
 
+def generate_employee_code(db, prefix='EMP'):
+    """Generate a unique, sequential employee code.
+
+    Standard format: EMP{YYYY}{####}
+    - EMP: fixed prefix
+    - YYYY: 4-digit year from hire date (defaults to current year)
+    - ####: zero-padded 4-digit sequential number within the year
+
+    Uses MAX(employee_code) parsed for the given year prefix to find the
+    next sequence number, ensuring strict sequential ordering and no gaps
+    within the same year. Thread-safe via row-level locking.
+    """
+    current_year = datetime.now().year
+    year_prefix = f'{prefix}{current_year}'
+
+    row = db.execute("""
+        SELECT employee_code FROM hr_employees
+        WHERE employee_code LIKE ?
+        ORDER BY employee_code DESC LIMIT 1
+    """, (f'{year_prefix}%',)).fetchone()
+
+    if row and row['employee_code']:
+        # employee_code format: EMPYYYY####  → extract numeric suffix
+        suffix_str = row['employee_code'][len(year_prefix):]
+        try:
+            next_seq = int(suffix_str) + 1
+        except ValueError:
+            next_seq = 1
+    else:
+        next_seq = 1
+
+    return f'{year_prefix}{next_seq:04d}'
+
+
 def format_date(date_obj, fmt='%d/%m/%Y'):
     """Format date object to string."""
     if not date_obj:
@@ -140,6 +177,7 @@ def error_response(message, status=400):
 @hr_bp.route('/')
 @hr_bp.route('/dashboard')
 @hr_login_required
+@hr_permission_required('view')
 def hr_dashboard():
     """HR Dashboard - Main overview page."""
     user = get_current_user()
@@ -251,6 +289,7 @@ def hr_dashboard():
 
 @hr_bp.route('/employees')
 @hr_login_required
+@hr_permission_required('view')
 def employees_list():
     """Employee list page with filtering and search."""
     user = get_current_user()
@@ -346,16 +385,9 @@ def employees_list():
         db.close()
 
 
-@hr_bp.route('/sync-employees')
-@hr_login_required
-def sync_employees():
-    """Sync employees - no longer supported, employees are managed locally."""
-    flash("Employee sync with external panel is no longer supported. Employees are managed locally.", 'info')
-    return redirect(url_for('hr.employees_list'))
-
-
 @hr_bp.route('/employees/new', methods=['GET', 'POST'])
 @hr_login_required
+@hr_permission_required('create')
 def employees_new():
     """Create new employee."""
     user = get_current_user()
@@ -368,16 +400,7 @@ def employees_new():
             # Generate employee code if not provided
             employee_code = data.get('employee_code')
             if not employee_code:
-                # Get max existing code and increment
-                last_code = db.execute("SELECT employee_code FROM hr_employees ORDER BY id DESC LIMIT 1").fetchone()
-                if last_code and last_code['employee_code']:
-                    try:
-                        num = int(last_code['employee_code'].replace('EMP', ''))
-                        employee_code = f'EMP{num + 1:04d}'
-                    except ValueError:
-                        employee_code = 'EMP0001'
-                else:
-                    employee_code = 'EMP0001'
+                employee_code = generate_employee_code(db)
             
             # Insert employee
             cursor = db.execute("""
@@ -496,6 +519,7 @@ def employees_new():
 
 @hr_bp.route('/employees/view/<int:id>')
 @hr_login_required
+@hr_permission_required('view')
 def employees_view(id):
     """View employee detail page."""
     user = get_current_user()
@@ -607,6 +631,7 @@ def employees_view(id):
 
 @hr_bp.route('/employees/edit/<int:id>', methods=['GET', 'POST'])
 @hr_login_required
+@hr_permission_required('edit')
 def employees_edit(id):
     """Edit employee details."""
     user = get_current_user()
@@ -717,6 +742,7 @@ def employees_edit(id):
 
 @hr_bp.route('/employees/delete/<int:id>', methods=['POST'])
 @hr_login_required
+@hr_permission_required('delete')
 def employees_delete(id):
     """Archive/delete employee."""
     user = get_current_user()
@@ -761,6 +787,7 @@ def employees_delete(id):
 
 @hr_bp.route('/departments')
 @hr_login_required
+@hr_permission_required('view')
 def departments_list():
     """List all departments."""
     user = get_current_user()
@@ -789,6 +816,7 @@ def departments_list():
 
 @hr_bp.route('/departments/new', methods=['GET', 'POST'])
 @hr_login_required
+@hr_permission_required('create')
 def departments_new():
     """Create new department."""
     if request.method == 'POST':
@@ -836,6 +864,7 @@ def departments_new():
 
 @hr_bp.route('/positions')
 @hr_login_required
+@hr_permission_required('view')
 def positions_list():
     """List all positions."""
     db = get_db()
@@ -863,6 +892,7 @@ def positions_list():
 
 @hr_bp.route('/attendance')
 @hr_login_required
+@hr_permission_required('view')
 def attendance_list():
     """Attendance records list."""
     db = get_db()
@@ -908,6 +938,7 @@ def attendance_list():
 
 @hr_bp.route('/attendance/mark', methods=['GET', 'POST'])
 @hr_login_required
+@hr_permission_required('create')
 def attendance_mark():
     """Mark attendance manually."""
     if request.method == 'POST':
@@ -979,6 +1010,7 @@ def attendance_mark():
 
 @hr_bp.route('/attendance/summary')
 @hr_login_required
+@hr_permission_required('view')
 def attendance_summary():
     """Attendance summary report."""
     db = get_db()
@@ -1026,6 +1058,7 @@ def attendance_summary():
 
 @hr_bp.route('/leave')
 @hr_login_required
+@hr_permission_required('view')
 def leave_list():
     """Leave requests list."""
     db = get_db()
@@ -1070,6 +1103,7 @@ def leave_list():
 
 @hr_bp.route('/leave/new', methods=['GET', 'POST'])
 @hr_login_required
+@hr_permission_required('create')
 def leave_new():
     """Create new leave request."""
     if request.method == 'POST':
@@ -1174,6 +1208,7 @@ def leave_new():
 
 @hr_bp.route('/leave/approve/<int:id>', methods=['POST'])
 @hr_login_required
+@hr_permission_required('approve')
 def leave_approve(id):
     """Approve or reject leave request."""
     db = get_db()
@@ -1240,6 +1275,7 @@ def leave_approve(id):
 
 @hr_bp.route('/payroll')
 @hr_login_required
+@hr_permission_required('view')
 def payroll_list():
     """List payroll periods."""
     db = get_db()
@@ -1258,6 +1294,7 @@ def payroll_list():
 
 @hr_bp.route('/payroll/process/<int:period_id>')
 @hr_login_required
+@hr_permission_required('process')
 def payroll_process(period_id):
     """Process payroll for a period."""
     db = get_db()
@@ -1388,6 +1425,7 @@ def payroll_process(period_id):
 
 @hr_bp.route('/payroll/detail/<int:period_id>')
 @hr_login_required
+@hr_permission_required('view')
 def payroll_detail(period_id):
     """View payroll detail for a period."""
     db = get_db()
@@ -1433,6 +1471,7 @@ def payroll_detail(period_id):
 
 @hr_bp.route('/payroll/approve/<int:period_id>', methods=['POST'])
 @hr_login_required
+@hr_permission_required('approve')
 def payroll_approve(period_id):
     """Approve payroll period."""
     db = get_db()
@@ -1463,6 +1502,7 @@ def payroll_approve(period_id):
 
 @hr_bp.route('/payroll/export/<int:period_id>')
 @hr_login_required
+@hr_permission_required('view')
 def payroll_export(period_id):
     """Export payroll to CSV."""
     db = get_db()
@@ -1502,6 +1542,7 @@ def payroll_export(period_id):
 
 @hr_bp.route('/overtime')
 @hr_login_required
+@hr_permission_required('view')
 def overtime_list():
     """List overtime requests."""
     db = get_db()
@@ -1534,6 +1575,7 @@ def overtime_list():
 
 @hr_bp.route('/overtime/new', methods=['GET', 'POST'])
 @hr_login_required
+@hr_permission_required('create')
 def overtime_new():
     """Create new overtime request."""
     if request.method == 'POST':
@@ -1591,6 +1633,7 @@ def overtime_new():
 
 @hr_bp.route('/overtime/approve/<int:id>', methods=['POST'])
 @hr_login_required
+@hr_permission_required('approve')
 def overtime_approve(id):
     """Approve or reject overtime."""
     db = get_db()
@@ -1628,6 +1671,7 @@ def overtime_approve(id):
 
 @hr_bp.route('/bonuses')
 @hr_login_required
+@hr_permission_required('view')
 def bonuses_list():
     """List bonus records."""
     db = get_db()
@@ -1650,6 +1694,7 @@ def bonuses_list():
 
 @hr_bp.route('/bonuses/new', methods=['GET', 'POST'])
 @hr_login_required
+@hr_permission_required('create')
 def bonuses_new():
     """Create new bonus record."""
     if request.method == 'POST':
@@ -1692,6 +1737,7 @@ def bonuses_new():
 
 @hr_bp.route('/deductions')
 @hr_login_required
+@hr_permission_required('view')
 def deductions_list():
     """List deduction records."""
     db = get_db()
@@ -1714,6 +1760,7 @@ def deductions_list():
 
 @hr_bp.route('/deductions/new', methods=['GET', 'POST'])
 @hr_login_required
+@hr_permission_required('create')
 def deductions_new():
     """Create new deduction record."""
     if request.method == 'POST':
@@ -1754,85 +1801,387 @@ def deductions_new():
 
 
 # =============================================================================
-# 11. LOANS
+# 11. TRAINING
 # =============================================================================
 
-@hr_bp.route('/loans')
+@hr_bp.route('/training')
 @hr_login_required
-def loans_list():
-    """List employee loans."""
+@hr_permission_required('view')
+def training_list():
+    """List all training programs."""
     db = get_db()
     try:
-        loans = db.execute("""
-            SELECT l.*, e.first_name, e.last_name, e.employee_code
-            FROM hr_loans l
-            JOIN hr_employees e ON l.employee_id = e.id
-            ORDER BY l.created_at DESC
+        programs = db.execute("""
+            SELECT tp.*,
+                   COUNT(ts.id) as session_count,
+                   COUNT(te.id) as total_enrollments
+            FROM hr_training_programs tp
+            LEFT JOIN hr_training_sessions ts ON ts.program_id = tp.id
+            LEFT JOIN hr_training_enrollments te ON te.session_id = ts.id
+            WHERE tp.is_active = 1
+            GROUP BY tp.id
+            ORDER BY tp.created_at DESC
         """).fetchall()
-        
-        return render_template('hr/loans/list.html',
-                             title='Loans & Advances',
-                             loans=[dict(l) for l in loans])
+
+        sessions = db.execute("""
+            SELECT ts.*, tp.title as program_title, tp.training_type
+            FROM hr_training_sessions ts
+            JOIN hr_training_programs tp ON ts.program_id = tp.id
+            ORDER BY ts.start_date DESC
+            LIMIT 20
+        """).fetchall()
+
+        return render_template('hr/training/list.html',
+                             title='Training',
+                             programs=[dict(p) for p in programs],
+                             sessions=[dict(s) for s in sessions])
     finally:
         db.close()
 
 
-@hr_bp.route('/loans/new', methods=['GET', 'POST'])
+@hr_bp.route('/training/programs/new', methods=['GET', 'POST'])
 @hr_login_required
-def loans_new():
-    """Create new loan."""
+@hr_permission_required('create')
+def training_program_new():
+    """Create new training program."""
     if request.method == 'POST':
         db = get_db()
         try:
             data = request.form
-            
-            principal = float(data.get('principal_amount'))
-            interest_rate = float(data.get('interest_rate', 0))
-            tenure = int(data.get('tenure_months'))
-            
-            total_amount = principal * (1 + interest_rate / 100)
-            monthly_installment = total_amount / tenure
-            
             cursor = db.execute("""
-                INSERT INTO hr_loans
-                (employee_id, loan_type, principal_amount, interest_rate, total_amount,
-                 monthly_installment, tenure_months, amount_remaining, start_date, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
-            """, (data.get('employee_id'), data.get('loan_type', 'Personal'),
-                  principal, interest_rate, total_amount, monthly_installment,
-                  tenure, total_amount, data.get('start_date')))
-            
-            loan_id = cursor.lastrowid
-            
-            # Create installment schedule
-            for i in range(tenure):
-                due_date = datetime.strptime(data.get('start_date'), '%Y-%m-%d')
-                due_date = due_date + timedelta(days=30 * i)
-                
-                db.execute("""
-                    INSERT INTO hr_loan_installments
-                    (loan_id, due_date, installment_amount, principal_amount, interest_amount, status)
-                    VALUES (?, ?, ?, ?, ?, 'Pending')
-                """, (loan_id, due_date.strftime('%Y-%m-%d'), monthly_installment,
-                      principal / tenure, (total_amount - principal) / tenure))
-            
+                INSERT INTO hr_training_programs
+                (title, title_ar, title_fa, description, category, training_type,
+                 provider, duration_hours, duration_days, cost_per_participant,
+                 certification_validity_months, is_mandatory, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            """, (
+                data.get('title'),
+                data.get('title_ar'),
+                data.get('title_fa'),
+                data.get('description'),
+                data.get('category'),
+                data.get('training_type', 'Technical'),
+                data.get('provider'),
+                data.get('duration_hours', 0),
+                data.get('duration_days', 0),
+                data.get('cost_per_participant', 0),
+                data.get('certification_validity_months'),
+                1 if data.get('is_mandatory') else 0,
+            ))
             db.commit()
-            flash('Loan created successfully!', 'success')
-            return redirect(url_for('hr.loans_list'))
-            
+            flash('Training program created successfully!', 'success')
+            return redirect(url_for('hr.training_list'))
         except Exception as e:
             db.rollback()
             flash(f'Error: {str(e)}', 'error')
         finally:
             db.close()
-    
+
+    return render_template('hr/training/program_new.html', title='New Training Program')
+
+
+@hr_bp.route('/training/programs/<int:program_id>')
+@hr_login_required
+@hr_permission_required('view')
+def training_program_detail(program_id):
+    """View training program details."""
     db = get_db()
     try:
-        employees = db.execute("SELECT id, first_name, last_name, employee_code FROM hr_employees WHERE status = 'Active' ORDER BY first_name").fetchall()
-        return render_template('hr/loans/new.html',
-                             title='New Loan',
-                             employees=[dict(e) for e in employees],
-                             default_date=datetime.now().strftime('%Y-%m-%d'))
+        program = db.execute("SELECT * FROM hr_training_programs WHERE id = ?", (program_id,)).fetchone()
+        if not program:
+            flash('Training program not found.', 'error')
+            return redirect(url_for('hr.training_list'))
+
+        sessions = db.execute("""
+            SELECT ts.*,
+                   COUNT(te.id) as enrolled_count,
+                   SUM(CASE WHEN te.status = 'Completed' THEN 1 ELSE 0 END) as completed_count
+            FROM hr_training_sessions ts
+            LEFT JOIN hr_training_enrollments te ON te.session_id = ts.id
+            WHERE ts.program_id = ?
+            GROUP BY ts.id
+            ORDER BY ts.start_date DESC
+        """, (program_id,)).fetchall()
+
+        return render_template('hr/training/program_detail.html',
+                             title=program['title'],
+                             program=dict(program),
+                             sessions=[dict(s) for s in sessions])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/training/sessions/new', methods=['GET', 'POST'])
+@hr_login_required
+@hr_permission_required('create')
+def training_session_new():
+    """Create new training session."""
+    if request.method == 'POST':
+        db = get_db()
+        try:
+            data = request.form
+            cursor = db.execute("""
+                INSERT INTO hr_training_sessions
+                (program_id, session_title, trainer_name, trainer_contact,
+                 location, online_link, start_date, end_date, start_time, end_time,
+                 max_participants, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Scheduled')
+            """, (
+                data.get('program_id'),
+                data.get('session_title'),
+                data.get('trainer_name'),
+                data.get('trainer_contact'),
+                data.get('location'),
+                data.get('online_link'),
+                data.get('start_date'),
+                data.get('end_date'),
+                data.get('start_time'),
+                data.get('end_time'),
+                data.get('max_participants', 20),
+            ))
+            db.commit()
+            flash('Training session scheduled successfully!', 'success')
+            return redirect(url_for('hr.training_list'))
+        except Exception as e:
+            db.rollback()
+            flash(f'Error: {str(e)}', 'error')
+        finally:
+            db.close()
+
+    db = get_db()
+    try:
+        programs = db.execute("SELECT id, title, training_type FROM hr_training_programs WHERE is_active = 1 ORDER BY title").fetchall()
+        return render_template('hr/training/session_new.html',
+                             title='Schedule Training Session',
+                             programs=[dict(p) for p in programs])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/training/sessions/<int:session_id>')
+@hr_login_required
+@hr_permission_required('view')
+def training_session_detail(session_id):
+    """View training session details with enrollments."""
+    db = get_db()
+    try:
+        session = db.execute("""
+            SELECT ts.*, tp.title as program_title, tp.training_type, tp.duration_hours
+            FROM hr_training_sessions ts
+            JOIN hr_training_programs tp ON ts.program_id = tp.id
+            WHERE ts.id = ?
+        """, (session_id,)).fetchone()
+
+        if not session:
+            flash('Training session not found.', 'error')
+            return redirect(url_for('hr.training_list'))
+
+        enrollments = db.execute("""
+            SELECT te.*, e.first_name, e.last_name, e.employee_code, e.department_id,
+                   d.name as department_name
+            FROM hr_training_enrollments te
+            JOIN hr_employees e ON te.employee_id = e.id
+            LEFT JOIN hr_employee_employment ee ON ee.employee_id = e.id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            WHERE te.session_id = ?
+            ORDER BY te.enrollment_date DESC
+        """, (session_id,)).fetchall()
+
+        available_employees = db.execute("""
+            SELECT e.id, e.first_name, e.last_name, e.employee_code,
+                   d.name as department_name
+            FROM hr_employees e
+            LEFT JOIN hr_employee_employment ee ON ee.employee_id = e.id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            WHERE e.status = 'Active'
+            AND e.id NOT IN (
+                SELECT employee_id FROM hr_training_enrollments WHERE session_id = ?
+            )
+            ORDER BY e.first_name
+        """, (session_id,)).fetchall()
+
+        return render_template('hr/training/session_detail.html',
+                             title=session['session_title'] or session['program_title'],
+                             session=dict(session),
+                             enrollments=[dict(e) for e in enrollments],
+                             available_employees=[dict(a) for a in available_employees])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/training/sessions/<int:session_id>/enroll', methods=['POST'])
+@hr_login_required
+@hr_permission_required('create')
+def training_session_enroll(session_id):
+    """Enroll employee(s) in a training session."""
+    db = get_db()
+    try:
+        employee_ids = request.form.getlist('employee_id')
+        for emp_id in employee_ids:
+            existing = db.execute(
+                "SELECT id FROM hr_training_enrollments WHERE session_id = ? AND employee_id = ?",
+                (session_id, emp_id)
+            ).fetchone()
+            if not existing:
+                db.execute("""
+                    INSERT INTO hr_training_enrollments (session_id, employee_id, status)
+                    VALUES (?, ?, 'Enrolled')
+                """, (session_id, emp_id))
+                db.execute("""
+                    UPDATE hr_training_sessions SET enrolled_count = enrolled_count + 1
+                    WHERE id = ?
+                """, (session_id,))
+        db.commit()
+        flash(f'{len(employee_ids)} employee(s) enrolled successfully!', 'success')
+    except Exception as e:
+        db.rollback()
+        flash(f'Error: {str(e)}', 'error')
+    finally:
+        db.close()
+    return redirect(url_for('hr.training_session_detail', session_id=session_id))
+
+
+@hr_bp.route('/training/enrollments/<int:enrollment_id>/update', methods=['POST'])
+@hr_login_required
+@hr_permission_required('edit')
+def training_enrollment_update(enrollment_id):
+    """Update enrollment status, score, and completion."""
+    db = get_db()
+    try:
+        data = request.form
+        status = data.get('status')
+        score = data.get('score')
+        grade = data.get('grade')
+        attendance = data.get('attendance_status')
+        cert_number = data.get('certificate_number')
+        completion_date = data.get('completion_date')
+
+        update_fields = ['status = ?']
+        update_values = [status]
+
+        if attendance:
+            update_fields.append('attendance_status = ?')
+            update_values.append(attendance)
+        if score:
+            update_fields.append('score = ?')
+            update_values.append(float(score))
+        if grade:
+            update_fields.append('grade = ?')
+            update_values.append(grade)
+        if cert_number:
+            update_fields.append('certificate_number = ?')
+            update_values.append(cert_number)
+        if completion_date:
+            update_fields.append('completion_date = ?')
+            update_values.append(completion_date)
+        elif status == 'Completed':
+            update_fields.append('completion_date = ?')
+            update_values.append(datetime.now().strftime('%Y-%m-%d'))
+
+        update_values.append(enrollment_id)
+        db.execute(
+            f"UPDATE hr_training_enrollments SET {', '.join(update_fields)} WHERE id = ?",
+            update_values
+        )
+        db.commit()
+        flash('Enrollment updated successfully!', 'success')
+        session_id_row = db.execute("SELECT session_id FROM hr_training_enrollments WHERE id = ?", (enrollment_id,)).fetchone()
+        redirect_session_id = session_id_row['session_id'] if session_id_row else 0
+    except Exception as e:
+        db.rollback()
+        flash(f'Error: {str(e)}', 'error')
+        redirect_session_id = 0
+    finally:
+        db.close()
+
+    return redirect(url_for('hr.training_session_detail', session_id=redirect_session_id))
+
+
+@hr_bp.route('/training/enrollments/<int:enrollment_id>/delete', methods=['POST'])
+@hr_login_required
+@hr_permission_required('delete')
+def training_enrollment_delete(enrollment_id):
+    """Remove an enrollment from a training session."""
+    db = get_db()
+    try:
+        enrollment = db.execute("SELECT session_id FROM hr_training_enrollments WHERE id = ?", (enrollment_id,)).fetchone()
+        if enrollment:
+            db.execute("DELETE FROM hr_training_enrollments WHERE id = ?", (enrollment_id,))
+            db.execute("UPDATE hr_training_sessions SET enrolled_count = MAX(0, enrolled_count - 1) WHERE id = ?",
+                       (enrollment['session_id'],))
+        db.commit()
+        flash('Enrollment removed.', 'success')
+    except Exception as e:
+        db.rollback()
+        flash(f'Error: {str(e)}', 'error')
+    finally:
+        db.close()
+    return redirect(url_for('hr.training_list'))
+
+
+@hr_bp.route('/training/sessions/<int:session_id>/status', methods=['POST'])
+@hr_login_required
+@hr_permission_required('edit')
+def training_session_update_status(session_id):
+    """Update training session status (Scheduled -> Ongoing -> Completed)."""
+    db = get_db()
+    try:
+        status = request.form.get('status') or request.args.get('status')
+        if status in ('Scheduled', 'Ongoing', 'Completed', 'Cancelled'):
+            db.execute("UPDATE hr_training_sessions SET status = ? WHERE id = ?", (status, session_id))
+            db.commit()
+            flash(f'Session marked as {status}!', 'success')
+    except Exception as e:
+        db.rollback()
+        flash(f'Error: {str(e)}', 'error')
+    finally:
+        db.close()
+    return redirect(url_for('hr.training_session_detail', session_id=session_id))
+
+
+@hr_bp.route('/training/reports')
+@hr_login_required
+@hr_permission_required('view')
+def training_reports():
+    """Training reports and analytics."""
+    db = get_db()
+    try:
+        total_programs = db.execute("SELECT COUNT(*) as cnt FROM hr_training_programs WHERE is_active = 1").fetchone()['cnt']
+        total_sessions = db.execute("SELECT COUNT(*) as cnt FROM hr_training_sessions").fetchone()['cnt']
+        total_enrollments = db.execute("SELECT COUNT(*) as cnt FROM hr_training_enrollments").fetchone()['cnt']
+        completed = db.execute("SELECT COUNT(*) as cnt FROM hr_training_enrollments WHERE status = 'Completed'").fetchone()['cnt']
+
+        by_type = db.execute("""
+            SELECT tp.training_type, COUNT(DISTINCT tp.id) as programs,
+                   COUNT(te.id) as enrollments
+            FROM hr_training_programs tp
+            LEFT JOIN hr_training_sessions ts ON ts.program_id = tp.id
+            LEFT JOIN hr_training_enrollments te ON te.session_id = ts.id
+            GROUP BY tp.training_type
+        """).fetchall()
+
+        recent = db.execute("""
+            SELECT te.*, e.first_name, e.last_name, e.employee_code,
+                   ts.session_title, tp.title as program_title
+            FROM hr_training_enrollments te
+            JOIN hr_employees e ON te.employee_id = e.id
+            JOIN hr_training_sessions ts ON te.session_id = ts.id
+            JOIN hr_training_programs tp ON ts.program_id = tp.id
+            ORDER BY te.created_at DESC
+            LIMIT 50
+        """).fetchall()
+
+        return render_template('hr/training/reports.html',
+                             title='Training Reports',
+                             stats={
+                                 'total_programs': total_programs,
+                                 'total_sessions': total_sessions,
+                                 'total_enrollments': total_enrollments,
+                                 'completed': completed,
+                                 'completion_rate': round(completed / total_enrollments * 100, 1) if total_enrollments > 0 else 0
+                             },
+                             by_type=[dict(r) for r in by_type],
+                             recent=[dict(r) for r in recent])
     finally:
         db.close()
 
@@ -1843,6 +2192,7 @@ def loans_new():
 
 @hr_bp.route('/documents')
 @hr_login_required
+@hr_permission_required('view')
 def documents_list():
     """List employee documents."""
     db = get_db()
@@ -1877,6 +2227,7 @@ def documents_list():
 
 @hr_bp.route('/documents/new', methods=['GET', 'POST'])
 @hr_login_required
+@hr_permission_required('create')
 def documents_new():
     """Upload new employee document."""
     if request.method == 'POST':
@@ -1934,43 +2285,385 @@ def documents_new():
 
 @hr_bp.route('/recruitment')
 @hr_login_required
+@hr_permission_required('view')
 def recruitment_list():
     """List job requisitions."""
     db = get_db()
     try:
-        requisitions = db.execute("""
+        search = request.args.get('search', '')
+        status = request.args.get('status', '')
+        department = request.args.get('department', '')
+        page = max(1, int(request.args.get('page', 1)))
+        per_page = 15
+
+        # Build query
+        query = """
             SELECT r.*, d.name as department_name, p.title as position_title,
                    u.username as requested_by_name
             FROM hr_job_requisitions r
             LEFT JOIN hr_departments d ON r.department_id = d.id
             LEFT JOIN hr_positions p ON r.position_id = p.id
             LEFT JOIN users u ON r.requested_by_id = u.id
-            ORDER BY r.created_at DESC
-        """).fetchall()
-        
+            WHERE 1=1
+        """
+        count_query = "SELECT COUNT(*) as cnt FROM hr_job_requisitions r WHERE 1=1"
+        params = []
+
+        if search:
+            query += " AND (r.title LIKE ? OR d.name LIKE ?)"
+            count_query += " AND (r.title LIKE ? OR d.name LIKE ?)"
+            params.extend([f'%{search}%', f'%{search}%'])
+
+        if status:
+            query += " AND r.status = ?"
+            count_query += " AND r.status = ?"
+            params.append(status)
+
+        if department:
+            query += " AND r.department_id = ?"
+            count_query += " AND r.department_id = ?"
+            params.append(department)
+
+        total = db.execute(count_query, params).fetchone()['cnt']
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        offset = (page - 1) * per_page
+
+        query += " ORDER BY r.created_at DESC LIMIT ? OFFSET ?"
+        params.extend([per_page, offset])
+
+        requisitions = db.execute(query, params).fetchall()
+
+        # Stats
+        stats = {
+            'open': db.execute("SELECT COUNT(*) as cnt FROM hr_job_requisitions WHERE status='Open'").fetchone()['cnt'],
+            'in_review': db.execute("SELECT COUNT(*) as cnt FROM hr_job_requisitions WHERE status='In Review'").fetchone()['cnt'],
+            'pending': db.execute("SELECT COUNT(*) as cnt FROM hr_job_requisitions WHERE status='Pending Approval'").fetchone()['cnt'],
+            'vacancies': db.execute("SELECT COALESCE(SUM(vacancy_count),0) as cnt FROM hr_job_requisitions WHERE status='Open'").fetchone()['cnt']
+        }
+
+        # Departments for filter
+        departments = db.execute("SELECT id, name FROM hr_departments ORDER BY name").fetchall()
+
         return render_template('hr/recruitment/list.html',
                              title='Recruitment',
-                             requisitions=[dict(r) for r in requisitions])
+                             requisitions=[dict(r) for r in requisitions],
+                             stats=stats,
+                             departments=[dict(d) for d in departments],
+                             search=search,
+                             status=status,
+                             department=department,
+                             page=page,
+                             total_pages=total_pages,
+                             total=total)
     finally:
         db.close()
 
 
 @hr_bp.route('/recruitment/candidates')
 @hr_login_required
+@hr_permission_required('view')
 def candidates_list():
     """List candidates."""
     db = get_db()
     try:
-        candidates = db.execute("""
+        search = request.args.get('search', '')
+        stage = request.args.get('stage', '')
+        status = request.args.get('status', '')
+        page = max(1, int(request.args.get('page', 1)))
+        per_page = 15
+
+        query = """
             SELECT c.*, r.title as requisition_title
             FROM hr_candidates c
             LEFT JOIN hr_job_requisitions r ON c.requisition_id = r.id
-            ORDER BY c.created_at DESC
-        """).fetchall()
-        
+            WHERE 1=1
+        """
+        count_query = "SELECT COUNT(*) as cnt FROM hr_candidates c WHERE 1=1"
+        params = []
+
+        if search:
+            query += " AND (c.first_name LIKE ? OR c.last_name LIKE ? OR c.email LIKE ? OR c.position_applied LIKE ?)"
+            count_query += " AND (c.first_name LIKE ? OR c.last_name LIKE ? OR c.email LIKE ? OR c.position_applied LIKE ?)"
+            params.extend([f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%'])
+
+        if stage:
+            query += " AND c.current_stage = ?"
+            count_query += " AND c.current_stage = ?"
+            params.append(stage)
+
+        if status:
+            query += " AND c.status = ?"
+            count_query += " AND c.status = ?"
+            params.append(status)
+
+        total = db.execute(count_query, params).fetchone()['cnt']
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        offset = (page - 1) * per_page
+
+        query += " ORDER BY c.created_at DESC LIMIT ? OFFSET ?"
+        params.extend([per_page, offset])
+
+        candidates = db.execute(query, params).fetchall()
+
+        # Stats
+        stats = {
+            'total': db.execute("SELECT COUNT(*) as cnt FROM hr_candidates").fetchone()['cnt'],
+            'interview': db.execute("SELECT COUNT(*) as cnt FROM hr_candidates WHERE current_stage IN ('Interview','Technical')").fetchone()['cnt'],
+            'offer': db.execute("SELECT COUNT(*) as cnt FROM hr_candidates WHERE current_stage = 'Offer'").fetchone()['cnt'],
+            'hired': db.execute("SELECT COUNT(*) as cnt FROM hr_candidates WHERE current_stage = 'Hired'").fetchone()['cnt']
+        }
+
         return render_template('hr/recruitment/candidates.html',
                              title='Candidates',
+                             candidates=[dict(c) for c in candidates],
+                             stats=stats,
+                             search=search,
+                             stage=stage,
+                             status=status,
+                             page=page,
+                             total_pages=total_pages,
+                             total=total)
+    finally:
+        db.close()
+
+
+@hr_bp.route('/recruitment/candidates/new', methods=['GET', 'POST'])
+@hr_login_required
+@hr_permission_required('add')
+def candidate_new():
+    """Create new candidate."""
+    db = get_db()
+    try:
+        requisitions = db.execute("SELECT id, title FROM hr_job_requisitions WHERE status = 'Open' ORDER BY title").fetchall()
+        users = db.execute("SELECT id, username FROM users ORDER BY username").fetchall()
+
+        if request.method == 'POST':
+            first_name = request.form.get('first_name')
+            last_name = request.form.get('last_name')
+            email = request.form.get('email')
+            phone = request.form.get('phone')
+            position_applied = request.form.get('position_applied')
+            requisition_id = request.form.get('requisition_id')
+            source = request.form.get('source')
+            current_stage = request.form.get('current_stage', 'Applied')
+            notes = request.form.get('notes')
+            assigned_recruiter_id = request.form.get('assigned_recruiter_id')
+
+            db.execute("""
+                INSERT INTO hr_candidates
+                (first_name, last_name, email, phone, position_applied, requisition_id,
+                 source, current_stage, notes, assigned_recruiter_id, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
+            """, (first_name, last_name, email, phone, position_applied, requisition_id,
+                  source, current_stage, notes, assigned_recruiter_id))
+            db.commit()
+
+            flash(t('candidate_created', 'Candidate added successfully'), 'success')
+            return redirect(url_for('hr.candidates_list'))
+
+        return render_template('hr/recruitment/candidate_new.html',
+                             requisitions=[dict(r) for r in requisitions],
+                             users=[dict(u) for u in users])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/recruitment/candidates/view/<int:id>')
+@hr_login_required
+@hr_permission_required('view')
+def candidate_view(id):
+    """View candidate details."""
+    db = get_db()
+    try:
+        c = db.execute("""
+            SELECT c.*, r.title as requisition_title
+            FROM hr_candidates c
+            LEFT JOIN hr_job_requisitions r ON c.requisition_id = r.id
+            WHERE c.id = ?
+        """, (id,)).fetchone()
+
+        if not c:
+            flash(t('candidate_not_found', 'Candidate not found'), 'error')
+            return redirect(url_for('hr.candidates_list'))
+
+        return render_template('hr/recruitment/candidate_view.html',
+                             candidate=dict(c))
+    finally:
+        db.close()
+
+
+@hr_bp.route('/recruitment/candidates/edit/<int:id>', methods=['GET', 'POST'])
+@hr_login_required
+@hr_permission_required('edit')
+def candidate_edit(id):
+    """Edit candidate."""
+    db = get_db()
+    try:
+        c = db.execute("SELECT * FROM hr_candidates WHERE id = ?", (id,)).fetchone()
+        if not c:
+            flash(t('candidate_not_found', 'Candidate not found'), 'error')
+            return redirect(url_for('hr.candidates_list'))
+
+        requisitions = db.execute("SELECT id, title FROM hr_job_requisitions ORDER BY title").fetchall()
+        users = db.execute("SELECT id, username FROM users ORDER BY username").fetchall()
+
+        if request.method == 'POST':
+            first_name = request.form.get('first_name')
+            last_name = request.form.get('last_name')
+            email = request.form.get('email')
+            phone = request.form.get('phone')
+            position_applied = request.form.get('position_applied')
+            requisition_id = request.form.get('requisition_id')
+            source = request.form.get('source')
+            current_stage = request.form.get('current_stage', 'Applied')
+            interview_score = request.form.get('interview_score')
+            status = request.form.get('status', 'Active')
+            notes = request.form.get('notes')
+            assigned_recruiter_id = request.form.get('assigned_recruiter_id')
+
+            db.execute("""
+                UPDATE hr_candidates SET
+                    first_name = ?, last_name = ?, email = ?, phone = ?,
+                    position_applied = ?, requisition_id = ?, source = ?,
+                    current_stage = ?, interview_score = ?, status = ?,
+                    notes = ?, assigned_recruiter_id = ?
+                WHERE id = ?
+            """, (first_name, last_name, email, phone, position_applied, requisition_id,
+                  source, current_stage, interview_score, status, notes, assigned_recruiter_id, id))
+            db.commit()
+
+            flash(t('candidate_updated', 'Candidate updated successfully'), 'success')
+            return redirect(url_for('hr.candidates_list'))
+
+        return render_template('hr/recruitment/candidate_edit.html',
+                             candidate=dict(c),
+                             requisitions=[dict(r) for r in requisitions],
+                             users=[dict(u) for u in users])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/recruitment/new', methods=['GET', 'POST'])
+@hr_login_required
+@hr_permission_required('add')
+def requisition_new():
+    """Create new job requisition."""
+    db = get_db()
+    try:
+        departments = db.execute("SELECT id, name FROM hr_departments ORDER BY name").fetchall()
+        positions = db.execute("SELECT id, title FROM hr_positions ORDER BY title").fetchall()
+
+        if request.method == 'POST':
+            title = request.form.get('title')
+            department_id = request.form.get('department_id')
+            position_id = request.form.get('position_id')
+            vacancy_count = request.form.get('vacancy_count', 1)
+            employment_type = request.form.get('employment_type', 'Full-time')
+            salary_min = request.form.get('salary_min')
+            salary_max = request.form.get('salary_max')
+            description = request.form.get('description')
+            requirements = request.form.get('requirements')
+            status = request.form.get('status', 'Draft')
+
+            user_id = session.get('user_id')
+
+            db.execute("""
+                INSERT INTO hr_job_requisitions
+                (title, department_id, position_id, vacancy_count, employment_type,
+                 salary_min, salary_max, description, requirements, status, requested_by_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (title, department_id, position_id, vacancy_count, employment_type,
+                  salary_min, salary_max, description, requirements, status, user_id))
+            db.commit()
+
+            flash(t('requisition_created', 'Job requisition created successfully'), 'success')
+            return redirect(url_for('hr.recruitment_list'))
+
+        return render_template('hr/recruitment/requisition_new.html',
+                             departments=[dict(d) for d in departments],
+                             positions=[dict(p) for p in positions])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/recruitment/view/<int:id>')
+@hr_login_required
+@hr_permission_required('view')
+def requisition_view(id):
+    """View job requisition details."""
+    db = get_db()
+    try:
+        r = db.execute("""
+            SELECT r.*, d.name as department_name, p.title as position_title,
+                   u.username as requested_by_name
+            FROM hr_job_requisitions r
+            LEFT JOIN hr_departments d ON r.department_id = d.id
+            LEFT JOIN hr_positions p ON r.position_id = p.id
+            LEFT JOIN users u ON r.requested_by_id = u.id
+            WHERE r.id = ?
+        """, (id,)).fetchone()
+
+        if not r:
+            flash(t('requisition_not_found', 'Job requisition not found'), 'error')
+            return redirect(url_for('hr.recruitment_list'))
+
+        candidates = db.execute("""
+            SELECT c.* FROM hr_candidates c
+            WHERE c.requisition_id = ?
+            ORDER BY c.created_at DESC
+        """, (id,)).fetchall()
+
+        return render_template('hr/recruitment/requisition_view.html',
+                             requisition=dict(r),
                              candidates=[dict(c) for c in candidates])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/recruitment/edit/<int:id>', methods=['GET', 'POST'])
+@hr_login_required
+@hr_permission_required('edit')
+def requisition_edit(id):
+    """Edit job requisition."""
+    db = get_db()
+    try:
+        r = db.execute("SELECT * FROM hr_job_requisitions WHERE id = ?", (id,)).fetchone()
+        if not r:
+            flash(t('requisition_not_found', 'Job requisition not found'), 'error')
+            return redirect(url_for('hr.recruitment_list'))
+
+        departments = db.execute("SELECT id, name FROM hr_departments ORDER BY name").fetchall()
+        positions = db.execute("SELECT id, title FROM hr_positions ORDER BY title").fetchall()
+
+        if request.method == 'POST':
+            title = request.form.get('title')
+            department_id = request.form.get('department_id')
+            position_id = request.form.get('position_id')
+            vacancy_count = request.form.get('vacancy_count', 1)
+            employment_type = request.form.get('employment_type', 'Full-time')
+            salary_min = request.form.get('salary_min')
+            salary_max = request.form.get('salary_max')
+            description = request.form.get('description')
+            requirements = request.form.get('requirements')
+            status = request.form.get('status', 'Draft')
+
+            db.execute("""
+                UPDATE hr_job_requisitions SET
+                    title = ?, department_id = ?, position_id = ?, vacancy_count = ?,
+                    employment_type = ?, salary_min = ?, salary_max = ?,
+                    description = ?, requirements = ?, status = ?
+                WHERE id = ?
+            """, (title, department_id, position_id, vacancy_count, employment_type,
+                  salary_min, salary_max, description, requirements, status, id))
+            db.commit()
+
+            flash(t('requisition_updated', 'Job requisition updated successfully'), 'success')
+            return redirect(url_for('hr.recruitment_list'))
+
+        return render_template('hr/recruitment/requisition_edit.html',
+                             requisition=dict(r),
+                             departments=[dict(d) for d in departments],
+                             positions=[dict(p) for p in positions])
     finally:
         db.close()
 
@@ -1981,6 +2674,7 @@ def candidates_list():
 
 @hr_bp.route('/tasks')
 @hr_login_required
+@hr_permission_required('view')
 def tasks_list():
     """List employee tasks."""
     db = get_db()
@@ -2017,6 +2711,7 @@ def tasks_list():
 
 @hr_bp.route('/performance')
 @hr_login_required
+@hr_permission_required('view')
 def performance_list():
     """List performance reviews."""
     db = get_db()
@@ -2043,6 +2738,7 @@ def performance_list():
 
 @hr_bp.route('/successors')
 @hr_login_required
+@hr_permission_required('view')
 def successors_list():
     """List successor plans."""
     db = get_db()
@@ -2072,6 +2768,7 @@ def successors_list():
 
 @hr_bp.route('/reports')
 @hr_login_required
+@hr_permission_required('view')
 def reports_menu():
     """HR Reports menu."""
     return render_template('hr/reports/menu.html', title='HR Reports')
@@ -2079,6 +2776,7 @@ def reports_menu():
 
 @hr_bp.route('/reports/headcount')
 @hr_login_required
+@hr_permission_required('view')
 def report_headcount():
     """Headcount report."""
     db = get_db()
@@ -2123,6 +2821,7 @@ def report_headcount():
 
 @hr_bp.route('/reports/leave')
 @hr_login_required
+@hr_permission_required('view')
 def report_leave():
     """Leave usage report."""
     db = get_db()
@@ -2150,6 +2849,7 @@ def report_leave():
 
 @hr_bp.route('/reports/payroll-summary')
 @hr_login_required
+@hr_permission_required('view')
 def report_payroll_summary():
     """Payroll summary report."""
     db = get_db()
@@ -2178,6 +2878,7 @@ def report_payroll_summary():
 
 @hr_bp.route('/settings')
 @hr_login_required
+@hr_permission_required('settings')
 def settings_menu():
     """HR Settings menu."""
     db = get_db()
@@ -2205,6 +2906,7 @@ def settings_menu():
 
 @hr_bp.route('/settings/update', methods=['POST'])
 @hr_login_required
+@hr_permission_required('settings')
 def settings_update():
     """Update HR settings."""
     db = get_db()
@@ -2224,6 +2926,7 @@ def settings_update():
 
 @hr_bp.route('/settings/leave-types')
 @hr_login_required
+@hr_permission_required('settings')
 def settings_leave_types():
     """Manage leave types."""
     db = get_db()
@@ -2238,6 +2941,7 @@ def settings_leave_types():
 
 @hr_bp.route('/settings/shifts')
 @hr_login_required
+@hr_permission_required('settings')
 def settings_shifts():
     """Manage shifts."""
     db = get_db()
@@ -2252,6 +2956,7 @@ def settings_shifts():
 
 @hr_bp.route('/settings/payroll-components')
 @hr_login_required
+@hr_permission_required('settings')
 def settings_payroll_components():
     """Manage payroll components."""
     db = get_db()
@@ -2273,22 +2978,203 @@ def settings_payroll_components():
 
 @hr_bp.route('/announcements')
 @hr_login_required
+@hr_permission_required('view')
 def announcements_list():
     """List announcements."""
     db = get_db()
     try:
-        announcements = db.execute("""
+        search = request.args.get('search', '').strip()
+        announcement_type = request.args.get('announcement_type', '').strip()
+        priority = request.args.get('priority', '').strip()
+        is_active = request.args.get('is_active', '').strip()
+        page = int(request.args.get('page', 1))
+        per_page = 12
+
+        where_clauses = []
+        params = []
+
+        if search:
+            where_clauses.append("(a.title LIKE ? OR a.content LIKE ?)")
+            params.extend([f"%{search}%", f"%{search}%"])
+        if announcement_type:
+            where_clauses.append("a.announcement_type = ?")
+            params.append(announcement_type)
+        if priority:
+            where_clauses.append("a.priority = ?")
+            params.append(priority)
+        if is_active != '':
+            where_clauses.append("a.is_active = ?")
+            params.append(is_active)
+
+        where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+        count_sql = f"SELECT COUNT(*) as total FROM hr_announcements a WHERE {where_sql}"
+        total = db.execute(count_sql, params).fetchone()['total']
+        total_pages = max(1, (total + per_page - 1) // per_page)
+        page = min(max(1, page), total_pages)
+        offset = (page - 1) * per_page
+
+        announcements = db.execute(f"""
             SELECT a.*, u.username as created_by_name
             FROM hr_announcements a
             LEFT JOIN users u ON a.created_by_id = u.id
+            WHERE {where_sql}
             ORDER BY a.created_at DESC
-        """).fetchall()
-        
+            LIMIT ? OFFSET ?
+        """, params + [per_page, offset]).fetchall()
+
         return render_template('hr/announcements/list.html',
                              title='Announcements',
-                             announcements=[dict(a) for a in announcements])
+                             announcements=[dict(a) for a in announcements],
+                             total=total,
+                             total_pages=total_pages,
+                             page=page,
+                             search=search,
+                             announcement_type=announcement_type,
+                             priority=priority,
+                             is_active=is_active)
     finally:
         db.close()
+
+
+@hr_bp.route('/announcements/view/<int:id>')
+@hr_login_required
+@hr_permission_required('view')
+def announcements_view(id):
+    """View announcement detail."""
+    db = get_db()
+    try:
+        ann = db.execute("""
+            SELECT a.*, u.username as created_by_name
+            FROM hr_announcements a
+            LEFT JOIN users u ON a.created_by_id = u.id
+            WHERE a.id = ?
+        """, (id,)).fetchone()
+
+        if not ann:
+            flash(t('announcement_not_found', 'Announcement not found'), 'error')
+            return redirect(url_for('hr.announcements_list'))
+
+        return render_template('hr/announcements/view.html',
+                             title='Announcement',
+                             ann=dict(ann))
+    finally:
+        db.close()
+
+
+@hr_bp.route('/announcements/new', methods=['GET', 'POST'])
+@hr_login_required
+@hr_permission_required('edit')
+def announcements_new():
+    """Create new announcement."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            title = request.form.get('title', '').strip()
+            content = request.form.get('content', '').strip()
+            announcement_type = request.form.get('announcement_type', 'General').strip()
+            priority = request.form.get('priority', 'Normal').strip()
+            is_active = 1 if request.form.get('is_active') else 0
+            valid_from = request.form.get('valid_from') or None
+            valid_to = request.form.get('valid_to') or None
+
+            if not title or not content:
+                flash(t('title_content_required', 'Title and content are required'), 'error')
+                return redirect(url_for('hr.announcements_new'))
+
+            db.execute("""
+                INSERT INTO hr_announcements (title, content, announcement_type, priority, is_active, valid_from, valid_to, created_by_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (title, content, announcement_type, priority, is_active, valid_from, valid_to, session.user_id))
+            ann_id = db.execute("SELECT last_insert_rowid() as id").fetchone()['id']
+            db.commit()
+
+            # Send platform notification to all users
+            try:
+                from database import send_notification
+                send_notification(
+                    title=title,
+                    message=content[:200] + ('...' if len(content) > 200 else ''),
+                    notification_type='INFO',
+                    role_id=None,
+                    severity='HIGH' if priority in ('High', 'Critical') else 'MEDIUM',
+                    link_url=f'/hr/announcements/view/{ann_id}',
+                    related_entity_type='hr_announcement',
+                    related_entity_id=ann_id
+                )
+            except Exception:
+                pass
+
+            flash(t('announcement_created', 'Announcement created successfully'), 'success')
+            return redirect(url_for('hr.announcements_list'))
+
+        return render_template('hr/announcements/form.html',
+                             title='New Announcement',
+                             ann=None)
+    finally:
+        db.close()
+
+
+@hr_bp.route('/announcements/edit/<int:id>', methods=['GET', 'POST'])
+@hr_login_required
+@hr_permission_required('edit')
+def announcements_edit(id):
+    """Edit announcement."""
+    db = get_db()
+    try:
+        ann = db.execute("SELECT * FROM hr_announcements WHERE id = ?", (id,)).fetchone()
+        if not ann:
+            flash(t('announcement_not_found', 'Announcement not found'), 'error')
+            return redirect(url_for('hr.announcements_list'))
+
+        if request.method == 'POST':
+            title = request.form.get('title', '').strip()
+            content = request.form.get('content', '').strip()
+            announcement_type = request.form.get('announcement_type', 'General').strip()
+            priority = request.form.get('priority', 'Normal').strip()
+            is_active = 1 if request.form.get('is_active') else 0
+            valid_from = request.form.get('valid_from') or None
+            valid_to = request.form.get('valid_to') or None
+
+            if not title or not content:
+                flash(t('title_content_required', 'Title and content are required'), 'error')
+                return redirect(url_for('hr.announcements_edit', id=id))
+
+            db.execute("""
+                UPDATE hr_announcements
+                SET title = ?, content = ?, announcement_type = ?, priority = ?, is_active = ?, valid_from = ?, valid_to = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (title, content, announcement_type, priority, is_active, valid_from, valid_to, id))
+
+            flash(t('announcement_updated', 'Announcement updated successfully'), 'success')
+            return redirect(url_for('hr.announcements_list'))
+
+        return render_template('hr/announcements/form.html',
+                             title='Edit Announcement',
+                             ann=dict(ann))
+    finally:
+        db.close()
+
+
+@hr_bp.route('/announcements/delete/<int:id>', methods=['POST'])
+@hr_login_required
+@hr_permission_required('delete')
+def announcements_delete(id):
+    """Delete announcement."""
+    db = get_db()
+    try:
+        ann = db.execute("SELECT * FROM hr_announcements WHERE id = ?", (id,)).fetchone()
+        if not ann:
+            flash(t('announcement_not_found', 'Announcement not found'), 'error')
+            return redirect(url_for('hr.announcements_list'))
+
+        db.execute("DELETE FROM hr_announcements WHERE id = ?", (id,))
+        db.commit()
+        flash(t('announcement_deleted', 'Announcement deleted successfully'), 'success')
+    finally:
+        db.close()
+
+    return redirect(url_for('hr.announcements_list'))
 
 
 # =============================================================================
@@ -2297,6 +3183,7 @@ def announcements_list():
 
 @hr_bp.route('/audit-logs')
 @hr_login_required
+@hr_permission_required('view')
 def audit_logs():
     """View HR audit logs."""
     db = get_db()
@@ -2345,6 +3232,7 @@ def audit_logs():
 
 @hr_bp.route('/api/employee/<int:id>')
 @hr_login_required
+@hr_permission_required('view')
 def api_employee(id):
     """Get employee details as JSON."""
     db = get_db()
@@ -2359,6 +3247,7 @@ def api_employee(id):
 
 @hr_bp.route('/api/departments')
 @hr_login_required
+@hr_permission_required('view')
 def api_departments():
     """Get all departments as JSON."""
     db = get_db()
@@ -2373,6 +3262,7 @@ def api_departments():
 
 @hr_bp.route('/api/positions')
 @hr_login_required
+@hr_permission_required('view')
 def api_positions():
     """Get all positions as JSON."""
     db = get_db()
@@ -2391,6 +3281,7 @@ def api_positions():
 
 @hr_bp.route('/api/leave-balance/<int:employee_id>')
 @hr_login_required
+@hr_permission_required('view')
 def api_leave_balance(employee_id):
     """Get employee leave balances as JSON."""
     db = get_db()
@@ -2412,6 +3303,7 @@ def api_leave_balance(employee_id):
 
 @hr_bp.route('/api/stats')
 @hr_login_required
+@hr_permission_required('view')
 def api_stats():
     """Get HR dashboard stats as JSON."""
     db = get_db()

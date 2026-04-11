@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root { --primary: #4F46E5; --success: #10B981; --warning: #F59E0B; --danger: #EF4444; --info: #3B82F6; }
+        body { background: #F9FAFB; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card-header { background: white; border-bottom: 2px solid #E5E7EB; font-weight: 600; }
+        .badge-status { font-weight: 500; padding: 0.375rem 0.625rem; }
+        .badge-IN_PROGRESS { background: #DBEAFE; color: #1E40AF; }
+        .badge-COMPLETED { background: #D1FAE5; color: #065F46; }
+        .badge-PASS { background: #D1FAE5; color: #065F46; }
+        .badge-FAIL { background: #FEE2E2; color: #991B1B; }
+        .badge-HOLD { background: #FEF3C7; color: #92400E; }
+        .badge-PENDING { background: #F3F4F6; color: #374151; }
+        .badge-CONDITIONAL_PASS { background: #E0E7FF; color: #3730A3; }
+        .badge-REJECT { background: #FEE2E2; color: #991B1B; }
+        .filter-section { background: #F3F4F6; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+        .table thead th { background: #F3F4F6; font-weight: 600; font-size: 0.8125rem; text-transform: uppercase; color: #6B7280; border: none; }
+        .text-overdue { color: #DC2626; font-weight: 600; }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <!-- Page Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1"><i class="fas fa-search me-2 text-primary"></i>{{ page_title }}</h1>
+                <p class="text-muted mb-0">Manage and track quality inspections</p>
+            </div>
+            <div>
+                <a href="{{ url_for('quality.inspections_create') }}" class="btn btn-primary">
+                    <i class="fas fa-plus me-1"></i> New Inspection
+                </a>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <form method="GET" class="filter-section">
+            <div class="row g-3">
+                <div class="col-md-2">
+                    <label class="form-label small text-muted">Inspection Type</label>
+                    <select name="inspection_type_id" class="form-select">
+                        <option value="">All Types</option>
+                        {% for itype in inspection_types %}
+                        <option value="{{ itype.id }}" {% if filters.inspection_type_id and filters.inspection_type_id|int == itype.id %}selected{% endif %}>
+                            {{ itype.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="">All Statuses</option>
+                        <option value="IN_PROGRESS" {% if filters.status == 'IN_PROGRESS' %}selected{% endif %}>In Progress</option>
+                        <option value="COMPLETED" {% if filters.status == 'COMPLETED' %}selected{% endif %}>Completed</option>
+                        <option value="CANCELLED" {% if filters.status == 'CANCELLED' %}selected{% endif %}>Cancelled</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted">Result</label>
+                    <select name="result" class="form-select">
+                        <option value="">All Results</option>
+                        <option value="PASS" {% if filters.result == 'PASS' %}selected{% endif %}>Pass</option>
+                        <option value="FAIL" {% if filters.result == 'FAIL' %}selected{% endif %}>Fail</option>
+                        <option value="HOLD" {% if filters.result == 'HOLD' %}selected{% endif %}>Hold</option>
+                        <option value="CONDITIONAL_PASS" {% if filters.result == 'CONDITIONAL_PASS' %}selected{% endif %}>Conditional Pass</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted">From Date</label>
+                    <input type="date" name="from_date" class="form-control" value="{{ filters.from_date or '' }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted">To Date</label>
+                    <input type="date" name="to_date" class="form-control" value="{{ filters.to_date or '' }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small text-muted">Search</label>
+                    <input type="text" name="search" class="form-control" placeholder="Search..." value="{{ filters.search or '' }}">
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary me-2">
+                        <i class="fas fa-filter me-1"></i> Apply Filters
+                    </button>
+                    <a href="{{ url_for('quality.inspections_list') }}" class="btn btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i> Clear
+                    </a>
+                </div>
+            </div>
+        </form>
+
+        <!-- Quick Filters -->
+        <div class="mb-3">
+            <a href="{{ url_for('quality.inspections_list') }}" class="btn btn-sm btn-outline-primary me-1">All</a>
+            <a href="{{ url_for('quality.inspections_by_type', inspection_type='INC') }}" class="btn btn-sm btn-outline-secondary me-1">Incoming</a>
+            <a href="{{ url_for('quality.inspections_by_type', inspection_type='PROC') }}" class="btn btn-sm btn-outline-secondary me-1">In-Process</a>
+            <a href="{{ url_for('quality.inspections_by_type', inspection_type='OUT') }}" class="btn btn-sm btn-outline-secondary me-1">Outgoing</a>
+            <a href="{{ url_for('quality.inspections_failed') }}" class="btn btn-sm btn-danger me-1"><i class="fas fa-times-circle me-1"></i>Failed</a>
+        </div>
+
+        <!-- Inspections Table -->
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Number</th>
+                                <th>Type</th>
+                                <th>Item</th>
+                                <th>Supplier/Customer</th>
+                                <th>Qty Inspected</th>
+                                <th>Accepted/Rejected</th>
+                                <th>Result</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th>Inspector</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if inspections %}
+                                {% for insp in inspections %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('quality.inspections_view', inspection_id=insp.id) }}">
+                                            <strong>{{ insp.inspection_number }}</strong>
+                                        </a>
+                                    </td>
+                                    <td>{{ insp.type_name or insp.type_code or 'N/A' }}</td>
+                                    <td>
+                                        {{ insp.item_name or 'N/A' }}
+                                        {% if insp.item_code %}<br><small class="text-muted">{{ insp.item_code }}</small>{% endif %}
+                                    </td>
+                                    <td>
+                                        {% if insp.supplier_name %}
+                                            <i class="fas fa-truck text-muted me-1"></i>{{ insp.supplier_name }}
+                                        {% elif insp.customer_name %}
+                                            <i class="fas fa-user text-muted me-1"></i>{{ insp.customer_name }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {{ insp.quantity_inspected or insp.sample_size or 0 }}
+                                        {% if insp.quantity_received %}
+                                            <small class="text-muted">/ {{ insp.quantity_received }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="text-success">{{ insp.quantity_accepted or 0 }}</span>
+                                        <span class="text-muted">/</span>
+                                        <span class="text-danger">{{ insp.quantity_rejected or 0 }}</span>
+                                    </td>
+                                    <td>
+                                        {% if insp.result %}
+                                            <span class="badge badge-status badge-{{ insp.result }}">{{ insp.result }}</span>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-status badge-{{ insp.status }}">{{ insp.status }}</span>
+                                    </td>
+                                    <td>{{ insp.inspection_date or insp.created_at[:10] }}</td>
+                                    <td>{{ insp.inspector_name or 'N/A' }}</td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('quality.inspections_view', inspection_id=insp.id) }}" class="btn btn-outline-primary" title="View">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            {% if insp.status != 'COMPLETED' %}
+                                            <a href="{{ url_for('quality.inspections_edit', inspection_id=insp.id) }}" class="btn btn-outline-secondary" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                            {% endif %}
+                                            {% if insp.result == 'FAIL' and insp.ncr_id is none %}
+                                            <a href="{{ url_for('quality.ncr_create') }}?inspection_id={{ insp.id }}" class="btn btn-outline-danger" title="Create NCR">
+                                                <i class="fas fa-exclamation-triangle"></i>
+                                            </a>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="11" class="text-center py-5">
+                                        <div class="text-muted">
+                                            <i class="fas fa-search fs-1 mb-3"></i>
+                                            <p class="mb-0">No inspections found</p>
+                                            <a href="{{ url_for('quality.inspections_create') }}" class="btn btn-primary btn-sm mt-2">
+                                                <i class="fas fa-plus me-1"></i> Create First Inspection
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

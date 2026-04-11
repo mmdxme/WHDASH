@@ -1,5 +1,5 @@
 import sys
-sys.path.insert(0, r'c:\Users\sdads\WHDASH')
+sys.path.insert(0, r'c:\Users\sdads\MMDx')
 
 from app import app
 

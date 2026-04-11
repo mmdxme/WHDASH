@@ -1,7 +1,7 @@
 """
 Seed Sample Data Script
 =======================
-Populates the WHDASH database with realistic sample data for demonstration purposes.
+Populates the MMDx database with realistic sample data for demonstration purposes.
 Run this script to see the dashboard with populated data.
 """
 
@@ -331,22 +331,24 @@ def seed_data():
     # =====================================================================
     print("Seeding announcements...")
     
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='announcements'")
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='hr_announcements'")
     if cursor.fetchone():
-        ann_count = count_rows('announcements')
+        ann_count = count_rows('hr_announcements')
         if ann_count < 3:
             announcements = [
-                ('Welcome to WHDASH Platform', 'We are excited to announce the launch of our new unified dashboard system.', 'admin'),
-                ('Office Closure Notice', 'The office will be closed on National Day, December 2nd.', 'admin'),
-                ('New HR Policy Update', 'Please review the updated leave and attendance policies effective January 2026.', 'admin'),
-                ('Sales Target Achievement', 'Congratulations to the sales team for achieving 120% of Q3 targets!', 'admin'),
+                ('Welcome to MMDx Platform', 'We are excited to announce the launch of our new unified dashboard system. This platform brings together all HR, inventory, sales, and management functions in one beautiful interface.', 'General', 'Normal', 1, None, None),
+                ('Office Closure Notice', 'The office will be closed on National Day, December 2nd. All staff are requested to plan accordingly. Emergency contacts remain active.', 'Urgent', 'High', 1, '2026-12-01', '2026-12-03'),
+                ('New HR Policy Update', 'Please review the updated leave and attendance policies effective January 2026. Key changes include flexible working hours and enhanced parental leave.', 'Policy', 'High', 1, '2026-01-01', '2026-06-30'),
+                ('Sales Target Achievement', 'Congratulations to the sales team for achieving 120% of Q3 targets! A celebration event will be held next Friday.', 'Event', 'Normal', 1, None, None),
+                ('IT System Maintenance', 'Scheduled maintenance window: Saturday 2:00 AM - 6:00 AM. All systems will be unavailable during this period.', 'IT', 'Critical', 1, None, None),
+                ('Holiday Schedule 2026', 'The official holiday schedule for 2026 has been published. Please check the HR portal for detailed information.', 'HR', 'Normal', 1, '2026-01-01', '2026-12-31'),
             ]
-            
-            for title, content, created_by in announcements:
+
+            for title, content, ann_type, priority, is_active, valid_from, valid_to in announcements:
                 cursor.execute("""
-                    INSERT INTO announcements (title, content, created_by, is_active, created_at)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (title, content, created_by, 1, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                    INSERT INTO hr_announcements (title, content, announcement_type, priority, is_active, valid_from, valid_to, created_by_id, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """, (title, content, ann_type, priority, is_active, valid_from, valid_to, datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
             
             db.commit()
         else:
@@ -360,7 +362,7 @@ def seed_data():
     settings = [
         ('default_currency', 'AED', 'GENERAL'),
         ('tax_percent', '5', 'GENERAL'),
-        ('company_name', 'WHDASH Trading LLC', 'COMPANY'),
+        ('company_name', 'MMDx Trading LLC', 'COMPANY'),
         ('support_email', 'support@warehouse.local', 'COMPANY'),
     ]
     

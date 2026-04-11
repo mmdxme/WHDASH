@@ -1,18 +1,214 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="space-y-6">
-    <div class="flex items-center justify-between"><div><h1 class="text-3xl font-bold text-white">{{ t('recruitment', 'Recruitment') }}</h1></div></div>
+    <!-- Page Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ t('recruitment', 'Recruitment') }}</h1>
+            <p class="text-slate-400 mt-1">{{ total }} {{ t('requisitions_found', 'requisitions found') }}</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('hr.candidates_list') }}" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-users"></i>
+                {{ t('view_candidates', 'View Candidates') }}
+            </a>
+            <a href="{{ url_for('hr.requisition_new') }}" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-plus"></i>
+                {{ t('new_requisition', 'New Requisition') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('open_positions', 'Open Positions') }}</p>
+                    <p class="text-3xl font-bold text-white mt-1">{{ stats.open }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-briefcase text-emerald-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('in_review', 'In Review') }}</p>
+                    <p class="text-3xl font-bold text-white mt-1">{{ stats.in_review }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-clipboard-check text-blue-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('pending_approval', 'Pending Approval') }}</p>
+                    <p class="text-3xl font-bold text-white mt-1">{{ stats.pending }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-clock text-amber-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('total_vacancies', 'Total Vacancies') }}</p>
+                    <p class="text-3xl font-bold text-white mt-1">{{ stats.vacancies }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-users text-purple-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-6">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="md:col-span-2">
+                <label class="block text-sm text-slate-400 mb-2">{{ t('search', 'Search') }}</label>
+                <input type="text" name="search" value="{{ search }}" placeholder="{{ t('search_placeholder', 'Title, department...') }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/50">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('status', 'Status') }}</label>
+                <select name="status" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white">
+                    <option value="">{{ t('all_statuses', 'All Statuses') }}</option>
+                    <option value="Open" {% if status == 'Open' %}selected{% endif %}>{{ t('open', 'Open') }}</option>
+                    <option value="In Review" {% if status == 'In Review' %}selected{% endif %}>{{ t('in_review', 'In Review') }}</option>
+                    <option value="Pending Approval" {% if status == 'Pending Approval' %}selected{% endif %}>{{ t('pending_approval', 'Pending Approval') }}</option>
+                    <option value="Approved" {% if status == 'Approved' %}selected{% endif %}>{{ t('approved', 'Approved') }}</option>
+                    <option value="Closed" {% if status == 'Closed' %}selected{% endif %}>{{ t('closed', 'Closed') }}</option>
+                    <option value="Draft" {% if status == 'Draft' %}selected{% endif %}>{{ t('draft', 'Draft') }}</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('department', 'Department') }}</label>
+                <select name="department" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white">
+                    <option value="">{{ t('all_departments', 'All Departments') }}</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}" {% if department|int == dept.id %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all">
+                    <i class="fa-solid fa-search mr-2"></i>{{ t('filter', 'Filter') }}
+                </button>
+                <a href="{{ url_for('hr.recruitment_list') }}" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all">
+                    <i class="fa-solid fa-times"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Requisitions Table -->
     <div class="glass-panel rounded-2xl overflow-hidden">
-        <table class="w-full">
-            <thead><tr class="border-b border-white/10"><th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('title', 'Title') }}</th><th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('department', 'Department') }}</th><th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('vacancies', 'Vacancies') }}</th><th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('status', 'Status') }}</th></tr></thead>
-            <tbody class="divide-y divide-white/5">
-                {% for r in requisitions %}
-                <tr class="hover:bg-white/5"><td class="px-6 py-4 text-white">{{ r.title }}</td><td class="px-6 py-4 text-slate-300">{{ r.department_name or '-' }}</td><td class="px-6 py-4 text-slate-300">{{ r.vacancy_count }}</td><td class="px-6 py-4"><span class="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full">{{ r.status }}</span></td></tr>
-                {% else %}
-                <tr><td colspan="4" class="px-6 py-12 text-center text-slate-500">{{ t('no_requisitions', 'No job requisitions found') }}</td></tr>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/10">
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('title', 'Title') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('department', 'Department') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('position', 'Position') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('vacancies', 'Vacancies') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('employment_type', 'Type') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('salary_range', 'Salary Range') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('status', 'Status') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('created', 'Created') }}</th>
+                        <th class="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for r in requisitions %}
+                    <tr class="hover:bg-white/5 transition-all">
+                        <td class="px-6 py-4">
+                            <div class="text-white font-medium">{{ r.title }}</div>
+                            <div class="text-sm text-slate-400">{{ t('by', 'by') }} {{ r.requested_by_name or 'System' }}</div>
+                        </td>
+                        <td class="px-6 py-4 text-slate-300">{{ r.department_name or '-' }}</td>
+                        <td class="px-6 py-4 text-slate-300">{{ r.position_title or '-' }}</td>
+                        <td class="px-6 py-4">
+                            <span class="px-3 py-1 bg-brand-500/10 text-brand-400 text-sm font-bold rounded-full">{{ r.vacancy_count }}</span>
+                        </td>
+                        <td class="px-6 py-4 text-slate-300">{{ r.employment_type or 'Full-time' }}</td>
+                        <td class="px-6 py-4 text-slate-300">
+                            {% if r.salary_min and r.salary_max %}
+                            ${{ r.salary_min|int }} - ${{ r.salary_max|int }}
+                            {% elif r.salary_min %}
+                            ${{ r.salary_min|int }}+
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if r.status == 'Open' %}
+                            <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ t('open', 'Open') }}</span>
+                            {% elif r.status == 'In Review' %}
+                            <span class="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full">{{ t('in_review', 'In Review') }}</span>
+                            {% elif r.status == 'Pending Approval' %}
+                            <span class="px-2.5 py-1 bg-amber-500/10 text-amber-400 text-xs font-bold rounded-full">{{ t('pending', 'Pending') }}</span>
+                            {% elif r.status == 'Approved' %}
+                            <span class="px-2.5 py-1 bg-purple-500/10 text-purple-400 text-xs font-bold rounded-full">{{ t('approved', 'Approved') }}</span>
+                            {% elif r.status == 'Closed' %}
+                            <span class="px-2.5 py-1 bg-slate-500/10 text-slate-400 text-xs font-bold rounded-full">{{ t('closed', 'Closed') }}</span>
+                            {% else %}
+                            <span class="px-2.5 py-1 bg-white/10 text-slate-400 text-xs font-bold rounded-full">{{ r.status or 'Draft' }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-slate-400 text-sm">{{ r.created_at[:10] if r.created_at else '-' }}</td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center justify-end gap-2">
+                                <a href="{{ url_for('hr.requisition_view', id=r.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="{{ t('view', 'View') }}">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                                <a href="{{ url_for('hr.requisition_edit', id=r.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="{{ t('edit', 'Edit') }}">
+                                    <i class="fa-solid fa-edit"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="px-6 py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-briefcase text-4xl mb-4 block opacity-50"></i>
+                            {{ t('no_requisitions', 'No job requisitions found') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="px-6 py-4 border-t border-white/10 flex items-center justify-between">
+            <div class="text-sm text-slate-400">
+                {{ t('page', 'Page') }} {{ page }} {{ t('of', 'of') }} {{ total_pages }}
+            </div>
+            <div class="flex items-center gap-2">
+                {% if page > 1 %}
+                <a href="?page={{ page - 1 }}&search={{ search }}&status={{ status }}&department={{ department }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </a>
+                {% endif %}
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p >= page - 2 and p <= page + 2 %}
+                <a href="?page={{ p }}&search={{ search }}&status={{ status }}&department={{ department }}" class="px-3 py-1.5 {% if p == page %}bg-brand-600{% else %}bg-white/5 hover:bg-white/10{% endif %} text-white rounded-lg transition-all">{{ p }}</a>
+                    {% endif %}
                 {% endfor %}
-            </tbody>
-        </table>
+                {% if page < total_pages %}
+                <a href="?page={{ page + 1 }}&search={{ search }}&status={{ status }}&department={{ department }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

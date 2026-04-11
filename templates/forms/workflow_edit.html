@@ -1,0 +1,440 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">Workflow Designer</h1>
+            <p class="text-gray-600">{{ template.form_title }}</p>
+        </div>
+        <div class="flex gap-3">
+            <a href="/forms/templates/{{ template.id }}" class="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Template
+            </a>
+            <button onclick="saveWorkflow()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                <i class="fas fa-save mr-2"></i>Save Workflow
+            </button>
+        </div>
+    </div>
+
+    {% if workflow %}
+    <input type="hidden" id="workflow_id" value="{{ workflow.id }}">
+    {% else %}
+    <input type="hidden" id="workflow_id" value="">
+    {% endif %}
+    <input type="hidden" id="template_id" value="{{ template.id }}">
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left: Workflow Steps -->
+        <div class="lg:col-span-2 space-y-6">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">
+                    <i class="fas fa-project-diagram mr-2"></i>Workflow Steps
+                </h2>
+
+                <div id="workflow-steps" class="space-y-4">
+                    <!-- Steps will be loaded here -->
+                    {% if steps %}
+                    {% for step in steps %}
+                    <div class="workflow-step border rounded-lg p-4" data-step-id="{{ step.id }}">
+                        <div class="flex justify-between items-center mb-3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold">
+                                    {{ step.step_order }}
+                                </div>
+                                <input type="text" value="{{ step.name }}" class="text-lg font-medium border-0 bg-transparent focus:outline-none focus:ring-0"
+                                       onchange="updateStep({{ step.id }}, 'name', this.value)">
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button onclick="addTransition({{ step.id }})" class="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200">
+                                    <i class="fas fa-plus mr-1"></i>Transition
+                                </button>
+                                {% if not step.is_first %}
+                                <button onclick="deleteStep({{ step.id }})" class="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">Step Type</label>
+                                <select class="w-full px-2 py-1 border rounded text-sm"
+                                        onchange="updateStep({{ step.id }}, 'step_type', this.value)">
+                                    <option value="approval" {% if step.step_type == 'approval' %}selected{% endif %}>Approval</option>
+                                    <option value="review" {% if step.step_type == 'review' %}selected{% endif %}>Review</option>
+                                    <option value="verification" {% if step.step_type == 'verification' %}selected{% endif %}>Verification</option>
+                                    <option value="sign" {% if step.step_type == 'sign' %}selected{% endif %}>Sign</option>
+                                    <option value="notification" {% if step.step_type == 'notification' %}selected{% endif %}>Notification</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">Approver Type</label>
+                                <select class="w-full px-2 py-1 border rounded text-sm"
+                                        onchange="updateStep({{ step.id }}, 'approver_type', this.value)">
+                                    <option value="user" {% if step.approver_type == 'user' %}selected{% endif %}>Specific User</option>
+                                    <option value="role" {% if step.approver_type == 'role' %}selected{% endif %}>Role</option>
+                                    <option value="department" {% if step.approver_type == 'department' %}selected{% endif %}>Department</option>
+                                    <option value="dynamic" {% if step.approver_type == 'dynamic' %}selected{% endif %}>Dynamic</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">Approver</label>
+                                <select class="w-full px-2 py-1 border rounded text-sm"
+                                        onchange="updateStep({{ step.id }}, 'approver_id', this.value)">
+                                    <option value="">Select...</option>
+                                    {% for u in users %}
+                                    <option value="{{ u.id }}" {% if step.approver_id == u.id %}selected{% endif %}>{{ u.username }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-500 mb-1">SLA (hours)</label>
+                                <input type="number" value="{{ step.sla_hours or '' }}" class="w-full px-2 py-1 border rounded text-sm"
+                                       placeholder="e.g., 24"
+                                       onchange="updateStep({{ step.id }}, 'sla_hours', this.value)">
+                            </div>
+                        </div>
+
+                        <div class="mt-3 space-y-2">
+                            <div class="flex items-center gap-4">
+                                <label class="flex items-center text-sm">
+                                    <input type="checkbox" class="mr-2" {% if step.is_required %}checked{% endif %}
+                                           onchange="updateStep({{ step.id }}, 'is_required', this.checked ? 1 : 0)">
+                                    Required Step
+                                </label>
+                                <label class="flex items-center text-sm">
+                                    <input type="checkbox" class="mr-2" {% if step.allow_delegate %}checked{% endif %}
+                                           onchange="updateStep({{ step.id }}, 'allow_delegate', this.checked ? 1 : 0)">
+                                    Allow Delegate
+                                </label>
+                                <label class="flex items-center text-sm">
+                                    <input type="checkbox" class="mr-2" {% if step.require_comment %}checked{% endif %}
+                                           onchange="updateStep({{ step.id }}, 'require_comment', this.checked ? 1 : 0)">
+                                    Require Comment
+                                </label>
+                                <label class="flex items-center text-sm">
+                                    <input type="checkbox" class="mr-2" {% if step.require_signature %}checked{% endif %}
+                                           onchange="updateStep({{ step.id }}, 'require_signature', this.checked ? 1 : 0)">
+                                    Require Signature
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Transitions for this step -->
+                        <div class="mt-4 pt-4 border-t">
+                            <h4 class="text-sm font-medium text-gray-700 mb-2">Transitions</h4>
+                            <div id="transitions-{{ step.id }}" class="space-y-2">
+                                {% for trans in step.transitions %}
+                                <div class="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                                    <span class="text-sm font-medium">{{ trans.action|title }}</span>
+                                    <i class="fas fa-arrow-right text-gray-400"></i>
+                                    <span class="text-sm text-gray-600">
+                                        {% if trans.to_step_id %}
+                                        Step {{ trans.to_step_name }}
+                                        {% elif trans.action == 'approve' %}
+                                        Next Step
+                                        {% elif trans.action == 'reject' %}
+                                        Rejection End
+                                        {% else %}
+                                        End
+                                        {% endif %}
+                                    </span>
+                                    {% if trans.condition %}
+                                    <span class="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                                        <i class="fas fa-code mr-1"></i>{{ trans.condition }}
+                                    </span>
+                                    {% endif %}
+                                    <button onclick="deleteTransition({{ trans.id }})" class="ml-auto text-red-500 hover:text-red-700">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="text-center py-8 text-gray-400">
+                        <i class="fas fa-project-diagram text-4xl mb-3"></i>
+                        <p>No workflow steps defined yet.</p>
+                        <p class="text-sm">Click "Add Step" below to create your first workflow step.</p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="mt-4 pt-4 border-t">
+                    <button onclick="addStep()" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        <i class="fas fa-plus mr-2"></i>Add Step
+                    </button>
+                </div>
+            </div>
+
+            <!-- Conditions Editor -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">
+                    <i class="fas fa-code mr-2"></i>Conditional Routing Rules
+                </h2>
+
+                <div id="conditions-list" class="space-y-3">
+                    {% if conditions %}
+                    {% for cond in conditions %}
+                    <div class="p-3 bg-gray-50 rounded border" data-condition-id="{{ cond.id }}">
+                        <div class="flex items-center gap-2 mb-2">
+                            <code class="text-sm bg-white px-2 py-1 rounded border">{{ cond.field_code }} {{ cond.operator }} {{ cond.value }}</code>
+                            <button onclick="deleteCondition({{ cond.id }})" class="ml-auto text-red-500 hover:text-red-700">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <p class="text-xs text-gray-500">
+                            Routes to: {{ cond.target_step_name }}
+                        </p>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p class="text-gray-400 text-center py-4">No conditional rules defined.</p>
+                    {% endif %}
+                </div>
+
+                <div class="mt-4 pt-4 border-t">
+                    <h3 class="text-sm font-medium mb-3">Add Conditional Rule</h3>
+                    <div class="grid grid-cols-4 gap-3">
+                        <select id="cond-field" class="px-2 py-1 border rounded">
+                            <option value="">Field...</option>
+                            {% for field in fields %}
+                            <option value="{{ field.field_code }}">{{ field.label }} ({{ field.field_code }})</option>
+                            {% endfor %}
+                        </select>
+                        <select id="cond-operator" class="px-2 py-1 border rounded">
+                            <option value="eq">Equals</option>
+                            <option value="ne">Not Equals</option>
+                            <option value="gt">Greater Than</option>
+                            <option value="gte">Greater or Equal</option>
+                            <option value="lt">Less Than</option>
+                            <option value="lte">Less or Equal</option>
+                            <option value="contains">Contains</option>
+                        </select>
+                        <input type="text" id="cond-value" class="px-2 py-1 border rounded" placeholder="Value...">
+                        <select id="cond-target" class="px-2 py-1 border rounded">
+                            <option value="">Target Step...</option>
+                            {% for step in steps %}
+                            <option value="{{ step.id }}">{{ step.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button onclick="addCondition()" class="mt-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                        <i class="fas fa-plus mr-2"></i>Add Rule
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Workflow Settings -->
+        <div class="lg:col-span-1">
+            <div class="bg-white rounded-lg shadow p-6 sticky top-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">
+                    <i class="fas fa-cog mr-2"></i>Workflow Settings
+                </h2>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Workflow Name</label>
+                        <input type="text" id="workflow_name" value="{{ workflow.name if workflow else '' }}"
+                               class="w-full px-3 py-2 border rounded" placeholder="e.g., Standard Approval">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                        <textarea id="workflow_description" rows="3"
+                                 class="w-full px-3 py-2 border rounded"
+                                 placeholder="Describe this workflow...">{{ workflow.description if workflow else '' }}</textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Routing Type</label>
+                        <select id="routing_type" class="w-full px-3 py-2 border rounded">
+                            <option value="serial" {% if workflow.routing_type == 'serial' %}selected{% endif %}>Serial (one after another)</option>
+                            <option value="parallel" {% if workflow.routing_type == 'parallel' %}selected{% endif %}>Parallel (multiple at once)</option>
+                            <option value="mixed" {% if workflow.routing_type == 'mixed' %}selected{% endif %}>Mixed</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Allow Backtracking</label>
+                        <select id="allow_backtrack" class="w-full px-3 py-2 border rounded">
+                            <option value="1" {% if workflow.allow_backtrack %}selected{% endif %}>Yes</option>
+                            <option value="0" {% if not workflow.allow_backtrack %}selected{% endif %}>No</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Default Priority</label>
+                        <select id="default_priority" class="w-full px-3 py-2 border rounded">
+                            <option value="low" {% if workflow.default_priority == 'low' %}selected{% endif %}>Low</option>
+                            <option value="medium" {% if workflow.default_priority == 'medium' %}selected{% endif %}>Medium</option>
+                            <option value="high" {% if workflow.default_priority == 'high' %}selected{% endif %}>High</option>
+                            <option value="urgent" {% if workflow.default_priority == 'urgent' %}selected{% endif %}>Urgent</option>
+                        </select>
+                    </div>
+
+                    <div class="pt-4 border-t">
+                        <h3 class="text-sm font-medium text-gray-700 mb-3">Notifications</h3>
+                        <div class="space-y-2">
+                            <label class="flex items-center">
+                                <input type="checkbox" class="mr-2" {% if workflow.notify_on_submit %}checked{% endif %}>
+                                <span class="text-sm">Notify on submit</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" class="mr-2" {% if workflow.notify_on_approve %}checked{% endif %}>
+                                <span class="text-sm">Notify on approval</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" class="mr-2" {% if workflow.notify_on_reject %}checked{% endif %}>
+                                <span class="text-sm">Notify on rejection</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="checkbox" class="mr-2" {% if workflow.notify_on_overdue %}checked{% endif %}>
+                                <span class="text-sm">Notify on overdue</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 pt-4 border-t">
+                    <button onclick="saveWorkflow()" class="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                        <i class="fas fa-save mr-2"></i>Save Workflow
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let workflowId = {{ workflow.id if workflow else 'null' }};
+let templateId = {{ template.id }};
+let steps = {{ steps|tojson }};
+
+// Add new step
+async function addStep() {
+    const response = await fetch(`/forms/workflows/${workflowId || 'new'}/steps/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            template_id: templateId,
+            name: 'New Step',
+            step_type: 'approval',
+            step_order: steps.length + 1
+        })
+    });
+    const data = await response.json();
+    if (data.success) {
+        location.reload();
+    }
+}
+
+// Update step
+async function updateStep(stepId, field, value) {
+    await fetch(`/forms/steps/${stepId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value })
+    });
+}
+
+// Delete step
+async function deleteStep(stepId) {
+    if (!confirm('Delete this step?')) return;
+    await fetch(`/forms/steps/${stepId}`, { method: 'DELETE' });
+    location.reload();
+}
+
+// Add transition
+async function addTransition(fromStepId) {
+    const toStepSelect = prompt('Enter target step ID (or 0 for end):');
+    if (toStepSelect === null) return;
+    const toStepId = parseInt(toStepSelect) || 0;
+
+    const response = await fetch(`/forms/workflows/${workflowId}/transitions/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            from_step_id: fromStepId,
+            to_step_id: toStepId,
+            action: 'approve',
+            transition_order: 1
+        })
+    });
+    const data = await response.json();
+    if (data.success) {
+        location.reload();
+    }
+}
+
+// Delete transition
+async function deleteTransition(transitionId) {
+    if (!confirm('Delete this transition?')) return;
+    await fetch(`/forms/transitions/${transitionId}`, { method: 'DELETE' });
+    location.reload();
+}
+
+// Add conditional rule
+async function addCondition() {
+    const field = document.getElementById('cond-field').value;
+    const operator = document.getElementById('cond-operator').value;
+    const value = document.getElementById('cond-value').value;
+    const targetStepId = document.getElementById('cond-target').value;
+
+    if (!field || !targetStepId) {
+        alert('Please fill all fields');
+        return;
+    }
+
+    const response = await fetch(`/forms/workflows/${workflowId}/conditions/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            field_code: field,
+            operator: operator,
+            value: value,
+            target_step_id: parseInt(targetStepId)
+        })
+    });
+    const data = await response.json();
+    if (data.success) {
+        location.reload();
+    }
+}
+
+// Delete condition
+async function deleteCondition(conditionId) {
+    if (!confirm('Delete this rule?')) return;
+    await fetch(`/forms/conditions/${conditionId}`, { method: 'DELETE' });
+    location.reload();
+}
+
+// Save workflow
+async function saveWorkflow() {
+    const data = {
+        name: document.getElementById('workflow_name').value,
+        description: document.getElementById('workflow_description').value,
+        routing_type: document.getElementById('routing_type').value,
+        allow_backtrack: document.getElementById('allow_backtrack').value === '1',
+        default_priority: document.getElementById('default_priority').value
+    };
+
+    const response = await fetch(`/forms/workflows/${workflowId || 'new'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    const result = await response.json();
+    if (result.success) {
+        workflowId = result.workflow_id;
+        location.reload();
+    }
+}
+</script>
+{% endblock %}

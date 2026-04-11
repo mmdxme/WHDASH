@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - {{ get_setting('platform_name', 'MMDx') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>{% include 'theme_variables.html' %}</style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900">
+{% include 'admin_sidebar.html' %}
+<div class="ml-64 min-h-screen">
+    {% include 'admin_header.html' %}
+    <main class="p-6">
+        <!-- Breadcrumb -->
+        <nav class="mb-6">
+            <ol class="flex items-center gap-2 text-sm">
+                <li><a href="{{ url_for('workflow_dashboard') }}" class="text-blue-600 hover:underline">Workflow</a></li>
+                <li class="text-slate-400">/</li>
+                <li><a href="{{ url_for('workflow_designer') }}" class="text-blue-600 hover:underline">Designer</a></li>
+                <li class="text-slate-400">/</li>
+                <li class="text-slate-800 dark:text-white font-medium">Automation Rules</li>
+            </ol>
+        </nav>
+
+        <!-- Page Header -->
+        <div class="mb-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
+                <p class="text-slate-600 dark:text-slate-400 mt-1">Configure automated actions triggered by workflow events</p>
+            </div>
+            <a href="{{ url_for('workflow_automation_new') }}" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                <i class="fas fa-plus mr-2"></i>New Rule
+            </a>
+        </div>
+
+        <!-- Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                        <i class="fas fa-cogs text-blue-600"></i>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.total|default(0) }}</p>
+                        <p class="text-sm text-slate-500">Total Rules</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                        <i class="fas fa-play text-green-600"></i>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.active|default(0) }}</p>
+                        <p class="text-sm text-slate-500">Active</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                        <i class="fas fa-exclamation-triangle text-red-600"></i>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.failed|default(0) }}</p>
+                        <p class="text-sm text-slate-500">Failed (24h)</p>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                        <i class="fas fa-check-double text-purple-600"></i>
+                    </div>
+                    <div>
+                        <p class="text-2xl font-bold text-slate-800 dark:text-white">{{ stats.executions|default(0) }}</p>
+                        <p class="text-sm text-slate-500">Executions (24h)</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rules Table -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-lg font-semibold text-slate-800 dark:text-white">Automation Rules</h2>
+                    <div class="flex gap-2">
+                        <a href="{{ url_for('workflow_automation') }}" class="px-3 py-1 text-sm rounded-lg {% if status_filter == 'all' %}bg-blue-100 text-blue-700{% else %}bg-slate-100 text-slate-600{% endif %}">All</a>
+                        <a href="{{ url_for('workflow_automation', status='active') }}" class="px-3 py-1 text-sm rounded-lg {% if status_filter == 'active' %}bg-green-100 text-green-700{% else %}bg-slate-100 text-slate-600{% endif %}">Active</a>
+                        <a href="{{ url_for('workflow_automation', status='inactive') }}" class="px-3 py-1 text-sm rounded-lg {% if status_filter == 'inactive' %}bg-slate-200 text-slate-800{% else %}bg-slate-100 text-slate-600{% endif %}">Inactive</a>
+                        <a href="{{ url_for('workflow_automation_failed') }}" class="px-3 py-1 text-sm rounded-lg bg-red-100 text-red-700">Failed</a>
+                    </div>
+                </div>
+                <a href="{{ url_for('workflow_automation_logs') }}" class="text-blue-600 hover:underline text-sm">View Logs</a>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-50 dark:bg-slate-700/50">
+                        <tr>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Rule</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Module</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Trigger</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Priority</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Executions</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Last Run</th>
+                            <th class="px-5 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                        {% for rule in rules %}
+                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                            <td class="px-5 py-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                                        <i class="fas fa-bolt text-purple-600 dark:text-purple-400"></i>
+                                    </div>
+                                    <div>
+                                        <a href="{{ url_for('workflow_automation_edit', rule_id=rule.id) }}" class="font-medium text-blue-600 hover:underline">{{ rule.rule_name }}</a>
+                                        <p class="text-sm text-slate-500">{{ rule.rule_code }}</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-5 py-4">
+                                <span class="px-2 py-1 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">{{ rule.module }}</span>
+                            </td>
+                            <td class="px-5 py-4 text-slate-600 dark:text-slate-300">
+                                {{ rule.trigger_type|replace('_', ' ')|title }}
+                            </td>
+                            <td class="px-5 py-4">
+                                <span class="px-2 py-1 text-xs rounded {% if rule.priority == 1 %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400{% elif rule.priority == 2 %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400{% else %}bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400{% endif %}">
+                                    {% if rule.priority == 1 %}High{% elif rule.priority == 2 %}Medium{% else %}Low{% endif %}
+                                </span>
+                            </td>
+                            <td class="px-5 py-4 text-slate-600 dark:text-slate-300">
+                                {{ rule.execution_count|default(0) }}
+                            </td>
+                            <td class="px-5 py-4 text-slate-500 dark:text-slate-400 text-sm">
+                                {% if rule.last_executed_at %}{{ rule.last_executed_at }}{% else %}Never{% endif %}
+                            </td>
+                            <td class="px-5 py-4 text-right">
+                                <div class="flex justify-end gap-2">
+                                    <a href="{{ url_for('workflow_automation_edit', rule_id=rule.id) }}" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg" title="Edit">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <form method="post" action="{{ url_for('workflow_automation_toggle', rule_id=rule.id) }}" class="inline">
+                                        <button type="submit" class="p-2 text-{{ 'green' if rule.is_active else 'red' }}-600 hover:bg-{{ 'green' if rule.is_active else 'red' }}-50 dark:hover:bg-{{ 'green' if rule.is_active else 'red' }}-900/30 rounded-lg" title="{{ 'Deactivate' if rule.is_active else 'Activate' }}">
+                                            <i class="fas fa-toggle-{{ 'on' if rule.is_active else 'off' }}"></i>
+                                        </button>
+                                    </form>
+                                    <form method="post" action="{{ url_for('workflow_automation_delete', rule_id=rule.id) }}" class="inline" onsubmit="return confirm('Delete this rule? This action cannot be undone.');">
+                                        <button type="submit" class="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="px-5 py-12 text-center text-slate-500 dark:text-slate-400">
+                                <i class="fas fa-bolt text-4xl mb-3"></i>
+                                <p>No automation rules configured.</p>
+                                <a href="{{ url_for('workflow_automation_new') }}" class="text-blue-600 hover:underline mt-2 inline-block">Create your first rule</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+{% include 'admin_scripts.html' %}
+</body>
+</html>

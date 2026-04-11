@@ -1,0 +1,304 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">API Gateway Dashboard</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('api_gateway_clients_new') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> New Client
+        </a>
+        <a href="{{ url_for('api_gateway_webhook_new') }}" class="btn btn-secondary">
+            <i class="fas fa-bell"></i> New Webhook
+        </a>
+    </div>
+</div>
+
+<!-- Stats Grid -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="icon blue">
+            <i class="fas fa-user-shield"></i>
+        </div>
+        <div class="value">{{ stats.total_clients if stats else 0 }}</div>
+        <div class="label">Total API Clients</div>
+        <div class="change up">
+            <i class="fas fa-arrow-up"></i> {{ stats.active_clients if stats else 0 }} active
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="icon green">
+            <i class="fas fa-paper-plane"></i>
+        </div>
+        <div class="value">{{ stats.requests_today if stats else 0|number_format }}</div>
+        <div class="label">API Requests Today</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="icon orange">
+            <i class="fas fa-exclamation-triangle"></i>
+        </div>
+        <div class="value">{{ stats.errors_today if stats else 0 }}</div>
+        <div class="label">Errors Today</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="icon purple">
+            <i class="fas fa-bell"></i>
+        </div>
+        <div class="value">{{ stats.active_subscriptions if stats else 0 }}</div>
+        <div class="label">Active Webhooks</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="icon cyan">
+            <i class="fas fa-route"></i>
+        </div>
+        <div class="value">{{ stats.total_routes if stats else 0 }}</div>
+        <div class="label">Registered Routes</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="icon green">
+            <i class="fas fa-plug"></i>
+        </div>
+        <div class="value">{{ stats.active_integrations if stats else 0 }}</div>
+        <div class="label">Active Integrations</div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+    <!-- Usage Metrics Chart -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">API Usage - Last 7 Days</h3>
+            <a href="{{ url_for('api_gateway_usage') }}" class="btn btn-sm btn-secondary">
+                View Details
+            </a>
+        </div>
+        <div style="padding: 20px;">
+            {% if metrics %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Requests</th>
+                        <th>Errors</th>
+                        <th>Error Rate</th>
+                        <th>Avg Response</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for metric in metrics %}
+                    <tr>
+                        <td>{{ metric.date }}</td>
+                        <td>{{ metric.requests|int|format("%d") }}</td>
+                        <td>{{ metric.errors }}</td>
+                        <td>
+                            <span class="badge {% if metric.error_rate > 5 %}badge-danger{% elif metric.error_rate > 1 %}badge-warning{% else %}badge-success{% endif %}">
+                                {{ "%.2f"|format(metric.error_rate) }}%
+                            </span>
+                        </td>
+                        <td>{{ metric.avg_response_ms }}ms</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <i class="fas fa-chart-line"></i>
+                <h3>No usage data yet</h3>
+                <p>API usage metrics will appear here once requests are made.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Quick Actions</h3>
+        </div>
+        <div style="padding: 15px; display: flex; flex-direction: column; gap: 10px;">
+            <a href="{{ url_for('api_gateway_clients_new') }}" class="btn btn-primary" style="justify-content: flex-start;">
+                <i class="fas fa-plus"></i> Create API Client
+            </a>
+            <a href="{{ url_for('api_gateway_webhook_new') }}" class="btn btn-primary" style="justify-content: flex-start;">
+                <i class="fas fa-bell"></i> Add Webhook Endpoint
+            </a>
+            <a href="{{ url_for('api_gateway_integration_new') }}" class="btn btn-primary" style="justify-content: flex-start;">
+                <i class="fas fa-plug"></i> New Integration
+            </a>
+            <a href="{{ url_for('api_gateway_request_logs') }}" class="btn btn-secondary" style="justify-content: flex-start;">
+                <i class="fas fa-search"></i> View Request Logs
+            </a>
+            <a href="{{ url_for('api_gateway_openapi') }}" class="btn btn-secondary" style="justify-content: flex-start;">
+                <i class="fas fa-file-code"></i> OpenAPI Spec
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+    <!-- Recent Request Logs -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Recent API Requests</h3>
+            <a href="{{ url_for('api_gateway_request_logs') }}" class="btn btn-sm btn-secondary">
+                View All
+            </a>
+        </div>
+        {% if recent_logs %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Method</th>
+                        <th>Path</th>
+                        <th>Status</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in recent_logs[:10] %}
+                    <tr>
+                        <td><span class="method-badge method-{{ log.method|lower }}">{{ log.method }}</span></td>
+                        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ log.path }}</td>
+                        <td>
+                            {% if log.response_status_code >= 200 and log.response_status_code < 300 %}
+                            <span class="badge badge-success">{{ log.response_status_code }}</span>
+                            {% elif log.response_status_code >= 400 and log.response_status_code < 500 %}
+                            <span class="badge badge-warning">{{ log.response_status_code }}</span>
+                            {% else %}
+                            <span class="badge badge-danger">{{ log.response_status_code }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ log.response_time_ms }}ms</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-inbox"></i>
+            <h3>No requests yet</h3>
+            <p>API requests will appear here.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Recent Errors -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Recent Errors</h3>
+            <a href="{{ url_for('api_gateway_errors') }}" class="btn btn-sm btn-secondary">
+                View All
+            </a>
+        </div>
+        {% if recent_errors %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Code</th>
+                        <th>Message</th>
+                        <th>Path</th>
+                        <th>Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for error in recent_errors[:10] %}
+                    <tr>
+                        <td><span class="badge badge-danger">{{ error.error_code }}</span></td>
+                        <td style="max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ error.error_message }}</td>
+                        <td style="max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ error.path }}</td>
+                        <td>{{ error.created_at[:16] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-check-circle"></i>
+            <h3>No errors</h3>
+            <p>Recent API errors will appear here.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Active Webhooks -->
+<div class="card" style="margin-top: 20px;">
+    <div class="card-header">
+        <h3 class="card-title">Active Webhook Subscriptions</h3>
+        <a href="{{ url_for('api_gateway_webhook_subscriptions') }}" class="btn btn-sm btn-secondary">
+            View All
+        </a>
+    </div>
+    {% if active_webhooks %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Endpoint Name</th>
+                    <th>Target URL</th>
+                    <th>Events</th>
+                    <th>Success Rate</th>
+                    <th>Last Delivery</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sub in active_webhooks %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('api_gateway_webhook_detail', sub_id=sub.id) }}">{{ sub.endpoint_name }}</a>
+                    </td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ sub.target_url }}</td>
+                    <td>
+                        {% set events = sub.subscribed_events %}
+                        {% if events %}
+                            {% if events|length > 30 %}
+                            <span title="{{ events }}">{{ events[:30] }}...</span>
+                            {% else %}
+                            {{ events }}
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div class="metric-bar" style="width: 60px;">
+                                <div class="metric-bar-fill {% if sub.success_rate >= 90 %}green{% elif sub.success_rate >= 70 %}yellow{% else %}red{% endif %}"
+                                     style="width: {{ sub.success_rate }}%;"></div>
+                            </div>
+                            <span>{{ "%.1f"|format(sub.success_rate) }}%</span>
+                        </div>
+                    </td>
+                    <td>{{ sub.last_delivery_at[:16] if sub.last_delivery_at else 'Never' }}</td>
+                    <td>
+                        {% if sub.active %}
+                        <span class="badge badge-success">Active</span>
+                        {% else %}
+                        <span class="badge badge-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-bell"></i>
+        <h3>No active webhooks</h3>
+        <p>Create webhook subscriptions to receive real-time event notifications.</p>
+        <a href="{{ url_for('api_gateway_webhook_new') }}" class="btn btn-primary" style="margin-top: 15px;">
+            <i class="fas fa-plus"></i> Create Webhook
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

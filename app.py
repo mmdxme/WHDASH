@@ -2,6 +2,9 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from functools import wraps
+import secrets
+import hmac
+import hashlib
 import sqlite3
 import os
 import re
@@ -37,6 +40,13 @@ from sales_suite_routes import register_sales_suite_routes
 from admin_routes import register_admin_routes
 from procurement_routes import register_procurement_routes
 from profile_routes import register_profile_routes
+from asset_routes import register_asset_routes
+from maintenance_routes import register_maintenance_routes
+from finance_routes import register_finance_routes
+from quality_routes import register_quality_routes
+from ecommerce_routes import register_ecommerce_routes
+from document_routes import register_document_routes
+from workflow_routes import register_workflow_routes
 
 # =============================================================================
 # UNIFIED PLATFORM MODULES (Enterprise Integration)
@@ -107,8 +117,8 @@ app = Flask(__name__)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DEFAULT_SECRET_KEY = 'change-me-in-production'
 app.secret_key = os.environ.get('SECRET_KEY', DEFAULT_SECRET_KEY)
-app.config['TEMPLATES_AUTO_RELOAD'] = False
-app.jinja_env.auto_reload = False
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.jinja_env.auto_reload = True
 
 DATABASE = os.environ.get('DATABASE_PATH', os.path.join(BASE_DIR, 'warehouse.db'))
 UPLOAD_FOLDER = os.environ.get(
@@ -300,6 +310,43 @@ def get_salesperson_performance_from_db():
         db.close()
 
 
+# =============================================================================
+# CSRF PROTECTION
+# =============================================================================
+
+def generate_csrf_token():
+    """Generate a CSRF token for the current session."""
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(32)
+    return session['csrf_token']
+
+
+def validate_csrf_token(token):
+    """Validate a CSRF token against the session."""
+    if not token or 'csrf_token' not in session:
+        return False
+    return hmac.compare_digest(token, session['csrf_token'])
+
+
+def csrf_protected(f):
+    """Decorator to protect forms with CSRF validation."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
+            token = request.form.get('csrf_token') or request.headers.get('X-CSRF-Token')
+            if not validate_csrf_token(token):
+                flash("CSRF validation failed. Please refresh the page and try again.", "error")
+                return redirect(request.url)
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+# Expose csrf_token to all templates
+@app.context_processor
+def inject_csrf_token():
+    return {'csrf_token': generate_csrf_token()}
+
+
 def require_login(f):
     """Decorator factory that redirects unauthenticated users to login."""
     @wraps(f)
@@ -326,13 +373,64 @@ register_sales_suite_routes(app, require_login, user_has_permission, get_db)
 register_admin_routes(app)
 register_procurement_routes(app, get_db)
 register_profile_routes(app)
+register_asset_routes(app)
+register_maintenance_routes(app)
+register_finance_routes(app)
+register_quality_routes(app)
+register_ecommerce_routes(app)
+register_document_routes(app)
+
+# Register Workflow / BPM routes
+register_workflow_routes(app)
 
 # Register Business Intelligence routes
 from bi_routes import register_bi_routes
 register_bi_routes(app)
 
+# Register Advanced Reporting / BI routes
+from bi_advanced_routes import register_advanced_bi_routes
+register_advanced_bi_routes(app)
+
+# Initialize Finance tables
+from finance_models import initialize_finance_schema
+initialize_finance_schema()
+
+# Initialize Quality Management tables
+from quality_models import initialize_quality_tables
+initialize_quality_tables()
+
 # Initialize Customer Intelligence tables
 init_ci_tables()
+
+# =============================================================================
+# INITIALIZE API GATEWAY MODULE
+# =============================================================================
+from api_gateway_models import init_api_gateway_tables
+init_api_gateway_tables()
+
+# =============================================================================
+# INITIALIZE WORKFLOW / BPM MODULE
+# =============================================================================
+from workflow_models import initialize_workflow_schema
+initialize_workflow_schema()
+
+# Register API Gateway routes
+from api_gateway_routes import register_api_gateway_routes
+register_api_gateway_routes(app, require_login, user_has_permission, get_db)
+
+# Register REST API
+from rest_api import register_rest_api
+register_rest_api(app)
+
+# =============================================================================
+# INITIALIZE FORM BUILDER MODULE
+# =============================================================================
+from form_routes import register_form_routes
+register_form_routes(app)
+
+# Register form builder template helpers
+from form_helpers import register_form_helpers
+register_form_helpers(app)
 
 def init_db():
     db = get_db()
@@ -822,6 +920,7 @@ def init_db():
             reduced_motion INTEGER DEFAULT 0,
             show_seconds INTEGER DEFAULT 1,
             sidebar_compact INTEGER DEFAULT 0,
+            language TEXT DEFAULT 'en',
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
@@ -1067,7 +1166,7 @@ def inject_globals():
             pass
     
     # Get platform settings
-    platform_name = get_platform_setting('platform_name', 'WHDASH')
+    platform_name = get_platform_setting('platform_name', 'MMDx')
     
     return dict(
         APP_NAME=platform_name,
@@ -1280,7 +1379,11 @@ USER_LANGUAGE_OPTIONS = [
     {'value': 'en', 'label': 'English'},
     {'value': 'fa', 'label': 'فارسی (Persian)'},
     {'value': 'ar', 'label': 'العربية (Arabic)'},
-    {'value': 'ru', 'label': 'Русский (Russian)'}
+    {'value': 'ru', 'label': 'Русский (Russian)'},
+    {'value': 'hi', 'label': 'हिन्दी (Hindi)'},
+    {'value': 'es', 'label': 'Español (Spanish)'},
+    {'value': 'zh', 'label': '中文 (Chinese)'},
+    {'value': 'de', 'label': 'Deutsch (German)'}
 ]
 USER_CURRENCY_OPTIONS = [
     {'value': 'AED', 'label': 'AED'},
@@ -2188,6 +2291,7 @@ def login():
             
             if user and check_password_hash(user['password'], password):
                 session.clear()
+                session.permanent = True
                 session['user_id'] = user['id']
                 session['username'] = user['username']
                 session['role_id'] = user['role_id']
@@ -2201,8 +2305,18 @@ def login():
                 session['can_manage_users'] = bool(role['can_manage_users'])
 
                 # Load marketing permissions for the user
-                from marketing_models import get_user_marketing_permissions
-                session['marketing_permissions'] = get_user_marketing_permissions(user['id'])
+                try:
+                    from marketing_models import get_user_marketing_permissions
+                    session['marketing_permissions'] = get_user_marketing_permissions(user['id'])
+                except Exception:
+                    session['marketing_permissions'] = []
+
+                # Load Customer Intelligence permissions for the user
+                try:
+                    from customer_intelligence_routes import get_ci_permissions
+                    session['ci_permissions'] = get_ci_permissions(user['id'])
+                except Exception:
+                    session['ci_permissions'] = []
 
                 return redirect(url_for('index'))
             else:
@@ -3711,7 +3825,7 @@ Due Date: {due_at}
 Please take action before the deadline.
 
 Best regards,
-WHDASH Notification System
+MMDx Notification System
 '''
         msg.attach(MIMEText(body, 'plain'))
         msg['From'] = email_config.get('smtp_username', 'noreply@whdash.local')
@@ -8527,9 +8641,9 @@ if __name__ == '__main__':
     # Always enable debug mode for local development
     os.environ['FLASK_DEBUG'] = '1'
     app.debug = True
-    host = '127.0.0.1'
+    host = '0.0.0.0'
     port = 5000
-    print(f"Starting Flask server on http://{host}:{port}")
+    print(f"Starting Flask server on http://localhost:{port}")
     print(f"Debug mode: ON")
     app.run(host=host, port=port, debug=True, use_reloader=True)
     print(f"Server stopped")

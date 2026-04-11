@@ -28,7 +28,7 @@ from database import (
     log_audit, get_user_notifications
 )
 from permissions import (
-    user_has_permission, get_user_permissions,
+    user_has_permission, get_user_permissions, get_role_permissions,
     require_permission, get_all_roles, get_role_by_id,
     MODULE_PERMISSIONS
 )
@@ -129,11 +129,14 @@ def register_admin_routes(app):
         """Settings page for a specific category."""
         user_id = session.get('user_id')
         language = session.get('language', 'en')
-        
-        if not user_has_permission(user_id, 'platform', 'settings', 'view'):
+
+        # Super admin bypass
+        if session.get('role_name') == 'Global Admin':
+            pass  # Continue to settings
+        elif not user_has_permission(user_id, 'platform', 'settings', 'view'):
             flash("Access denied to settings.", "error")
             return redirect(url_for('index'))
-        
+
         context = _get_admin_context(user_id, language)
         context['page_title'] = ADMIN_CATEGORIES.get(category.upper(), {}).get('label', category)
         context['category_key'] = category.upper()
@@ -324,6 +327,7 @@ def register_admin_routes(app):
         context['page_title'] = 'Numbering & Code Rules'
         context['rules'] = get_all_numbering_rules()
         context['rule_definitions'] = NUMBERING_RULES
+        context['settings'] = get_settings_by_category('NUMBERING')
         
         if request.method == 'POST':
             rule_type = request.form.get('rule_type')
@@ -435,13 +439,27 @@ def register_admin_routes(app):
         
         context = _get_admin_context(user_id, language)
         context['page_title'] = 'Notifications & Alerts'
-        
+
+        # Get relevant settings from different categories for display
+        # Use dict() to ensure we always have a dict, even if the function returns None
+        wms_settings = dict(get_settings_by_category('WMS') or {})
+        general_settings = dict(get_settings_by_category('GENERAL') or {})
+        crm_settings = dict(get_settings_by_category('CRM') or {})
+        marketing_settings = dict(get_settings_by_category('MARKETING') or {})
+
+        context['settings'] = {
+            **wms_settings,
+            **general_settings,
+            **crm_settings,
+            **marketing_settings,
+        }
+
         # Get notification rules from database
         with get_db_context() as db:
             context['rules'] = db.execute(
                 "SELECT * FROM notification_rules WHERE is_active = 1 ORDER BY module, alert_type"
             ).fetchall()
-        
+
         return render_template('admin/notifications.html', **context)
     
     @app.route('/admin/api/notifications/rules', methods=['GET', 'POST'])
@@ -1210,6 +1228,37 @@ def register_admin_routes(app):
 
             log_audit(entity_type='role_permissions', entity_id=str(role_id), action='UPDATE',
                      user_id=user_id, notes=f"Updated permissions for role ID: {role_id}")
+
+        return jsonify({'success': True})
+
+    @app.route('/admin/roles/delete/<int:role_id>', methods=['POST'])
+    @admin_require_login
+    def admin_delete_role(role_id):
+        """Delete a role."""
+        user_id = session.get('user_id')
+
+        if not user_has_permission(user_id, 'platform', 'roles', 'delete'):
+            return jsonify({'error': 'Access denied'}), 403
+
+        role = get_one("SELECT * FROM roles WHERE id = ?", (role_id,))
+        if not role:
+            return jsonify({'error': 'Role not found'}), 404
+
+        if role['is_system']:
+            return jsonify({'error': 'Cannot delete system role'}), 403
+
+        # Check if role has users
+        user_count = get_one("SELECT COUNT(*) as cnt FROM users WHERE role_id = ?", (role_id,))
+        if user_count and user_count['cnt'] > 0:
+            return jsonify({'error': f'Cannot delete role: {user_count["cnt"]} users are assigned to this role'}), 400
+
+        with get_db_context() as db:
+            db.execute("DELETE FROM role_permissions WHERE role_id = ?", (role_id,))
+            db.execute("DELETE FROM roles WHERE id = ? AND is_system = 0", (role_id,))
+            db.commit()
+
+            log_audit(entity_type='role', entity_id=str(role_id), action='DELETE',
+                     user_id=user_id, notes=f"Deleted role ID: {role_id}")
 
         return jsonify({'success': True})
 

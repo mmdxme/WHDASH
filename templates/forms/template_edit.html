@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if rtl else 'en' }}" dir="{{ 'rtl' if rtl else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ template.form_title }} - Form Designer - MMDx</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .glass-panel { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .section-card { transition: all 0.2s; }
+        .section-card:hover { border-color: rgba(59, 130, 246, 0.5); }
+        .field-item { transition: all 0.2s; }
+        .field-item:hover { background: rgba(59, 130, 246, 0.1); }
+        .field-type-icon { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 8px; }
+        .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    {% include 'admin_sidebar.html' %}
+    
+    <div class="ml-64 min-h-screen flex flex-col">
+        {% include 'admin_header.html' %}
+        
+        <main class="p-6 flex-1">
+            <!-- Page Header -->
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <div class="flex items-center gap-3">
+                        <a href="{{ url_for('forms.templates_list') }}" class="text-gray-400 hover:text-white">
+                            <i class="fas fa-arrow-left"></i>
+                        </a>
+                        <div>
+                            <span class="text-xs font-mono text-gray-500">{{ template.template_code }}</span>
+                            <h1 class="text-2xl font-bold text-white">{{ template.form_title }}</h1>
+                        </div>
+                    </div>
+                    <p class="text-gray-400 mt-1 ml-8">{% trans %}Form Designer - Add sections, fields, and configure workflow{% endtrans %}</p>
+                </div>
+                <div class="flex gap-3">
+                    {% if template.status == 'draft' %}
+                    <form action="{{ url_for('forms.templates_publish', template_id=template.id) }}" method="POST" class="inline">
+                        <button type="submit" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors">
+                            <i class="fas fa-paper-plane mr-2"></i>{% trans %}Publish Template{% endtrans %}
+                        </button>
+                    </form>
+                    {% endif %}
+                    <form action="{{ url_for('forms.templates_duplicate', template_id=template.id) }}" method="POST" class="inline">
+                        <button type="submit" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors">
+                            <i class="fas fa-copy mr-2"></i>{% trans %}Duplicate{% endtrans %}
+                        </button>
+                    </form>
+                    <a href="{{ url_for('forms.templates_view', template_id=template.id) }}" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors">
+                        <i class="fas fa-eye mr-2"></i>{% trans %}Preview{% endtrans %}
+                    </a>
+                </div>
+            </div>
+            
+            <!-- Tabs -->
+            <div class="flex border-b border-gray-700 mb-6">
+                <button onclick="showTab('sections')" id="tab-sections" class="px-6 py-3 text-gray-400 hover:text-white tab-active">
+                    <i class="fas fa-layer-group mr-2"></i>{% trans %}Sections & Fields{% endtrans %}
+                </button>
+                <button onclick="showTab('workflow')" id="tab-workflow" class="px-6 py-3 text-gray-400 hover:text-white">
+                    <i class="fas fa-project-diagram mr-2"></i>{% trans %}Workflow{% endtrans %}
+                </button>
+                <button onclick="showTab('settings')" id="tab-settings" class="px-6 py-3 text-gray-400 hover:text-white">
+                    <i class="fas fa-cog mr-2"></i>{% trans %}Settings{% endtrans %}
+                </button>
+            </div>
+            
+            <!-- Tab Content: Sections & Fields -->
+            <div id="content-sections" class="tab-content">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <!-- Left: Section List -->
+                    <div class="lg:col-span-2">
+                        <div class="glass-panel rounded-xl p-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-lg font-semibold text-white">{% trans %}Form Sections{% endtrans %}</h2>
+                                <button onclick="showAddSectionModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors">
+                                    <i class="fas fa-plus mr-2"></i>{% trans %}Add Section{% endtrans %}
+                                </button>
+                            </div>
+                            
+                            {% if sections %}
+                            <div class="space-y-4" id="sections-list">
+                                {% for section in sections %}
+                                <div class="section-card bg-gray-800/50 rounded-xl p-4 border border-gray-700" data-section-id="{{ section.id }}">
+                                    <div class="flex justify-between items-start mb-3">
+                                        <div>
+                                            <h3 class="font-semibold text-white">{{ section.title }}</h3>
+                                            {% if section.title_ar %}
+                                            <p class="text-sm text-gray-400">{{ section.title_ar }}</p>
+                                            {% endif %}
+                                            {% if section.description %}
+                                            <p class="text-sm text-gray-500 mt-1">{{ section.description }}</p>
+                                            {% endif %}
+                                        </div>
+                                        <div class="flex gap-2">
+                                            <button onclick="editSection({{ section.id }})" class="p-2 hover:bg-gray-700 rounded-lg transition-colors">
+                                                <i class="fas fa-edit text-gray-400"></i>
+                                            </button>
+                                            <button onclick="deleteSection({{ section.id }})" class="p-2 hover:bg-gray-700 rounded-lg transition-colors">
+                                                <i class="fas fa-trash text-red-400"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Fields in Section -->
+                                    <div class="mt-3 space-y-2">
+                                        {% for field in section.fields %}
+                                        <div class="field-item flex items-center justify-between p-3 bg-gray-900/50 rounded-lg border border-gray-700/50" data-field-id="{{ field.id }}">
+                                            <div class="flex items-center gap-3">
+                                                <div class="field-type-icon bg-blue-600/20 text-blue-400">
+                                                    <i class="{{ get_field_icon(field.field_type) }}"></i>
+                                                </div>
+                                                <div>
+                                                    <span class="text-sm font-medium text-white">{{ field.label }}</span>
+                                                    <span class="text-xs text-gray-500 ml-2">({{ field.field_code }})</span>
+                                                    {% if field.is_required %}
+                                                    <span class="text-xs text-red-400 ml-1">*</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                            <div class="flex gap-2">
+                                                <button onclick="editField({{ field.id }})" class="p-2 hover:bg-gray-700 rounded transition-colors">
+                                                    <i class="fas fa-edit text-gray-400"></i>
+                                                </button>
+                                                <button onclick="deleteField({{ field.id }})" class="p-2 hover:bg-gray-700 rounded transition-colors">
+                                                    <i class="fas fa-trash text-red-400"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                    
+                                    <!-- Add Field Button -->
+                                    <button onclick="showAddFieldModal({{ section.id }})" class="mt-3 w-full py-2 border-2 border-dashed border-gray-600 hover:border-gray-500 rounded-lg text-gray-400 hover:text-gray-300 text-sm transition-colors">
+                                        <i class="fas fa-plus mr-2"></i>{% trans %}Add Field{% endtrans %}
+                                    </button>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="text-center py-12">
+                                <i class="fas fa-layer-group text-4xl text-gray-600 mb-3"></i>
+                                <p class="text-gray-400">{% trans %}No sections yet. Add your first section to start building the form.{% endtrans %}</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <!-- Right: Field Types Palette -->
+                    <div>
+                        <div class="glass-panel rounded-xl p-6 sticky top-6">
+                            <h2 class="text-lg font-semibold text-white mb-4">{% trans %}Field Types{% endtrans %}</h2>
+                            <p class="text-sm text-gray-400 mb-4">{% trans %}Drag or click to add fields{% endtrans %}</p>
+                            
+                            {% for category, types in field_type_categories.items() %}
+                            <div class="mb-4">
+                                <h3 class="text-xs uppercase text-gray-500 mb-2">{{ category }}</h3>
+                                <div class="grid grid-cols-2 gap-2">
+                                    {% for type in types %}
+                                    <button onclick="quickAddField('{{ type }}')" class="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-left transition-colors">
+                                        <i class="{{ get_field_icon(type) }} text-blue-400 mb-1"></i>
+                                        <span class="text-xs text-gray-300 block">{{ get_field_label(type) }}</span>
+                                    </button>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tab Content: Workflow -->
+            <div id="content-workflow" class="tab-content hidden">
+                <div class="glass-panel rounded-xl p-6">
+                    <div class="flex justify-between items-center mb-6">
+                        <h2 class="text-lg font-semibold text-white">{% trans %}Approval Workflow{% endtrans %}</h2>
+                        <button onclick="showAddStepModal()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors">
+                            <i class="fas fa-plus mr-2"></i>{% trans %}Add Step{% endtrans %}
+                        </button>
+                    </div>
+                    
+                    <div class="workflow-builder">
+                        {% if workflow and steps %}
+                        <div class="flex items-center gap-4 overflow-x-auto pb-4">
+                            {% for step in steps %}
+                            <div class="workflow-step flex-shrink-0 bg-gray-800 rounded-xl p-4 border border-gray-700 min-w-[200px]">
+                                <div class="flex justify-between items-start mb-2">
+                                    <span class="text-xs bg-blue-600/20 text-blue-400 px-2 py-1 rounded">Step {{ step.step_order + 1 }}</span>
+                                    <div class="flex gap-1">
+                                        <button onclick="editStep({{ step.id }})" class="p-1 hover:bg-gray-700 rounded">
+                                            <i class="fas fa-edit text-gray-400 text-xs"></i>
+                                        </button>
+                                        <button onclick="deleteStep({{ step.id }})" class="p-1 hover:bg-gray-700 rounded">
+                                            <i class="fas fa-trash text-red-400 text-xs"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <h4 class="font-semibold text-white">{{ step.step_name }}</h4>
+                                <p class="text-xs text-gray-400 mt-1">
+                                    <i class="fas fa-{{ 'user' if step.approver_type == 'user' else 'users' if step.approver_type == 'role' else 'building' }} mr-1"></i>
+                                    {{ step.approver_type|title }}:
+                                    {% if step.approver_id %}
+                                    User #{{ step.approver_id }}
+                                    {% elif step.approver_role_id %}
+                                    Role #{{ step.approver_role_id }}
+                                    {% else %}
+                                    Not set
+                                    {% endif %}
+                                </p>
+                                <span class="text-xs bg-purple-600/20 text-purple-400 px-2 py-1 rounded mt-2 inline-block">{{ step.step_type|title }}</span>
+                            </div>
+                            {% if not loop.last %}
+                            <i class="fas fa-arrow-right text-gray-600 flex-shrink-0"></i>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="text-center py-12">
+                            <i class="fas fa-project-diagram text-4xl text-gray-600 mb-3"></i>
+                            <p class="text-gray-400">{% trans %}No workflow steps defined. Add approval steps to route forms through your organization.{% endtrans %}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Tab Content: Settings -->
+            <div id="content-settings" class="tab-content hidden">
+                <form method="POST">
+                    <div class="glass-panel rounded-xl p-6">
+                        <h2 class="text-lg font-semibold text-white mb-6">{% trans %}Template Settings{% endtrans %}</h2>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Form Title{% endtrans %}</label>
+                                <input type="text" name="form_title" value="{{ template.form_title }}" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Template Code{% endtrans %}</label>
+                                <input type="text" name="template_code" value="{{ template.template_code }}" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" readonly>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Department{% endtrans %}</label>
+                                <select name="department" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white">
+                                    <option value="">{% trans %}Select{% endtrans %}</option>
+                                    {% for dept in ['warehouse', 'logistics', 'hr', 'finance', 'procurement', 'quality', 'sales', 'maintenance', 'general'] %}
+                                    <option value="{{ dept }}" {% if template.department == dept %}selected{% endif %}>{{ dept|title }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Status{% endtrans %}</label>
+                                <select name="status" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white">
+                                    <option value="draft" {% if template.status == 'draft' %}selected{% endif %}>Draft</option>
+                                    <option value="published" {% if template.status == 'published' %}selected{% endif %}>Published</option>
+                                    <option value="archived" {% if template.status == 'archived' %}selected{% endif %}>Archived</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-6">
+                            <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Instructions{% endtrans %}</label>
+                            <textarea name="instructions" rows="4" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white">{{ template.instructions or '' }}</textarea>
+                        </div>
+                        
+                        <div class="mt-8 flex justify-end">
+                            <button type="submit" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                                <i class="fas fa-save mr-2"></i>{% trans %}Save Settings{% endtrans %}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Add Section Modal -->
+    <div id="add-section-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+        <div class="glass-panel rounded-xl p-6 w-full max-w-lg mx-4">
+            <h3 class="text-xl font-semibold text-white mb-4">{% trans %}Add Section{% endtrans %}</h3>
+            <form id="add-section-form">
+                <input type="hidden" name="template_id" value="{{ template.id }}">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Section Title{% endtrans %} *</label>
+                        <input type="text" name="title" required class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Section Title (Arabic){% endtrans %}</label>
+                        <input type="text" name="title_ar" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" dir="rtl">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Description{% endtrans %}</label>
+                        <textarea name="description" rows="2" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white"></textarea>
+                    </div>
+                    <div class="flex gap-4">
+                        <label class="flex items-center">
+                            <input type="checkbox" name="is_collapsible" value="1" checked class="mr-2">
+                            <span class="text-gray-300">{% trans %}Collapsible{% endtrans %}</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="is_repeatable" value="1" class="mr-2">
+                            <span class="text-gray-300">{% trans %}Repeatable{% endtrans %}</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="hideAddSectionModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">{% trans %}Cancel{% endtrans %}</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">{% trans %}Add Section{% endtrans %}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Add Field Modal -->
+    <div id="add-field-modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 overflow-y-auto py-8">
+        <div class="glass-panel rounded-xl p-6 w-full max-w-2xl mx-4 my-auto">
+            <h3 class="text-xl font-semibold text-white mb-4">{% trans %}Add Field{% endtrans %}</h3>
+            <form id="add-field-form">
+                <input type="hidden" name="section_id" id="field-section-id">
+                <input type="hidden" name="field_type" id="field-type-input">
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Label{% endtrans %} *</label>
+                        <input type="text" name="label" required class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Field Code{% endtrans %}</label>
+                        <input type="text" name="field_code" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white">
+                        <p class="text-xs text-gray-500 mt-1">{% trans %}Unique identifier (auto-generated if empty){% endtrans %}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Field Type{% endtrans %}</label>
+                        <select name="field_type_display" id="field-type-select" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" onchange="onFieldTypeChange(this.value)">
+                            {% for category, types in field_type_categories.items() %}
+                            <optgroup label="{{ category }}">
+                                {% for type in types %}
+                                <option value="{{ type }}">{{ get_field_label(type) }}</option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Width{% endtrans %}</label>
+                        <select name="field_width" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white">
+                            <option value="12">Full Width</option>
+                            <option value="6">Half Width</option>
+                            <option value="4">One Third</option>
+                            <option value="3">One Quarter</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Placeholder{% endtrans %}</label>
+                    <input type="text" name="placeholder" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white">
+                </div>
+                
+                <div class="mt-4">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Help Text{% endtrans %}</label>
+                    <input type="text" name="help_text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white">
+                </div>
+                
+                <!-- Options for selection fields -->
+                <div id="field-options-section" class="mt-4 hidden">
+                    <label class="block text-sm font-medium text-gray-300 mb-2">{% trans %}Options{% endtrans %}</label>
+                    <div id="options-container" class="space-y-2">
+                        <div class="flex gap-2">
+                            <input type="text" name="options[][label]" placeholder="Option 1" class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white">
+                            <button type="button" onclick="addOptionField()" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg">+</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Validation Section -->
+                <div class="mt-6 border-t border-gray-700 pt-4">
+                    <h4 class="text-sm font-medium text-gray-300 mb-3">{% trans %}Validation & Settings{% endtrans %}</h4>
+                    <div class="grid grid-cols-2 gap-4">
+                        <label class="flex items-center">
+                            <input type="checkbox" name="is_required" value="1" class="mr-2">
+                            <span class="text-gray-300">{% trans %}Required{% endtrans %}</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="is_readonly" value="1" class="mr-2">
+                            <span class="text-gray-300">{% trans %}Read-only{% endtrans %}</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="is_hidden" value="1" class="mr-2">
+                            <span class="text-gray-300">{% trans %}Hidden{% endtrans %}</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="is_unique" value="1" class="mr-2">
+                            <span class="text-gray-300">{% trans %}Unique Value{% endtrans %}</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="hideAddFieldModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">{% trans %}Cancel{% endtrans %}</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">{% trans %}Add Field{% endtrans %}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+        // Tab switching
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('[id^="tab-"]').forEach(el => el.classList.remove('tab-active'));
+            document.getElementById('content-' + tabName).classList.remove('hidden');
+            document.getElementById('tab-' + tabName).classList.add('tab-active');
+        }
+        
+        // Section Modal
+        function showAddSectionModal() {
+            document.getElementById('add-section-modal').classList.remove('hidden');
+            document.getElementById('add-section-modal').classList.add('flex');
+        }
+        
+        function hideAddSectionModal() {
+            document.getElementById('add-section-modal').classList.add('hidden');
+            document.getElementById('add-section-modal').classList.remove('flex');
+        }
+        
+        document.getElementById('add-section-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            const response = await fetch('{{ url_for("forms.sections_add", template_id=template.id) }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.fromEntries(formData))
+            });
+            
+            if (response.ok) {
+                location.reload();
+            }
+        });
+        
+        function editSection(sectionId) {
+            // Fetch section data and show edit modal
+            fetch('/forms/sections/' + sectionId)
+                .then(r => r.json())
+                .then(data => {
+                    // Populate edit form
+                    hideAddSectionModal();
+                });
+        }
+        
+        async function deleteSection(sectionId) {
+            if (!confirm('Delete this section and all its fields?')) return;
+            
+            await fetch('/forms/sections/' + sectionId, { method: 'DELETE' });
+            location.reload();
+        }
+        
+        // Field Modal
+        function showAddFieldModal(sectionId) {
+            document.getElementById('field-section-id').value = sectionId;
+            document.getElementById('add-field-modal').classList.remove('hidden');
+            document.getElementById('add-field-modal').classList.add('flex');
+        }
+        
+        function hideAddFieldModal() {
+            document.getElementById('add-field-modal').classList.add('hidden');
+            document.getElementById('add-field-modal').classList.remove('flex');
+        }
+        
+        function onFieldTypeChange(type) {
+            document.getElementById('field-type-input').value = type;
+            const optionsSection = document.getElementById('field-options-section');
+            if (['dropdown', 'radio', 'multi_select'].includes(type)) {
+                optionsSection.classList.remove('hidden');
+            } else {
+                optionsSection.classList.add('hidden');
+            }
+        }
+        
+        let optionCount = 1;
+        function addOptionField() {
+            optionCount++;
+            const container = document.getElementById('options-container');
+            const div = document.createElement('div');
+            div.className = 'flex gap-2';
+            div.innerHTML = `
+                <input type="text" name="options[][label]" placeholder="Option ${optionCount}" class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white">
+                <button type="button" onclick="this.parentElement.remove()" class="px-3 py-2 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-lg">×</button>
+            `;
+            container.appendChild(div);
+        }
+        
+        document.getElementById('add-field-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+            
+            // Parse options if present
+            const options = [];
+            const optionsInputs = document.querySelectorAll('input[name="options[][label]"]');
+            optionsInputs.forEach((input, idx) => {
+                if (input.value) {
+                    options.push({ value: idx + 1, label: input.value });
+                }
+            });
+            if (options.length) data.options = options;
+            
+            const sectionId = data.section_id;
+            delete data.section_id;
+            delete data.options[];
+            
+            const response = await fetch(`/forms/sections/${sectionId}/fields/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            
+            if (response.ok) {
+                location.reload();
+            }
+        });
+        
+        async function deleteField(fieldId) {
+            if (!confirm('Delete this field?')) return;
+            
+            await fetch('/forms/fields/' + fieldId, { method: 'DELETE' });
+            location.reload();
+        }
+        
+        function quickAddField(fieldType) {
+            // If there are sections, use the first one; otherwise show message
+            const sections = document.querySelectorAll('[data-section-id]');
+            if (sections.length === 0) {
+                alert('Please add a section first.');
+                return;
+            }
+            const sectionId = sections[0].dataset.sectionId;
+            
+            document.getElementById('field-section-id').value = sectionId;
+            document.getElementById('field-type-input').value = fieldType;
+            document.getElementById('field-type-select').value = fieldType;
+            onFieldTypeChange(fieldType);
+            
+            showAddFieldModal(sectionId);
+        }
+    </script>
+</body>
+</html>

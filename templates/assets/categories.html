@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 fade-in">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-100">Asset Categories</h1>
+            <p class="text-slate-400 text-sm mt-1">Manage asset classification and depreciation defaults</p>
+        </div>
+        <button onclick="showCategoryModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition-colors">
+            <i class="fas fa-plus mr-2"></i>New Category
+        </button>
+    </div>
+
+    <div class="glass-panel rounded-xl overflow-hidden">
+        <table class="w-full">
+            <thead class="bg-slate-800/50">
+                <tr>
+                    <th class="text-left text-slate-400 text-xs font-medium uppercase px-4 py-3">Code</th>
+                    <th class="text-left text-slate-400 text-xs font-medium uppercase px-4 py-3">Category</th>
+                    <th class="text-left text-slate-400 text-xs font-medium uppercase px-4 py-3">Depreciation Method</th>
+                    <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Useful Life</th>
+                    <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Salvage %</th>
+                    <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Assets</th>
+                    <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-700">
+                {% for cat in categories %}
+                <tr class="hover:bg-slate-700/30">
+                    <td class="px-4 py-3 text-slate-300 font-mono text-sm">{{ cat.code }}</td>
+                    <td class="px-4 py-3 text-white font-medium">{{ cat.name }}</td>
+                    <td class="px-4 py-3 text-slate-300">{{ cat.depreciation_method_name or '-' }}</td>
+                    <td class="px-4 py-3 text-center text-slate-300">{{ cat.default_useful_life_years }} years</td>
+                    <td class="px-4 py-3 text-center text-slate-300">{{ cat.default_salvage_percent }}%</td>
+                    <td class="px-4 py-3 text-center">
+                        <span class="px-2 py-1 bg-slate-700 text-slate-300 rounded text-xs">{{ cat.asset_count }}</span>
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        <button onclick="editCategory({{ cat.id }}, '{{ cat.name|e }}', '{{ cat.code|e }}', {{ cat.default_useful_life_years }}, {{ cat.default_salvage_percent }})" class="p-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition-colors">
+                            <i class="fas fa-edit text-xs"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="px-4 py-8 text-center text-slate-400">
+                        <i class="fas fa-tags text-4xl mb-3"></i>
+                        <p>No categories defined</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Category Modal -->
+<div id="categoryModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="glass-panel rounded-xl p-6 w-full max-w-md">
+        <h3 id="modalTitle" class="text-lg font-semibold text-white mb-4">New Category</h3>
+        <form id="categoryForm" onsubmit="saveCategory(event)">
+            <input type="hidden" id="categoryId" value="">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Category Name *</label>
+                    <input type="text" id="catName" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Code *</label>
+                    <input type="text" id="catCode" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Default Useful Life (Years)</label>
+                    <input type="number" id="catLife" value="5" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Default Salvage %</label>
+                    <input type="number" step="0.1" id="catSalvage" value="0" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="hideModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showCategoryModal() {
+    document.getElementById('modalTitle').textContent = 'New Category';
+    document.getElementById('categoryId').value = '';
+    document.getElementById('categoryForm').reset();
+    document.getElementById('categoryModal').classList.remove('hidden');
+    document.getElementById('categoryModal').classList.add('flex');
+}
+
+function editCategory(id, name, code, life, salvage) {
+    document.getElementById('modalTitle').textContent = 'Edit Category';
+    document.getElementById('categoryId').value = id;
+    document.getElementById('catName').value = name;
+    document.getElementById('catCode').value = code;
+    document.getElementById('catLife').value = life;
+    document.getElementById('catSalvage').value = salvage;
+    document.getElementById('categoryModal').classList.remove('hidden');
+    document.getElementById('categoryModal').classList.add('flex');
+}
+
+function hideModal() {
+    document.getElementById('categoryModal').classList.add('hidden');
+    document.getElementById('categoryModal').classList.remove('flex');
+}
+
+async function saveCategory(e) {
+    e.preventDefault();
+    const id = document.getElementById('categoryId').value;
+    const data = {
+        name: document.getElementById('catName').value,
+        code: document.getElementById('catCode').value,
+        default_useful_life_years: parseInt(document.getElementById('catLife').value),
+        default_salvage_percent: parseFloat(document.getElementById('catSalvage').value)
+    };
+    if (id) data.id = parseInt(id);
+
+    try {
+        const res = await fetch('{{ url_for("assets.category_save") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        const result = await res.json();
+        if (result.success) location.reload();
+        else alert(result.error);
+    } catch (e) { alert('Error saving category'); }
+}
+</script>
+{% endblock %}

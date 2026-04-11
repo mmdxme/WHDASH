@@ -1,0 +1,172 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Webhook Subscriptions</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('api_gateway_webhook_new') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> New Subscription
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Filter Subscriptions</h3>
+    </div>
+    <form method="get" style="padding: 15px;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Search</label>
+                <input type="text" name="search" value="{{ filters.search or '' }}" placeholder="Search subscriptions...">
+            </div>
+            <div class="filter-group">
+                <label>Status</label>
+                <select name="active">
+                    <option value="">All</option>
+                    <option value="1" {% if filters.active == '1' %}selected{% endif %}>Active</option>
+                    <option value="0" {% if filters.active == '0' %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+            <div class="filter-group" style="align-self: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+                <a href="{{ url_for('api_gateway_webhook_subscriptions') }}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Subscriptions ({{ total }})</h3>
+        <a href="{{ url_for('api_gateway_export_webhooks_csv') }}" class="btn btn-sm btn-secondary">
+            <i class="fas fa-download"></i> Export
+        </a>
+    </div>
+
+    {% if subscriptions %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Target URL</th>
+                    <th>Events</th>
+                    <th>Success Rate</th>
+                    <th>Deliveries</th>
+                    <th>Last Delivery</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sub in subscriptions %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('api_gateway_webhook_detail', sub_id=sub.id) }}">{{ sub.endpoint_name }}</a>
+                    </td>
+                    <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ sub.target_url }}">
+                        {{ sub.target_url }}
+                    </td>
+                    <td>
+                        {% set events_str = sub.subscribed_events[:50] if sub.subscribed_events else '' %}
+                        {% if sub.subscribed_events|length > 50 %}
+                        <span title="{{ sub.subscribed_events }}">{{ events_str }}...</span>
+                        {% else %}
+                        {{ events_str }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <div class="metric-bar" style="width: 50px;">
+                                <div class="metric-bar-fill {% if sub.success_rate >= 90 %}green{% elif sub.success_rate >= 70 %}yellow{% else %}red{% endif %}"
+                                     style="width: {{ sub.success_rate }}%;"></div>
+                            </div>
+                            <span>{{ "%.1f"|format(sub.success_rate) if sub.success_rate else '0' }}%</span>
+                        </div>
+                    </td>
+                    <td>
+                        {{ sub.total_deliveries }}
+                    </td>
+                    <td>
+                        {% if sub.last_delivery_at %}
+                        {{ sub.last_delivery_at[:16] }}
+                        {% else %}
+                        Never
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if sub.active %}
+                        <span class="badge badge-success">Active</span>
+                        {% else %}
+                        <span class="badge badge-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 5px;">
+                            <a href="{{ url_for('api_gateway_webhook_detail', sub_id=sub.id) }}" class="btn btn-sm btn-secondary">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <a href="{{ url_for('api_gateway_webhook_edit', sub_id=sub.id) }}" class="btn btn-sm btn-primary">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <button onclick="toggleWebhook({{ sub.id }}, {{ sub.active }})" class="btn btn-sm {% if sub.active %}btn-warning{% else %}btn-success{% endif %}">
+                                <i class="fas fa-{% if sub.active %}pause{% else %}play{% endif %}"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ (page - 1) * per_page + 1 }} to {{ [page * per_page, total]|min }} of {{ total }} subscriptions
+        </div>
+        <div class="pagination-links">
+            {% if page > 1 %}
+            <a href="{{ url_for('api_gateway_webhook_subscriptions', page=page-1, **filters) }}">&laquo; Prev</a>
+            {% endif %}
+            {% for p in range([1, page-2]|max, ([page+3, pages+1]|min)) %}
+                {% if p == page %}
+                <span class="active">{{ p }}</span>
+                {% else %}
+                <a href="{{ url_for('api_gateway_webhook_subscriptions', page=p, **filters) }}">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if page < pages %}
+            <a href="{{ url_for('api_gateway_webhook_subscriptions', page=page+1, **filters) }}">Next &raquo;</a>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-bell"></i>
+        <h3>No webhook subscriptions</h3>
+        <p>Create your first webhook subscription to receive real-time event notifications.</p>
+        <a href="{{ url_for('api_gateway_webhook_new') }}" class="btn btn-primary" style="margin-top: 15px;">
+            <i class="fas fa-plus"></i> Create Subscription
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleWebhook(subId, isActive) {
+    fetch(`/api-gateway/api/webhooks/${subId}/toggle/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) location.reload();
+    });
+}
+</script>
+{% endblock %}

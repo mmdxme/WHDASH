@@ -25,14 +25,6 @@ Covers:
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, send_file, Response
 from functools import wraps
-import sqlite3
-import os
-import json
-import io
-from datetime import datetime, timedelta, date
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-from collections import Counter
 
 from procurement_models import (
     initialize_procurement_tables,
@@ -57,21 +49,18 @@ def register_procurement_routes(app, get_db):
     # DECORATORS & HELPERS
     # ============================================================
 
-    def procurement_permission_required(permission=None):
-        """Decorator to check procurement-specific permissions."""
+    def procurement_permission_required(module: str, resource: str, action: str):
+        """Decorator to check procurement permissions using central permissions system."""
+        from permissions import user_has_permission
         def decorator(f):
             @wraps(f)
             def decorated_function(*args, **kwargs):
                 if 'user_id' not in session:
                     return redirect(url_for('login'))
 
-                # Super admin bypass
-                user_perms = session.get('permissions', set())
-                if 'platform.*' in user_perms or 'procurement.*' in user_perms:
-                    return f(*args, **kwargs)
-
-                if permission and f'procurement.{permission}' not in user_perms:
-                    flash(f'You do not have permission: procurement.{permission}', 'error')
+                user_id = session['user_id']
+                if not user_has_permission(user_id, module, resource, action):
+                    flash(f"Access Denied. You don't have permission to {action} {resource}.", "error")
                     return redirect(url_for('procurement_dashboard'))
                 return f(*args, **kwargs)
             return decorated_function
@@ -127,11 +116,9 @@ def register_procurement_routes(app, get_db):
 
     @app.route('/procurement')
     @app.route('/procurement/dashboard')
+    @procurement_permission_required('procurement', 'dashboard', 'view')
     def procurement_dashboard():
         """Main Procurement Dashboard."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         user = get_current_user()
         stats = get_procurement_dashboard_stats(user['id'])
         alerts = get_procurement_alerts({'is_read': False})[:10]
@@ -160,11 +147,9 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/suppliers')
+    @procurement_permission_required('procurement', 'suppliers', 'view')
     def procurement_suppliers():
         """Supplier list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         page = request.args.get('page', 1, type=int)
         search = request.args.get('search', '')
         status = request.args.get('status', '')
@@ -203,11 +188,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/suppliers/new', methods=['GET', 'POST'])
+    @procurement_permission_required('procurement', 'suppliers', 'create')
     def procurement_suppliers_new():
         """Create new supplier."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         if request.method == 'POST':
             data = {
                 'name': request.form.get('name'),
@@ -265,11 +248,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/suppliers/<int:supplier_id>')
+    @procurement_permission_required('procurement', 'suppliers', 'view')
     def procurement_suppliers_view(supplier_id):
         """View supplier details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         supplier = get_supplier_by_id(supplier_id)
         if not supplier:
             flash('Supplier not found', 'error')
@@ -283,11 +264,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/suppliers/<int:supplier_id>/edit', methods=['GET', 'POST'])
+    @procurement_permission_required('procurement', 'suppliers', 'edit')
     def procurement_suppliers_edit(supplier_id):
         """Edit supplier."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         if request.method == 'POST':
             data = {
                 'name': request.form.get('name'),
@@ -351,11 +330,9 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/requisitions')
+    @procurement_permission_required('procurement', 'requisitions', 'view')
     def procurement_requisitions():
         """Requisition list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         page = request.args.get('page', 1, type=int)
         search = request.args.get('search', '')
         status = request.args.get('status', '')
@@ -384,11 +361,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/requisitions/new', methods=['GET', 'POST'])
+    @procurement_permission_required('procurement', 'requisitions', 'create')
     def procurement_requisitions_new():
         """Create new requisition."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         if request.method == 'POST':
             user = get_current_user()
 
@@ -451,11 +426,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/requisitions/<int:requisition_id>')
+    @procurement_permission_required('procurement', 'requisitions', 'view')
     def procurement_requisitions_view(requisition_id):
         """View requisition details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         requisition = get_requisition_by_id(requisition_id)
         if not requisition:
             flash('Requisition not found', 'error')
@@ -467,11 +440,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/requisitions/<int:requisition_id>/status', methods=['POST'])
+    @procurement_permission_required('procurement', 'requisitions', 'edit')
     def procurement_requisitions_status(requisition_id):
         """Update requisition status."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         new_status = request.form.get('status')
         rejection_reason = request.form.get('rejection_reason')
         user = get_current_user()
@@ -483,11 +454,9 @@ def register_procurement_routes(app, get_db):
         return redirect(url_for('procurement_requisitions_view', requisition_id=requisition_id))
 
     @app.route('/procurement/requisitions/<int:requisition_id>/convert-to-rfq', methods=['POST'])
+    @procurement_permission_required('procurement', 'requisitions', 'convert')
     def procurement_requisitions_to_rfq(requisition_id):
         """Convert requisition to RFQ."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         requisition = get_requisition_by_id(requisition_id)
         if not requisition:
             flash('Requisition not found', 'error')
@@ -501,11 +470,9 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/rfqs')
+    @procurement_permission_required('procurement', 'rfqs', 'view')
     def procurement_rfqs():
         """RFQ list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         page = request.args.get('page', 1, type=int)
         search = request.args.get('search', '')
         status = request.args.get('status', '')
@@ -528,11 +495,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/rfqs/new', methods=['GET', 'POST'])
+    @procurement_permission_required('procurement', 'rfqs', 'create')
     def procurement_rfqs_new():
         """Create new RFQ."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         # Pre-fill from requisition if provided
         prefill_data = None
         requisition_id = request.args.get('requisition_id', type=int)
@@ -610,11 +575,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/rfqs/<int:rfq_id>')
+    @procurement_permission_required('procurement', 'rfqs', 'view')
     def procurement_rfqs_view(rfq_id):
         """View RFQ details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         rfq = get_rfq_by_id(rfq_id)
         if not rfq:
             flash('RFQ not found', 'error')
@@ -626,11 +589,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/rfqs/<int:rfq_id>/send', methods=['POST'])
+    @procurement_permission_required('procurement', 'rfqs', 'send')
     def procurement_rfqs_send(rfq_id):
         """Send RFQ to suppliers."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         db.execute("UPDATE procurement_rfqs SET status = 'SENT', updated_at = datetime('now') WHERE id = ?", (rfq_id,))
         db.commit()
@@ -643,11 +604,9 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/quotations')
+    @procurement_permission_required('procurement', 'quotations', 'view')
     def procurement_quotations():
         """Quotation list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         page = request.args.get('page', 1, type=int)
         search = request.args.get('search', '')
         status = request.args.get('status', '')
@@ -676,11 +635,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/quotations/new', methods=['GET', 'POST'])
+    @procurement_permission_required('procurement', 'quotations', 'create')
     def procurement_quotations_new():
         """Create new quotation."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         rfq_id = request.args.get('rfq_id', type=int)
         prefill_data = None
         if rfq_id:
@@ -746,11 +703,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/quotations/<int:quotation_id>')
+    @procurement_permission_required('procurement', 'quotations', 'view')
     def procurement_quotations_view(quotation_id):
         """View quotation details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         quotation = get_quotation_by_id(quotation_id)
         if not quotation:
             flash('Quotation not found', 'error')
@@ -762,11 +717,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/quotations/compare/<int:rfq_id>')
+    @procurement_permission_required('procurement', 'quotations', 'compare')
     def procurement_quotations_compare(rfq_id):
         """Compare quotations for an RFQ."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         rfq = get_rfq_by_id(rfq_id)
         if not rfq:
             flash('RFQ not found', 'error')
@@ -783,11 +736,9 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/orders')
+    @procurement_permission_required('procurement', 'orders', 'view')
     def procurement_orders():
         """Purchase order list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         page = request.args.get('page', 1, type=int)
         search = request.args.get('search', '')
         status = request.args.get('status', '')
@@ -819,11 +770,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/orders/new', methods=['GET', 'POST'])
+    @procurement_permission_required('procurement', 'orders', 'create')
     def procurement_orders_new():
         """Create new purchase order."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         # Pre-fill from quotation or vendor selection
         prefill_data = None
         quotation_id = request.args.get('quotation_id', type=int)
@@ -904,11 +853,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/orders/<int:po_id>')
+    @procurement_permission_required('procurement', 'orders', 'view')
     def procurement_orders_view(po_id):
         """View purchase order details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         order = get_purchase_order_by_id(po_id)
         if not order:
             flash('Purchase Order not found', 'error')
@@ -920,11 +867,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/orders/<int:po_id>/approve', methods=['POST'])
+    @procurement_permission_required('procurement', 'orders', 'approve')
     def procurement_orders_approve(po_id):
         """Approve a purchase order."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         user = get_current_user()
         db = get_db()
         db.execute("""
@@ -942,11 +887,9 @@ def register_procurement_routes(app, get_db):
         return redirect(url_for('procurement_orders_view', po_id=po_id))
 
     @app.route('/procurement/orders/<int:po_id>/status', methods=['POST'])
+    @procurement_permission_required('procurement', 'orders', 'edit')
     def procurement_orders_status(po_id):
         """Update purchase order status."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         new_status = request.form.get('status')
         user = get_current_user()
 
@@ -972,11 +915,9 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/shipments')
+    @procurement_permission_required('procurement', 'shipments', 'view')
     def procurement_shipments():
         """Shipment tracking list."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         page = request.args.get('page', 1, type=int)
         status = request.args.get('status', '')
@@ -1014,11 +955,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/shipments/<int:shipment_id>')
+    @procurement_permission_required('procurement', 'shipments', 'view')
     def procurement_shipments_view(shipment_id):
         """View shipment details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         shipment = db.execute("""
             SELECT ps.*, ppo.po_number, s.name as supplier_name
@@ -1042,11 +981,9 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/receiving')
+    @procurement_permission_required('procurement', 'receiving', 'view')
     def procurement_receiving():
         """Receiving coordination page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         today = datetime.now().strftime('%Y-%m-%d')
 
@@ -1088,11 +1025,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/receiving/<int:receipt_id>')
+    @procurement_permission_required('procurement', 'receiving', 'view')
     def procurement_receiving_view(receipt_id):
         """View receiving details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         receipt = db.execute("""
             SELECT prr.*, ppo.po_number, ppo.supplier_name, w.name as warehouse_name
@@ -1121,11 +1056,9 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/claims')
+    @procurement_permission_required('procurement', 'claims', 'view')
     def procurement_claims():
         """Claims list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         page = request.args.get('page', 1, type=int)
         search = request.args.get('search', '')
         status = request.args.get('status', '')
@@ -1151,11 +1084,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/claims/new', methods=['GET', 'POST'])
+    @procurement_permission_required('procurement', 'claims', 'create')
     def procurement_claims_new():
         """Create new claim."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         if request.method == 'POST':
             user = get_current_user()
 
@@ -1197,11 +1128,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/claims/<int:claim_id>')
+    @procurement_permission_required('procurement', 'claims', 'view')
     def procurement_claims_view(claim_id):
         """View claim details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         claim = db.execute("SELECT * FROM procurement_claims WHERE id = ?", (claim_id,)).fetchone()
 
@@ -1215,11 +1144,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/returns/new', methods=['GET', 'POST'])
+    @procurement_permission_required('procurement', 'returns', 'create')
     def procurement_returns_new():
         """Create new return."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         if request.method == 'POST':
             user = get_current_user()
 
@@ -1255,11 +1182,9 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/contracts')
+    @procurement_permission_required('procurement', 'contracts', 'view')
     def procurement_contracts():
         """Contracts list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         page = request.args.get('page', 1, type=int)
         search = request.args.get('search', '')
         status = request.args.get('status', '')
@@ -1285,11 +1210,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/contracts/new', methods=['GET', 'POST'])
+    @procurement_permission_required('procurement', 'contracts', 'create')
     def procurement_contracts_new():
         """Create new contract."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         if request.method == 'POST':
             user = get_current_user()
 
@@ -1348,11 +1271,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/contracts/<int:contract_id>')
+    @procurement_permission_required('procurement', 'contracts', 'view')
     def procurement_contracts_view(contract_id):
         """View contract details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         contract = db.execute("SELECT * FROM procurement_contracts WHERE id = ?", (contract_id,)).fetchone()
 
@@ -1373,11 +1294,9 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/performance')
+    @procurement_permission_required('procurement', 'performance', 'view')
     def procurement_performance():
         """Supplier performance page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         supplier_id = request.args.get('supplier_id', type=int)
         performance_data = get_supplier_performance_summary(supplier_id if supplier_id else None)
 
@@ -1392,21 +1311,17 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/reports')
+    @procurement_permission_required('procurement', 'reports', 'view')
     def procurement_reports():
         """Procurement reports page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         return render_template('procurement/reports.html',
             page_title='Procurement Reports'
         )
 
     @app.route('/procurement/reports/spend-analysis')
+    @procurement_permission_required('procurement', 'reports', 'export')
     def procurement_reports_spend():
         """Spend analysis report."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
 
         # Spend by supplier
@@ -1445,11 +1360,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/reports/po-status')
+    @procurement_permission_required('procurement', 'reports', 'view')
     def procurement_reports_po_status():
         """PO status report."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
 
         pos = get_purchase_orders(per_page=500)['items']
@@ -1464,11 +1377,9 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/procurement/settings')
+    @procurement_permission_required('procurement', 'settings', 'view')
     def procurement_settings():
         """Procurement settings page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         category = request.args.get('category', 'GENERAL')
         settings = get_all_procurement_settings(category)
 
@@ -1479,11 +1390,9 @@ def register_procurement_routes(app, get_db):
         )
 
     @app.route('/procurement/settings/save', methods=['POST'])
+    @procurement_permission_required('procurement', 'settings', 'edit')
     def procurement_settings_save():
         """Save procurement settings."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         for key, value in request.form.items():
             if key.startswith('setting_'):
                 setting_key = key.replace('setting_', '')
@@ -1497,20 +1406,16 @@ def register_procurement_routes(app, get_db):
     # ============================================================
 
     @app.route('/api/procurement/dashboard-stats')
+    @procurement_permission_required('procurement', 'dashboard', 'view')
     def api_procurement_dashboard_stats():
         """API endpoint for dashboard stats."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
-
         stats = get_procurement_dashboard_stats(session['user_id'])
         return jsonify(stats)
 
     @app.route('/api/procurement/suppliers/search')
+    @procurement_permission_required('procurement', 'suppliers', 'view')
     def api_procurement_suppliers_search():
         """API endpoint to search suppliers."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
-
         query = request.args.get('q', '')
         suppliers = get_suppliers({'search': query, 'status': 'Active'}, per_page=20)['items']
 

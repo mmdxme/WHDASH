@@ -1,0 +1,96 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Webhook Event Catalog</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Filter Events</h3>
+    </div>
+    <form method="get" style="padding: 15px;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Search</label>
+                <input type="text" name="search" value="{{ filters.search or '' }}" placeholder="Search events...">
+            </div>
+            <div class="filter-group">
+                <label>Module</label>
+                <select name="module">
+                    <option value="">All Modules</option>
+                    {% for mod_code, mod_name in modules %}
+                    <option value="{{ mod_code }}" {% if filters.module == mod_code %}selected{% endif %}>{{ mod_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group" style="align-self: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+                <a href="{{ url_for('api_gateway_webhook_events') }}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Available Events ({{ events|length }})</h3>
+    </div>
+
+    {% for module, module_events in events_by_module.items() %}
+    <div style="margin-bottom: 25px;">
+        <h4 style="padding: 10px 15px; background: #f8fafc; border-radius: 8px; margin-bottom: 10px;">
+            <i class="fas fa-module"></i> {{ module|title }} ({{ module_events|length }} events)
+        </h4>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Event Code</th>
+                        <th>Event Name</th>
+                        <th>Resource</th>
+                        <th>Description</th>
+                        <th>Danger</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for event in module_events %}
+                    <tr>
+                        <td><code style="font-size: 0.8rem;">{{ event.event_code }}</code></td>
+                        <td>{{ event.event_name }}</td>
+                        <td>{{ event.resource }}</td>
+                        <td style="max-width: 300px;">{{ event.description or 'N/A' }}</td>
+                        <td>
+                            <span class="badge badge-{% if event.danger_level == 'critical' %}danger{% elif event.danger_level == 'high' %}warning{% elif event.danger_level == 'medium' %}info{% else %}secondary{% endif %}">
+                                {{ event.danger_level|title }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if event.is_active %}
+                            <span class="badge badge-success">Active</span>
+                            {% else %}
+                            <span class="badge badge-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+
+    {% if not events_by_module %}
+    <div class="empty-state">
+        <i class="fas fa-bolt"></i>
+        <h3>No webhook events</h3>
+        <p>Webhook events will be available once modules start emitting events.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

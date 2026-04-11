@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if rtl else 'en' }}" dir="{{ 'rtl' if rtl else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ template.form_title }} - Preview - MMDx</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .glass-panel { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .print-only { display: none; }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block; }
+            body { background: white; color: black; }
+            .glass-panel { background: white; border: 1px solid #ddd; }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    {% include 'admin_sidebar.html' %}
+    
+    <div class="ml-64 min-h-screen">
+        {% include 'admin_header.html' %}
+        
+        <main class="p-6">
+            <!-- Print Header -->
+            <div class="print-only mb-6">
+                <h1 class="text-2xl font-bold">{{ template.form_title }}</h1>
+                <p class="text-gray-600">Template Code: {{ template.template_code }}</p>
+                <hr class="my-4">
+            </div>
+            
+            <!-- Page Header -->
+            <div class="flex justify-between items-center mb-6 no-print">
+                <div>
+                    <div class="flex items-center gap-3">
+                        <a href="{{ url_for('forms.templates_list') }}" class="text-gray-400 hover:text-white">
+                            <i class="fas fa-arrow-left"></i>
+                        </a>
+                        <div>
+                            <span class="text-xs font-mono text-gray-500">{{ template.template_code }}</span>
+                            <h1 class="text-2xl font-bold text-white">{{ template.form_title }}</h1>
+                        </div>
+                    </div>
+                    {% if template.form_title_ar %}
+                    <p class="text-gray-400 mt-1 ml-8">{{ template.form_title_ar }}</p>
+                    {% endif %}
+                </div>
+                <div class="flex gap-3">
+                    <a href="{{ url_for('forms.templates_edit', template_id=template.id) }}" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                        <i class="fas fa-edit mr-2"></i>{% trans %}Edit Template{% endtrans %}
+                    </a>
+                    <button onclick="window.print()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors">
+                        <i class="fas fa-print mr-2"></i>{% trans %}Print{% endtrans %}
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Template Info -->
+            <div class="glass-panel rounded-xl p-6 mb-6">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                        <span class="text-gray-400">{% trans %}Status{% endtrans %}</span>
+                        <p class="font-medium mt-1">
+                            <span class="px-2 py-1 rounded text-xs font-semibold {% if template.status == 'published' %}bg-green-500/20 text-green-400{% elif template.status == 'draft' %}bg-yellow-500/20 text-yellow-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">
+                                {{ template.status|title }}
+                            </span>
+                        </p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400">{% trans %}Version{% endtrans %}</span>
+                        <p class="font-medium mt-1">{{ template.version }}</p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400">{% trans %}Department{% endtrans %}</span>
+                        <p class="font-medium mt-1">{{ template.department or 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <span class="text-gray-400">{% trans %}Category{% endtrans %}</span>
+                        <p class="font-medium mt-1">{{ template.category or 'N/A' }}</p>
+                    </div>
+                </div>
+                {% if template.description %}
+                <div class="mt-4 pt-4 border-t border-gray-700">
+                    <span class="text-gray-400 text-sm">{% trans %}Description{% endtrans %}</span>
+                    <p class="mt-1">{{ template.description }}</p>
+                </div>
+                {% endif %}
+                {% if template.instructions %}
+                <div class="mt-4 pt-4 border-t border-gray-700">
+                    <span class="text-gray-400 text-sm">{% trans %}Instructions{% endtrans %}</span>
+                    <p class="mt-1">{{ template.instructions }}</p>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- Form Sections Preview -->
+            <div class="space-y-6">
+                {% for section in sections %}
+                <div class="glass-panel rounded-xl p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h2 class="text-xl font-semibold text-white">{{ section.title }}</h2>
+                            {% if section.title_ar %}
+                            <p class="text-gray-400">{{ section.title_ar }}</p>
+                            {% endif %}
+                            {% if section.description %}
+                            <p class="text-gray-500 text-sm mt-1">{{ section.description }}</p>
+                            {% endif %}
+                        </div>
+                        {% if section.is_repeatable %}
+                        <span class="text-xs bg-purple-600/20 text-purple-400 px-2 py-1 rounded">
+                            <i class="fas fa-redo mr-1"></i>{% trans %}Repeatable{% endtrans %}
+                        </span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {% for field in section.fields %}
+                        <div class="field-preview {% if field.field_width < 12 %}md:col-span-1{% else %}md:col-span-2{% endif %}">
+                            <label class="block text-sm font-medium text-gray-300 mb-2">
+                                {{ field.label }}
+                                {% if field.is_required %}<span class="text-red-400">*</span>{% endif %}
+                            </label>
+                            
+                            {% if field.field_type == 'text' %}
+                            <input type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" placeholder="{{ field.placeholder or '' }}" readonly>
+                            
+                            {% elif field.field_type == 'textarea' %}
+                            <textarea class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white h-24" placeholder="{{ field.placeholder or '' }}" readonly></textarea>
+                            
+                            {% elif field.field_type == 'number' or field.field_type == 'decimal' or field.field_type == 'currency' or field.field_type == 'percentage' %}
+                            <input type="number" step="any" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" placeholder="0.00" readonly>
+                            
+                            {% elif field.field_type == 'date' %}
+                            <input type="date" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" readonly>
+                            
+                            {% elif field.field_type == 'time' %}
+                            <input type="time" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" readonly>
+                            
+                            {% elif field.field_type == 'datetime' %}
+                            <input type="datetime-local" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" readonly>
+                            
+                            {% elif field.field_type == 'dropdown' %}
+                            <select class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" disabled>
+                                <option value="">{% trans %}Select...{% endtrans %}</option>
+                                {% for option in field.options %}
+                                <option value="{{ option.option_value }}">{{ option.option_label }}</option>
+                                {% endfor %}
+                            </select>
+                            
+                            {% elif field.field_type == 'radio' %}
+                            <div class="space-y-2">
+                                {% for option in field.options %}
+                                <label class="flex items-center">
+                                    <input type="radio" class="mr-2" disabled>
+                                    <span class="text-gray-300">{{ option.option_label }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                            
+                            {% elif field.field_type == 'checkbox' %}
+                            <div class="space-y-2">
+                                {% for option in field.options %}
+                                <label class="flex items-center">
+                                    <input type="checkbox" class="mr-2" disabled>
+                                    <span class="text-gray-300">{{ option.option_label }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                            
+                            {% elif field.field_type == 'toggle' %}
+                            <div class="flex items-center">
+                                <input type="checkbox" class="relative w-11 h-6 bg-gray-700 rounded-full peer" disabled>
+                                <div class="absolute left-1 top-1 w-4 h-4 bg-white rounded-full transition peer-checked:translate-x-5"></div>
+                                <span class="ml-3 text-gray-400">{% trans %}Toggle{% endtrans %}</span>
+                            </div>
+                            
+                            {% elif field.field_type == 'email' %}
+                            <input type="email" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" placeholder="email@example.com" readonly>
+                            
+                            {% elif field.field_type == 'phone' %}
+                            <input type="tel" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" placeholder="+966 XX XXX XXXX" readonly>
+                            
+                            {% elif field.field_type == 'url' %}
+                            <input type="url" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" placeholder="https://" readonly>
+                            
+                            {% elif field.field_type == 'file' or field.field_type == 'image' %}
+                            <div class="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center">
+                                <i class="fas fa-cloud-upload-alt text-3xl text-gray-600 mb-2"></i>
+                                <p class="text-gray-500 text-sm">{% trans %}File upload area{% endtrans %}</p>
+                            </div>
+                            
+                            {% elif field.field_type == 'signature' %}
+                            <div class="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center bg-gray-800/50">
+                                <i class="fas fa-signature text-3xl text-gray-600 mb-2"></i>
+                                <p class="text-gray-500 text-sm">{% trans %}Signature area{% endtrans %}</p>
+                            </div>
+                            
+                            {% elif field.field_type == 'user_picker' %}
+                            <input type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" placeholder="{% trans %}Search for user...{% endtrans %}" readonly>
+                            
+                            {% elif field.field_type == 'table' %}
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead>
+                                        <tr class="border-b border-gray-700">
+                                            {% for col in field.columns %}
+                                            <th class="text-left py-2 px-3 text-gray-400">{{ col.column_label }}</th>
+                                            {% endfor %}
+                                            <th class="w-10"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr class="border-b border-gray-800">
+                                            {% for col in field.columns %}
+                                            <td class="py-2 px-3">
+                                                <input type="text" class="w-full bg-gray-800/50 border border-gray-700/50 rounded px-2 py-1 text-white/50" readonly>
+                                            </td>
+                                            {% endfor %}
+                                            <td class="py-2 px-1">
+                                                <button class="p-1 text-red-400 hover:text-red-300" disabled><i class="fas fa-times"></i></button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <button class="mt-2 text-sm text-blue-400 hover:text-blue-300" disabled>
+                                    <i class="fas fa-plus mr-1"></i>{% trans %}Add Row{% endtrans %}
+                                </button>
+                            </div>
+                            
+                            {% elif field.field_type == 'approval_decision' %}
+                            <div class="flex gap-2">
+                                <button class="flex-1 px-4 py-2 bg-green-600/20 text-green-400 rounded-lg" disabled>{% trans %}Approve{% endtrans %}</button>
+                                <button class="flex-1 px-4 py-2 bg-red-600/20 text-red-400 rounded-lg" disabled>{% trans %}Reject{% endtrans %}</button>
+                                <button class="flex-1 px-4 py-2 bg-yellow-600/20 text-yellow-400 rounded-lg" disabled>{% trans %}Return{% endtrans %}</button>
+                            </div>
+                            
+                            {% else %}
+                            <input type="text" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-white" readonly>
+                            {% endif %}
+                            
+                            {% if field.help_text %}
+                            <p class="text-xs text-gray-500 mt-1">{{ field.help_text }}</p>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            
+            {% if not sections %}
+            <div class="glass-panel rounded-xl p-12 text-center">
+                <i class="fas fa-layer-group text-6xl text-gray-600 mb-4"></i>
+                <h3 class="text-xl font-semibold text-gray-400 mb-2">{% trans %}No Sections Defined{% endtrans %}</h3>
+                <p class="text-gray-500 mb-6">{% trans %}This template doesn't have any sections yet.{% endtrans %}</p>
+                <a href="{{ url_for('forms.templates_edit', template_id=template.id) }}" class="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                    <i class="fas fa-edit mr-2"></i>{% trans %}Edit Template{% endtrans %}
+                </a>
+            </div>
+            {% endif %}
+        </main>
+    </div>
+</body>
+</html>

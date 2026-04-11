@@ -67,6 +67,18 @@ CREATE TABLE IF NOT EXISTS `statuses` (
   `name` TEXT NOT NULL
 );
 
+INSERT INTO `statuses` (`name`) VALUES ('Active'), ('Discontinued'), ('Obsolete'), ('Pending');
+
+-- --------------------------------------------------------
+-- Vitalities (part classification)
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `vitalities` (
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` TEXT NOT NULL
+);
+
+INSERT INTO `vitalities` (`name`) VALUES ('Fast Moving'), ('Slow Moving'), ('Dead Stock'), ('Critical');
+
 -- --------------------------------------------------------
 -- Master Parts
 -- --------------------------------------------------------
@@ -80,12 +92,14 @@ CREATE TABLE IF NOT EXISTS `parts` (
   `category_id` INTEGER NULL,
   `brand_id` INTEGER NULL,
   `status_id` INTEGER NULL,
+  `vitality_id` INTEGER NULL,
   `reorder_point` INTEGER DEFAULT 0,
   `cost_price` REAL DEFAULT 0.00,
   `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (`category_id`) REFERENCES `categories`(`id`) ON DELETE SET NULL,
   FOREIGN KEY (`brand_id`) REFERENCES `brands`(`id`) ON DELETE SET NULL,
-  FOREIGN KEY (`status_id`) REFERENCES `statuses`(`id`) ON DELETE SET NULL
+  FOREIGN KEY (`status_id`) REFERENCES `statuses`(`id`) ON DELETE SET NULL,
+  FOREIGN KEY (`vitality_id`) REFERENCES `vitalities`(`id`) ON DELETE SET NULL
 );
 
 -- --------------------------------------------------------

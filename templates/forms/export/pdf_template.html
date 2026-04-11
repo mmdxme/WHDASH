@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if rtl else 'en' }}" dir="{{ 'rtl' if rtl else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ submission.submission_number }} - {{ template.form_title }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; margin: 40px; }
+        .header { border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .header .subtitle { color: #666; margin-top: 5px; }
+        .info-grid { display: table; width: 100%; margin-bottom: 20px; }
+        .info-row { display: table-row; }
+        .info-label { display: table-cell; width: 150px; font-weight: bold; padding: 5px 0; background: #f5f5f5; }
+        .info-value { display: table-cell; padding: 5px 10px; }
+        .section { margin-bottom: 25px; border: 1px solid #ddd; padding: 15px; }
+        .section h2 { margin: 0 0 10px 0; font-size: 16px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .field { margin-bottom: 10px; }
+        .field-label { font-weight: bold; color: #333; margin-bottom: 3px; }
+        .field-value { color: #000; }
+        .table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        .table th, .table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .table th { background: #f5f5f5; font-weight: bold; }
+        .signature-block { margin-top: 30px; border-top: 1px solid #333; padding-top: 20px; }
+        .signature-line { display: inline-block; width: 200px; border-top: 1px solid #333; margin-right: 50px; text-align: center; }
+        .footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid #333; font-size: 10px; color: #666; }
+        @media print { body { margin: 20px; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ template.form_title }}</h1>
+        <div class="subtitle">
+            <strong>{{ submission.submission_number }}</strong>
+            {% if template.template_code %}| Template: {{ template.template_code }}{% endif %}
+        </div>
+    </div>
+
+    <div class="info-grid">
+        <div class="info-row">
+            <div class="info-label">Status:</div>
+            <div class="info-value">{{ submission.status|replace('_', ' ')|title }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Submitted Date:</div>
+            <div class="info-value">{{ submission.created_at[:16] if submission.created_at else 'N/A' }}</div>
+        </div>
+        <div class="info-row">
+            <div class="info-label">Priority:</div>
+            <div class="info-value">{{ submission.priority|default('Medium')|title }}</div>
+        </div>
+        {% if submission.due_date %}
+        <div class="info-row">
+            <div class="info-label">Due Date:</div>
+            <div class="info-value">{{ submission.due_date }}</div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% for section in sections %}
+    <div class="section">
+        <h2>{{ section.title }}</h2>
+        {% if section.description %}<p style="color:#666;font-size:11px;">{{ section.description }}</p>{% endif %}
+
+        <div class="fields">
+            {% for field in section.fields %}
+            {% if not field.is_hidden %}
+            <div class="field">
+                <div class="field-label">{{ field.label }}:</div>
+                <div class="field-value">
+                    {% if field.current_value %}
+                        {% if field.field_type == 'table' %}
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    {% for col in field.columns %}
+                                    <th>{{ col.column_label }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in field.rows %}
+                                <tr>
+                                    {% for col in row %}
+                                    <td>{{ col }}</td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        {% elif field.field_type == 'signature' %}
+                        <img src="{{ field.current_value }}" style="height:60px;">
+                        {% elif field.field_type in ['file', 'image'] %}
+                        <a href="/forms/attachments/{{ field.current_value }}">View Attachment</a>
+                        {% else %}
+                        {{ field.current_value }}
+                        {% endif %}
+                    {% else %}
+                    <span style="color:#999;">—</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+
+    <div class="signature-block">
+        <div class="signature-line">
+            <div style="padding-top:30px;">Submitted By</div>
+            <div>{{ submission.created_at[:10] if submission.created_at else '' }}</div>
+        </div>
+        <div class="signature-line">
+            <div style="padding-top:30px;">Approved By</div>
+            <div></div>
+        </div>
+        <div class="signature-line">
+            <div style="padding-top:30px;">Final Approval</div>
+            <div></div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>This document was generated from the MMDx Form Builder system on {{ submission.created_at[:10] if submission.created_at else '' }}.</p>
+        <p>Document ID: {{ submission.submission_number }} | Form Version: {{ template.version }}</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-100">{{ page_title }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{% if asset %}Edit asset {{ asset.asset_code }}{% else %}Create a new fixed asset{% endif %}</p>
+        </div>
+        <a href="{{ url_for('assets.register') }}" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors">
+            <i class="fas fa-arrow-left mr-2"></i>Back to Register
+        </a>
+    </div>
+
+    <form method="POST" class="space-y-6">
+        <!-- Basic Information -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4 flex items-center">
+                <i class="fas fa-info-circle text-brand-400 mr-2"></i>Basic Information
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Asset Name *</label>
+                    <input type="text" name="name" required value="{{ asset.name if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Asset Category</label>
+                    <select name="category_id" id="categorySelect" onchange="updateFromCategory()"
+                            class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                        <option value="">Select Category</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}" {% if asset and asset.category_id == cat.id %}selected{% endif %}
+                                data-useful-life="{{ cat.default_useful_life_years }}"
+                                data-salvage="{{ cat.default_salvage_percent }}">{{ cat.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Asset Type</label>
+                    <select name="asset_type" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                        <option value="Tangible" {% if asset and asset.asset_type == 'Tangible' %}selected{% endif %}>Tangible</option>
+                        <option value="Intangible" {% if asset and asset.asset_type == 'Intangible' %}selected{% endif %}>Intangible</option>
+                        <option value="Financial" {% if asset and asset.asset_type == 'Financial' %}selected{% endif %}>Financial</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Serial Number</label>
+                    <input type="text" name="serial_number" value="{{ asset.serial_number if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Brand</label>
+                    <input type="text" name="brand" value="{{ asset.brand if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Model</label>
+                    <input type="text" name="model" value="{{ asset.model if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Manufacturer</label>
+                    <input type="text" name="manufacturer" value="{{ asset.manufacturer if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Tag Number</label>
+                    <input type="text" name="tag_number" value="{{ asset.tag_number if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+            </div>
+        </div>
+
+        <!-- Acquisition Information -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4 flex items-center">
+                <i class="fas fa-shopping-cart text-green-400 mr-2"></i>Acquisition Details
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Acquisition Date</label>
+                    <input type="date" name="acquisition_date" value="{{ asset.acquisition_date if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Capitalization Date</label>
+                    <input type="date" name="capitalization_date" value="{{ asset.capitalization_date if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">In-Service Date</label>
+                    <input type="date" name="in_service_date" value="{{ asset.in_service_date if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Acquisition Cost *</label>
+                    <input type="number" step="0.01" name="acquisition_cost" required id="acquisitionCost"
+                           value="{{ asset.acquisition_cost if asset else '0' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Additional Capitalization</label>
+                    <input type="number" step="0.01" name="additional_capitalization"
+                           value="{{ asset.additional_capitalization if asset else '0' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Supplier</label>
+                    <select name="supplier_id" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                        <option value="">Select Supplier</option>
+                        {% for sup in suppliers %}
+                        <option value="{{ sup.id }}" {% if asset and asset.supplier_id == sup.id %}selected{% endif %}>{{ sup.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Purchase Order Number</label>
+                    <input type="text" name="purchase_order_number" value="{{ asset.purchase_order_number if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Invoice Number</label>
+                    <input type="text" name="invoice_number" value="{{ asset.invoice_number if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Warranty Expiry</label>
+                    <input type="date" name="warranty_expiry_date" value="{{ asset.warranty_expiry_date if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+            </div>
+        </div>
+
+        <!-- Depreciation Configuration -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4 flex items-center">
+                <i class="fas fa-calculator text-yellow-400 mr-2"></i>Depreciation Configuration
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Depreciation Method</label>
+                    <select name="depreciation_method_id" id="depreciationMethod"
+                            class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                        <option value="">Select Method</option>
+                        {% for method in depreciation_methods %}
+                        <option value="{{ method.id }}" {% if asset and asset.depreciation_method_id == method.id %}selected{% endif %}>{{ method.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Useful Life (Years)</label>
+                    <input type="number" name="useful_life_years" id="usefulLife" onchange="calculateSalvage()"
+                           value="{{ asset.useful_life_years if asset else '5' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Salvage Value %</label>
+                    <input type="number" step="0.1" name="salvage_percent" id="salvagePercent" onchange="calculateSalvage()"
+                           value="{{ asset.salvage_percent if asset else '0' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Salvage Value (AED)</label>
+                    <input type="number" step="0.01" name="salvage_value" id="salvageValue"
+                           value="{{ asset.salvage_value if asset else '0' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-slate-400 text-xs mb-1">Depreciation Start Date</label>
+                    <input type="date" name="depreciation_start_date"
+                           value="{{ asset.depreciation_start_date if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+            </div>
+        </div>
+
+        <!-- Location & Assignment -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4 flex items-center">
+                <i class="fas fa-map-marker-alt text-blue-400 mr-2"></i>Location & Assignment
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Company</label>
+                    <select name="company_id" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                        <option value="">Select Company</option>
+                        {% for comp in companies %}
+                        <option value="{{ comp.id }}" {% if asset and asset.company_id == comp.id %}selected{% endif %}>{{ comp.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Department</label>
+                    <select name="department_id" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                        <option value="">Select Department</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept.id }}" {% if asset and asset.department_id == dept.id %}selected{% endif %}>{{ dept.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Location</label>
+                    <input type="text" name="location" value="{{ asset.location if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Cost Center</label>
+                    <input type="text" name="cost_center" value="{{ asset.cost_center if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Custodian</label>
+                    <input type="text" name="custodian_id" value="{{ asset.custodian_id if asset else '' }}"
+                           class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Condition Rating</label>
+                    <select name="condition_rating" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">
+                        <option value="Excellent" {% if asset and asset.condition_rating == 'Excellent' %}selected{% endif %}>Excellent</option>
+                        <option value="Good" {% if not asset or asset.condition_rating == 'Good' %}selected{% endif %}>Good</option>
+                        <option value="Fair" {% if asset and asset.condition_rating == 'Fair' %}selected{% endif %}>Fair</option>
+                        <option value="Poor" {% if asset and asset.condition_rating == 'Poor' %}selected{% endif %}>Poor</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notes -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4 flex items-center">
+                <i class="fas fa-sticky-note text-purple-400 mr-2"></i>Notes
+            </h2>
+            <textarea name="notes" rows="3"
+                      class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:border-brand-500 focus:outline-none">{{ asset.notes if asset else '' }}</textarea>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex justify-end gap-3">
+            <a href="{{ url_for('assets.register') }}" class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors">
+                Cancel
+            </a>
+            <button type="submit" class="px-6 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-save mr-2"></i>Save Asset
+            </button>
+        </div>
+    </form>
+</div>
+
+<script>
+function updateFromCategory() {
+    const select = document.getElementById('categorySelect');
+    const option = select.options[select.selectedIndex];
+    if (option && option.dataset.usefulLife) {
+        document.getElementById('usefulLife').value = option.dataset.usefulLife;
+        document.getElementById('salvagePercent').value = option.dataset.salvage || 0;
+        calculateSalvage();
+    }
+}
+
+function calculateSalvage() {
+    const cost = parseFloat(document.getElementById('acquisitionCost').value) || 0;
+    const percent = parseFloat(document.getElementById('salvagePercent').value) || 0;
+    const salvage = cost * (percent / 100);
+    document.getElementById('salvageValue').value = salvage.toFixed(2);
+}
+
+document.getElementById('acquisitionCost').addEventListener('change', calculateSalvage);
+document.getElementById('salvagePercent').addEventListener('change', calculateSalvage);
+</script>
+{% endblock %}

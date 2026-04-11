@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if rtl else 'en' }}" dir="{{ 'rtl' if rtl else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% trans %}Form Submissions{% endtrans %} - MMDx</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .glass-panel { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    {% include 'admin_sidebar.html' %}
+    
+    <div class="ml-64 min-h-screen">
+        {% include 'admin_header.html' %}
+        
+        <main class="p-6">
+            <!-- Page Header -->
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold text-white">{% trans %}Form Submissions{% endtrans %}</h1>
+                    <p class="text-gray-400 mt-1">{% trans %}View and manage form submissions{% endtrans %}</p>
+                </div>
+            </div>
+            
+            <!-- Filters -->
+            <div class="glass-panel rounded-xl p-6 mb-6">
+                <form method="GET" class="flex flex-wrap gap-4 items-end">
+                    <div class="flex-1 min-w-[150px]">
+                        <label class="block text-sm text-gray-400 mb-2">{% trans %}Search{% endtrans %}</label>
+                        <input type="text" name="search" value="{{ search or '' }}" placeholder="{% trans %}Search by number or title{% endtrans %}" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white">
+                    </div>
+                    <div class="flex-1 min-w-[150px]">
+                        <label class="block text-sm text-gray-400 mb-2">{% trans %}Status{% endtrans %}</label>
+                        <select name="status" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white">
+                            <option value="">{% trans %}All Statuses{% endtrans %}</option>
+                            <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+                            <option value="submitted" {% if status_filter == 'submitted' %}selected{% endif %}>Submitted</option>
+                            <option value="under_review" {% if status_filter == 'under_review' %}selected{% endif %}>Under Review</option>
+                            <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
+                            <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+                            <option value="returned" {% if status_filter == 'returned' %}selected{% endif %}>Returned</option>
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[150px]">
+                        <label class="block text-sm text-gray-400 mb-2">{% trans %}My Submissions{% endtrans %}</label>
+                        <select name="my_submissions" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white">
+                            <option value="">{% trans %}All Submissions{% endtrans %}</option>
+                            <option value="1">{% trans %}My Submissions Only{% endtrans %}</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors">
+                        <i class="fas fa-search mr-2"></i>{% trans %}Search{% endtrans %}
+                    </button>
+                </form>
+            </div>
+            
+            <!-- Quick Links -->
+            <div class="flex gap-4 mb-6">
+                <a href="{{ url_for('forms.my_drafts') }}" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm transition-colors">
+                    <i class="fas fa-edit mr-2"></i>{% trans %}My Drafts{% endtrans %}
+                </a>
+                <a href="{{ url_for('forms.my_pending') }}" class="px-4 py-2 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 rounded-lg text-sm transition-colors">
+                    <i class="fas fa-clock mr-2"></i>{% trans %}Pending Approvals{% endtrans %}
+                </a>
+                <a href="{{ url_for('forms.my_submissions') }}" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm transition-colors">
+                    <i class="fas fa-list mr-2"></i>{% trans %}My Submissions{% endtrans %}
+                </a>
+            </div>
+            
+            <!-- Submissions Table -->
+            {% if submissions %}
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-gray-700 bg-gray-800/50">
+                            <th class="text-left px-6 py-4 text-sm font-medium text-gray-400">{% trans %}Number{% endtrans %}</th>
+                            <th class="text-left px-6 py-4 text-sm font-medium text-gray-400">{% trans %}Form{% endtrans %}</th>
+                            <th class="text-left px-6 py-4 text-sm font-medium text-gray-400">{% trans %}Status{% endtrans %}</th>
+                            <th class="text-left px-6 py-4 text-sm font-medium text-gray-400">{% trans %}Priority{% endtrans %}</th>
+                            <th class="text-left px-6 py-4 text-sm font-medium text-gray-400">{% trans %}Submitted By{% endtrans %}</th>
+                            <th class="text-left px-6 py-4 text-sm font-medium text-gray-400">{% trans %}Date{% endtrans %}</th>
+                            <th class="text-right px-6 py-4 text-sm font-medium text-gray-400">{% trans %}Actions{% endtrans %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sub in submissions %}
+                        <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
+                            <td class="px-6 py-4">
+                                <span class="font-mono text-sm text-blue-400">{{ sub.submission_number }}</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="font-medium text-white">{{ sub.form_title or sub.template_code }}</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="px-3 py-1 rounded-full text-xs font-semibold
+                                    {% if sub.status == 'approved' %}bg-green-500/20 text-green-400
+                                    {% elif sub.status == 'rejected' %}bg-red-500/20 text-red-400
+                                    {% elif sub.status == 'returned' %}bg-orange-500/20 text-orange-400
+                                    {% elif sub.status == 'submitted' %}bg-blue-500/20 text-blue-400
+                                    {% elif sub.status == 'draft' %}bg-gray-500/20 text-gray-400
+                                    {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+                                    {{ sub.status|replace('_', ' ')|title if sub.status else 'N/A' }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="text-sm {% if sub.priority == 'high' %}text-red-400{% elif sub.priority == 'low' %}text-gray-400{% else %}text-white{% endif %}">
+                                    {{ sub.priority|title if sub.priority else 'Medium' }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-300">
+                                {{ sub.submitted_by_name or 'N/A' }}
+                            </td>
+                            <td class="px-6 py-4 text-sm text-gray-400">
+                                {{ sub.created_at[:10] if sub.created_at else 'N/A' }}
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <a href="{{ url_for('forms.submissions_view', submission_id=sub.id) }}" class="p-2 hover:bg-gray-700 rounded-lg inline-block transition-colors" title="{% trans %}View{% endtrans %}">
+                                    <i class="fas fa-eye text-gray-400"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="glass-panel rounded-xl p-12 text-center">
+                <i class="fas fa-inbox text-6xl text-gray-600 mb-4"></i>
+                <h3 class="text-xl font-semibold text-gray-400 mb-2">{% trans %}No Submissions Found{% endtrans %}</h3>
+                <p class="text-gray-500">{% trans %}There are no form submissions matching your criteria.{% endtrans %}</p>
+            </div>
+            {% endif %}
+        </main>
+    </div>
+</body>
+</html>

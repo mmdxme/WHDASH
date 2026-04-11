@@ -1,4 +1,4 @@
-# WHDASH
+# MMDx
 
 Flask-based warehouse and inventory dashboard.
 
@@ -17,7 +17,7 @@ Open `http://localhost:5000`
 
 Your GitHub repo is:
 
-`https://github.com/Mohammadzangard/WHDASH.git`
+`https://github.com/Mohammadzangard/MMDx.git`
 
 Run these commands inside the project folder:
 
@@ -26,7 +26,7 @@ git init
 git add .
 git commit -m "Initial commit"
 git branch -M main
-git remote add origin https://github.com/Mohammadzangard/WHDASH.git
+git remote add origin https://github.com/Mohammadzangard/MMDx.git
 git push -u origin main
 ```
 
@@ -59,8 +59,8 @@ PythonAnywhere is the easiest choice for this project because it works well with
 3. Clone your repo:
 
 ```bash
-git clone https://github.com/Mohammadzangard/WHDASH.git
-cd WHDASH
+git clone https://github.com/Mohammadzangard/MMDx.git
+cd MMDx
 python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -70,7 +70,7 @@ pip install -r requirements.txt
 
 ```python
 import sys
-path = '/home/YOUR_USERNAME/WHDASH'
+path = '/home/YOUR_USERNAME/MMDx'
 if path not in sys.path:
     sys.path.append(path)
 
@@ -81,8 +81,8 @@ from wsgi import application
 
 - `SECRET_KEY`
 - `ADMIN_PASSWORD`
-- `DATABASE_PATH=/home/YOUR_USERNAME/WHDASH/warehouse.db`
-- `UPLOAD_FOLDER=/home/YOUR_USERNAME/WHDASH/uploads/avatars`
+- `DATABASE_PATH=/home/YOUR_USERNAME/MMDx/warehouse.db`
+- `UPLOAD_FOLDER=/home/YOUR_USERNAME/MMDx/uploads/avatars`
 
 6. Reload the web app.
 

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if rtl else 'en' }}" dir="{{ 'rtl' if rtl else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% trans %}Form Templates{% endtrans %} - MMDx</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .glass-panel { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .status-badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    {% include 'admin_sidebar.html' %}
+    
+    <div class="ml-64 min-h-screen">
+        {% include 'admin_header.html' %}
+        
+        <main class="p-6">
+            <!-- Page Header -->
+            <div class="flex justify-between items-center mb-8">
+                <div>
+                    <h1 class="text-3xl font-bold text-white">{% trans %}Form Templates{% endtrans %}</h1>
+                    <p class="text-gray-400 mt-1">{% trans %}Create and manage reusable form templates{% endtrans %}</p>
+                </div>
+                <a href="{{ url_for('forms.templates_new') }}" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                    <i class="fas fa-plus mr-2"></i>{% trans %}New Template{% endtrans %}
+                </a>
+            </div>
+            
+            <!-- Filters -->
+            <div class="glass-panel rounded-xl p-6 mb-6">
+                <form method="GET" class="flex flex-wrap gap-4 items-end">
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-sm text-gray-400 mb-2">{% trans %}Status{% endtrans %}</label>
+                        <select name="status" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white">
+                            <option value="">{% trans %}All Statuses{% endtrans %}</option>
+                            <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>{% trans %}Draft{% endtrans %}</option>
+                            <option value="published" {% if status_filter == 'published' %}selected{% endif %}>{% trans %}Published{% endtrans %}</option>
+                            <option value="archived" {% if status_filter == 'archived' %}selected{% endif %}>{% trans %}Archived{% endtrans %}</option>
+                        </select>
+                    </div>
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-sm text-gray-400 mb-2">{% trans %}Department{% endtrans %}</label>
+                        <input type="text" name="department" value="{{ department_filter or '' }}" placeholder="{% trans %}Filter by department{% endtrans %}" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white">
+                    </div>
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-sm text-gray-400 mb-2">{% trans %}Category{% endtrans %}</label>
+                        <input type="text" name="category" value="{{ category_filter or '' }}" placeholder="{% trans %}Filter by category{% endtrans %}" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white">
+                    </div>
+                    <button type="submit" class="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors">
+                        <i class="fas fa-filter mr-2"></i>{% trans %}Filter{% endtrans %}
+                    </button>
+                </form>
+            </div>
+            
+            <!-- Templates Grid -->
+            {% if templates %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {% for template in templates %}
+                <div class="glass-panel rounded-xl p-6 hover:border-blue-500/50 transition-all duration-300">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <span class="text-xs font-mono text-gray-500">{{ template.template_code }}</span>
+                            <h3 class="text-xl font-semibold text-white mt-1">{{ template.form_title }}</h3>
+                            {% if template.form_title_ar %}
+                            <p class="text-sm text-gray-400">{{ template.form_title_ar }}</p>
+                            {% endif %}
+                        </div>
+                        <span class="status-badge {% if template.status == 'published' %}bg-green-500/20 text-green-400{% elif template.status == 'draft' %}bg-yellow-500/20 text-yellow-400{% else %}bg-gray-500/20 text-gray-400{% endif %}">
+                            {{ template.status|title }}
+                        </span>
+                    </div>
+                    
+                    {% if template.description %}
+                    <p class="text-gray-400 text-sm mb-4 line-clamp-2">{{ template.description }}</p>
+                    {% endif %}
+                    
+                    <div class="flex flex-wrap gap-2 mb-4">
+                        {% if template.department %}
+                        <span class="px-2 py-1 bg-gray-700/50 rounded text-xs text-gray-300">
+                            <i class="fas fa-building mr-1"></i>{{ template.department }}
+                        </span>
+                        {% endif %}
+                        {% if template.category %}
+                        <span class="px-2 py-1 bg-gray-700/50 rounded text-xs text-gray-300">
+                            <i class="fas fa-tag mr-1"></i>{{ template.category }}
+                        </span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="flex justify-between items-center pt-4 border-t border-gray-700/50">
+                        <span class="text-xs text-gray-500">
+                            v{{ template.version }} | {{ template.created_at[:10] if template.created_at else 'N/A' }}
+                        </span>
+                        <div class="flex gap-2">
+                            <a href="{{ url_for('forms.templates_view', template_id=template.id) }}" class="p-2 hover:bg-gray-700 rounded-lg transition-colors" title="{% trans %}View{% endtrans %}">
+                                <i class="fas fa-eye text-gray-400"></i>
+                            </a>
+                            <a href="{{ url_for('forms.templates_edit', template_id=template.id) }}" class="p-2 hover:bg-gray-700 rounded-lg transition-colors" title="{% trans %}Edit{% endtrans %}">
+                                <i class="fas fa-edit text-gray-400"></i>
+                            </a>
+                            <a href="{{ url_for('forms.submissions_new', template_id=template.id) }}" class="p-2 hover:bg-gray-700 rounded-lg transition-colors" title="{% trans %}Use Template{% endtrans %}">
+                                <i class="fas fa-paper-plane text-gray-400"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="glass-panel rounded-xl p-12 text-center">
+                <i class="fas fa-file-alt text-6xl text-gray-600 mb-4"></i>
+                <h3 class="text-xl font-semibold text-gray-400 mb-2">{% trans %}No Templates Found{% endtrans %}</h3>
+                <p class="text-gray-500 mb-6">{% trans %}Create your first form template to get started{% endtrans %}</p>
+                <a href="{{ url_for('forms.templates_new') }}" class="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                    <i class="fas fa-plus mr-2"></i>{% trans %}Create Template{% endtrans %}
+                </a>
+            </div>
+            {% endif %}
+        </main>
+    </div>
+</body>
+</html>

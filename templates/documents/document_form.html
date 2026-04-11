@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #F9FAFB; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card-header { background: white; border-bottom: 2px solid #E5E7EB; font-weight: 600; }
+        .form-label { font-weight: 500; color: #374151; }
+        .drop-zone { border: 2px dashed #CBD5E1; border-radius: 12px; padding: 3rem; text-align: center; cursor: pointer; transition: all 0.2s; }
+        .drop-zone:hover, .drop-zone.dragover { border-color: #4F46E5; background: #EEF2FF; }
+        .drop-zone i { font-size: 3rem; color: #9CA3AF; }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-{% if is_edit %}edit{% else %}upload{% endif %} me-2"></i>{{ page_title }}
+                    </div>
+                    <div class="card-body">
+                        <form id="documentForm" method="post" enctype="multipart/form-data">
+                            <div class="row">
+                                <!-- Left Column -->
+                                <div class="col-md-8">
+                                    <div class="mb-3">
+                                        <label class="form-label">Document Title <span class="text-danger">*</span></label>
+                                        <input type="text" name="title" class="form-control" required 
+                                               value="{{ document.title if document else '' }}"
+                                               placeholder="Enter document title">
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Description</label>
+                                        <textarea name="description" class="form-control" rows="3"
+                                                  placeholder="Enter document description">{{ document.description if document else '' }}</textarea>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label class="form-label">Category</label>
+                                                <select name="category_id" class="form-select">
+                                                    <option value="">Select Category</option>
+                                                    {% for cat in categories %}
+                                                    <option value="{{ cat.id }}" {% if document and document.category_id == cat.id %}selected{% endif %}>
+                                                        {{ cat.name }}
+                                                    </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label class="form-label">Visibility</label>
+                                                <select name="visibility" class="form-select">
+                                                    <option value="Private" {% if document and document.visibility == 'Private' %}selected{% endif %}>Private</option>
+                                                    <option value="Department" {% if document and document.visibility == 'Department' %}selected{% endif %}>Department</option>
+                                                    <option value="Branch" {% if document and document.visibility == 'Branch' %}selected{% endif %}>Branch</option>
+                                                    <option value="Company" {% if document and document.visibility == 'Company' %}selected{% endif %}>Company</option>
+                                                    <option value="Public" {% if document and document.visibility == 'Public' %}selected{% endif %}>Public</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label class="form-label">Source Module</label>
+                                                <input type="text" name="source_module" class="form-control" 
+                                                       value="{{ document.source_module if document else '' }}"
+                                                       placeholder="e.g., sales, finance, hr">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label class="form-label">Source Record ID</label>
+                                                <input type="number" name="source_record_id" class="form-control" 
+                                                       value="{{ document.source_record_id if document else '' }}"
+                                                       placeholder="Link to business record ID">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Tags</label>
+                                        <div class="d-flex flex-wrap gap-2">
+                                            {% for tag in tags %}
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" name="tags" value="{{ tag.name }}" 
+                                                       id="tag{{ tag.id }}"
+                                                       {% if document and document.tags_json and tag.name in document.tags_json %}checked{% endif %}>
+                                                <label class="form-check-label" for="tag{{ tag.id }}">
+                                                    {{ tag.name }}
+                                                </label>
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">Notes</label>
+                                        <textarea name="notes" class="form-control" rows="2"
+                                                  placeholder="Additional notes">{{ document.notes if document else '' }}</textarea>
+                                    </div>
+                                </div>
+
+                                <!-- Right Column - File Upload -->
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label class="form-label">Document File {% if not is_edit %}<span class="text-danger">*</span>{% endif %}</label>
+                                        <div class="drop-zone" id="dropZone">
+                                            <i class="fas fa-cloud-upload-alt mb-3"></i>
+                                            <p class="mb-1 fw-medium">Drop file here or click to browse</p>
+                                            <p class="small text-muted mb-0">PDF, DOC, DOCX, XLS, XLSX, PNG, JPG up to 50MB</p>
+                                            <input type="file" name="file" id="fileInput" class="d-none" 
+                                                   accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.txt,.csv,.zip,.rar">
+                                        </div>
+                                        <div id="filePreview" class="mt-2 {% if not uploaded_file %}d-none{% endif %}">
+                                            <div class="d-flex align-items-center p-2 bg-light rounded">
+                                                <i class="fas fa-file-alt me-2 text-primary"></i>
+                                                <div class="flex-grow-1">
+                                                    <div class="fw-medium" id="fileName">{{ uploaded_file.original_filename if uploaded_file else '' }}</div>
+                                                    <div class="small text-muted" id="fileSize">{{ uploaded_file.file_size|format_file_size if uploaded_file else '' }}</div>
+                                                </div>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFile()">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <input type="hidden" name="stored_filename" id="stored_filename" value="{{ document.stored_filename if document else '' }}">
+                                        <input type="hidden" name="storage_path" id="storage_path" value="{{ document.storage_path if document else '' }}">
+                                        <input type="hidden" name="original_filename" id="original_filename" value="{{ document.original_filename if document else '' }}">
+                                        <input type="hidden" name="checksum" id="checksum" value="{{ document.checksum if document else '' }}">
+                                        <input type="hidden" name="file_size" id="file_size" value="{{ document.file_size if document else '' }}">
+                                        <input type="hidden" name="mime_type" id="mime_type" value="{{ document.mime_type if document else '' }}">
+                                    </div>
+
+                                    {% if is_edit and versions %}
+                                    <div class="mb-3">
+                                        <label class="form-label">Version History</label>
+                                        <ul class="list-group">
+                                            {% for version in versions[:5] %}
+                                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <span class="fw-medium">v{{ version.version_number }}</span>
+                                                    <div class="small text-muted">{{ version.created_at[:10] if version.created_at else '' }}</div>
+                                                </div>
+                                                <span class="badge bg-{% if version.is_current_version %}primary{% else %}secondary{% endif %}">
+                                                    {% if version.is_current_version %}Current{% endif %}
+                                                </span>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                    {% endif %}
+
+                                    {% if is_edit and links %}
+                                    <div class="mb-3">
+                                        <label class="form-label">Linked Records</label>
+                                        <ul class="list-group">
+                                            {% for link in links %}
+                                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <span class="fw-medium">{{ link.linked_module }}</span>
+                                                    <div class="small text-muted">ID: {{ link.linked_record_id }}</div>
+                                                </div>
+                                                <span class="badge bg-secondary">{{ link.link_type }}</span>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                                <a href="{{ url_for('documents_all') }}" class="btn btn-outline-secondary">Cancel</a>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="fas fa-save me-1"></i> {% if is_edit %}Save Changes{% else %}Create Document{% endif %}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const filePreview = document.getElementById('filePreview');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length) {
+                handleFileUpload(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) {
+                handleFileUpload(fileInput.files[0]);
+            }
+        });
+
+        function handleFileUpload(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('{{ url_for("documents_upload") }}', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('stored_filename').value = data.stored_filename;
+                    document.getElementById('storage_path').value = data.storage_path;
+                    document.getElementById('original_filename').value = data.original_filename;
+                    document.getElementById('checksum').value = data.checksum;
+                    document.getElementById('file_size').value = data.file_size;
+                    document.getElementById('mime_type').value = data.mime_type;
+                    document.getElementById('fileName').textContent = data.original_filename;
+                    document.getElementById('fileSize').textContent = formatBytes(data.file_size);
+                    filePreview.classList.remove('d-none');
+                    dropZone.classList.add('d-none');
+                } else {
+                    alert('Upload failed: ' + data.message);
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                alert('Upload failed');
+            });
+        }
+
+        function removeFile() {
+            fileInput.value = '';
+            document.getElementById('stored_filename').value = '';
+            document.getElementById('storage_path').value = '';
+            document.getElementById('original_filename').value = '';
+            document.getElementById('checksum').value = '';
+            document.getElementById('file_size').value = '';
+            document.getElementById('mime_type').value = '';
+            filePreview.classList.add('d-none');
+            dropZone.classList.remove('d-none');
+        }
+
+        function formatBytes(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+    </script>
+</body>
+</html>

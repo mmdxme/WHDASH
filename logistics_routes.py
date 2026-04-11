@@ -275,6 +275,7 @@ def logistics_dashboard():
 
         return render_template('logistics/dashboard.html',
                              title='Logistics Dashboard',
+                             today=today,
                              shipment_stats=shipment_stats,
                              driver_stats=driver_stats,
                              vehicle_stats=vehicle_stats,

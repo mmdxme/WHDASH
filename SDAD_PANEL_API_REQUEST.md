@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the API requirements for integrating the **SDAD Panel (Warehouse Management System)** with the **WHDASH Enterprise Hub**. The integration enables real-time synchronization of stock data, warehouse information, and product catalog.
+This document outlines the API requirements for integrating the **SDAD Panel (Warehouse Management System)** with the **MMDx Enterprise Hub**. The integration enables real-time synchronization of stock data, warehouse information, and product catalog.
 
 ---
 
@@ -264,7 +264,7 @@ Retrieve products with zero quantity.
 
 ## Data Field Mapping
 
-| SDAD Panel Field | WHDASH Field | Data Type | Description |
+| SDAD Panel Field | MMDx Field | Data Type | Description |
 |-------------------|---------------|-----------|-------------|
 | `product_code` | `product_code` | string | Unique product identifier |
 | `name` | `name` | string | Product name |
@@ -328,7 +328,7 @@ For real-time updates, consider implementing webhooks:
 
 **POST** `/api/webhooks/stock-update`
 
-WHDASH can receive real-time notifications when stock levels change.
+MMDx can receive real-time notifications when stock levels change.
 
 ```json
 {
@@ -347,4 +347,4 @@ WHDASH can receive real-time notifications when stock levels change.
 
 For API support or questions:
 - **Technical Lead:** IT Department
-- **Integration Support:** WHDASH Team
+- **Integration Support:** MMDx Team

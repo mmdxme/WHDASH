@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 fade-in">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('maintenance.equipment_list') }}" class="p-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors">
+                    <i class="fas fa-arrow-left"></i>
+                </a>
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-100">{{ asset.asset_code }}</h1>
+                    <p class="text-slate-400 text-sm">{{ asset.name }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="flex gap-3">
+            <a href="{{ url_for('maintenance.work_order_new') }}?asset_id={{ asset.id }}" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-plus mr-2"></i>New Work Order
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="glass-panel rounded-xl p-5">
+            <p class="text-slate-400 text-sm">Total Work Orders</p>
+            <p class="text-2xl font-bold text-slate-100 mt-1">{{ maint_history|length }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-5">
+            <p class="text-slate-400 text-sm">Open Work Orders</p>
+            <p class="text-2xl font-bold text-yellow-400 mt-1">{{ work_orders|length }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-5">
+            <p class="text-slate-400 text-sm">Total Downtime</p>
+            <p class="text-2xl font-bold text-red-400 mt-1">{{ downtime_summary.total_hours|default(0)|round(1) }} hrs</p>
+        </div>
+        <div class="glass-panel rounded-xl p-5">
+            <p class="text-slate-400 text-sm">Total Cost</p>
+            <p class="text-2xl font-bold text-green-400 mt-1">{{ cost_summary.total_cost|default(0)|round(2) }}</p>
+        </div>
+    </div>
+
+    <!-- Asset Info -->
+    <div class="glass-panel rounded-xl p-5 mb-6">
+        <h2 class="text-lg font-semibold text-white mb-4">Equipment Details</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div>
+                <p class="text-slate-400 text-xs uppercase tracking-wider">Category</p>
+                <p class="text-slate-200">{{ asset.category_name or 'N/A' }}</p>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs uppercase tracking-wider">Status</p>
+                <p class="text-slate-200">{{ asset.status }}</p>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs uppercase tracking-wider">Serial Number</p>
+                <p class="text-slate-200">{{ asset.serial_number or 'N/A' }}</p>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs uppercase tracking-wider">Location</p>
+                <p class="text-slate-200">{{ asset.location or 'N/A' }}</p>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs uppercase tracking-wider">Brand</p>
+                <p class="text-slate-200">{{ asset.brand or 'N/A' }}</p>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs uppercase tracking-wider">Model</p>
+                <p class="text-slate-200">{{ asset.model or 'N/A' }}</p>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs uppercase tracking-wider">Acquisition Date</p>
+                <p class="text-slate-200">{{ asset.acquisition_date or 'N/A' }}</p>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs uppercase tracking-wider">Warranty Expiry</p>
+                <p class="text-slate-200">{{ asset.warranty_expiry_date or 'N/A' }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Maintenance History -->
+            <div class="glass-panel rounded-xl p-5">
+                <h2 class="text-lg font-semibold text-white mb-4">Maintenance History</h2>
+                {% if maint_history %}
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-slate-800/50">
+                            <tr>
+                                <th class="text-left text-slate-400 text-xs font-medium uppercase px-3 py-2">Date</th>
+                                <th class="text-left text-slate-400 text-xs font-medium uppercase px-3 py-2">Type</th>
+                                <th class="text-left text-slate-400 text-xs font-medium uppercase px-3 py-2">Technician</th>
+                                <th class="text-right text-slate-400 text-xs font-medium uppercase px-3 py-2">Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700">
+                            {% for log in maint_history %}
+                            <tr>
+                                <td class="px-3 py-2 text-slate-300">{{ log.work_date }}</td>
+                                <td class="px-3 py-2 text-slate-200">{{ log.maintenance_type_name }}</td>
+                                <td class="px-3 py-2 text-slate-300">{{ log.technician_name or 'N/A' }}</td>
+                                <td class="px-3 py-2 text-right text-green-400">{{ log.total_cost|default(0)|round(2) }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No maintenance history</p>
+                {% endif %}
+            </div>
+
+            <!-- Open Work Orders -->
+            {% if work_orders %}
+            <div class="glass-panel rounded-xl p-5">
+                <h2 class="text-lg font-semibold text-white mb-4">Open Work Orders</h2>
+                <div class="space-y-3">
+                    {% for wo in work_orders %}
+                    <a href="{{ url_for('maintenance.work_order_detail', wo_id=wo.id) }}" class="block p-3 bg-slate-800/50 rounded-lg hover:bg-slate-700/50 transition-colors">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-brand-400 font-medium">{{ wo.work_order_number }}</p>
+                                <p class="text-slate-500 text-xs">{{ wo.maintenance_type }}</p>
+                            </div>
+                            <span class="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs">{{ wo.status }}</span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="space-y-6">
+            <!-- PM Schedules -->
+            <div class="glass-panel rounded-xl p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-semibold text-white">PM Schedules</h2>
+                    <a href="{{ url_for('maintenance.pm_plan_new') }}?asset_id={{ asset.id }}" class="text-brand-400 hover:text-brand-300 text-sm">
+                        <i class="fas fa-plus"></i>
+                    </a>
+                </div>
+                {% if schedules %}
+                <div class="space-y-3">
+                    {% for schedule in schedules %}
+                    <div class="p-3 bg-slate-800/50 rounded-lg">
+                        <p class="text-slate-200 text-sm">{{ schedule.maintenance_type_name }}</p>
+                        <p class="text-slate-500 text-xs">Next: {{ schedule.next_due_date }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No PM schedules</p>
+                {% endif %}
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="glass-panel rounded-xl p-5">
+                <h2 class="text-lg font-semibold text-white mb-4">Quick Actions</h2>
+                <div class="space-y-2">
+                    <a href="{{ url_for('maintenance.work_order_new') }}?asset_id={{ asset.id }}" class="block w-full px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm text-center">
+                        <i class="fas fa-plus mr-2"></i>Create Work Order
+                    </a>
+                    <a href="{{ url_for('maintenance.equipment_downtime', asset_id=asset.id) }}" class="block w-full px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg text-sm text-center">
+                        <i class="fas fa-power-off mr-2"></i>View Downtime History
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

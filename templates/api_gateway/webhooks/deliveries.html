@@ -1,0 +1,126 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Webhook Deliveries</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('api_gateway_export_webhooks_csv') }}" class="btn btn-secondary">
+            <i class="fas fa-download"></i> Export
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Filter Deliveries</h3>
+    </div>
+    <form method="get" style="padding: 15px;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Subscription</label>
+                <select name="subscription_id">
+                    <option value="">All</option>
+                    {% for sub in subscriptions %}
+                    <option value="{{ sub.id }}" {% if filters.subscription_id|int == sub.id %}selected{% endif %}>{{ sub.endpoint_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Status</label>
+                <select name="status">
+                    <option value="">All</option>
+                    <option value="success" {% if filters.status == 'success' %}selected{% endif %}>Success</option>
+                    <option value="failed" {% if filters.status == 'failed' %}selected{% endif %}>Failed</option>
+                    <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>Pending</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Date From</label>
+                <input type="date" name="date_from" value="{{ filters.date_from or '' }}">
+            </div>
+            <div class="filter-group">
+                <label>Date To</label>
+                <input type="date" name="date_to" value="{{ filters.date_to or '' }}">
+            </div>
+            <div class="filter-group" style="align-self: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+                <a href="{{ url_for('api_gateway_webhook_deliveries') }}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Delivery Log ({{ total }})</h3>
+    </div>
+
+    {% if deliveries %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Delivery ID</th>
+                    <th>Event</th>
+                    <th>Subscription</th>
+                    <th>Status</th>
+                    <th>HTTP</th>
+                    <th>Time (ms)</th>
+                    <th>Attempts</th>
+                    <th>Delivered</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for delivery in deliveries %}
+                <tr>
+                    <td><code style="font-size: 0.75rem;">{{ delivery.delivery_id[:20] }}...</code></td>
+                    <td><code style="font-size: 0.8rem;">{{ delivery.event_code }}</code></td>
+                    <td>{{ delivery.endpoint_name or delivery.subscription_code }}</td>
+                    <td>
+                        <span class="badge badge-{% if delivery.delivery_status == 'success' %}success{% elif delivery.delivery_status == 'failed' %}danger{% else %}warning{% endif %}">
+                            {{ delivery.delivery_status|title }}
+                        </span>
+                    </td>
+                    <td>{{ delivery.http_status_code or 'N/A' }}</td>
+                    <td>{{ delivery.response_time_ms or 'N/A' }}</td>
+                    <td>{{ delivery.attempt_number }}/{{ delivery.max_attempts }}</td>
+                    <td>{{ delivery.delivered_at[:16] if delivery.delivered_at else 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ (page - 1) * per_page + 1 }} to {{ [page * per_page, total]|min }} of {{ total }} deliveries
+        </div>
+        <div class="pagination-links">
+            {% if page > 1 %}
+            <a href="{{ url_for('api_gateway_webhook_deliveries', page=page-1, **filters) }}">&laquo; Prev</a>
+            {% endif %}
+            {% for p in range([1, page-2]|max, ([page+3, pages+1]|min)) %}
+                {% if p == page %}
+                <span class="active">{{ p }}</span>
+                {% else %}
+                <a href="{{ url_for('api_gateway_webhook_deliveries', page=p, **filters) }}">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if page < pages %}
+            <a href="{{ url_for('api_gateway_webhook_deliveries', page=page+1, **filters) }}">Next &raquo;</a>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-paper-plane"></i>
+        <h3>No deliveries found</h3>
+        <p>Webhook deliveries will appear here once events are triggered.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

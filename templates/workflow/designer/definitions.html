@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - {{ get_setting('platform_name', 'MMDx') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>{% include 'theme_variables.html' %}</style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900">
+{% include 'admin_sidebar.html' %}
+<div class="ml-64 min-h-screen">
+    {% include 'admin_header.html' %}
+    <main class="p-6">
+        <!-- Page Header -->
+        <div class="mb-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
+                <p class="text-slate-600 dark:text-slate-400 mt-1">Design and manage workflow definitions with approval chains</p>
+            </div>
+            <a href="{{ url_for('workflow_designer_definition_new') }}" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
+                <i class="fas fa-plus mr-2"></i>New Definition
+            </a>
+        </div>
+
+        <!-- Workflow Definitions Table -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-slate-800 dark:text-white">Workflow Definitions</h2>
+                <div class="flex gap-2">
+                    <input type="text" id="searchInput" placeholder="Search definitions..." class="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white text-sm">
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-50 dark:bg-slate-700/50">
+                        <tr>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Definition</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Module / Type</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Steps</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Status</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Version</th>
+                            <th class="px-5 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                        {% for def in definitions %}
+                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                            <td class="px-5 py-4">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                                        <i class="fas fa-project-diagram text-blue-600 dark:text-blue-400"></i>
+                                    </div>
+                                    <div>
+                                        <a href="{{ url_for('workflow_designer_definition_edit', definition_id=def.id) }}" class="font-medium text-blue-600 hover:underline">{{ def.name }}</a>
+                                        <p class="text-sm text-slate-500">{{ def.workflow_type }}</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-5 py-4">
+                                <span class="px-2 py-1 text-xs font-medium rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">{{ def.module }}</span>
+                            </td>
+                            <td class="px-5 py-4 text-slate-600 dark:text-slate-300">
+                                {{ def.step_count }} steps
+                            </td>
+                            <td class="px-5 py-4">
+                                {% if def.is_active %}
+                                <span class="px-2 py-1 text-xs font-medium rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Active</span>
+                                {% else %}
+                                <span class="px-2 py-1 text-xs font-medium rounded bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="px-5 py-4 text-slate-600 dark:text-slate-300">
+                                v{{ def.version }}
+                            </td>
+                            <td class="px-5 py-4 text-right">
+                                <div class="flex justify-end gap-2">
+                                    <a href="{{ url_for('workflow_designer_steps', definition_id=def.id) }}" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg" title="Edit Steps">
+                                        <i class="fas fa-list-ol"></i>
+                                    </a>
+                                    <a href="{{ url_for('workflow_designer_definition_edit', definition_id=def.id) }}" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg" title="Edit Definition">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <form method="post" action="{{ url_for('workflow_designer_definition_activate', definition_id=def.id) }}" class="inline">
+                                        <button type="submit" class="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30 rounded-lg" title="{{ 'Deactivate' if def.is_active else 'Activate' }}">
+                                            <i class="fas fa-toggle-{{ 'on' if def.is_active else 'off' }}"></i>
+                                        </button>
+                                    </form>
+                                    <form method="post" action="{{ url_for('workflow_designer_definition_duplicate', definition_id=def.id) }}" class="inline">
+                                        <button type="submit" class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg" title="Clone">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="px-5 py-12 text-center text-slate-500 dark:text-slate-400">
+                                <i class="fas fa-project-diagram text-4xl mb-3"></i>
+                                <p>No workflow definitions yet.</p>
+                                <a href="{{ url_for('workflow_designer_definition_new') }}" class="text-blue-600 hover:underline mt-2 inline-block">Create your first workflow</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+{% include 'admin_scripts.html' %}
+<script>
+document.getElementById('searchInput').addEventListener('keyup', function(e) {
+    const query = e.target.value.toLowerCase();
+    document.querySelectorAll('tbody tr').forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(query) ? '' : 'none';
+    });
+});
+</script>
+</body>
+</html>

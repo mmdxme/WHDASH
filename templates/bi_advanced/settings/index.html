@@ -1,0 +1,143 @@
+{% extends "bi_advanced/base.html" %}
+
+{% block content %}
+<aside class="bi-sidebar">
+    <div class="bi-sidebar-header">
+        <h2><i class="fas fa-analytics"></i> Advanced BI</h2>
+    </div>
+    <div class="bi-nav-section">
+        <div class="bi-nav-section-title">Administration</div>
+        <a href="{{ url_for('bi_manage_kpis') }}" class="bi-nav-item"><i class="fas fa-tachometer-alt"></i> Manage KPIs</a>
+        <a href="{{ url_for('bi_approvals') }}" class="bi-nav-item"><i class="fas fa-check-circle"></i> Approvals</a>
+        <a href="{{ url_for('bi_settings') }}" class="bi-nav-item active"><i class="fas fa-sliders-h"></i> Settings</a>
+    </div>
+</aside>
+
+<main class="bi-main">
+    <div class="bi-breadcrumb">
+        <a href="{{ url_for('index') }}">Home</a>
+        <i class="fas fa-chevron-right"></i>
+        <a href="{{ url_for('bi_advanced_dashboard') }}">BI</a>
+        <i class="fas fa-chevron-right"></i>
+        <span>Settings</span>
+    </div>
+    
+    <div class="bi-header">
+        <h1>{{ page_title }}</h1>
+    </div>
+    
+    <div class="bi-card">
+        <div class="bi-card-header">
+            <span class="bi-card-title">BI Configuration</span>
+        </div>
+        
+        <div id="settings_form">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Default Row Limit</label>
+                    <input type="number" id="bi.default_row_limit" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;" value="1000">
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Query Timeout (seconds)</label>
+                    <input type="number" id="bi.default_timeout_seconds" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;" value="300">
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Slow Query Threshold (ms)</label>
+                    <input type="number" id="bi.slow_query_threshold_ms" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;" value="5000">
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Max Export Rows</label>
+                    <input type="number" id="bi.max_export_rows" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;" value="50000">
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Enable Query Cache</label>
+                    <select id="bi.enable_query_cache" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Cache TTL (minutes)</label>
+                    <input type="number" id="bi.cache_ttl_minutes" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;" value="60">
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+                <h4 style="margin-bottom: 15px;">Export Settings</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+                    <div>
+                        <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Allow CSV Export</label>
+                        <select id="bi.allow_csv_export" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                            <option value="true">Allowed</option>
+                            <option value="false">Disabled</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Allow Excel Export</label>
+                        <select id="bi.allow_excel_export" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                            <option value="true">Allowed</option>
+                            <option value="false">Disabled</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Allow PDF Export</label>
+                        <select id="bi.allow_pdf_export" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px;">
+                            <option value="true">Allowed</option>
+                            <option value="false">Disabled</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="margin-top: 20px; display: flex; justify-content: flex-end;">
+                <button class="bi-btn bi-btn-primary" onclick="saveSettings()">
+                    <i class="fas fa-save"></i> Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+async function loadSettings() {
+    const response = await fetch('/bi/settings/api/get');
+    const data = await response.json();
+    
+    if (data.settings) {
+        Object.keys(data.settings).forEach(key => {
+            const input = document.getElementById(key);
+            if (input) {
+                input.value = data.settings[key];
+            }
+        });
+    }
+}
+
+async function saveSettings() {
+    const settings = {};
+    document.querySelectorAll('#settings_form input, #settings_form select').forEach(input => {
+        const key = input.id;
+        if (key) {
+            let value = input.value;
+            if (input.type === 'number') value = parseInt(value);
+            settings[key] = value;
+        }
+    });
+    
+    const response = await fetch('/bi/settings/api/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(settings)
+    });
+    
+    const result = await response.json();
+    if (result.success) {
+        alert('Settings saved successfully!');
+    } else {
+        alert('Error saving settings');
+    }
+}
+
+loadSettings();
+</script>
+{% endblock %}

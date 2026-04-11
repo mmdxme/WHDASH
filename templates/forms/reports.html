@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800">
+                <i class="fas fa-chart-bar text-green-500 mr-2"></i>Form Reports
+            </h1>
+            <p class="text-gray-600">Analytics and statistics for form submissions</p>
+        </div>
+        <div class="flex gap-3">
+            <a href="/forms/reports/search" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                <i class="fas fa-search mr-2"></i>Search Submissions
+            </a>
+            <button onclick="exportReport()" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                <i class="fas fa-download mr-2"></i>Export Report
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white rounded-lg shadow p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Total Submissions</p>
+                    <p class="text-3xl font-bold text-gray-800">{{ submission_stats.total }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                    <i class="fas fa-paper-plane text-blue-600"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Approved</p>
+                    <p class="text-3xl font-bold text-green-600">{{ submission_stats.approved }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
+                    <i class="fas fa-check-circle text-green-600"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Rejected</p>
+                    <p class="text-3xl font-bold text-red-600">{{ submission_stats.rejected }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                    <i class="fas fa-times-circle text-red-600"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-sm text-gray-500">Pending</p>
+                    <p class="text-3xl font-bold text-yellow-600">{{ submission_stats.pending }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center">
+                    <i class="fas fa-clock text-yellow-600"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Status Breakdown -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">
+                <i class="fas fa-chart-pie mr-2"></i>Status Breakdown
+            </h2>
+            <div class="space-y-3">
+                {% for stat in status_stats %}
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span class="w-4 h-4 rounded-full mr-3
+                            {% if stat.status == 'draft' %}bg-gray-400
+                            {% elif stat.status == 'submitted' %}bg-blue-400
+                            {% elif stat.status == 'under_review' %}bg-yellow-400
+                            {% elif stat.status == 'approved' %}bg-green-400
+                            {% elif stat.status == 'rejected' %}bg-red-400
+                            {% elif stat.status == 'returned_for_correction' %}bg-orange-400
+                            {% elif stat.status == 'cancelled' %}bg-gray-600
+                            {% else %}bg-gray-300{% endif %}"></span>
+                        <span class="text-sm text-gray-700">{{ stat.status|replace('_', ' ')|title }}</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-32 bg-gray-200 rounded-full h-2">
+                            <div class="h-2 rounded-full
+                                {% if stat.status == 'approved' %}bg-green-500
+                                {% elif stat.status == 'rejected' %}bg-red-500
+                                {% elif stat.status == 'draft' %}bg-gray-400
+                                {% else %}bg-blue-500{% endif %}"
+                                 style="width: {{ (stat.count / submission_stats.total * 100)|round }}%"></div>
+                        </div>
+                        <span class="text-sm font-medium text-gray-800 w-10 text-right">{{ stat.count }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Top Templates -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">
+                <i class="fas fa-th-large mr-2"></i>Most Used Templates
+            </h2>
+            <div class="space-y-3">
+                {% for template in top_templates %}
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded">
+                    <span class="text-sm text-gray-700">{{ template.form_title }}</span>
+                    <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs">{{ template.submission_count }} submissions</span>
+                </div>
+                {% else %}
+                <p class="text-gray-400 text-center py-4">No data yet</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Department Breakdown -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">
+                <i class="fas fa-building mr-2"></i>By Department
+            </h2>
+            <div class="space-y-3">
+                {% for dept in dept_stats %}
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-gray-700">{{ dept.department }}</span>
+                    <span class="text-sm font-medium text-gray-800">{{ dept.count }}</span>
+                </div>
+                {% else %}
+                <p class="text-gray-400 text-center py-4">No data yet</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Performance Metrics -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold text-gray-800 mb-4">
+                <i class="fas fa-tachometer-alt mr-2"></i>Performance Metrics
+            </h2>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="text-center p-4 bg-green-50 rounded-lg">
+                    <p class="text-3xl font-bold text-green-600">{{ "%.1f"|format(avg_approval_time) }}</p>
+                    <p class="text-sm text-gray-600">Avg Hours to Approve</p>
+                </div>
+                <div class="text-center p-4 bg-red-50 rounded-lg">
+                    <p class="text-3xl font-bold text-red-600">{{ overdue_count }}</p>
+                    <p class="text-sm text-gray-600">Overdue Forms</p>
+                </div>
+                <div class="text-center p-4 bg-blue-50 rounded-lg">
+                    <p class="text-3xl font-bold text-blue-600">{{ template_stats|length }}</p>
+                    <p class="text-sm text-gray-600">Active Templates</p>
+                </div>
+                <div class="text-center p-4 bg-purple-50 rounded-lg">
+                    <p class="text-3xl font-bold text-purple-600">
+                        {% if submission_stats.total > 0 %}
+                        {{ "%.0f"|format((submission_stats.approved / submission_stats.total * 100)) }}%
+                        {% else %}0%{% endif %}
+                    </p>
+                    <p class="text-sm text-gray-600">Approval Rate</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Submissions Over Time -->
+    <div class="mt-6 bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">
+            <i class="fas fa-chart-line mr-2"></i>Submissions Over Time (Last 30 Days)
+        </h2>
+        <div class="h-64 flex items-end justify-between gap-2">
+            {% for day in time_stats %}
+            <div class="flex-1 flex flex-col items-center">
+                <div class="w-full bg-blue-500 rounded-t" style="height: {{ (day.count / 10 * 100)|round }}%"></div>
+                <span class="text-xs text-gray-500 mt-2">{{ day.date[5:] }}</span>
+            </div>
+            {% else %}
+            <div class="flex-1 text-center text-gray-400 py-8">No data for the last 30 days</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Template Usage Stats -->
+    <div class="mt-6 bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">
+            <i class="fas fa-th-large mr-2"></i>Template Usage Statistics
+        </h2>
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Template</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Submissions</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Approved</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rejected</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pending</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Approval Rate</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+                {% for stat in template_stats %}
+                <tr>
+                    <td class="px-4 py-3 text-sm text-gray-800">{{ stat.form_title }}</td>
+                    <td class="px-4 py-3 text-sm text-gray-800">{{ stat.total }}</td>
+                    <td class="px-4 py-3 text-sm text-green-600">{{ stat.approved }}</td>
+                    <td class="px-4 py-3 text-sm text-red-600">{{ stat.rejected }}</td>
+                    <td class="px-4 py-3 text-sm text-yellow-600">{{ stat.pending }}</td>
+                    <td class="px-4 py-3 text-sm">
+                        {% if stat.total > 0 %}
+                        <span class="px-2 py-1 rounded text-xs
+                            {% if (stat.approved / stat.total * 100) >= 80 %}bg-green-100 text-green-800
+                            {% elif (stat.approved / stat.total * 100) >= 50 %}bg-yellow-100 text-yellow-800
+                            {% else %}bg-red-100 text-red-800{% endif %}">
+                            {{ "%.0f"|format((stat.approved / stat.total * 100)) }}%
+                        </span>
+                        {% else %}—{% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="px-4 py-3 text-center text-gray-400">No template statistics yet</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function exportReport() {
+    window.location.href = '/forms/reports/export?format=csv';
+}
+</script>
+{% endblock %}

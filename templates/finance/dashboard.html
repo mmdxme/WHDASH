@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+            --gray-700: #374151;
+            --gray-800: #1f2937;
+            --gray-900: #111827;
+        }
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .stat-card { transition: transform 0.2s, box-shadow 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        .text-success { color: var(--success); }
+        .text-danger { color: var(--danger); }
+        .text-warning { color: var(--warning); }
+        .bg-success { background: rgba(16, 185, 129, 0.1); }
+        .bg-danger { background: rgba(239, 68, 68, 0.1); }
+        .bg-warning { background: rgba(245, 158, 11, 0.1); }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        .amount-positive { color: var(--success); }
+        .amount-negative { color: var(--danger); }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Financial overview and key metrics</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="/finance/journals/create" class="btn btn-primary">
+                    <i class="fas fa-plus mr-2"></i> New Journal
+                </a>
+            </div>
+        </div>
+
+        <!-- Key Metrics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Total Receivables -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Total Receivables</p>
+                        <p class="text-2xl font-bold text-white amount">{{ "%.2f"|format(summary.total_receivables) }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-info/20 rounded-full flex items-center justify-center">
+                        <i class="fas fa-hand-holding-usd text-info text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Total Payables -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Total Payables</p>
+                        <p class="text-2xl font-bold text-white amount">{{ "%.2f"|format(summary.total_payables) }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-warning/20 rounded-full flex items-center justify-center">
+                        <i class="fas fa-file-invoice-dollar text-warning text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Revenue -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Total Revenue</p>
+                        <p class="text-2xl font-bold text-success amount">{{ "%.2f"|format(summary.total_revenue) }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-success/20 rounded-full flex items-center justify-center">
+                        <i class="fas fa-chart-line text-success text-xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Expenses -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Total Expenses</p>
+                        <p class="text-2xl font-bold text-danger amount">{{ "%.2f"|format(summary.total_expenses) }}</p>
+                    </div>
+                    <div class="w-12 h-12 bg-danger/20 rounded-full flex items-center justify-center">
+                        <i class="fas fa-arrow-down text-danger text-xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Net Profit & Overdue Alerts -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <!-- Net Profit -->
+            <div class="card stat-card md:col-span-1">
+                <h3 class="text-lg font-semibold text-white mb-4">Net Profit</h3>
+                <div class="text-center py-4">
+                    {% if summary.net_profit >= 0 %}
+                    <p class="text-4xl font-bold text-success amount">{{ "%.2f"|format(summary.net_profit) }}</p>
+                    <p class="text-gray-400 mt-2">Profit this period</p>
+                    {% else %}
+                    <p class="text-4xl font-bold text-danger amount">{{ "%.2f"|format(summary.net_profit) }}</p>
+                    <p class="text-gray-400 mt-2">Loss this period</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Overdue AR/AP Summary -->
+            <div class="card md:col-span-2">
+                <h3 class="text-lg font-semibold text-white mb-4">Collection Status</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-gray-800/50 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-gray-400 text-sm">Overdue AR</span>
+                            <span class="badge bg-danger text-danger">{{ overdue_ar_count }}</span>
+                        </div>
+                        <p class="text-xl font-semibold text-white">
+                            {% set overdue_ar_total = namespace(total=0) %}
+                            {% for c in ar_aging %}
+                                {% set overdue_ar_total.total = overdue_ar_total.total + (c.days_over_90 or 0) %}
+                            {% endfor %}
+                            {{ "%.2f"|format(overdue_ar_total.total) }}
+                        </p>
+                    </div>
+                    <div class="bg-gray-800/50 rounded-lg p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-gray-400 text-sm">Overdue AP</span>
+                            <span class="badge bg-danger text-danger">{{ overdue_ap_count }}</span>
+                        </div>
+                        <p class="text-xl font-semibold text-white">
+                            {% set overdue_ap_total = namespace(total=0) %}
+                            {% for s in ap_aging %}
+                                {% set overdue_ap_total.total = overdue_ap_total.total + (s.days_over_90 or 0) %}
+                            {% endfor %}
+                            {{ "%.2f"|format(overdue_ap_total.total) }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Recent Journals -->
+            <div class="card">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-white">Recent Journals</h3>
+                    <a href="/finance/journals" class="text-primary hover:text-primary-dark text-sm">View All</a>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Number</th>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th class="text-right">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for journal in recent_journals %}
+                            <tr>
+                                <td><a href="/finance/journals/{{ journal.id }}" class="text-primary hover:underline">{{ journal.journal_number }}</a></td>
+                                <td>{{ journal.journal_date }}</td>
+                                <td class="max-w-xs truncate">{{ journal.description or journal.journal_type }}</td>
+                                <td class="text-right amount">{{ "%.2f"|format(journal.total_debit) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-gray-500 py-8">No journal entries yet</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Open Invoices -->
+            <div class="card">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-white">Open Invoices</h3>
+                    <a href="/finance/ar/invoices" class="text-primary hover:text-primary-dark text-sm">View All</a>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Invoice #</th>
+                                <th>Customer</th>
+                                <th>Due Date</th>
+                                <th class="text-right">Amount Due</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for invoice in open_invoices %}
+                            <tr>
+                                <td><a href="/finance/ar/invoices/{{ invoice.id }}" class="text-primary hover:underline">{{ invoice.invoice_number }}</a></td>
+                                <td>{{ invoice.customer_name }}</td>
+                                <td>{{ invoice.due_date }}</td>
+                                <td class="text-right amount text-warning">{{ "%.2f"|format(invoice.amount_due) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-gray-500 py-8">No open invoices</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card">
+            <h3 class="text-lg font-semibold text-white mb-4">Quick Actions</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <a href="/finance/journals/create" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                    <i class="fas fa-book text-2xl text-primary mb-2"></i>
+                    <span class="text-sm text-gray-300">New Journal</span>
+                </a>
+                <a href="/finance/ar/invoices/create" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                    <i class="fas fa-file-invoice text-2xl text-success mb-2"></i>
+                    <span class="text-sm text-gray-300">New Invoice</span>
+                </a>
+                <a href="/finance/ar/receipts/create" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                    <i class="fas fa-hand-holding-usd text-2xl text-info mb-2"></i>
+                    <span class="text-sm text-gray-300">New Receipt</span>
+                </a>
+                <a href="/finance/ap/bills/create" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                    <i class="fas fa-file-invoice-dollar text-2xl text-warning mb-2"></i>
+                    <span class="text-sm text-gray-300">New Bill</span>
+                </a>
+                <a href="/finance/assets/create" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                    <i class="fas fa-building text-2xl text-purple-500 mb-2"></i>
+                    <span class="text-sm text-gray-300">New Asset</span>
+                </a>
+                <a href="/finance/reports/trial-balance" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                    <i class="fas fa-balance-scale text-2xl text-pink-500 mb-2"></i>
+                    <span class="text-sm text-gray-300">Trial Balance</span>
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

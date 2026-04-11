@@ -1,7 +1,7 @@
 """
 Theme Management System
 ========================
-Centralized theme configuration, tokens, and helpers for the WHDASH platform.
+Centralized theme configuration, tokens, and helpers for the MMDx platform.
 
 This module provides:
 - Theme definitions with semantic design tokens

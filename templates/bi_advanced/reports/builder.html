@@ -1,0 +1,397 @@
+{% extends "bi_advanced/base.html" %}
+
+{% block content %}
+<aside class="bi-sidebar">
+    <div class="bi-sidebar-header">
+        <h2><i class="fas fa-analytics"></i> Advanced BI</h2>
+    </div>
+    <div class="bi-nav-section">
+        <div class="bi-nav-section-title">Reports</div>
+        <a href="{{ url_for('bi_reports') }}" class="bi-nav-item"><i class="fas fa-file-alt"></i> Saved Reports</a>
+        <a href="{{ url_for('bi_report_builder') }}" class="bi-nav-item active"><i class="fas fa-tools"></i> Report Builder</a>
+    </div>
+</aside>
+
+<main class="bi-main">
+    <div class="bi-breadcrumb">
+        <a href="{{ url_for('index') }}">Home</a>
+        <i class="fas fa-chevron-right"></i>
+        <a href="{{ url_for('bi_advanced_dashboard') }}">BI</a>
+        <i class="fas fa-chevron-right"></i>
+        <span>Report Builder</span>
+    </div>
+    
+    <div class="bi-header">
+        <h1>{{ page_title }}</h1>
+        <div class="bi-actions">
+            <button class="bi-btn bi-btn-secondary" onclick="previewReport()">
+                <i class="fas fa-eye"></i> Preview
+            </button>
+            <button class="bi-btn bi-btn-primary" onclick="saveReport()">
+                <i class="fas fa-save"></i> Save Report
+            </button>
+        </div>
+    </div>
+    
+    {% if error %}
+    <div class="alert alert-error">
+        <i class="fas fa-exclamation-circle"></i> {{ error }}
+    </div>
+    {% endif %}
+    
+    <div style="display: grid; grid-template-columns: 300px 1fr; gap: 20px;">
+        <div>
+            <div class="bi-card">
+                <div class="bi-card-header">
+                    <span class="bi-card-title">Report Configuration</span>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Report Name *</label>
+                    <input type="text" id="report_name" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;" 
+                           placeholder="Enter report name" value="{{ editing_report.report_name if editing_report else '' }}">
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Data Source *</label>
+                    <select id="dataset_id" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;" onchange="loadDatasetFields()">
+                        <option value="">Select a dataset...</option>
+                        {% for ds in datasets %}
+                        <option value="{{ ds.id }}" {% if editing_report and editing_report.dataset_id == ds.id %}selected{% endif %}>{{ ds.dataset_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Report Type</label>
+                    <select id="report_type" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                        <option value="tabular" {% if editing_report and editing_report.report_type == 'tabular' %}selected{% endif %}>Tabular</option>
+                        <option value="summary" {% if editing_report and editing_report.report_type == 'summary' %}selected{% endif %}>Summary</option>
+                        <option value="grouped" {% if editing_report and editing_report.report_type == 'grouped' %}selected{% endif %}>Grouped</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Description</label>
+                    <textarea id="description" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; min-height: 60px;" 
+                              placeholder="Optional description">{{ editing_report.description if editing_report else '' }}</textarea>
+                </div>
+                
+                <div style="margin-bottom: 20px;">
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">
+                        <input type="checkbox" id="is_shared" style="margin-right: 8px;"> Share with others
+                    </label>
+                </div>
+            </div>
+            
+            <div class="bi-card" id="fields_panel" style="display: none;">
+                <div class="bi-card-header">
+                    <span class="bi-card-title">Available Fields</span>
+                </div>
+                <div id="fields_list" style="max-height: 300px; overflow-y: auto;">
+                </div>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
+                    <label style="font-size: 13px; font-weight: 600; display: block; margin-bottom: 8px;">Group By</label>
+                    <select id="group_by" multiple style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; min-height: 80px;">
+                    </select>
+                    <small style="color: #888; font-size: 11px;">Hold Ctrl/Cmd to select multiple</small>
+                </div>
+            </div>
+        </div>
+        
+        <div>
+            <div class="bi-card">
+                <div class="bi-card-header">
+                    <span class="bi-card-title">Selected Fields</span>
+                    <button class="bi-btn bi-btn-secondary" style="padding: 5px 12px; font-size: 12px;" onclick="clearFields()">
+                        <i class="fas fa-times"></i> Clear
+                    </button>
+                </div>
+                <div id="selected_fields" style="min-height: 100px; border: 2px dashed #ddd; border-radius: 8px; padding: 15px; display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start;">
+                    <div style="color: #888; width: 100%; text-align: center; padding: 30px;">
+                        Select fields from the left panel
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bi-card">
+                <div class="bi-card-header">
+                    <span class="bi-card-title">Filters</span>
+                    <button class="bi-btn bi-btn-secondary" style="padding: 5px 12px; font-size: 12px;" onclick="addFilter()">
+                        <i class="fas fa-plus"></i> Add Filter
+                    </button>
+                </div>
+                <div id="filters_container">
+                    <div class="filter-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; margin-bottom: 10px; align-items: center;">
+                        <select class="filter-field" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="">Select field...</option>
+                        </select>
+                        <select class="filter-operator" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                            <option value="=">equals</option>
+                            <option value="!=">not equals</option>
+                            <option value=">">greater than</option>
+                            <option value="<">less than</option>
+                            <option value="like">contains</option>
+                        </select>
+                        <input type="text" class="filter-value" placeholder="Value" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <button class="remove-filter" style="background: none; border: none; color: #ff5757; cursor: pointer;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bi-card" id="preview_panel">
+                <div class="bi-card-header">
+                    <span class="bi-card-title">Preview</span>
+                    <span id="preview_status" style="font-size: 12px; color: #888;"></span>
+                </div>
+                <div id="preview_results" style="overflow-x: auto;">
+                    <div class="bi-empty-state">
+                        <i class="fas fa-eye"></i>
+                        <h3>No Preview Yet</h3>
+                        <p>Click "Preview" to see report results</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+let currentFields = [];
+let selectedFields = [];
+let editingReportId = {{ editing_report.id if editing_report else 'null' }};
+
+async function loadDatasetFields() {
+    const datasetId = document.getElementById('dataset_id').value;
+    if (!datasetId) return;
+    
+    const response = await fetch(`/bi/datasets/api/fields/${datasetId}`);
+    const data = await response.json();
+    
+    currentFields = data.fields || [];
+    renderFieldsPanel();
+    document.getElementById('fields_panel').style.display = 'block';
+}
+
+function renderFieldsPanel() {
+    const container = document.getElementById('fields_list');
+    const groupBySelect = document.getElementById('group_by');
+    const filterFieldSelects = document.querySelectorAll('.filter-field');
+    
+    container.innerHTML = '';
+    groupBySelect.innerHTML = '<option value="">Select fields...</option>';
+    
+    const grouped = {};
+    currentFields.forEach(field => {
+        const cat = field.field_category || 'Other';
+        if (!grouped[cat]) grouped[cat] = [];
+        grouped[cat].push(field);
+    });
+    
+    for (const [category, fields] of Object.entries(grouped)) {
+        const catDiv = document.createElement('div');
+        catDiv.style.marginBottom = '15px';
+        catDiv.innerHTML = `<div style="font-size: 11px; text-transform: uppercase; color: #888; margin-bottom: 5px; font-weight: 600;">${category}</div>`;
+        
+        fields.forEach(field => {
+            const isSelected = selectedFields.includes(field.field_code);
+            const fieldDiv = document.createElement('div');
+            fieldDiv.style.cssText = `padding: 6px 8px; margin-bottom: 4px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 8px; background: ${isSelected ? 'rgba(79, 172, 254, 0.1)' : '#f8f9fa'}; border-left: 3px solid ${isSelected ? '#4facfe' : 'transparent'};`;
+            fieldDiv.innerHTML = `
+                <i class="fas fa-${field.data_type === 'number' ? 'hashtag' : field.data_type === 'date' ? 'calendar' : 'font'}" style="width: 20px; color: #888;"></i>
+                <span style="flex: 1; font-size: 13px;">${field.field_name}</span>
+                ${field.is_groupable ? '<span style="font-size: 10px; color: #4facfe;">GROUP</span>' : ''}
+            `;
+            fieldDiv.onclick = () => toggleField(field.field_code);
+            catDiv.appendChild(fieldDiv);
+            
+            const option = document.createElement('option');
+            option.value = field.field_code;
+            option.textContent = `${field.field_name} (${field.field_code})`;
+            groupBySelect.appendChild(option);
+            
+            filterFieldSelects.forEach(select => {
+                const opt = document.createElement('option');
+                opt.value = field.field_code;
+                opt.textContent = field.field_name;
+                select.appendChild(opt);
+            });
+        });
+        
+        container.appendChild(catDiv);
+    }
+}
+
+function toggleField(fieldCode) {
+    if (selectedFields.includes(fieldCode)) {
+        selectedFields = selectedFields.filter(f => f !== fieldCode);
+    } else {
+        selectedFields.push(fieldCode);
+    }
+    renderSelectedFields();
+    renderFieldsPanel();
+}
+
+function renderSelectedFields() {
+    const container = document.getElementById('selected_fields');
+    if (selectedFields.length === 0) {
+        container.innerHTML = '<div style="color: #888; width: 100%; text-align: center; padding: 30px;">Select fields from the left panel</div>';
+        return;
+    }
+    
+    container.innerHTML = selectedFields.map(code => {
+        const field = currentFields.find(f => f.field_code === code);
+        return `<div style="background: rgba(79, 172, 254, 0.1); padding: 6px 12px; border-radius: 20px; font-size: 13px; display: flex; align-items: center; gap: 8px;">
+            <span>${field ? field.field_name : code}</span>
+            <i class="fas fa-times" style="cursor: pointer; color: #888;" onclick="toggleField('${code}')"></i>
+        </div>`;
+    }).join('');
+}
+
+function clearFields() {
+    selectedFields = [];
+    renderSelectedFields();
+    renderFieldsPanel();
+}
+
+function addFilter() {
+    const container = document.getElementById('filters_container');
+    const div = document.createElement('div');
+    div.className = 'filter-row';
+    div.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; margin-bottom: 10px; align-items: center;';
+    div.innerHTML = `
+        <select class="filter-field" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="">Select field...</option>
+            ${currentFields.map(f => `<option value="${f.field_code}">${f.field_name}</option>`).join('')}
+        </select>
+        <select class="filter-operator" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+            <option value="=">equals</option>
+            <option value="!=">not equals</option>
+            <option value=">">greater than</option>
+            <option value="<">less than</option>
+            <option value="like">contains</option>
+        </select>
+        <input type="text" class="filter-value" placeholder="Value" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+        <button class="remove-filter" style="background: none; border: none; color: #ff5757; cursor: pointer;"><i class="fas fa-trash"></i></button>
+    `;
+    div.querySelector('.remove-filter').onclick = () => div.remove();
+    container.appendChild(div);
+}
+
+async function previewReport() {
+    const datasetId = document.getElementById('dataset_id').value;
+    if (!datasetId) {
+        alert('Please select a data source');
+        return;
+    }
+    if (selectedFields.length === 0) {
+        alert('Please select at least one field');
+        return;
+    }
+    
+    document.getElementById('preview_status').textContent = 'Loading...';
+    
+    const response = await fetch('/bi/reports/api/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            dataset_id: parseInt(datasetId),
+            fields: selectedFields,
+            filters: { conditions: [] },
+            group_by: Array.from(document.getElementById('group_by').selectedOptions).map(o => o.value),
+            limit: 100
+        })
+    });
+    
+    const result = await response.json();
+    
+    if (result.error) {
+        document.getElementById('preview_results').innerHTML = `<div class="alert alert-error"><i class="fas fa-exclamation-circle"></i> ${result.error}</div>`;
+    } else {
+        const rows = result.data || [];
+        if (rows.length === 0) {
+            document.getElementById('preview_results').innerHTML = '<div class="bi-empty-state"><i class="fas fa-inbox"></i><h3>No Results</h3></div>';
+        } else {
+            const cols = result.columns || [];
+            let tableHtml = '<table class="bi-table"><thead><tr>';
+            cols.forEach(col => { tableHtml += `<th>${col}</th>`; });
+            tableHtml += '</tr></thead><tbody>';
+            rows.forEach(row => {
+                tableHtml += '<tr>';
+                cols.forEach(col => { tableHtml += `<td>${row[col] ?? ''}</td>`; });
+                tableHtml += '</tr>';
+            });
+            tableHtml += '</tbody></table>';
+            document.getElementById('preview_results').innerHTML = tableHtml;
+        }
+    }
+    
+    document.getElementById('preview_status').textContent = `${result.row_count || 0} rows (${result.execution_time_ms || 0}ms)`;
+}
+
+async function saveReport() {
+    const reportName = document.getElementById('report_name').value.trim();
+    if (!reportName) {
+        alert('Please enter a report name');
+        return;
+    }
+    
+    const datasetId = document.getElementById('dataset_id').value;
+    if (!datasetId) {
+        alert('Please select a data source');
+        return;
+    }
+    
+    const filters = [];
+    document.querySelectorAll('.filter-row').forEach(row => {
+        const field = row.querySelector('.filter-field').value;
+        const operator = row.querySelector('.filter-operator').value;
+        const value = row.querySelector('.filter-value').value;
+        if (field && value) {
+            filters.push({ field, operator, value });
+        }
+    });
+    
+    const payload = {
+        report_name: reportName,
+        dataset_id: parseInt(datasetId),
+        report_type: document.getElementById('report_type').value,
+        description: document.getElementById('description').value,
+        is_shared: document.getElementById('is_shared').checked,
+        fields: selectedFields,
+        filters: { conditions: filters },
+        group_by: Array.from(document.getElementById('group_by').selectedOptions).map(o => o.value)
+    };
+    
+    const url = editingReportId ? `/bi/reports/api/update/${editingReportId}` : '/bi/reports/api/save';
+    const method = editingReportId ? 'POST' : 'POST';
+    
+    const response = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+        window.location.href = `/bi/reports/${result.report_id}`;
+    } else {
+        alert('Error saving report: ' + (result.error || 'Unknown error'));
+    }
+}
+
+document.querySelectorAll('.remove-filter').forEach(btn => {
+    btn.onclick = () => btn.closest('.filter-row').remove();
+});
+
+{% if editing_report and editing_report.selected_fields %}
+selectedFields = {{ editing_report.selected_fields | tojson }};
+if (selectedFields.length > 0) {
+    loadDatasetFields();
+}
+{% endif %}
+</script>
+{% endblock %}

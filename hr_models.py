@@ -21,6 +21,9 @@ HR Tables:
 - hr_deduction_records: Deductions and penalties
 - hr_loans: Employee loans/advances
 - hr_loan_installments: Loan installment schedule
+- hr_training_programs: Training program definitions
+- hr_training_sessions: Scheduled training sessions
+- hr_training_enrollments: Employee enrollments in training
 - hr_employee_documents: Employee document management
 - hr_announcements: HR announcements/notices
 - hr_candidates: Recruitment candidates
@@ -486,7 +489,74 @@ HR_TABLES = [
     )""",
 
     # -------------------------------------------------------------------------
-    # 19. HR Employee Documents
+    # 19. HR Training Programs
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS hr_training_programs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        title_ar TEXT,
+        title_fa TEXT,
+        description TEXT,
+        category TEXT,
+        training_type TEXT DEFAULT 'Technical',
+        provider TEXT,
+        duration_hours INTEGER DEFAULT 0,
+        duration_days INTEGER DEFAULT 0,
+        cost_per_participant DECIMAL(10,2) DEFAULT 0,
+        currency TEXT DEFAULT 'AED',
+        certification_validity_months INTEGER,
+        is_mandatory INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 20. HR Training Sessions
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS hr_training_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        program_id INTEGER NOT NULL,
+        session_title TEXT,
+        trainer_name TEXT,
+        trainer_contact TEXT,
+        location TEXT,
+        online_link TEXT,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        start_time TEXT,
+        end_time TEXT,
+        max_participants INTEGER DEFAULT 20,
+        enrolled_count INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'Scheduled',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (program_id) REFERENCES hr_training_programs(id) ON DELETE CASCADE
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 21. HR Training Enrollments
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS hr_training_enrollments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        session_id INTEGER NOT NULL,
+        employee_id INTEGER NOT NULL,
+        enrollment_date DATE DEFAULT (date('now')),
+        status TEXT DEFAULT 'Enrolled',
+        attendance_status TEXT,
+        completion_date DATE,
+        score DECIMAL(5,2),
+        grade TEXT,
+        certificate_number TEXT,
+        feedback TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (session_id) REFERENCES hr_training_sessions(id) ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES hr_employees(id) ON DELETE CASCADE
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 22. HR Employee Documents
     # -------------------------------------------------------------------------
     """CREATE TABLE IF NOT EXISTS hr_employee_documents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

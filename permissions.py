@@ -1,7 +1,7 @@
 """
 Unified Permission / RBAC System
 ================================
-Centralized Role-Based Access Control (RBAC) for the entire WHDASH platform.
+Centralized Role-Based Access Control (RBAC) for the entire MMDx platform.
 
 This module provides:
 - Single source of truth for all permissions
@@ -54,6 +54,82 @@ def get_db_context():
 
 # Module definitions with their resources and actions
 MODULE_PERMISSIONS = {
+    'assets': {
+        'label': 'Asset Management',
+        'resources': {
+            'dashboard': ['view'],
+            'assets': ['view', 'create', 'edit', 'delete', 'activate', 'transfer', 'dispose'],
+            'categories': ['view', 'create', 'edit', 'delete'],
+            'acquisitions': ['view', 'create', 'edit', 'approve'],
+            'depreciation': ['view', 'create', 'run', 'post', 'reverse', 'approve'],
+            'depreciation_profiles': ['view', 'create', 'edit'],
+            'maintenance': ['view', 'create', 'edit', 'complete'],
+            'maintenance_schedules': ['view', 'create', 'edit', 'delete'],
+            'maintenance_work_orders': ['view', 'create', 'edit', 'complete'],
+            'maintenance_work_logs': ['view', 'create', 'edit'],
+            'maintenance_costs': ['view', 'create'],
+            'transfers': ['view', 'create', 'approve'],
+            'assignments': ['view', 'create', 'edit'],
+            'disposal': ['view', 'create', 'approve', 'execute'],
+            'disposal_requests': ['view', 'create', 'edit', 'approve', 'reject'],
+            'audit_log': ['view', 'export'],
+            'reports': ['view', 'export'],
+            'settings': ['view', 'edit'],
+        }
+    },
+    'maintenance': {
+        'label': 'Maintenance Management',
+        'resources': {
+            'dashboard': ['view'],
+            'equipment': ['view', 'create', 'edit'],
+            'equipment_detail': ['view'],
+            'equipment_downtime': ['view'],
+            'facilities': ['view', 'create', 'edit', 'delete'],
+            'facility_requests': ['view', 'create', 'edit', 'complete'],
+            'pm_plans': ['view', 'create', 'edit', 'delete'],
+            'pm_schedules': ['view', 'create', 'edit', 'delete'],
+            'corrective': ['view', 'create', 'edit'],
+            'breakdown': ['view', 'create', 'edit'],
+            'work_orders': ['view', 'create', 'edit', 'complete', 'assign'],
+            'work_order_tasks': ['view', 'create', 'edit', 'complete'],
+            'technicians': ['view', 'create', 'edit'],
+            'teams': ['view', 'create', 'edit'],
+            'parts_usage': ['view', 'create', 'edit'],
+            'labor_logs': ['view', 'create', 'edit'],
+            'downtime': ['view', 'create', 'edit'],
+            'inspections': ['view', 'create', 'edit'],
+            'checklists': ['view', 'create', 'edit'],
+            'calendar': ['view'],
+            'reports': ['view', 'export'],
+            'settings': ['view', 'edit'],
+            'audit_logs': ['view', 'export'],
+            'my_work_orders': ['view', 'edit', 'complete'],
+        }
+    },
+    'finance': {
+        'label': 'Finance & Accounting',
+        'resources': {
+            'dashboard': ['view'],
+            'accounts': ['view', 'create', 'edit', 'delete'],
+            'journals': ['view', 'create', 'edit', 'delete', 'post', 'reverse'],
+            'fiscal_years': ['view', 'create', 'edit', 'close', 'reopen'],
+            'ar_invoices': ['view', 'create', 'edit', 'delete', 'post'],
+            'ar_receipts': ['view', 'create', 'edit', 'delete', 'post'],
+            'ar_credit_notes': ['view', 'create', 'edit', 'delete', 'post'],
+            'ar': ['view', 'manage'],
+            'ap_bills': ['view', 'create', 'edit', 'delete', 'post'],
+            'ap_payments': ['view', 'create', 'edit', 'delete', 'post'],
+            'ap_debit_notes': ['view', 'create', 'edit', 'delete', 'post'],
+            'ap': ['view', 'manage'],
+            'assets': ['view', 'create', 'edit', 'delete', 'transfer', 'dispose'],
+            'depreciation': ['view', 'create', 'post', 'reverse'],
+            'cost_centers': ['view', 'create', 'edit', 'delete'],
+            'budgets': ['view', 'create', 'edit', 'delete', 'approve'],
+            'tax': ['view', 'create', 'edit'],
+            'reports': ['view', 'export'],
+            'settings': ['view', 'edit'],
+        }
+    },
     'platform': {
         'label': 'Platform Administration',
         'resources': {
@@ -228,21 +304,188 @@ MODULE_PERMISSIONS = {
         }
     },
     'reports': {
-        'label': 'Reporting',
+        'label': 'Reporting & BI',
         'resources': {
+            'dashboard': ['view', 'export'],
             'executive': ['view', 'export'],
             'operational': ['view', 'export'],
             'financial': ['view', 'export'],
+            'sales': ['view', 'export'],
+            'inventory': ['view', 'export'],
+            'logistics': ['view', 'export'],
+            'procurement': ['view', 'export'],
+            'hr': ['view', 'export'],
+            'marketing': ['view', 'export'],
             'custom': ['view', 'create', 'edit', 'delete', 'export'],
             'scheduled': ['view', 'create', 'edit', 'delete', 'execute'],
+            'adhoc': ['view', 'create', 'edit', 'delete', 'execute'],
+            'datasets': ['view', 'create', 'edit', 'delete'],
+            'kpis': ['view', 'create', 'edit', 'delete', 'approve'],
+            'drilldown': ['view', 'execute'],
+            'settings': ['view', 'edit'],
+            'audit_logs': ['view', 'export'],
+        }
+    },
+    'ecommerce': {
+        'label': 'E-commerce Integration',
+        'resources': {
+            'dashboard': ['view'],
+            'channels': ['view', 'create', 'edit', 'delete', 'connect', 'disconnect'],
+            'orders': ['view', 'create', 'edit', 'delete', 'import', 'export', 'retry', 'approve'],
+            'inventory': ['view', 'create', 'edit', 'delete', 'sync', 'export'],
+            'customers': ['view', 'create', 'edit', 'delete', 'sync', 'merge', 'export'],
+            'mappings': ['view', 'create', 'edit', 'delete'],
+            'exceptions': ['view', 'create', 'edit', 'delete', 'resolve', 'approve', 'export'],
+            'reports': ['view', 'export'],
+            'settings': ['view', 'edit'],
+            'audit_logs': ['view', 'export'],
+            'sync': ['view', 'create', 'edit', 'delete', 'execute', 'cancel'],
         }
     },
     'documents': {
-        'label': 'Documents',
+        'label': 'Document Management',
         'resources': {
-            'files': ['view', 'upload', 'download', 'edit', 'delete'],
-            'templates': ['view', 'create', 'edit', 'delete'],
-            'folders': ['view', 'create', 'edit', 'delete'],
+            'dashboard': ['view'],
+            'files': ['view', 'upload', 'download', 'edit', 'delete', 'share', 'archive'],
+            'versions': ['view', 'create', 'edit', 'delete', 'publish', 'restore'],
+            'templates': ['view', 'create', 'edit', 'delete', 'generate', 'preview'],
+            'signatures': ['view', 'create', 'sign', 'reject', 'cancel', 'request'],
+            'categories': ['view', 'create', 'edit', 'delete', 'manage'],
+            'tags': ['view', 'create', 'edit', 'delete', 'manage'],
+            'links': ['view', 'create', 'edit', 'delete', 'manage'],
+            'shares': ['view', 'create', 'edit', 'delete', 'revoke', 'manage'],
+            'reports': ['view', 'export', 'generate'],
+            'settings': ['view', 'edit', 'manage'],
+            'audit_logs': ['view', 'export'],
+            'retention': ['view', 'create', 'edit', 'delete', 'manage'],
+            'access_control': ['view', 'create', 'edit', 'delete', 'manage'],
+            'checkin_checkout': ['view', 'create', 'edit', 'delete', 'manage'],
+            'linked_records': ['view', 'create', 'edit', 'delete', 'manage'],
+        }
+    },
+    'quality': {
+        'label': 'Quality Management',
+        'resources': {
+            'dashboard': ['view'],
+            'inspections': ['view', 'create', 'edit', 'delete', 'approve', 'execute'],
+            'ncr': ['view', 'create', 'edit', 'delete', 'approve', 'resolve', 'close'],
+            'capa': ['view', 'create', 'edit', 'delete', 'approve', 'verify', 'close'],
+            'audits': ['view', 'create', 'edit', 'delete', 'approve', 'execute', 'close'],
+            'reports': ['view', 'export'],
+            'settings': ['view', 'edit'],
+            'audit_log': ['view', 'export'],
+            'quality': ['view', 'create', 'edit', 'delete', 'approve', 'execute', 'verify', 'export', 'manage'],
+        }
+    },
+    'workflow': {
+        'label': 'Workflow & BPM',
+        'resources': {
+            'dashboard': ['view'],
+            'my_work': ['view', 'edit', 'complete'],
+            'approvals': ['view', 'approve', 'reject', 'return', 'escalate'],
+            'delegation': ['view', 'create', 'edit', 'delete', 'manage'],
+            'designer': ['view', 'create', 'edit', 'delete', 'activate', 'deactivate'],
+            'processes': ['view', 'create', 'edit', 'delete'],
+            'instances': ['view', 'create', 'edit', 'delete', 'cancel', 'reassign'],
+            'automation': ['view', 'create', 'edit', 'delete', 'activate', 'deactivate', 'manage', 'test'],
+            'notifications': ['view', 'create', 'edit', 'delete', 'manage'],
+            'monitoring': ['view', 'manage'],
+            'reports': ['view', 'export', 'generate'],
+            'settings': ['view', 'create', 'edit', 'delete', 'manage'],
+            'audit': ['view', 'export'],
+            'templates': ['view', 'create', 'edit', 'delete', 'clone'],
+            'escalation': ['view', 'create', 'edit', 'delete', 'manage'],
+        }
+    },
+    'forms': {
+        'label': 'Form Builder',
+        'resources': {
+            'templates': ['view', 'create', 'edit', 'delete', 'publish', 'archive', 'duplicate'],
+            'submissions': ['view', 'create', 'edit', 'delete', 'submit', 'approve', 'reject', 'return', 'cancel'],
+            'drafts': ['view', 'edit', 'delete'],
+            'approvals': ['view', 'approve', 'reject', 'return'],
+            'workflows': ['view', 'create', 'edit', 'delete', 'activate', 'deactivate'],
+            'reports': ['view', 'export'],
+            'settings': ['view', 'edit'],
+            'signatures': ['view', 'create', 'sign'],
+            'attachments': ['view', 'upload', 'download', 'delete'],
+            'comments': ['view', 'create', 'edit', 'delete'],
+            'audit': ['view', 'export'],
+        }
+    },
+    'api_gateway': {
+        'label': 'API Gateway',
+        'resources': {
+            'dashboard': ['view'],
+            'clients': ['view', 'create', 'edit', 'delete', 'approve'],
+            'scopes': ['view', 'create', 'edit', 'delete'],
+            'policies': ['view', 'create', 'edit', 'delete'],
+            'routes': ['view', 'create', 'edit', 'delete'],
+            'api_versions': ['view', 'create', 'edit', 'delete'],
+            'request_logs': ['view', 'export'],
+            'webhooks': ['view', 'create', 'edit', 'delete', 'subscribe'],
+            'subscriptions': ['view', 'create', 'edit', 'delete'],
+            'integrations': ['view', 'create', 'edit', 'delete', 'sync'],
+            'sync_jobs': ['view', 'create', 'edit', 'delete', 'execute'],
+            'monitoring': ['view', 'manage'],
+            'rate_limits': ['view', 'create', 'edit', 'delete'],
+            'health_status': ['view'],
+            'reports': ['view', 'export'],
+            'documentation': ['view'],
+            'audit_logs': ['view', 'export'],
+            'settings': ['view', 'edit'],
+        }
+    },
+    'bi': {
+        'label': 'Business Intelligence',
+        'resources': {
+            'dashboard': ['view'],
+            'executive': ['view', 'export'],
+            'holding_view': ['view', 'export'],
+            'company_comparison': ['view', 'export'],
+            'operational': ['view', 'export'],
+            'kpis': ['view', 'create', 'edit', 'delete'],
+            'drilldown': ['view', 'execute'],
+            'alerts': ['view', 'create', 'edit', 'delete', 'resolve'],
+            'reports': ['view', 'export', 'generate'],
+            'settings': ['view', 'edit'],
+        }
+    },
+    'bi_advanced': {
+        'label': 'Advanced Analytics',
+        'resources': {
+            'dashboard': ['view'],
+            'datasets': ['view', 'create', 'edit', 'delete', 'import', 'export'],
+            'adhoc_queries': ['view', 'create', 'edit', 'delete', 'execute'],
+            'reports': ['view', 'create', 'edit', 'delete', 'export'],
+            'scheduled_reports': ['view', 'create', 'edit', 'delete', 'execute'],
+            'kpis': ['view', 'create', 'edit', 'delete', 'approve'],
+            'drilldown': ['view', 'execute'],
+            'monitoring': ['view', 'manage'],
+            'access_logs': ['view', 'export'],
+            'performance_logs': ['view', 'export'],
+            'delivery_logs': ['view', 'export'],
+            'settings': ['view', 'edit'],
+        }
+    },
+    'social_media': {
+        'label': 'Social Media',
+        'resources': {
+            'dashboard': ['view'],
+            'accounts': ['view', 'create', 'edit', 'delete', 'connect', 'disconnect'],
+            'content': ['view', 'create', 'edit', 'delete', 'publish', 'archive'],
+            'calendar': ['view', 'create', 'edit', 'delete'],
+            'publishing': ['view', 'create', 'edit', 'delete', 'publish', 'schedule'],
+            'queue': ['view', 'create', 'edit', 'delete'],
+            'engagement': ['view', 'manage'],
+            'messages': ['view', 'create', 'edit', 'delete'],
+            'saved_replies': ['view', 'create', 'edit', 'delete'],
+            'leads': ['view', 'create', 'edit', 'delete', 'convert'],
+            'campaigns': ['view', 'create', 'edit', 'delete', 'approve', 'launch'],
+            'advertisements': ['view', 'create', 'edit', 'delete', 'approve'],
+            'monitoring': ['view', 'manage'],
+            'reports': ['view', 'export'],
+            'settings': ['view', 'edit'],
         }
     },
 }
@@ -823,6 +1066,56 @@ def _create_default_roles():
             'permissions': [('*', '*', '*')]  # Wildcard = all permissions
         },
         {
+            'name': 'Asset Admin',
+            'description': 'Full Asset Management module access',
+            'permissions': [
+                ('assets', '*', '*'),
+                ('reports', 'executive', 'view'),
+                ('reports', 'operational', 'view'),
+            ]
+        },
+        {
+            'name': 'Fixed Asset Accountant',
+            'description': 'Asset depreciation and financial asset management',
+            'permissions': [
+                ('assets', 'dashboard', 'view'),
+                ('assets', 'assets', 'view'),
+                ('assets', 'categories', 'view'),
+                ('assets', 'acquisitions', 'view'),
+                ('assets', 'depreciation', 'view'),
+                ('assets', 'depreciation', 'create'),
+                ('assets', 'depreciation', 'run'),
+                ('assets', 'depreciation', 'post'),
+                ('assets', 'depreciation_profiles', 'view'),
+                ('assets', 'depreciation_profiles', 'create'),
+                ('assets', 'depreciation_profiles', 'edit'),
+                ('assets', 'reports', 'view'),
+                ('assets', 'reports', 'export'),
+                ('assets', 'audit_log', 'view'),
+            ]
+        },
+        {
+            'name': 'Maintenance Coordinator',
+            'description': 'Asset maintenance scheduling and tracking',
+            'permissions': [
+                ('assets', 'dashboard', 'view'),
+                ('assets', 'assets', 'view'),
+                ('assets', 'maintenance', 'view'),
+                ('assets', 'maintenance', 'create'),
+                ('assets', 'maintenance', 'edit'),
+                ('assets', 'maintenance_schedules', 'view'),
+                ('assets', 'maintenance_schedules', 'create'),
+                ('assets', 'maintenance_schedules', 'edit'),
+                ('assets', 'maintenance_work_orders', 'view'),
+                ('assets', 'maintenance_work_orders', 'create'),
+                ('assets', 'maintenance_work_orders', 'edit'),
+                ('assets', 'maintenance_work_logs', 'view'),
+                ('assets', 'maintenance_work_logs', 'create'),
+                ('assets', 'maintenance_costs', 'view'),
+                ('reports', 'operational', 'view'),
+            ]
+        },
+        {
             'name': 'HR Manager',
             'description': 'Full HR module access',
             'permissions': [
@@ -854,6 +1147,36 @@ def _create_default_roles():
                 ('logistics', 'dashboard', 'view'),
                 ('reports', 'operational', 'view'),
                 ('tasks', 'tasks', 'view'),
+            ]
+        },
+        {
+            'name': 'Quality Manager',
+            'description': 'Full Quality Management module access',
+            'permissions': [
+                ('quality', '*', '*'),
+                ('reports', 'executive', 'view'),
+                ('reports', 'operational', 'view'),
+            ]
+        },
+        {
+            'name': 'Quality Inspector',
+            'description': 'Quality inspection and NCR tracking',
+            'permissions': [
+                ('quality', 'dashboard', 'view'),
+                ('quality', 'inspections', ['view', 'create', 'edit', 'execute']),
+                ('quality', 'ncr', ['view', 'create', 'edit']),
+                ('quality', 'reports', 'view'),
+            ]
+        },
+        {
+            'name': 'Quality Auditor',
+            'description': 'Quality audit management',
+            'permissions': [
+                ('quality', 'dashboard', 'view'),
+                ('quality', 'audits', ['view', 'create', 'edit', 'execute']),
+                ('quality', 'ncr', 'view'),
+                ('quality', 'capa', ['view', 'create', 'edit']),
+                ('quality', 'reports', 'view'),
             ]
         },
         {

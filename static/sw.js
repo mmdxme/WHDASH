@@ -1,4 +1,4 @@
-// Service Worker for WHDASH Browser Notifications
+// Service Worker for MMDx Browser Notifications
 const CACHE_NAME = 'whdash-notify-v1';
 
 self.addEventListener('install', (event) => {
@@ -16,10 +16,10 @@ self.addEventListener('push', (event) => {
     try {
         data = event.data.json();
     } catch (e) {
-        data = { title: 'WHDASH Reminder', body: event.data.text() };
+        data = { title: 'MMDx Reminder', body: event.data.text() };
     }
 
-    const title = data.title || 'WHDASH Reminder';
+    const title = data.title || 'MMDx Reminder';
     const options = {
         body: data.body || '',
         icon: data.icon || '/static/icon-notify.png',

@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 fade-in">
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-100">Depreciation Run {{ run.run_number }}</h1>
+            <p class="text-slate-400 text-sm mt-1">Period: {{ run.period_month }}/{{ run.period_year }}</p>
+        </div>
+        <div class="flex gap-2">
+            {% if run.status == 'Draft' %}
+            <button onclick="postRun({{ run.id }})" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-check mr-2"></i>Post Run
+            </button>
+            {% endif %}
+            <a href="{{ url_for('assets.depreciation') }}" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-arrow-left mr-2"></i>Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="glass-panel rounded-xl p-4">
+            <p class="text-slate-400 text-sm">Status</p>
+            <p class="text-white font-medium mt-1">
+                {% if run.status == 'Posted' %}<span class="text-green-400">{{ run.status }}</span>
+                {% else %}<span class="text-yellow-400">{{ run.status }}</span>{% endif %}
+            </p>
+        </div>
+        <div class="glass-panel rounded-xl p-4">
+            <p class="text-slate-400 text-sm">Total Assets</p>
+            <p class="text-white font-medium mt-1">{{ run.total_assets }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4">
+            <p class="text-slate-400 text-sm">Total Depreciation</p>
+            <p class="text-yellow-400 font-medium mt-1">{{ run.total_depreciation | round(2) }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4">
+            <p class="text-slate-400 text-sm">Processed By</p>
+            <p class="text-white font-medium mt-1">{{ run.processed_by_name or '-' }}</p>
+        </div>
+    </div>
+
+    <!-- Entries -->
+    <div class="glass-panel rounded-xl overflow-hidden">
+        <div class="p-4 border-b border-slate-700">
+            <h2 class="text-white font-medium">Depreciation Entries</h2>
+        </div>
+        <table class="w-full">
+            <thead class="bg-slate-800/50">
+                <tr>
+                    <th class="text-left text-slate-400 text-xs font-medium uppercase px-4 py-3">Asset</th>
+                    <th class="text-right text-slate-400 text-xs font-medium uppercase px-4 py-3">Depreciation</th>
+                    <th class="text-right text-slate-400 text-xs font-medium uppercase px-4 py-3">Accumulated</th>
+                    <th class="text-right text-slate-400 text-xs font-medium uppercase px-4 py-3">Net Book Value</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-700">
+                {% for entry in entries %}
+                <tr class="hover:bg-slate-700/30">
+                    <td class="px-4 py-3">
+                        <a href="{{ url_for('assets.asset_detail', asset_id=entry.asset_id) }}" class="text-brand-400 hover:text-brand-300">{{ entry.asset_code }}</a>
+                        <p class="text-slate-400 text-xs">{{ entry.asset_name }}</p>
+                    </td>
+                    <td class="px-4 py-3 text-right text-yellow-400">{{ entry.depreciation_amount | round(2) }}</td>
+                    <td class="px-4 py-3 text-right text-slate-300">{{ entry.accumulated_depreciation | round(2) }}</td>
+                    <td class="px-4 py-3 text-right text-green-400 font-medium">{{ entry.net_book_value | round(2) }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+async function postRun(id) {
+    try {
+        const res = await fetch(`/assets/depreciation/run/${id}/post`, { method: 'POST' });
+        const data = await res.json();
+        if (data.success) location.reload();
+        else alert(data.error);
+    } catch (e) { alert('Error posting run'); }
+}
+</script>
+{% endblock %}

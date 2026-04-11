@@ -33,6 +33,8 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from collections import Counter
 import re
 
+from permissions import user_has_permission
+
 
 def register_wms_routes(app, get_db):
     """Register all WMS routes with the Flask app."""
@@ -41,18 +43,17 @@ def register_wms_routes(app, get_db):
     # DECORATORS & HELPERS
     # ============================================================
 
-    def wms_permission_required(permission=None):
-        """Decorator to check WMS-specific permissions."""
+    def wms_permission_required(resource, action):
+        """Decorator to check WMS permissions using central permissions system."""
         def decorator(f):
             @wraps(f)
             def decorated_function(*args, **kwargs):
                 if 'user_id' not in session:
                     return redirect(url_for('login'))
-                if permission:
-                    user_perms = session.get('wms_permissions', {})
-                    if permission not in user_perms and not session.get('can_manage_users'):
-                        flash(f'You do not have permission: {permission}', 'error')
-                        return redirect(url_for('wms_dashboard'))
+                user_id = session.get('user_id')
+                if not user_has_permission(user_id, 'wms', resource, action):
+                    flash(f"Access denied. You need '{action}' permission on '{resource}'.", "error")
+                    return redirect(url_for('wms_dashboard'))
                 return f(*args, **kwargs)
             return decorated_function
         return decorator
@@ -1564,11 +1565,9 @@ def register_wms_routes(app, get_db):
 
     @app.route('/wms')
     @app.route('/wms/dashboard')
+    @wms_permission_required('dashboard', 'view')
     def wms_dashboard():
         """Main WMS Dashboard."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         user_id = session.get('user_id')
         wh_filter = get_warehouse_filter(user_id)
@@ -1790,11 +1789,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/items')
+    @wms_permission_required('items', 'view')
     def wms_items():
         """Item master list."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         search = request.args.get('search', '').strip()
         category = request.args.get('category', '')
@@ -1856,10 +1853,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/items/new', methods=['GET', 'POST'])
+    @wms_permission_required('items', 'create')
     def wms_items_new():
         """Create new item."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -1944,11 +1940,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/items/<int:item_id>')
+    @wms_permission_required('items', 'view')
     def wms_item_detail(item_id):
         """Item detail view with tabs."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         item = db.execute('''
             SELECT i.*, b.name as brand_name, c.name as category_name,
@@ -2039,11 +2033,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/items/<int:item_id>/edit', methods=['GET', 'POST'])
+    @wms_permission_required('items', 'edit')
     def wms_items_edit(item_id):
         """Edit item."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         item = db.execute('SELECT * FROM wms_items WHERE id = ?', (item_id,)).fetchone()
         if not item:
@@ -2140,11 +2132,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/warehouses')
+    @wms_permission_required('warehouses', 'view')
     def wms_warehouses():
         """Warehouse list."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         warehouses = db.execute('''
             SELECT w.*, c.name as company_name,
@@ -2164,10 +2154,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/warehouses/new', methods=['GET', 'POST'])
+    @wms_permission_required('warehouses', 'create')
     def wms_warehouses_new():
         """Create new warehouse."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -2214,11 +2203,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/warehouses/<int:warehouse_id>')
+    @wms_permission_required('warehouses', 'view')
     def wms_warehouse_detail(warehouse_id):
         """Warehouse detail view."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         warehouse = db.execute('''
             SELECT w.*, c.name as company_name, u.username as manager_name
@@ -2273,11 +2260,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/warehouses/<int:warehouse_id>/edit', methods=['GET', 'POST'])
+    @wms_permission_required('warehouses', 'edit')
     def wms_warehouses_edit(warehouse_id):
         """Edit warehouse."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         db = get_db()
         warehouse = db.execute('SELECT * FROM wms_warehouses WHERE id = ?', (warehouse_id,)).fetchone()
         if not warehouse:
@@ -2336,10 +2321,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/locations')
+    @wms_permission_required('locations', 'view')
     def wms_locations():
         """Locations list."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         warehouse_id = request.args.get('warehouse_id', '')
@@ -2403,10 +2387,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/locations/new', methods=['GET', 'POST'])
+    @wms_permission_required('locations', 'create')
     def wms_locations_new():
         """Create new location."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -2468,10 +2451,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/locations/<int:location_id>')
+    @wms_permission_required('locations', 'view')
     def wms_location_detail(location_id):
         """Location detail."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         location = db.execute('''
@@ -2516,10 +2498,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/locations/<int:location_id>/edit', methods=['GET', 'POST'])
+    @wms_permission_required('locations', 'edit')
     def wms_locations_edit(location_id):
         """Edit location."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         location = db.execute('SELECT * FROM wms_locations WHERE id = ?', (location_id,)).fetchone()
@@ -2598,21 +2579,26 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/inventory')
+    @wms_permission_required('inventory', 'view')
     def wms_inventory():
         """Inventory overview."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         search = request.args.get('search', '').strip()
-        warehouse_id = request.args.get('warehouse_id', '')
+        warehouse_ids = request.args.getlist('warehouse_id')
         location_id = request.args.get('location_id', '')
-        category_id = request.args.get('category_id', '')
+        category_ids = request.args.getlist('category_id')
         brand_id = request.args.get('brand_id', '')
-        status = request.args.get('status', '')
-        stock_filter = request.args.get('stock_filter', '')
+        statuses = request.args.getlist('status')
+        stock_filters = request.args.getlist('stock_filter')
         page = int(request.args.get('page', 1))
         per_page = 100
+
+        # Build warehouse_id / category_id / status for display (use first if multiple)
+        warehouse_id = warehouse_ids[0] if warehouse_ids else ''
+        category_id = category_ids[0] if category_ids else ''
+        status = statuses[0] if statuses else ''
+        stock_filter = stock_filters[0] if stock_filters else ''
 
         query = '''
             SELECT b.*, i.item_code, i.name as item_name, i.unit_of_measure,
@@ -2637,33 +2623,38 @@ def register_wms_routes(app, get_db):
             query += " AND (i.item_code LIKE ? OR i.name LIKE ? OR i.barcode LIKE ? OR i.part_number LIKE ?)"
             sp = f'%{search}%'
             params.extend([sp, sp, sp, sp])
-        if warehouse_id:
-            query += " AND b.warehouse_id = ?"
-            params.append(warehouse_id)
+        if warehouse_ids:
+            placeholders = ','.join(['?'] * len(warehouse_ids))
+            query += f" AND b.warehouse_id IN ({placeholders})"
+            params.extend(warehouse_ids)
         if location_id:
             query += " AND b.location_id = ?"
             params.append(location_id)
-        if category_id:
-            query += " AND i.category_id = ?"
-            params.append(category_id)
+        if category_ids:
+            placeholders = ','.join(['?'] * len(category_ids))
+            query += f" AND i.category_id IN ({placeholders})"
+            params.extend(category_ids)
         if brand_id:
             query += " AND i.brand_id = ?"
             params.append(brand_id)
-        if status:
-            query += " AND b.status = ?"
-            params.append(status)
-        if stock_filter == 'zero':
-            query += " AND b.quantity = 0"
-        elif stock_filter == 'negative':
-            query += " AND b.quantity < 0"
-        elif stock_filter == 'low':
-            query += " AND i.min_stock_level > 0 AND b.quantity < i.min_stock_level"
-        elif stock_filter == 'below_reorder':
-            query += " AND i.reorder_point > 0 AND b.quantity < i.reorder_point"
-        elif stock_filter == 'available_only':
-            query += " AND b.status = 'AVAILABLE' AND b.quantity > 0"
-        elif stock_filter == 'reserved':
-            query += " AND b.reserved_quantity > 0"
+        if statuses:
+            placeholders = ','.join(['?'] * len(statuses))
+            query += f" AND b.status IN ({placeholders})"
+            params.extend(statuses)
+        if stock_filters:
+            for sf in stock_filters:
+                if sf == 'zero':
+                    query += " AND b.quantity = 0"
+                elif sf == 'negative':
+                    query += " AND b.quantity < 0"
+                elif sf == 'low':
+                    query += " AND i.min_stock_level > 0 AND b.quantity < i.min_stock_level"
+                elif sf == 'below_reorder':
+                    query += " AND i.reorder_point > 0 AND b.quantity < i.reorder_point"
+                elif sf == 'available_only':
+                    query += " AND b.status = 'AVAILABLE' AND b.quantity > 0"
+                elif sf == 'reserved':
+                    query += " AND b.reserved_quantity > 0"
 
         total = len(db.execute(query, params).fetchall())
         query += " ORDER BY i.name LIMIT ? OFFSET ?"
@@ -2689,8 +2680,8 @@ def register_wms_routes(app, get_db):
             FROM wms_inventory_balances b
             JOIN wms_items i ON i.id = b.item_id
             WHERE 1=1
-            ''' + ('' if not warehouse_id else ' AND b.warehouse_id = ' + warehouse_id),
-            ([] if not warehouse_id else [warehouse_id])
+            ''' + ('' if not warehouse_ids else ' AND b.warehouse_id IN (' + ','.join(['?'] * len(warehouse_ids)) + ')'),
+            ([] if not warehouse_ids else warehouse_ids)
         ).fetchone()
 
         title = 'Inventory Overview'
@@ -2701,12 +2692,12 @@ def register_wms_routes(app, get_db):
             categories=categories,
             brands=brands,
             search=search,
-            warehouse_id=warehouse_id,
+            warehouse_ids=warehouse_ids,
             location_id=location_id,
-            category_id=category_id,
+            category_ids=category_ids,
             brand_id=brand_id,
-            status=status,
-            stock_filter=stock_filter,
+            statuses=statuses,
+            stock_filters=stock_filters,
             page=page,
             per_page=per_page,
             total_count=total,
@@ -2719,10 +2710,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/receiving')
+    @wms_permission_required('receiving', 'view')
     def wms_receiving():
         """Receiving/Inbound list."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         status = request.args.get('status', '')
@@ -2774,10 +2764,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/receiving/new', methods=['GET', 'POST'])
+    @wms_permission_required('receiving', 'create')
     def wms_receiving_new():
         """Create new inbound receipt."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -2828,10 +2817,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/receiving/<int:receipt_id>')
+    @wms_permission_required('receiving', 'view')
     def wms_receiving_detail(receipt_id):
         """Receiving detail with lines."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         receipt = db.execute('''
@@ -2867,10 +2855,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/receiving/<int:receipt_id>/receive', methods=['POST'])
+    @wms_permission_required('receiving', 'edit')
     def wms_receiving_receive(receipt_id):
         """Receive items against a receipt."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         data = request.form
@@ -3004,10 +2991,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/putaway')
+    @wms_permission_required('putaway', 'view')
     def wms_putaway():
         """Putaway tasks list."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         status = request.args.get('status', '')
@@ -3058,10 +3044,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/putaway/<int:task_id>/complete', methods=['POST'])
+    @wms_permission_required('putaway', 'edit')
     def wms_putaway_complete(task_id):
         """Complete a putaway task."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         try:
@@ -3092,10 +3077,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/movements')
+    @wms_permission_required('movements', 'view')
     def wms_movements():
         """Internal movements list."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         movement_type = request.args.get('movement_type', '')
@@ -3150,10 +3134,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/movements/new', methods=['GET', 'POST'])
+    @wms_permission_required('movements', 'create')
     def wms_movements_new():
         """Create new internal movement."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -3272,10 +3255,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/replenishment')
+    @wms_permission_required('replenishment', 'view')
     def wms_replenishment():
         """Replenishment tasks."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         status = request.args.get('status', '')
@@ -3329,10 +3311,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/picking')
+    @wms_permission_required('picking', 'view')
     def wms_picking():
         """Pick tasks."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         status = request.args.get('status', '')
@@ -3387,10 +3368,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/packing')
+    @wms_permission_required('packing', 'view')
     def wms_packing():
         """Pack tasks."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         status = request.args.get('status', '')
@@ -3441,10 +3421,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/dispatch')
+    @wms_permission_required('dispatch', 'view')
     def wms_dispatch():
         """Dispatch/Shipping."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         status = request.args.get('status', '')
@@ -3493,10 +3472,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/transfers')
+    @wms_permission_required('transfers', 'view')
     def wms_transfers():
         """Transfers list."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         status = request.args.get('status', '')
@@ -3543,10 +3521,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/transfers/new', methods=['GET', 'POST'])
+    @wms_permission_required('transfers', 'create')
     def wms_transfers_new():
         """Create new transfer."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -3594,10 +3571,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/transfers/<int:transfer_id>')
+    @wms_permission_required('transfers', 'view')
     def wms_transfer_detail(transfer_id):
         """Transfer detail."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         transfer = db.execute('''
@@ -3640,10 +3616,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/returns')
+    @wms_permission_required('returns', 'view')
     def wms_returns():
         """Returns list."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         status = request.args.get('status', '')
@@ -3686,10 +3661,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/returns/new', methods=['GET', 'POST'])
+    @wms_permission_required('returns', 'create')
     def wms_returns_new():
         """Create new return."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -3743,10 +3717,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/returns/<int:return_id>')
+    @wms_permission_required('returns', 'view')
     def wms_return_detail(return_id):
         """Return detail."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         return_rec = db.execute('''
@@ -3782,10 +3755,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/stock-counts')
+    @wms_permission_required('stock_counts', 'view')
     def wms_stock_counts():
         """Stock counts list."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         status = request.args.get('status', '')
@@ -3826,10 +3798,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/stock-counts/new', methods=['GET', 'POST'])
+    @wms_permission_required('stock_counts', 'create')
     def wms_stock_counts_new():
         """Create new stock count."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -3877,10 +3848,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/stock-counts/<int:count_id>')
+    @wms_permission_required('stock_counts', 'view')
     def wms_stock_count_detail(count_id):
         """Stock count detail."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         count_rec = db.execute('''
@@ -3918,10 +3888,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/adjustments')
+    @wms_permission_required('adjustments', 'view')
     def wms_adjustments():
         """Stock adjustments."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         status = request.args.get('status', '')
@@ -3957,10 +3926,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/adjustments/new', methods=['GET', 'POST'])
+    @wms_permission_required('adjustments', 'create')
     def wms_adjustments_new():
         """Create new stock adjustment."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -4002,10 +3970,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/adjustments/<int:adjustment_id>')
+    @wms_permission_required('adjustments', 'view')
     def wms_adjustment_detail(adjustment_id):
         """Adjustment detail."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         adjustment = db.execute('''
@@ -4039,10 +4006,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/quality')
+    @wms_permission_required('quality', 'view')
     def wms_quality():
         """QC Inspections."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         result = request.args.get('result', '')
@@ -4084,10 +4050,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/documents')
+    @wms_permission_required('documents', 'view')
     def wms_documents():
         """WMS Documents."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         doc_type = request.args.get('document_type', '')
@@ -4130,10 +4095,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/reports')
+    @wms_permission_required('reports', 'view')
     def wms_reports():
         """WMS Reports index."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         title = 'WMS Reports & Analytics'
         return render_template('wms/reports.html', title=title)
@@ -4294,10 +4258,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/settings')
+    @wms_permission_required('settings', 'view')
     def wms_settings():
         """WMS Settings."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         tab = request.args.get('tab', 'general')
@@ -4361,10 +4324,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/settings/save', methods=['POST'])
+    @wms_permission_required('settings', 'edit')
     def wms_settings_save():
         """Save WMS settings."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         data = request.form
@@ -4394,10 +4356,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/zones/new', methods=['GET', 'POST'])
+    @wms_permission_required('zones', 'create')
     def wms_zones_new():
         """Create new zone."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -4438,10 +4399,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/item-categories')
+    @wms_permission_required('item_categories', 'view')
     def wms_item_categories():
         """Item categories."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         categories = db.execute('''
@@ -4460,10 +4420,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/item-categories/new', methods=['GET', 'POST'])
+    @wms_permission_required('item_categories', 'create')
     def wms_item_categories_new():
         """Create new item category."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -4504,10 +4463,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/item-brands')
+    @wms_permission_required('item_brands', 'view')
     def wms_item_brands():
         """Item brands."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         brands = db.execute('''
@@ -4525,10 +4483,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/item-brands/new', methods=['GET', 'POST'])
+    @wms_permission_required('item_brands', 'create')
     def wms_item_brands_new():
         """Create new brand."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
         db = get_db()
 
         if request.method == 'POST':
@@ -4558,10 +4515,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/lots')
+    @wms_permission_required('lots', 'view')
     def wms_lots():
         """Lots/Batches list."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         search = request.args.get('search', '').strip()
@@ -4617,10 +4573,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/work-tasks')
+    @wms_permission_required('work_tasks', 'view')
     def wms_work_tasks():
         """Work queue / tasks."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         task_type = request.args.get('task_type', '')
@@ -4675,10 +4630,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/alerts')
+    @wms_permission_required('alerts', 'view')
     def wms_alerts():
         """WMS Alerts."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         severity = request.args.get('severity', '')
@@ -4719,10 +4673,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/alerts/acknowledge/<int:alert_id>', methods=['POST'])
+    @wms_permission_required('alerts', 'edit')
     def wms_alerts_acknowledge(alert_id):
         """Acknowledge an alert."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         try:
@@ -4742,10 +4695,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/api/locations/<int:warehouse_id>')
+    @wms_permission_required('locations', 'view')
     def wms_api_locations(warehouse_id):
         """API: Get locations for a warehouse."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         locations = db.execute('''
@@ -4759,10 +4711,9 @@ def register_wms_routes(app, get_db):
         return jsonify([dict(row) for row in locations])
 
     @app.route('/wms/api/items/search')
+    @wms_permission_required('items', 'view')
     def wms_api_items_search():
         """API: Search items."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         q = request.args.get('q', '').strip()
@@ -4781,10 +4732,9 @@ def register_wms_routes(app, get_db):
         return jsonify([dict(row) for row in items])
 
     @app.route('/wms/api/stock/<int:item_id>')
+    @wms_permission_required('inventory', 'view')
     def wms_api_stock(item_id):
         """API: Get stock for an item."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         balances = db.execute('''
@@ -4800,10 +4750,9 @@ def register_wms_routes(app, get_db):
         return jsonify([dict(row) for row in balances])
 
     @app.route('/wms/api/dashboard/stats')
+    @wms_permission_required('dashboard', 'view')
     def wms_api_dashboard_stats():
         """API: Dashboard statistics for AJAX refresh."""
-        if 'user_id' not in session:
-            return jsonify({'error': 'Unauthorized'}), 401
 
         db = get_db()
         user_id = session.get('user_id')
@@ -4837,16 +4786,36 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/export/inventory')
+    @wms_permission_required('reports', 'view')
     def wms_export_inventory():
         """Export inventory to Excel."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
-        warehouse_id = request.args.get('warehouse_id', '')
+        selected_ids = request.args.getlist('ids')
+        selected_cols = request.args.getlist('cols')
+
+        all_cols = ['item', 'warehouse', 'location', 'lot', 'expiry',
+                    'quantity', 'reserved', 'allocated', 'status']
+        if selected_cols:
+            cols_to_export = [c for c in all_cols if c in selected_cols]
+        else:
+            cols_to_export = all_cols
+
+        col_header_map = {
+            'item': 'Item',
+            'warehouse': 'Warehouse',
+            'location': 'Location',
+            'lot': 'Lot Number',
+            'expiry': 'Expiry Date',
+            'quantity': 'Available',
+            'reserved': 'Reserved',
+            'allocated': 'Allocated',
+            'status': 'Status',
+        }
+        headers = [col_header_map[c] for c in cols_to_export]
 
         query = '''
-            SELECT i.item_code, i.name as item_name, i.unit_of_measure,
+            SELECT b.id, i.item_code, i.name as item_name, i.unit_of_measure,
                    br.name as brand, cat.name as category,
                    w.name as warehouse, l.code as location,
                    lot.lot_number, lot.expiry_date,
@@ -4862,9 +4831,10 @@ def register_wms_routes(app, get_db):
             WHERE b.quantity != 0
         '''
         params = []
-        if warehouse_id:
-            query += " AND b.warehouse_id = ?"
-            params.append(warehouse_id)
+        if selected_ids:
+            placeholders = ','.join(['?'] * len(selected_ids))
+            query += f" AND b.id IN ({placeholders})"
+            params.extend(selected_ids)
 
         query += " ORDER BY i.name"
         rows = db.execute(query, params).fetchall()
@@ -4872,20 +4842,23 @@ def register_wms_routes(app, get_db):
         wb = Workbook()
         ws = wb.active
         ws.title = "Inventory"
-
-        headers = ['Item Code', 'Item Name', 'UOM', 'Brand', 'Category', 'Warehouse',
-                    'Location', 'Lot Number', 'Expiry Date', 'Quantity',
-                    'Reserved', 'Allocated', 'Status']
         ws.append(headers)
 
+        col_data_map = {
+            'item': lambda r: f"{r['item_code']} - {r['item_name']}",
+            'warehouse': lambda r: r['warehouse'] or '',
+            'location': lambda r: r['location'] or '',
+            'lot': lambda r: r['lot_number'] or '',
+            'expiry': lambda r: r['expiry_date'] or '',
+            'quantity': lambda r: r['quantity'],
+            'reserved': lambda r: r['reserved_quantity'],
+            'allocated': lambda r: r['allocated_quantity'],
+            'status': lambda r: r['status'],
+        }
+
         for row in rows:
-            ws.append([
-                row['item_code'], row['item_name'], row['unit_of_measure'],
-                row['brand'] or '', row['category'] or '', row['warehouse'] or '',
-                row['location'] or '', row['lot_number'] or '', row['expiry_date'] or '',
-                row['quantity'], row['reserved_quantity'], row['allocated_quantity'],
-                row['status']
-            ])
+            row_data = [col_data_map[c](row) for c in cols_to_export]
+            ws.append(row_data)
 
         output = io.BytesIO()
         wb.save(output)
@@ -4895,10 +4868,9 @@ def register_wms_routes(app, get_db):
                          download_name=f'wms_inventory_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
 
     @app.route('/wms/export/items')
+    @wms_permission_required('reports', 'view')
     def wms_export_items():
         """Export items to Excel."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         items = db.execute('''
@@ -4954,10 +4926,9 @@ def register_wms_routes(app, get_db):
     # ============================================================
 
     @app.route('/wms/print/grn/<int:receipt_id>')
+    @wms_permission_required('receiving', 'view')
     def wms_print_grn(receipt_id):
         """Print Goods Receipt Note."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         receipt = db.execute('''
@@ -4983,10 +4954,9 @@ def register_wms_routes(app, get_db):
         )
 
     @app.route('/wms/print/pick-list/<int:order_id>')
+    @wms_permission_required('picking', 'view')
     def wms_print_pick_list(order_id):
         """Print Pick List."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
 
         db = get_db()
         order = db.execute('SELECT * FROM wms_outbound_orders WHERE id = ?', (order_id,)).fetchone()

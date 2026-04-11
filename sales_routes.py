@@ -40,7 +40,7 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
     # HELPER DECORATORS
     # =============================================================================
 
-    def sales_permission(module, resource, action):
+    def sales_permission_required(resource, action='view'):
         """Sales-specific permission decorator."""
         def decorator(f):
             @wraps(f)
@@ -50,7 +50,7 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
                     flash("Please login to access this page.", "error")
                     return redirect(url_for('login'))
 
-                if not require_permission(user_id, module, resource, action):
+                if not require_permission(user_id, 'sales', resource, action):
                     flash(f"Access Denied. You don't have permission to {action} {resource}.", "error")
                     return redirect(url_for('index'))
 
@@ -74,11 +74,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
 
     @app.route('/sales/')
     @app.route('/sales/dashboard/')
+    @sales_permission_required('dashboard', 'view')
     def sales_dashboard():
         """Main sales dashboard."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_sales_dashboard_stats, get_salesperson_performance
 
         user = get_current_user()
@@ -109,11 +107,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
     # =============================================================================
 
     @app.route('/sales/customers/')
+    @sales_permission_required('customers', 'view')
     def sales_customers():
         """Customer list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_sales_customers, get_sales_customers
 
         # Get filters
@@ -147,11 +143,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
                              countries=[dict(c) for c in countries])
 
     @app.route('/sales/customers/new/', methods=['GET', 'POST'])
+    @sales_permission_required('customers', 'create')
     def sales_customers_new():
         """Create new customer."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         if request.method == 'POST':
             from sales_models import create_sales_customer
             from database import log_audit
@@ -206,11 +200,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
                              form_action='create')
 
     @app.route('/sales/customers/<int:customer_id>/')
+    @sales_permission_required('customers', 'view')
     def sales_customers_view(customer_id):
         """View customer details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_customer_by_id, get_customer_balance, get_sales_orders, get_sales_quotations, get_sales_activities
 
         customer = get_customer_by_id(customer_id)
@@ -237,11 +229,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
                              recent_activities=activities['activities'])
 
     @app.route('/sales/customers/<int:customer_id>/edit/', methods=['GET', 'POST'])
+    @sales_permission_required('customers', 'edit')
     def sales_customers_edit(customer_id):
         """Edit customer."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_customer_by_id, update_sales_customer
         from database import log_audit
 
@@ -303,11 +293,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
     # =============================================================================
 
     @app.route('/sales/inquiries/')
+    @sales_permission_required('inquiries', 'view')
     def sales_inquiries():
         """Inquiries list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_inquiries, get_inquiry_sources, get_inquiry_statuses
 
         filters = {
@@ -340,11 +328,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
                              statuses=get_inquiry_statuses())
 
     @app.route('/sales/inquiries/new/', methods=['GET', 'POST'])
+    @sales_permission_required('inquiries', 'create')
     def sales_inquiries_new():
         """Create new inquiry."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import create_inquiry, add_inquiry_line, get_inquiry_sources, get_inquiry_statuses
 
         if request.method == 'POST':
@@ -403,11 +389,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
                              form_action='create')
 
     @app.route('/sales/inquiries/<int:inquiry_id>/')
+    @sales_permission_required('inquiries', 'view')
     def sales_inquiries_view(inquiry_id):
         """View inquiry details."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_inquiry_by_id, update_inquiry_status
 
         inquiry = get_inquiry_by_id(inquiry_id)
@@ -418,11 +402,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
         return render_template('sales/inquiries/view.html', inquiry=inquiry)
 
     @app.route('/sales/inquiries/<int:inquiry_id>/edit/', methods=['GET', 'POST'])
+    @sales_permission_required('inquiries', 'edit')
     def sales_inquiries_edit(inquiry_id):
         """Edit inquiry."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_inquiry_by_id, update_inquiry_status, add_inquiry_line
 
         inquiry = get_inquiry_by_id(inquiry_id)
@@ -450,11 +432,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
                              form_action='edit')
 
     @app.route('/sales/inquiries/<int:inquiry_id>/convert-to-opportunity/', methods=['POST'])
+    @sales_permission_required('inquiries', 'edit')
     def sales_inquiries_convert_to_opportunity(inquiry_id):
         """Convert inquiry to opportunity."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_inquiry_by_id, create_opportunity, update_inquiry_status
 
         inquiry = get_inquiry_by_id(inquiry_id)
@@ -485,11 +465,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
     # =============================================================================
 
     @app.route('/sales/opportunities/')
+    @sales_permission_required('opportunities', 'view')
     def sales_opportunities():
         """Opportunities list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_opportunities, get_opportunity_stages
 
         filters = {
@@ -614,11 +592,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
     # =============================================================================
 
     @app.route('/sales/quotations/')
+    @sales_permission_required('quotations', 'view')
     def sales_quotations():
         """Quotations list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_quotations, get_quotation_statuses
 
         filters = {
@@ -881,11 +857,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
     # =============================================================================
 
     @app.route('/sales/orders/')
+    @sales_permission_required('orders', 'view')
     def sales_orders():
         """Sales orders list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_sales_orders, get_order_statuses
 
         filters = {
@@ -1202,11 +1176,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
     # =============================================================================
 
     @app.route('/sales/deliveries/')
+    @sales_permission_required('deliveries', 'view')
     def sales_deliveries():
         """Deliveries list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_deliveries, get_delivery_statuses
 
         filters = {
@@ -1302,11 +1274,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
     # =============================================================================
 
     @app.route('/sales/returns/')
+    @sales_permission_required('returns', 'view')
     def sales_returns():
         """Returns list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_returns, get_return_statuses, get_return_reasons
 
         filters = {
@@ -1402,11 +1372,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
     # =============================================================================
 
     @app.route('/sales/targets/')
+    @sales_permission_required('targets', 'view')
     def sales_targets():
         """Sales targets page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_sales_targets, get_target_periods
 
         filters = {
@@ -1471,11 +1439,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
     # =============================================================================
 
     @app.route('/sales/contracts/')
+    @sales_permission_required('contracts', 'view')
     def sales_contracts():
         """Contracts list page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         from sales_models import get_sales_contracts, get_contract_types
 
         filters = {
@@ -1700,11 +1666,9 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
     # =============================================================================
 
     @app.route('/sales/reports/')
+    @sales_permission_required('reports', 'view')
     def sales_reports():
         """Sales reports page."""
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-
         return render_template('sales/reports/index.html')
 
     @app.route('/sales/reports/sales-summary/')

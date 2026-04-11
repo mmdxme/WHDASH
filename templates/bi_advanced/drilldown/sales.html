@@ -1,0 +1,133 @@
+{% extends "bi_advanced/base.html" %}
+
+{% block content %}
+<aside class="bi-sidebar">
+    <div class="bi-sidebar-header">
+        <h2><i class="fas fa-analytics"></i> Advanced BI</h2>
+    </div>
+    <div class="bi-nav-section">
+        <div class="bi-nav-section-title">Analytics</div>
+        <a href="{{ url_for('bi_drilldown', domain='sales') }}" class="bi-nav-item active"><i class="fas fa-chart-line"></i> Sales</a>
+        <a href="{{ url_for('bi_drilldown', domain='inventory') }}" class="bi-nav-item"><i class="fas fa-boxes"></i> Inventory</a>
+        <a href="{{ url_for('bi_drilldown', domain='customers') }}" class="bi-nav-item"><i class="fas fa-users"></i> Customers</a>
+    </div>
+</aside>
+
+<main class="bi-main">
+    <div class="bi-breadcrumb">
+        <a href="{{ url_for('index') }}">Home</a>
+        <i class="fas fa-chevron-right"></i>
+        <a href="{{ url_for('bi_advanced_dashboard') }}">BI</a>
+        <i class="fas fa-chevron-right"></i>
+        <span>Sales Drill-down</span>
+    </div>
+    
+    <div class="bi-header">
+        <h1>{{ page_title }}</h1>
+    </div>
+    
+    <div class="bi-card" style="margin-bottom: 20px;">
+        <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap;">
+            <div>
+                <label style="font-size: 12px; color: #888; display: block;">Date From</label>
+                <input type="date" id="date_from" value="{{ date_from }}" style="padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
+            </div>
+            <div>
+                <label style="font-size: 12px; color: #888; display: block;">Date To</label>
+                <input type="date" id="date_to" value="{{ date_to }}" style="padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
+            </div>
+            <button class="bi-btn bi-btn-primary" onclick="loadData()" style="margin-top: 18px;">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+    </div>
+    
+    <div class="bi-stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 20px;">
+        <div class="bi-stat-card">
+            <div class="icon blue"><i class="fas fa-building"></i></div>
+            <div class="value" id="stat_companies">-</div>
+            <div class="label">Companies</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon green"><i class="fas fa-shopping-cart"></i></div>
+            <div class="value" id="stat_orders">-</div>
+            <div class="label">Orders</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon purple"><i class="fas fa-dollar-sign"></i></div>
+            <div class="value" id="stat_revenue">-</div>
+            <div class="label">Total Sales</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon orange"><i class="fas fa-chart-line"></i></div>
+            <div class="value" id="stat_avg_order">-</div>
+            <div class="label">Avg Order</div>
+        </div>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+        <div class="bi-card">
+            <div class="bi-card-header">
+                <span class="bi-card-title">Sales by Company</span>
+            </div>
+            <div id="by_company_container">
+                <div class="bi-empty-state"><i class="fas fa-spinner fa-spin"></i></div>
+            </div>
+        </div>
+        
+        <div class="bi-card">
+            <div class="bi-card-header">
+                <span class="bi-card-title">Sales by Item (Top 10)</span>
+            </div>
+            <div id="by_item_container">
+                <div class="bi-empty-state"><i class="fas fa-spinner fa-spin"></i></div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script>
+async function loadData() {
+    const dateFrom = document.getElementById('date_from').value;
+    const dateTo = document.getElementById('date_to').value;
+    
+    const [companyRes, itemRes] = await Promise.all([
+        fetch(`/bi/api/drilldown/sales/by-company?date_from=${dateFrom}&date_to=${dateTo}`),
+        fetch(`/bi/api/drilldown/sales/by-item?date_from=${dateFrom}&date_to=${dateTo}&limit=10`)
+    ]);
+    
+    const companyData = await companyRes.json();
+    const itemData = await itemRes.json();
+    
+    if (companyData.data) {
+        let totalOrders = 0, totalSales = 0;
+        companyData.data.forEach(d => {
+            totalOrders += d.order_count || 0;
+            totalSales += d.total_sales || 0;
+        });
+        document.getElementById('stat_companies').textContent = companyData.data.length;
+        document.getElementById('stat_orders').textContent = totalOrders.toLocaleString();
+        document.getElementById('stat_revenue').textContent = '$' + totalSales.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
+        document.getElementById('stat_avg_order').textContent = totalOrders > 0 ? '$' + (totalSales / totalOrders).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0}) : '$0';
+        
+        let tableHtml = '<table class="bi-table"><thead><tr><th>Company</th><th>Orders</th><th>Sales</th><th>Avg Order</th></tr></thead><tbody>';
+        companyData.data.forEach(d => {
+            tableHtml += `<tr><td><a href="/company/${d.company_id}">${d.company}</a></td><td>${d.order_count}</td><td>$${(d.total_sales || 0).toLocaleString()}</td><td>$${(d.avg_order || 0).toLocaleString()}</td></tr>`;
+        });
+        tableHtml += '</tbody></table>';
+        document.getElementById('by_company_container').innerHTML = tableHtml;
+    }
+    
+    if (itemData.data) {
+        let tableHtml = '<table class="bi-table"><thead><tr><th>Part #</th><th>Brand</th><th>Qty Sold</th><th>Total Sales</th></tr></thead><tbody>';
+        itemData.data.forEach(d => {
+            tableHtml += `<tr><td>${d.part_number || 'N/A'}</td><td>${d.brand || 'N/A'}</td><td>${(d.total_qty || 0).toLocaleString()}</td><td>$${(d.total_sales || 0).toLocaleString()}</td></tr>`;
+        });
+        tableHtml += '</tbody></table>';
+        document.getElementById('by_item_container').innerHTML = tableHtml;
+    }
+}
+
+loadData();
+</script>
+{% endblock %}

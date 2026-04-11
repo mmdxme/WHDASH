@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - {{ get_setting('platform_name', 'MMDx') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>{% include 'theme_variables.html' %}</style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900">
+{% include 'admin_sidebar.html' %}
+<div class="ml-64 min-h-screen">
+    {% include 'admin_header.html' %}
+    <main class="p-6">
+        <!-- Breadcrumb -->
+        <nav class="mb-6">
+            <ol class="flex items-center gap-2 text-sm">
+                <li><a href="{{ url_for('workflow_dashboard') }}" class="text-blue-600 hover:underline">Workflow</a></li>
+                <li class="text-slate-400">/</li>
+                <li class="text-slate-800 dark:text-white font-medium">Reports</li>
+            </ol>
+        </nav>
+
+        <!-- Page Header -->
+        <div class="mb-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
+                <p class="text-slate-600 dark:text-slate-400 mt-1">Analyze workflow performance and identify bottlenecks</p>
+            </div>
+            <div class="flex gap-2">
+                <a href="{{ url_for('workflow_reports_export', report_type=report_type, format='csv') }}" class="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+                    <i class="fas fa-download mr-2"></i>CSV
+                </a>
+                <a href="{{ url_for('workflow_reports_export', report_type=report_type, format='excel') }}" class="px-4 py-2 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
+                    <i class="fas fa-file-excel mr-2"></i>Excel
+                </a>
+            </div>
+        </div>
+
+        <!-- Report Navigation -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 mb-6">
+            <div class="flex flex-wrap gap-2">
+                <a href="{{ url_for('workflow_reports_performance') }}" class="px-4 py-2 rounded-lg {% if report_type == 'performance' %}bg-blue-100 text-blue-700{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    <i class="fas fa-chart-line mr-2"></i>Performance
+                </a>
+                <a href="{{ url_for('workflow_reports_cycle_time') }}" class="px-4 py-2 rounded-lg {% if report_type == 'cycle_time' %}bg-blue-100 text-blue-700{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    <i class="fas fa-stopwatch mr-2"></i>Cycle Time
+                </a>
+                <a href="{{ url_for('workflow_reports_rejection') }}" class="px-4 py-2 rounded-lg {% if report_type == 'rejection' %}bg-blue-100 text-blue-700{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    <i class="fas fa-thumbs-down mr-2"></i>Rejections
+                </a>
+                <a href="{{ url_for('workflow_reports_escalation') }}" class="px-4 py-2 rounded-lg {% if report_type == 'escalation' %}bg-blue-100 text-blue-700{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    <i class="fas fa-arrow-up mr-2"></i>Escalations
+                </a>
+                <a href="{{ url_for('workflow_reports_user_load') }}" class="px-4 py-2 rounded-lg {% if report_type == 'user_load' %}bg-blue-100 text-blue-700{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    <i class="fas fa-users mr-2"></i>User Load
+                </a>
+                <a href="{{ url_for('workflow_reports_sla') }}" class="px-4 py-2 rounded-lg {% if report_type == 'sla' %}bg-blue-100 text-blue-700{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}">
+                    <i class="fas fa-clock mr-2"></i>SLA Compliance
+                </a>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 mb-6">
+            <form method="get" class="flex flex-wrap gap-4 items-end">
+                <input type="hidden" name="report_type" value="{{ report_type }}">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Date Range</label>
+                    <select name="date_range" class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                        <option value="7d" {% if filters.date_range == '7d' %}selected{% endif %}>Last 7 Days</option>
+                        <option value="30d" {% if filters.date_range == '30d' %}selected{% endif %}>Last 30 Days</option>
+                        <option value="90d" {% if filters.date_range == '90d' %}selected{% endif %}>Last 90 Days</option>
+                        <option value="ytd" {% if filters.date_range == 'ytd' %}selected{% endif %}>Year to Date</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Workflow Type</label>
+                    <select name="workflow_type" class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                        <option value="">All Types</option>
+                        {% for wf_type in workflow_types %}
+                        <option value="{{ wf_type }}" {% if filters.workflow_type == wf_type %}selected{% endif %}>{{ wf_type }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Module</label>
+                    <select name="module" class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                        <option value="">All Modules</option>
+                        {% for mod in modules %}
+                        <option value="{{ mod }}" {% if filters.module == mod %}selected{% endif %}>{{ mod }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+                    <i class="fas fa-filter mr-2"></i>Apply
+                </button>
+            </form>
+        </div>
+
+        <!-- Report Content -->
+        {% block report_content %}{% endblock %}
+    </main>
+</div>
+{% include 'admin_scripts.html' %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

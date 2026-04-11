@@ -1,7 +1,7 @@
 """
 Data Deduplication and Migration Script
 ====================================
-This script helps unify duplicate data across the WHDASH platform.
+This script helps unify duplicate data across the MMDx platform.
 
 It performs:
 1. Customer deduplication and canonical mapping
@@ -606,7 +606,7 @@ def main():
     args = parser.parse_args()
     
     print("=" * 70)
-    print("WHDASH Data Deduplication and Migration Tool")
+    print("MMDx Data Deduplication and Migration Tool")
     print("=" * 70)
     print()
     

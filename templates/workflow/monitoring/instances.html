@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="{{ language }}" dir="{{ direction }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - {{ get_setting('platform_name', 'MMDx') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>{% include 'theme_variables.html' %}</style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900">
+{% include 'admin_sidebar.html' %}
+<div class="ml-64 min-h-screen">
+    {% include 'admin_header.html' %}
+    <main class="p-6">
+        <!-- Page Header -->
+        <div class="mb-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
+                <p class="text-slate-600 dark:text-slate-400 mt-1">Monitor workflow instances across the system</p>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4 mb-6">
+            <form method="get" class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Status</label>
+                    <select name="status" class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                        <option value="">All Status</option>
+                        <option value="draft">Draft</option>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="completed">Completed</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Workflow Type</label>
+                    <select name="workflow_type" class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                        <option value="">All Types</option>
+                        {% for wf_type in workflow_types %}
+                        <option value="{{ wf_type }}">{{ wf_type }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Assigned To</label>
+                    <select name="assigned_to" class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                        <option value="">All</option>
+                        {% for user in users %}
+                        <option value="{{ user.id }}">{{ user.username }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Search</label>
+                    <input type="text" name="search" placeholder="Instance code..." class="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                </div>
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+                    <i class="fas fa-search mr-2"></i>Filter
+                </button>
+            </form>
+        </div>
+
+        <!-- Instances Table -->
+        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-50 dark:bg-slate-700/50">
+                        <tr>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Instance</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Workflow</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Status</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Assigned To</th>
+                            <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Due Date</th>
+                            <th class="px-5 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                        {% for instance in instances %}
+                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30 {% if instance.current_state == 'escalated' %}bg-red-50 dark:bg-red-900/10{% endif %}">
+                            <td class="px-5 py-4">
+                                <a href="{{ url_for('workflow_monitoring_instance_detail', instance_id=instance.id) }}" class="font-medium text-blue-600 hover:underline">{{ instance.instance_code }}</a>
+                            </td>
+                            <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ instance.workflow_name }}</td>
+                            <td class="px-5 py-4">
+                                <span class="px-2 py-1 text-xs font-medium rounded {% if instance.current_state == 'pending' %}bg-amber-100 text-amber-700{% elif instance.current_state == 'approved' %}bg-green-100 text-green-700{% elif instance.current_state == 'rejected' %}bg-red-100 text-red-700{% elif instance.current_state == 'completed' %}bg-blue-100 text-blue-700{% else %}bg-slate-100 text-slate-600{% endif %}">
+                                    {{ instance.current_state|title }}
+                                </span>
+                            </td>
+                            <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ instance.assigned_to_name }}</td>
+                            <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ instance.due_date }}</td>
+                            <td class="px-5 py-4 text-right">
+                                <a href="{{ url_for('workflow_monitoring_instance_detail', instance_id=instance.id) }}" class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="px-5 py-12 text-center text-slate-500 dark:text-slate-400">
+                                <i class="fas fa-inbox text-4xl mb-3"></i>
+                                <p>No workflow instances found</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+{% include 'admin_scripts.html' %}
+</body>
+</html>

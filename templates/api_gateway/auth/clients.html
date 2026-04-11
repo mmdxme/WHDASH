@@ -1,0 +1,160 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">API Clients</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('api_gateway_clients_new') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> New Client
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Filter Clients</h3>
+    </div>
+    <form method="get" style="padding: 15px;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Search</label>
+                <input type="text" name="search" value="{{ filters.search or '' }}" placeholder="Client name or code...">
+            </div>
+            <div class="filter-group">
+                <label>Status</label>
+                <select name="status">
+                    <option value="">All Status</option>
+                    <option value="active" {% if filters.status == 'active' %}selected{% endif %}>Active</option>
+                    <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>Inactive</option>
+                    <option value="suspended" {% if filters.status == 'suspended' %}selected{% endif %}>Suspended</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Type</label>
+                <select name="client_type">
+                    <option value="">All Types</option>
+                    <option value="external" {% if filters.client_type == 'external' %}selected{% endif %}>External</option>
+                    <option value="internal" {% if filters.client_type == 'internal' %}selected{% endif %}>Internal</option>
+                    <option value="partner" {% if filters.client_type == 'partner' %}selected{% endif %}>Partner</option>
+                </select>
+            </div>
+            <div class="filter-group" style="align-self: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+                <a href="{{ url_for('api_gateway_clients') }}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">API Clients ({{ total }})</h3>
+    </div>
+
+    {% if clients %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Client Code</th>
+                    <th>Client Name</th>
+                    <th>Owner</th>
+                    <th>Department</th>
+                    <th>Rate Limit</th>
+                    <th>Status</th>
+                    <th>Last Used</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for client in clients %}
+                <tr>
+                    <td><code>{{ client.client_code }}</code></td>
+                    <td>
+                        <a href="{{ url_for('api_gateway_client_detail', client_id=client.id) }}">{{ client.client_name }}</a>
+                    </td>
+                    <td>{{ client.owner_name or 'N/A' }}</td>
+                    <td>{{ client.department or 'N/A' }}</td>
+                    <td>{{ client.rate_limit_profile or 'default' }}</td>
+                    <td>
+                        <span class="badge badge-{% if client.status == 'active' %}success{% elif client.status == 'pending' %}warning{% else %}secondary{% endif %}">
+                            {{ client.status|title }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if client.last_used_at %}
+                        {{ client.last_used_at[:16] }}
+                        {% else %}
+                        Never
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 5px;">
+                            <a href="{{ url_for('api_gateway_client_detail', client_id=client.id) }}" class="btn btn-sm btn-secondary">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <a href="{{ url_for('api_gateway_client_edit', client_id=client.id) }}" class="btn btn-sm btn-primary">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <button onclick="toggleStatus({{ client.id }}, '{{ client.status }}')" class="btn btn-sm {% if client.status == 'active' %}btn-warning{% else %}btn-success{% endif %}">
+                                <i class="fas fa-{% if client.status == 'active' %}pause{% else %}play{% endif %}"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ (page - 1) * per_page + 1 }} to {{ [page * per_page, total]|min }} of {{ total }} clients
+        </div>
+        <div class="pagination-links">
+            {% if page > 1 %}
+            <a href="{{ url_for('api_gateway_clients', page=page-1, **filters) }}">&laquo; Prev</a>
+            {% endif %}
+            {% for p in range([1, page-2]|max, ([page+3, pages+1]|min)) %}
+                {% if p == page %}
+                <span class="active">{{ p }}</span>
+                {% else %}
+                <a href="{{ url_for('api_gateway_clients', page=p, **filters) }}">{{ p }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if page < pages %}
+            <a href="{{ url_for('api_gateway_clients', page=page+1, **filters) }}">Next &raquo;</a>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-user-shield"></i>
+        <h3>No API clients</h3>
+        <p>Create your first API client to start using the API Gateway.</p>
+        <a href="{{ url_for('api_gateway_clients_new') }}" class="btn btn-primary" style="margin-top: 15px;">
+            <i class="fas fa-plus"></i> Create Client
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleStatus(clientId, currentStatus) {
+    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    fetch(`/api-gateway/api/clients/${clientId}/toggle-status/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) location.reload();
+    });
+}
+</script>
+{% endblock %}

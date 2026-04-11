@@ -1,0 +1,102 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Integration Runs</h1>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Filter Runs</h3>
+    </div>
+    <form method="get" style="padding: 15px;">
+        <div class="filters">
+            <div class="filter-group">
+                <label>Integration</label>
+                <select name="integration_id">
+                    <option value="">All Integrations</option>
+                    {% for profile in profiles %}
+                    <option value="{{ profile.id }}" {% if filters.integration_id|int == profile.id %}selected{% endif %}>{{ profile.integration_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Status</label>
+                <select name="status">
+                    <option value="">All</option>
+                    <option value="success" {% if filters.status == 'success' %}selected{% endif %}>Success</option>
+                    <option value="failed" {% if filters.status == 'failed' %}selected{% endif %}>Failed</option>
+                    <option value="running" {% if filters.status == 'running' %}selected{% endif %}>Running</option>
+                </select>
+            </div>
+            <div class="filter-group" style="align-self: flex-end;">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+                <a href="{{ url_for('api_gateway_integration_runs') }}" class="btn btn-secondary btn-sm">
+                    <i class="fas fa-times"></i> Clear
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Run History ({{ total }})</h3>
+    </div>
+
+    {% if runs %}
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Run ID</th>
+                    <th>Integration</th>
+                    <th>Type</th>
+                    <th>Direction</th>
+                    <th>Status</th>
+                    <th>Records</th>
+                    <th>Success</th>
+                    <th>Failed</th>
+                    <th>Time (ms)</th>
+                    <th>Started</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in runs %}
+                <tr>
+                    <td><code style="font-size: 0.75rem;">{{ run.run_id[:20] }}...</code></td>
+                    <td>{{ run.integration_name }}</td>
+                    <td>{{ run.run_type|title }}</td>
+                    <td>{{ run.direction|title }}</td>
+                    <td>
+                        <span class="badge badge-{% if run.status == 'success' %}success{% elif run.status == 'failed' %}danger{% else %}warning{% endif %}">
+                            {{ run.status|title }}
+                        </span>
+                    </td>
+                    <td>{{ run.records_processed }}</td>
+                    <td style="color: var(--success);">{{ run.records_success }}</td>
+                    <td style="color: var(--danger);">{{ run.records_failed }}</td>
+                    <td>{{ run.execution_time_ms or 'N/A' }}</td>
+                    <td>{{ run.started_at[:16] if run.started_at else 'N/A' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination">
+        <div class="pagination-info">
+            Showing {{ (page - 1) * per_page + 1 }} to {{ [page * per_page, total]|min }} of {{ total }} runs
+        </div>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-sync"></i>
+        <h3>No runs found</h3>
+        <p>Integration runs will appear here once integrations are executed.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

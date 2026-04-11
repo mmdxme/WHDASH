@@ -1,0 +1,247 @@
+{% extends "api_gateway/base.html" %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">API Client: {{ client.client_name }}</h1>
+    <div class="header-actions">
+        <a href="{{ url_for('api_gateway_client_edit', client_id=client.id) }}" class="btn btn-primary">
+            <i class="fas fa-edit"></i> Edit
+        </a>
+        <a href="{{ url_for('api_gateway_clients') }}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back
+        </a>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: 20px;">
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Client Information</h3>
+            </div>
+            <table style="width: 100%;">
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary); width: 150px;"><strong>Client Code</strong></td>
+                    <td style="padding: 10px;"><code>{{ client.client_code }}</code></td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Client Name</strong></td>
+                    <td style="padding: 10px;">{{ client.client_name }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Type</strong></td>
+                    <td style="padding: 10px;">{{ client.client_type|title }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Owner</strong></td>
+                    <td style="padding: 10px;">{{ client.owner_name or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Email</strong></td>
+                    <td style="padding: 10px;">{{ client.owner_email or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Department</strong></td>
+                    <td style="padding: 10px;">{{ client.department or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Purpose</strong></td>
+                    <td style="padding: 10px;">{{ client.integration_purpose or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Rate Limit Profile</strong></td>
+                    <td style="padding: 10px;">{{ client.rate_limit_profile or 'default' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Status</strong></td>
+                    <td style="padding: 10px;">
+                        <span class="badge badge-{% if client.status == 'active' %}success{% elif client.status == 'pending' %}warning{% else %}secondary{% endif %}">
+                            {{ client.status|title }}
+                        </span>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Last Used</strong></td>
+                    <td style="padding: 10px;">{{ client.last_used_at or 'Never' }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; color: var(--secondary);"><strong>Created</strong></td>
+                    <td style="padding: 10px;">{{ client.created_at[:16] }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Allowed Scopes</h3>
+            </div>
+            <div style="padding: 15px;">
+                {% if client.allowed_scopes_list %}
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    {% for scope in client.allowed_scopes_list %}
+                    <span class="badge badge-primary">{{ scope }}</span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p style="color: var(--secondary);">No scopes assigned. Client has full access to permitted modules.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Allowed Modules</h3>
+            </div>
+            <div style="padding: 15px;">
+                {% if client.allowed_modules_list %}
+                <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                    {% for module in client.allowed_modules_list %}
+                    <span class="badge badge-info">{{ module|title }}</span>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p style="color: var(--secondary);">No module restrictions. Client can access all permitted modules.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div>
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Credentials</h3>
+                <button onclick="showNewCredentialModal()" class="btn btn-sm btn-primary">
+                    <i class="fas fa-plus"></i> Add
+                </button>
+            </div>
+            {% if credentials %}
+            <div style="padding: 15px; display: flex; flex-direction: column; gap: 15px;">
+                {% for cred in credentials %}
+                <div style="border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span class="badge badge-{% if cred.credential_type == 'api_key' %}primary{% elif cred.credential_type == 'oauth' %}info{% else %}secondary{% endif %}">
+                            {{ cred.credential_type|upper }}
+                        </span>
+                        {% if cred.is_primary %}
+                        <span class="badge badge-success">Primary</span>
+                        {% endif %}
+                    </div>
+                    {% if cred.api_key_prefix %}
+                    <div style="font-size: 0.8rem; color: var(--secondary);">
+                        <strong>Key Prefix:</strong> <code>{{ cred.api_key_prefix }}...</code>
+                    </div>
+                    {% endif %}
+                    <div style="font-size: 0.8rem; color: var(--secondary); margin-top: 5px;">
+                        <strong>Created:</strong> {{ cred.created_at[:16] }}
+                    </div>
+                    {% if cred.last_used_at %}
+                    <div style="font-size: 0.8rem; color: var(--secondary);">
+                        <strong>Last Used:</strong> {{ cred.last_used_at[:16] }}
+                    </div>
+                    {% endif %}
+                    <div style="margin-top: 10px;">
+                        <button onclick="showSecret('{{ cred.id }}')" class="btn btn-sm btn-secondary">
+                            <i class="fas fa-eye"></i> Reveal
+                        </button>
+                        <button onclick="revokeCredential('{{ cred.id }}')" class="btn btn-sm btn-danger" {% if not cred.is_active %}disabled{% endif %}>
+                            <i class="fas fa-ban"></i> Revoke
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state" style="padding: 30px;">
+                <i class="fas fa-key" style="font-size: 2rem;"></i>
+                <h3>No credentials</h3>
+                <p>Add credentials to enable API access.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if rl_profile %}
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Rate Limit Profile</h3>
+            </div>
+            <table style="width: 100%; font-size: 0.9rem;">
+                <tr>
+                    <td style="padding: 8px;"><strong>Profile</strong></td>
+                    <td>{{ rl_profile.profile_name }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Per Second</strong></td>
+                    <td>{{ rl_profile.requests_per_second }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Per Minute</strong></td>
+                    <td>{{ rl_profile.requests_per_minute }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Per Hour</strong></td>
+                    <td>{{ rl_profile.requests_per_hour }}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px;"><strong>Per Day</strong></td>
+                    <td>{{ rl_profile.requests_per_day }}</td>
+                </tr>
+            </table>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Notes</h3>
+            </div>
+            <div style="padding: 15px;">
+                {{ client.notes or 'No notes.' }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Credential Modal -->
+<div id="newCredentialModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: 12px; padding: 25px; width: 400px; max-width: 90%;">
+        <h3 style="margin-bottom: 20px;">Add New Credential</h3>
+        <form method="post" action="{{ url_for('api_gateway_new_credential', client_id=client.id) }}">
+            <div class="form-group">
+                <label>Credential Type</label>
+                <select name="credential_type" class="form-control">
+                    <option value="api_key">API Key</option>
+                    <option value="oauth">OAuth Client</option>
+                    <option value="jwt">JWT Token</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Notes (optional)</label>
+                <textarea name="notes" class="form-control" rows="2"></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+                <button type="button" onclick="hideNewCredentialModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Create</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showNewCredentialModal() {
+    document.getElementById('newCredentialModal').style.display = 'flex';
+}
+
+function hideNewCredentialModal() {
+    document.getElementById('newCredentialModal').style.display = 'none';
+}
+
+function showSecret(credId) {
+    alert('In production, this would reveal the secret in a secure manner.');
+}
+
+function revokeCredential(credId) {
+    if (confirm('Are you sure you want to revoke this credential?')) {
+        alert('Credential revoked.');
+    }
+}
+</script>
+{% endblock %}

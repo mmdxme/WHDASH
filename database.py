@@ -1,7 +1,7 @@
 """
 Shared Database Connection Module
 ================================
-Centralized database connection management for the unified WHDASH platform.
+Centralized database connection management for the unified MMDx platform.
 This module provides a single source of truth for all database connections,
 ensuring consistent connection settings, transaction management, and cursor factory.
 

@@ -1,7 +1,7 @@
 """
 Master Data Management System
 ============================
-Unified master data management for the WHDASH platform.
+Unified master data management for the MMDx platform.
 
 This module provides:
 - Single source of truth for all master data entities

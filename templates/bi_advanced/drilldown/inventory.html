@@ -1,0 +1,90 @@
+{% extends "bi_advanced/base.html" %}
+
+{% block content %}
+<aside class="bi-sidebar">
+    <div class="bi-sidebar-header">
+        <h2><i class="fas fa-analytics"></i> Advanced BI</h2>
+    </div>
+    <div class="bi-nav-section">
+        <div class="bi-nav-section-title">Analytics</div>
+        <a href="{{ url_for('bi_drilldown', domain='sales') }}" class="bi-nav-item"><i class="fas fa-chart-line"></i> Sales</a>
+        <a href="{{ url_for('bi_drilldown', domain='inventory') }}" class="bi-nav-item active"><i class="fas fa-boxes"></i> Inventory</a>
+        <a href="{{ url_for('bi_drilldown', domain='customers') }}" class="bi-nav-item"><i class="fas fa-users"></i> Customers</a>
+    </div>
+</aside>
+
+<main class="bi-main">
+    <div class="bi-breadcrumb">
+        <a href="{{ url_for('index') }}">Home</a>
+        <i class="fas fa-chevron-right"></i>
+        <a href="{{ url_for('bi_advanced_dashboard') }}">BI</a>
+        <i class="fas fa-chevron-right"></i>
+        <span>Inventory Drill-down</span>
+    </div>
+    
+    <div class="bi-header">
+        <h1>{{ page_title }}</h1>
+    </div>
+    
+    <div class="bi-stats-grid" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 20px;">
+        <div class="bi-stat-card">
+            <div class="icon blue"><i class="fas fa-building"></i></div>
+            <div class="value" id="stat_warehouses">-</div>
+            <div class="label">Warehouses</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon green"><i class="fas fa-boxes"></i></div>
+            <div class="value" id="stat_items">-</div>
+            <div class="label">Items with Stock</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon purple"><i class="fas fa-dollar-sign"></i></div>
+            <div class="value" id="stat_value">-</div>
+            <div class="label">Total Value</div>
+        </div>
+        <div class="bi-stat-card">
+            <div class="icon orange"><i class="fas fa-exclamation-triangle"></i></div>
+            <div class="value" id="stat_low_stock">-</div>
+            <div class="label">Low Stock</div>
+        </div>
+    </div>
+    
+    <div class="bi-card">
+        <div class="bi-card-header">
+            <span class="bi-card-title">Inventory by Warehouse</span>
+        </div>
+        <div id="warehouse_container">
+            <div class="bi-empty-state"><i class="fas fa-spinner fa-spin"></i></div>
+        </div>
+    </div>
+</main>
+
+<script>
+async function loadData() {
+    const response = await fetch('/bi/api/drilldown/inventory/by-warehouse');
+    const data = await response.json();
+    
+    if (data.data) {
+        let totalItems = 0, totalValue = 0, lowStock = 0;
+        data.data.forEach(d => {
+            totalItems += d.item_count || 0;
+            totalValue += d.total_value || 0;
+            lowStock += d.low_stock_count || 0;
+        });
+        document.getElementById('stat_warehouses').textContent = data.data.length;
+        document.getElementById('stat_items').textContent = totalItems.toLocaleString();
+        document.getElementById('stat_value').textContent = '$' + totalValue.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0});
+        document.getElementById('stat_low_stock').textContent = lowStock;
+        
+        let tableHtml = '<table class="bi-table"><thead><tr><th>Warehouse</th><th>Company</th><th>Items</th><th>Total Qty</th><th>Value</th><th>Out of Stock</th><th>Low Stock</th></tr></thead><tbody>';
+        data.data.forEach(d => {
+            tableHtml += `<tr><td><a href="/warehouse/${d.warehouse_id}">${d.warehouse}</a></td><td>${d.company}</td><td>${d.item_count || 0}</td><td>${(d.total_quantity || 0).toLocaleString()}</td><td>$${(d.total_value || 0).toLocaleString()}</td><td>${d.out_of_stock_count || 0}</td><td>${d.low_stock_count || 0}</td></tr>`;
+        });
+        tableHtml += '</tbody></table>';
+        document.getElementById('warehouse_container').innerHTML = tableHtml;
+    }
+}
+
+loadData();
+</script>
+{% endblock %}

@@ -1,18 +1,225 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="space-y-6">
-    <div class="flex items-center justify-between"><div><h1 class="text-3xl font-bold text-white">{{ t('candidates', 'Candidates') }}</h1></div></div>
+    <!-- Page Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ t('candidates', 'Candidates') }}</h1>
+            <p class="text-slate-400 mt-1">{{ total }} {{ t('candidates_found', 'candidates found') }}</p>
+        </div>
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('hr.recruitment_list') }}" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-briefcase"></i>
+                {{ t('view_requisitions', 'View Requisitions') }}
+            </a>
+            <a href="{{ url_for('hr.candidate_new') }}" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-plus"></i>
+                {{ t('add_candidate', 'Add Candidate') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('total_candidates', 'Total Candidates') }}</p>
+                    <p class="text-3xl font-bold text-white mt-1">{{ stats.total }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-brand-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-users text-brand-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('in_interview', 'In Interview') }}</p>
+                    <p class="text-3xl font-bold text-white mt-1">{{ stats.interview }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-comments text-blue-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('offer_extended', 'Offer Extended') }}</p>
+                    <p class="text-3xl font-bold text-white mt-1">{{ stats.offer }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-handshake text-purple-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('hired', 'Hired') }}</p>
+                    <p class="text-3xl font-bold text-white mt-1">{{ stats.hired }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-check-circle text-emerald-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-6">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div class="md:col-span-2">
+                <label class="block text-sm text-slate-400 mb-2">{{ t('search', 'Search') }}</label>
+                <input type="text" name="search" value="{{ search }}" placeholder="{{ t('search_placeholder', 'Name, email, position...') }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500/50">
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('stage', 'Stage') }}</label>
+                <select name="stage" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white">
+                    <option value="">{{ t('all_stages', 'All Stages') }}</option>
+                    <option value="Applied" {% if stage == 'Applied' %}selected{% endif %}>{{ t('applied', 'Applied') }}</option>
+                    <option value="Screening" {% if stage == 'Screening' %}selected{% endif %}>{{ t('screening', 'Screening') }}</option>
+                    <option value="Interview" {% if stage == 'Interview' %}selected{% endif %}>{{ t('interview', 'Interview') }}</option>
+                    <option value="Technical" {% if stage == 'Technical' %}selected{% endif %}>{{ t('technical', 'Technical') }}</option>
+                    <option value="Offer" {% if stage == 'Offer' %}selected{% endif %}>{{ t('offer', 'Offer') }}</option>
+                    <option value="Hired" {% if stage == 'Hired' %}selected{% endif %}>{{ t('hired', 'Hired') }}</option>
+                    <option value="Rejected" {% if stage == 'Rejected' %}selected{% endif %}>{{ t('rejected', 'Rejected') }}</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-slate-400 mb-2">{{ t('status', 'Status') }}</label>
+                <select name="status" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white">
+                    <option value="">{{ t('all_statuses', 'All Statuses') }}</option>
+                    <option value="Active" {% if status == 'Active' %}selected{% endif %}>{{ t('active', 'Active') }}</option>
+                    <option value="Inactive" {% if status == 'Inactive' %}selected{% endif %}>{{ t('inactive', 'Inactive') }}</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold transition-all">
+                    <i class="fa-solid fa-search mr-2"></i>{{ t('filter', 'Filter') }}
+                </button>
+                <a href="{{ url_for('hr.candidates_list') }}" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all">
+                    <i class="fa-solid fa-times"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Candidates Table -->
     <div class="glass-panel rounded-2xl overflow-hidden">
-        <table class="w-full">
-            <thead><tr class="border-b border-white/10"><th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('name', 'Name') }}</th><th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('position', 'Position') }}</th><th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('stage', 'Stage') }}</th><th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('status', 'Status') }}</th></tr></thead>
-            <tbody class="divide-y divide-white/5">
-                {% for c in candidates %}
-                <tr class="hover:bg-white/5"><td class="px-6 py-4 text-white">{{ c.first_name }} {{ c.last_name }}</td><td class="px-6 py-4 text-slate-300">{{ c.position_applied or c.requisition_title or '-' }}</td><td class="px-6 py-4 text-slate-300">{{ c.current_stage }}</td><td class="px-6 py-4"><span class="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full">{{ c.status }}</span></td></tr>
-                {% else %}
-                <tr><td colspan="4" class="px-6 py-12 text-center text-slate-500">{{ t('no_candidates', 'No candidates found') }}</td></tr>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/10">
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('candidate', 'Candidate') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('position', 'Position') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('source', 'Source') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('stage', 'Stage') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('score', 'Score') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('status', 'Status') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('applied', 'Applied') }}</th>
+                        <th class="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for c in candidates %}
+                    <tr class="hover:bg-white/5 transition-all">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-brand-500/20 flex items-center justify-center">
+                                    <span class="text-brand-400 font-bold">{{ c.first_name[0] if c.first_name else '?' }}{{ c.last_name[0] if c.last_name else '?' }}</span>
+                                </div>
+                                <div>
+                                    <div class="text-white font-medium">{{ c.first_name }} {{ c.last_name }}</div>
+                                    <div class="text-sm text-slate-400">{{ c.email or '' }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-slate-300">{{ c.position_applied or c.requisition_title or '-' }}</td>
+                        <td class="px-6 py-4 text-slate-300">{{ c.source or '-' }}</td>
+                        <td class="px-6 py-4 text-slate-300">
+                            {% if c.current_stage == 'Applied' %}
+                            <span class="px-2.5 py-1 bg-slate-500/10 text-slate-400 text-xs font-bold rounded-full">{{ t('applied', 'Applied') }}</span>
+                            {% elif c.current_stage == 'Screening' %}
+                            <span class="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full">{{ t('screening', 'Screening') }}</span>
+                            {% elif c.current_stage == 'Interview' %}
+                            <span class="px-2.5 py-1 bg-amber-500/10 text-amber-400 text-xs font-bold rounded-full">{{ t('interview', 'Interview') }}</span>
+                            {% elif c.current_stage == 'Technical' %}
+                            <span class="px-2.5 py-1 bg-purple-500/10 text-purple-400 text-xs font-bold rounded-full">{{ t('technical', 'Technical') }}</span>
+                            {% elif c.current_stage == 'Offer' %}
+                            <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ t('offer', 'Offer') }}</span>
+                            {% elif c.current_stage == 'Hired' %}
+                            <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ t('hired', 'Hired') }}</span>
+                            {% elif c.current_stage == 'Rejected' %}
+                            <span class="px-2.5 py-1 bg-red-500/10 text-red-400 text-xs font-bold rounded-full">{{ t('rejected', 'Rejected') }}</span>
+                            {% else %}
+                            <span class="px-2.5 py-1 bg-white/10 text-slate-400 text-xs font-bold rounded-full">{{ c.current_stage or 'Applied' }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if c.interview_score %}
+                            <span class="text-white font-medium">{{ c.interview_score }}/5</span>
+                            {% else %}
+                            <span class="text-slate-500">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if c.status == 'Active' %}
+                            <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ t('active', 'Active') }}</span>
+                            {% else %}
+                            <span class="px-2.5 py-1 bg-slate-500/10 text-slate-400 text-xs font-bold rounded-full">{{ c.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-slate-400 text-sm">{{ c.created_at[:10] if c.created_at else '-' }}</td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center justify-end gap-2">
+                                <a href="{{ url_for('hr.candidate_view', id=c.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="{{ t('view', 'View') }}">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                                <a href="{{ url_for('hr.candidate_edit', id=c.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="{{ t('edit', 'Edit') }}">
+                                    <i class="fa-solid fa-edit"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="px-6 py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-users text-4xl mb-4 block opacity-50"></i>
+                            {{ t('no_candidates', 'No candidates found') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="px-6 py-4 border-t border-white/10 flex items-center justify-between">
+            <div class="text-sm text-slate-400">
+                {{ t('page', 'Page') }} {{ page }} {{ t('of', 'of') }} {{ total_pages }}
+            </div>
+            <div class="flex items-center gap-2">
+                {% if page > 1 %}
+                <a href="?page={{ page - 1 }}&search={{ search }}&stage={{ stage }}&status={{ status }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </a>
+                {% endif %}
+                {% for p in range(1, total_pages + 1) %}
+                    {% if p >= page - 2 and p <= page + 2 %}
+                <a href="?page={{ p }}&search={{ search }}&stage={{ stage }}&status={{ status }}" class="px-3 py-1.5 {% if p == page %}bg-brand-600{% else %}bg-white/5 hover:bg-white/10{% endif %} text-white rounded-lg transition-all">{{ p }}</a>
+                    {% endif %}
                 {% endfor %}
-            </tbody>
-        </table>
+                {% if page < total_pages %}
+                <a href="?page={{ page + 1 }}&search={{ search }}&stage={{ stage }}&status={{ status }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

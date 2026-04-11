@@ -1,7 +1,7 @@
 """
 Unified Reporting Framework
 ========================
-Centralized reporting and analytics for the WHDASH platform.
+Centralized reporting and analytics for the MMDx platform.
 
 This module provides:
 - Standardized KPI calculations
