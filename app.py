@@ -28,6 +28,7 @@ from translations import TRANSLATIONS, LANGUAGES, RTL_LANGUAGES, get_translation
 from hr_routes import register_hr_routes
 from wms_routes import register_wms_routes
 from logistics_routes import register_logistics_routes
+from task_center_routes import task_bp
 from company_routes import register_company_routes
 from planning_routes import register_planning_routes
 from marketing_routes import register_marketing_routes
@@ -47,6 +48,8 @@ from quality_routes import register_quality_routes
 from ecommerce_routes import register_ecommerce_routes
 from document_routes import register_document_routes
 from workflow_routes import register_workflow_routes
+from task_center_routes import register_task_center_routes
+from flow_routes import register_flow_routes
 
 # =============================================================================
 # UNIFIED PLATFORM MODULES (Enterprise Integration)
@@ -347,6 +350,44 @@ def inject_csrf_token():
     return {'csrf_token': generate_csrf_token()}
 
 
+@app.context_processor
+def inject_format_time():
+    """Inject format_time function for human-readable timestamps."""
+    from datetime import datetime
+    def format_time(value):
+        if value is None:
+            return ''
+        if isinstance(value, str):
+            try:
+                dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                return value
+        elif isinstance(value, datetime):
+            dt = value
+        else:
+            return str(value)
+
+        now = datetime.now()
+        diff = now - dt
+        total_seconds = diff.total_seconds()
+
+        if total_seconds < 0:
+            return dt.strftime('%H:%M')
+        if total_seconds < 60:
+            return 'now'
+        if total_seconds < 3600:
+            minutes = int(total_seconds / 60)
+            return f'{minutes}m'
+        if total_seconds < 86400:
+            hours = int(total_seconds / 3600)
+            return f'{hours}h'
+        if total_seconds < 604800:
+            days = int(total_seconds / 86400)
+            return f'{days}d'
+        return dt.strftime('%Y-%m-%d')
+    return {'format_time': format_time}
+
+
 def require_login(f):
     """Decorator factory that redirects unauthenticated users to login."""
     @wraps(f)
@@ -363,6 +404,9 @@ register_email_manager(app, get_db)
 register_hr_routes(app)
 register_wms_routes(app, get_db)
 register_company_routes(app)
+app.register_blueprint(task_bp)
+from issue_tracker_routes import issue_bp
+app.register_blueprint(issue_bp)
 register_logistics_routes(app)
 register_planning_routes(app, get_db)
 register_marketing_routes(app)
@@ -431,6 +475,11 @@ register_form_routes(app)
 # Register form builder template helpers
 from form_helpers import register_form_helpers
 register_form_helpers(app)
+
+# =============================================================================
+# INITIALIZE FLOW COMMUNICATION MODULE
+# =============================================================================
+register_flow_routes(app)
 
 def init_db():
     db = get_db()
@@ -893,6 +942,89 @@ def init_db():
         )
     ''')
     db.execute('''
+        CREATE TABLE IF NOT EXISTS issue_comments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            issue_id INTEGER NOT NULL,
+            user_id INTEGER,
+            comment TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (issue_id) REFERENCES issue_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+    ''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS issue_attachments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            issue_id INTEGER NOT NULL,
+            user_id INTEGER,
+            filename TEXT,
+            file_path TEXT,
+            file_size INTEGER,
+            mime_type TEXT,
+            description TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (issue_id) REFERENCES issue_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        )
+    ''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS issue_watchers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            issue_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(issue_id, user_id),
+            FOREIGN KEY (issue_id) REFERENCES issue_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    ''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS issue_escalations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            issue_id INTEGER NOT NULL,
+            escalated_by INTEGER,
+            escalated_to INTEGER,
+            escalation_level INTEGER DEFAULT 1,
+            reason TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (issue_id) REFERENCES issue_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (escalated_by) REFERENCES users(id) ON DELETE SET NULL,
+            FOREIGN KEY (escalated_to) REFERENCES users(id) ON DELETE SET NULL
+        )
+    ''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS issue_categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT,
+            parent_id INTEGER,
+            default_assignee TEXT,
+            default_priority TEXT DEFAULT 'Medium',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS issue_sla_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            priority TEXT NOT NULL,
+            response_hours INTEGER DEFAULT 24,
+            resolution_hours INTEGER DEFAULT 72,
+            description TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS issue_workflow_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            from_status TEXT NOT NULL,
+            to_status TEXT NOT NULL,
+            description TEXT,
+            requires_comment INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    db.execute('''
         CREATE TABLE IF NOT EXISTS user_task_preferences (
             user_id INTEGER PRIMARY KEY,
             visible_columns TEXT,
@@ -1255,7 +1387,7 @@ REPORT_TYPES = ['Status', 'Priority', 'Department', 'User', 'Timeline', 'Financi
 REPORT_INTERVALS = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly', 'Custom']
 
 ISSUE_PRIORITY_OPTIONS = ['High', 'Medium', 'Low']
-ISSUE_STATUS_OPTIONS = ['Open', 'Pending', 'Closed']
+ISSUE_STATUS_OPTIONS = ['Open', 'In Progress', 'Pending Review', 'Backlog', 'Pending', 'Resolved', 'Closed']
 ISSUE_TYPE_OPTIONS = ['Problem', 'Suggestion', 'Issue']
 ISSUE_COLUMN_OPTIONS = [
     {'key': 'row_id', 'label': 'Row ID', 'rtl': 'ردیف'},
@@ -1932,8 +2064,9 @@ def normalize_issue_priority(priority_value):
 
 
 def normalize_issue_status(status_value):
+    valid = ['Open', 'In Progress', 'Pending Review', 'Backlog', 'Pending', 'Resolved', 'Closed']
     status = (status_value or 'Open').strip().title()
-    return status if status in ISSUE_STATUS_OPTIONS else 'Open'
+    return status if status in valid else 'Open'
 
 
 def normalize_issue_type(issue_type):
@@ -1952,8 +2085,12 @@ def issue_priority_badge(priority):
 def issue_status_badge(status):
     return {
         'Open': 'bg-sky-500/15 text-sky-200 border-sky-400/30',
+        'In Progress': 'bg-blue-500/15 text-blue-200 border-blue-400/30',
+        'Pending Review': 'bg-violet-500/15 text-violet-200 border-violet-400/30',
         'Pending': 'bg-amber-500/15 text-amber-200 border-amber-400/30',
-        'Closed': 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30'
+        'Backlog': 'bg-slate-500/15 text-slate-200 border-slate-400/30',
+        'Resolved': 'bg-teal-500/15 text-teal-200 border-teal-400/30',
+        'Closed': 'bg-emerald-500/15 text-emerald-200 border-emerald-400/30',
     }.get(status, 'bg-slate-500/10 text-slate-300 border-slate-500/20')
 
 
@@ -8645,5 +8782,6 @@ if __name__ == '__main__':
     port = 5000
     print(f"Starting Flask server on http://localhost:{port}")
     print(f"Debug mode: ON")
-    app.run(host=host, port=port, debug=True, use_reloader=True)
+    # Disable reloader on Windows to avoid import issues with debug mode
+    app.run(host=host, port=port, debug=True, use_reloader=False)
     print(f"Server stopped")

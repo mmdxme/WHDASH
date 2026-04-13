@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .stat-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+    .priority-critical { color: #ef4444; }
+    .priority-high { color: #f97316; }
+    .priority-medium { color: #eab308; }
+    .priority-low { color: #22c55e; }
+    .status-open { color: #94a3b8; }
+    .status-in_progress { color: #3b82f6; }
+    .status-completed { color: #22c55e; }
+    .status-review { color: #a855f7; }
+    .status-canceled { color: #f97316; }
+    .glass-panel { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); }
+</style>
+
+<div class="space-y-8 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">Task Dashboard</h1>
+            <p class="mt-1 text-sm text-slate-400">Overview of all task activities and metrics.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="{{ url_for('task_center.my_tasks') }}" class="rounded-xl bg-brand-600 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-white transition-all hover:bg-brand-500">
+                <i class="fa-solid fa-plus mr-2"></i>My Tasks
+            </a>
+            <a href="{{ url_for('task_manager') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                <i class="fa-solid fa-list mr-2"></i>All Tasks
+            </a>
+            {% if session.get('can_manage_users') %}
+            <button onclick="seedDemoData()" class="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-emerald-300 transition-all hover:bg-emerald-500/20">
+                <i class="fa-solid fa-database mr-2"></i>Seed Demo Data
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <div class="stat-card glass-panel rounded-2xl border border-white/5 p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Tasks</p>
+                    <h3 class="mt-2 text-3xl font-black text-white">{{ stats.total_tasks }}</h3>
+                </div>
+                <div class="rounded-xl bg-blue-500/10 p-3">
+                    <i class="fa-solid fa-tasks text-xl text-blue-400"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-white/5 p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">My Tasks</p>
+                    <h3 class="mt-2 text-3xl font-black text-emerald-400">{{ stats.my_tasks_count }}</h3>
+                </div>
+                <div class="rounded-xl bg-emerald-500/10 p-3">
+                    <i class="fa-solid fa-user-check text-xl text-emerald-400"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-white/5 p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Team Tasks</p>
+                    <h3 class="mt-2 text-3xl font-black text-cyan-400">{{ stats.team_tasks_count }}</h3>
+                </div>
+                <div class="rounded-xl bg-cyan-500/10 p-3">
+                    <i class="fa-solid fa-users text-xl text-cyan-400"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-white/5 p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Overdue</p>
+                    <h3 class="mt-2 text-3xl font-black text-rose-400">{{ stats.overdue_tasks_count }}</h3>
+                </div>
+                <div class="rounded-xl bg-rose-500/10 p-3">
+                    <i class="fa-solid fa-exclamation-circle text-xl text-rose-400"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-white/5 p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Completed</p>
+                    <h3 class="mt-2 text-3xl font-black text-green-400">{{ stats.completed_tasks_count }}</h3>
+                </div>
+                <div class="rounded-xl bg-green-500/10 p-3">
+                    <i class="fa-solid fa-check-double text-xl text-green-400"></i>
+                </div>
+            </div>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-white/5 p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Escalations</p>
+                    <h3 class="mt-2 text-3xl font-black text-amber-400">{{ stats.escalation_count }}</h3>
+                </div>
+                <div class="rounded-xl bg-amber-500/10 p-3">
+                    <i class="fa-solid fa-arrow-up text-xl text-amber-400"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Secondary Stats -->
+    <div class="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-4">
+        <div class="glass-panel rounded-2xl border border-white/5 p-4">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">In Progress</p>
+            <h3 class="mt-2 text-2xl font-black text-blue-400">{{ stats.in_progress_count }}</h3>
+        </div>
+        <div class="glass-panel rounded-2xl border border-white/5 p-4">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Review</p>
+            <h3 class="mt-2 text-2xl font-black text-purple-400">{{ stats.review_count }}</h3>
+        </div>
+        <div class="glass-panel rounded-2xl border border-white/5 p-4">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">SLA Warning</p>
+            <h3 class="mt-2 text-2xl font-black text-orange-400">{{ stats.sla_warning }}</h3>
+        </div>
+        <div class="glass-panel rounded-2xl border border-white/5 p-4">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Subtasks Done</p>
+            <h3 class="mt-2 text-2xl font-black text-teal-400">{{ stats.subtask_completed }}/{{ stats.subtask_total }}</h3>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 gap-8 xl:grid-cols-3">
+        <!-- Overdue Tasks -->
+        <div class="glass-panel rounded-3xl border border-white/5 xl:col-span-2">
+            <div class="flex items-center justify-between border-b border-white/5 bg-white/[0.02] p-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white">Overdue Tasks</h3>
+                    <p class="mt-1 text-xs text-slate-500">Tasks past their due date</p>
+                </div>
+                <a href="{{ url_for('task_center.overdue_tasks') }}" class="rounded-lg bg-rose-500/10 px-3 py-1.5 text-xs font-bold text-rose-300 hover:bg-rose-500/20">
+                    View All <i class="fa-solid fa-arrow-right ml-1"></i>
+                </a>
+            </div>
+            <div class="divide-y divide-white/5">
+                {% if overdue_tasks %}
+                {% for task in overdue_tasks[:5] %}
+                <div class="flex items-center justify-between p-4 hover:bg-white/[0.02]">
+                    <div class="flex items-center gap-3">
+                        <div class="rounded-lg bg-rose-500/10 p-2">
+                            <i class="fa-solid fa-exclamation text-sm text-rose-400"></i>
+                        </div>
+                        <div>
+                            <p class="font-bold text-white">{{ task.task_name }}</p>
+                            <p class="mt-0.5 text-xs text-slate-500">
+                                {{ task.assigned_to_name or 'Unassigned' }}
+                                {% if task.due_at %}<span class="ml-2">Due: {{ task.due_at[:10] }}</span>{% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    <span class="badge badge-{{ task.priority|lower if task.priority else 'medium' }}">
+                        {{ task.priority or 'Medium' }}
+                    </span>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="p-8 text-center">
+                    <i class="fa-solid fa-check-circle text-4xl text-emerald-400/30"></i>
+                    <p class="mt-3 text-sm font-bold text-slate-400">No overdue tasks</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Links -->
+        <div class="glass-panel rounded-3xl border border-white/5">
+            <div class="border-b border-white/5 bg-white/[0.02] p-6">
+                <h3 class="text-lg font-bold text-white">Quick Access</h3>
+            </div>
+            <div class="divide-y divide-white/5 p-4">
+                <a href="{{ url_for('task_center.my_tasks') }}" class="flex items-center gap-3 rounded-xl p-3 hover:bg-white/5 transition-colors">
+                    <div class="rounded-lg bg-blue-500/10 p-2">
+                        <i class="fa-solid fa-user-check text-blue-400"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-white">My Tasks</p>
+                        <p class="text-xs text-slate-500">Tasks assigned to me</p>
+                    </div>
+                </a>
+                <a href="{{ url_for('task_center.team_tasks') }}" class="flex items-center gap-3 rounded-xl p-3 hover:bg-white/5 transition-colors">
+                    <div class="rounded-lg bg-cyan-500/10 p-2">
+                        <i class="fa-solid fa-users text-cyan-400"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-white">Team Tasks</p>
+                        <p class="text-xs text-slate-500">Department tasks</p>
+                    </div>
+                </a>
+                <a href="{{ url_for('task_center.task_queue') }}" class="flex items-center gap-3 rounded-xl p-3 hover:bg-white/5 transition-colors">
+                    <div class="rounded-lg bg-purple-500/10 p-2">
+                        <i class="fa-solid fa-list text-purple-400"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-white">Task Queue</p>
+                        <p class="text-xs text-slate-500">All active tasks</p>
+                    </div>
+                </a>
+                <a href="{{ url_for('task_center.priority_board') }}" class="flex items-center gap-3 rounded-xl p-3 hover:bg-white/5 transition-colors">
+                    <div class="rounded-lg bg-orange-500/10 p-2">
+                        <i class="fa-solid fa-signal text-orange-400"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-white">Priority Board</p>
+                        <p class="text-xs text-slate-500">By priority level</p>
+                    </div>
+                </a>
+                <a href="{{ url_for('task_center.sla_view') }}" class="flex items-center gap-3 rounded-xl p-3 hover:bg-white/5 transition-colors">
+                    <div class="rounded-lg bg-teal-500/10 p-2">
+                        <i class="fa-solid fa-clock text-teal-400"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-white">SLA View</p>
+                        <p class="text-xs text-slate-500">SLA compliance</p>
+                    </div>
+                </a>
+                <a href="{{ url_for('task_center.escalations') }}" class="flex items-center gap-3 rounded-xl p-3 hover:bg-white/5 transition-colors">
+                    <div class="rounded-lg bg-amber-500/10 p-2">
+                        <i class="fa-solid fa-arrow-up text-amber-400"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-white">Escalations</p>
+                        <p class="text-xs text-slate-500">Critical & urgent</p>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts and Recent Activity Row -->
+    <div class="grid grid-cols-1 gap-8 xl:grid-cols-2">
+        <!-- Priority Distribution -->
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <h3 class="text-lg font-bold text-white">Tasks by Priority</h3>
+            <div class="mt-6 space-y-4">
+                {% for p in priority_breakdown %}
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="badge badge-{{ p.priority|lower }}">{{ p.priority }}</span>
+                        <div class="h-2 w-48 rounded-full bg-white/5">
+                            <div class="h-2 rounded-full bg-{{ 'rose' if p.priority == 'Critical' else 'orange' if p.priority == 'High' else 'yellow' if p.priority == 'Medium' else 'green' }}-500" style="width: {% if stats.total_tasks > 0 %}{{ (p.count / stats.total_tasks * 100)|round }}{% else %}0{% endif %}%"></div>
+                        </div>
+                    </div>
+                    <span class="font-bold text-white">{{ p.count }}</span>
+                </div>
+                {% else %}
+                <p class="text-sm text-slate-500">No tasks yet</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Status Distribution -->
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <h3 class="text-lg font-bold text-white">Tasks by Status</h3>
+            <div class="mt-6 space-y-4">
+                {% for s in status_breakdown %}
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <span class="badge badge-{{ s.status|replace(' ', '_')|lower }}">{{ s.status }}</span>
+                        <div class="h-2 w-48 rounded-full bg-white/5">
+                            <div class="h-2 rounded-full bg-{{ 'slate' if s.status == 'Open' else 'blue' if s.status == 'In Progress' else 'purple' if s.status == 'Review' else 'green' if s.status == 'Completed' else 'orange' }}-500" style="width: {% if stats.total_tasks > 0 %}{{ (s.count / stats.total_tasks * 100)|round }}{% else %}0{% endif %}%"></div>
+                        </div>
+                    </div>
+                    <span class="font-bold text-white">{{ s.count }}</span>
+                </div>
+                {% else %}
+                <p class="text-sm text-slate-500">No tasks yet</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Tasks Table -->
+    <div class="glass-panel rounded-3xl border border-white/5">
+        <div class="flex items-center justify-between border-b border-white/5 bg-white/[0.02] p-6">
+            <div>
+                <h3 class="text-lg font-bold text-white">Recent Tasks</h3>
+                <p class="mt-1 text-xs text-slate-500">Latest task activity</p>
+            </div>
+            <a href="{{ url_for('task_center.task_dashboard') }}" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-slate-300 hover:bg-white/10 hover:text-white">
+                View All <i class="fa-solid fa-arrow-right ml-1"></i>
+            </a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-[1000px] w-full text-left">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-800/50 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <th class="px-4 py-4">Task</th>
+                        <th class="px-4 py-4">Priority</th>
+                        <th class="px-4 py-4">Status</th>
+                        <th class="px-4 py-4">Assigned To</th>
+                        <th class="px-4 py-4">Department</th>
+                        <th class="px-4 py-4">Due Date</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/10">
+                    {% for task in recent_tasks[:10] %}
+                    <tr class="hover:bg-white/[0.02]">
+                        <td class="px-4 py-4">
+                            <p class="font-bold text-white">{{ task.task_name }}</p>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="badge badge-{{ task.priority|lower if task.priority else 'medium' }}">
+                                {{ task.priority or 'Medium' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="badge badge-{{ task.status|replace(' ', '_')|lower }}">
+                                {{ task.status or 'Open' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-300">
+                            {{ task.assigned_to_name or 'Unassigned' }}
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-300">
+                            {{ task.department_name or 'Unassigned' }}
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-300">
+                            {% if task.due_at %}{{ task.due_at[:10] }}{% else %}No due date{% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="px-4 py-12 text-center">
+                            <i class="fa-solid fa-tasks text-4xl text-slate-600/30"></i>
+                            <p class="mt-3 text-sm font-bold text-slate-500">No tasks yet</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- My Due Today -->
+    {% if my_due_today %}
+    <div class="glass-panel rounded-3xl border border-white/5">
+        <div class="border-b border-white/5 bg-white/[0.02] p-6">
+            <h3 class="text-lg font-bold text-white">My Tasks Due Today</h3>
+        </div>
+        <div class="divide-y divide-white/5">
+            {% for task in my_due_today %}
+            <div class="flex items-center justify-between p-4 hover:bg-white/[0.02]">
+                <div class="flex items-center gap-3">
+                    <div class="rounded-lg bg-cyan-500/10 p-2">
+                        <i class="fa-solid fa-calendar-day text-cyan-400"></i>
+                    </div>
+                    <div>
+                        <p class="font-bold text-white">{{ task.task_name }}</p>
+                        <p class="mt-0.5 text-xs text-slate-500">
+                            {{ task.status or 'Open' }} - {{ task.priority or 'Medium' }} priority
+                        </p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="{{ url_for('task_manager') }}?task_id={{ task.id }}" class="rounded-lg bg-brand-500/10 px-3 py-1.5 text-xs font-bold text-brand-300 hover:bg-brand-500/20">
+                        View
+                    </a>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function seedDemoData() {
+    if (!confirm('This will create sample demo tasks. Continue?')) return;
+
+    fetch('/tasks/seed-demo-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.success) {
+            alert('Demo data seeded successfully!');
+            location.reload();
+        } else {
+            alert('Error: ' + d.message);
+        }
+    })
+    .catch(e => alert('Error: ' + e));
+}
+</script>
+{% endblock %}

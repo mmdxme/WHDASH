@@ -413,6 +413,28 @@ MODULE_PERMISSIONS = {
             'audit': ['view', 'export'],
         }
     },
+    'flow': {
+        'label': 'Flow - Communication',
+        'resources': {
+            'dashboard': ['view'],
+            'chats': ['view', 'send', 'edit', 'delete'],
+            'channels': ['view', 'create', 'join', 'leave', 'manage', 'admin'],
+            'groups': ['view', 'create', 'join', 'leave', 'manage', 'admin'],
+            'messages': ['view', 'send', 'edit', 'delete', 'pin'],
+            'files': ['upload', 'download', 'delete'],
+            'calls': ['initiate', 'join', 'manage'],
+            'meetings': ['create', 'join', 'host', 'manage'],
+            'notifications': ['view', 'manage'],
+            'reminders': ['view', 'create', 'complete', 'dismiss'],
+            'saved_messages': ['view', 'save', 'unsave'],
+            'settings': ['view', 'edit'],
+            'users': ['view', 'block', 'unblock'],
+            'profile': ['view', 'edit'],
+            'status': ['view', 'set'],
+            'search': ['view'],
+            'shared_media': ['view', 'upload'],
+        }
+    },
     'api_gateway': {
         'label': 'API Gateway',
         'resources': {
@@ -1063,7 +1085,7 @@ def _create_default_roles():
         {
             'name': 'Global Admin',
             'description': 'Full system access with all permissions',
-            'permissions': [('*', '*', '*')]  # Wildcard = all permissions
+            'permissions': [('*', '*', '*'), ('flow', '*', '*')]  # Wildcard = all permissions
         },
         {
             'name': 'Asset Admin',
@@ -1235,6 +1257,16 @@ def _create_default_roles():
                 ('tasks', 'tasks', 'view'),
                 ('tasks', 'subtasks', 'view'),
                 ('tasks', 'subtasks', 'create'),
+                ('flow', 'dashboard', 'view'),
+                ('flow', 'chats', ['view', 'send']),
+                ('flow', 'channels', 'view'),
+                ('flow', 'groups', 'view'),
+                ('flow', 'messages', ['view', 'send']),
+                ('flow', 'notifications', 'view'),
+                ('flow', 'reminders', ['view', 'create']),
+                ('flow', 'saved_messages', 'view'),
+                ('flow', 'search', 'view'),
+                ('flow', 'settings', 'view'),
             ]
         },
         {
@@ -1253,6 +1285,16 @@ def _create_default_roles():
                 ('marketing', 'dashboard', 'view'),
                 ('reports', 'executive', 'view'),
                 ('reports', 'operational', 'view'),
+                ('flow', 'dashboard', 'view'),
+                ('flow', 'chats', 'view'),
+                ('flow', 'channels', 'view'),
+                ('flow', 'groups', 'view'),
+                ('flow', 'messages', 'view'),
+                ('flow', 'notifications', 'view'),
+                ('flow', 'reminders', 'view'),
+                ('flow', 'saved_messages', 'view'),
+                ('flow', 'search', 'view'),
+                ('flow', 'settings', 'view'),
             ]
         },
     ]

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">Time Logs</h1>
+            <p class="mt-1 text-sm text-slate-400">Track time spent on tasks.</p>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 gap-4 md:grid-cols-3">
+        <div class="glass-panel rounded-2xl border border-white/5 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Logs</p>
+            <h3 class="mt-2 text-3xl font-black text-white">{{ stats.total_logs }}</h3>
+        </div>
+        <div class="glass-panel rounded-2xl border border-white/5 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Hours</p>
+            <h3 class="mt-2 text-3xl font-black text-brand-400">{{ stats.total_hours }}h</h3>
+        </div>
+        <div class="glass-panel rounded-2xl border border-white/5 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Minutes</p>
+            <h3 class="mt-2 text-3xl font-black text-cyan-400">{{ stats.total_minutes }}m</h3>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-3xl border border-white/5 p-6">
+        <form method="GET" class="grid grid-cols-1 gap-4 md:grid-cols-5">
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Task</label>
+                <select name="task" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none focus:border-brand-500">
+                    <option value="all">All Tasks</option>
+                    {% for t in tasks %}
+                    <option value="{{ t.id }}" {% if filters.task == t.id|string %}selected{% endif %}>{{ t.task_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">User</label>
+                <select name="user" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none focus:border-brand-500">
+                    <option value="all">All Users</option>
+                    {% for u in task_users %}
+                    <option value="{{ u.id }}" {% if filters.user == u.id|string %}selected{% endif %}>{{ u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Date From</label>
+                <input type="date" name="date_from" value="{{ filters.date_from }}" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none focus:border-brand-500">
+            </div>
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Date To</label>
+                <input type="date" name="date_to" value="{{ filters.date_to }}" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none focus:border-brand-500">
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="flex-1 rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-brand-500">
+                    <i class="fa-solid fa-filter mr-2"></i>Filter
+                </button>
+                <a href="{{ url_for('task_center.time_logs') }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">Clear</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Time Logs Table -->
+    <div class="glass-panel rounded-3xl border border-white/5">
+        <div class="border-b border-white/5 bg-white/[0.02] p-6">
+            <h3 class="text-lg font-bold text-white">Time Entries</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-[1200px] w-full text-left">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-800/50 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <th class="px-4 py-4">Date</th>
+                        <th class="px-4 py-4">Task</th>
+                        <th class="px-4 py-4">User</th>
+                        <th class="px-4 py-4">Duration</th>
+                        <th class="px-4 py-4">Start Time</th>
+                        <th class="px-4 py-4">End Time</th>
+                        <th class="px-4 py-4">Billable</th>
+                        <th class="px-4 py-4">Description</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/10">
+                    {% for log in logs %}
+                    <tr class="hover:bg-white/[0.02]">
+                        <td class="px-4 py-4 text-sm text-slate-300">{{ log.log_date }}</td>
+                        <td class="px-4 py-4 text-sm text-white">{{ log.task_name or 'N/A' }}</td>
+                        <td class="px-4 py-4 text-sm text-slate-300">{{ log.user_name or 'Unknown' }}</td>
+                        <td class="px-4 py-4">
+                            <span class="rounded-lg bg-brand-500/10 px-2 py-1 text-xs font-bold text-brand-400">
+                                {{ log.duration_minutes }}m
+                            </span>
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-400">{{ log.start_time or '-' }}</td>
+                        <td class="px-4 py-4 text-sm text-slate-400">{{ log.end_time or '-' }}</td>
+                        <td class="px-4 py-4">
+                            {% if log.billable %}
+                            <span class="badge badge-emerald">Billable</span>
+                            {% else %}
+                            <span class="badge badge-slate">Non-billable</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-400">{{ log.description[:50] if log.description else '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="px-4 py-12 text-center">
+                            <i class="fa-solid fa-clock text-4xl text-slate-600/30"></i>
+                            <p class="mt-3 text-sm font-bold text-slate-500">No time logs found</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="flex items-center justify-center gap-2">
+        {% if page > 1 %}
+        <a href="{{ url_for('task_center.time_logs') }}?page={{ page - 1 }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-white/10">
+            <i class="fa-solid fa-chevron-left mr-1"></i>Previous
+        </a>
+        {% endif %}
+        <span class="px-4 py-2 text-sm text-slate-500">Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="{{ url_for('task_center.time_logs') }}?page={{ page + 1 }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-white/10">
+            Next<i class="fa-solid fa-chevron-right ml-1"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

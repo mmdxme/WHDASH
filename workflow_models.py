@@ -1784,7 +1784,13 @@ def get_workflow_stats(workflow_definition_id: int = None, company_id: int = Non
         params.append(company_id)
 
     result = get_one(sql, params)
-    return dict(result) if result else {}
+    if not result:
+        return {}
+    # Ensure all numeric fields default to 0 instead of None
+    for key in ('total_instances', 'completed', 'pending', 'rejected', 'escalated', 'overdue'):
+        if key in result and result[key] is None:
+            result[key] = 0
+    return result
 
 
 def get_my_work_items(user_id: int, limit: int = 50) -> List[Dict]:

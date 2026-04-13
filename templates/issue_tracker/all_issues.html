@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Issue Tracker</p>
+            <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">All Issues</h1>
+            <p class="mt-2 text-sm text-slate-400">{{ stats.total }} total issues found.</p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl border border-white/5 p-4">
+        <form method="GET" class="flex flex-wrap gap-3">
+            <input type="text" name="search" value="{{ filters.search }}" placeholder="Search issues..." 
+                   class="flex-1 min-w-[200px] rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none">
+            <select name="status" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white">
+                <option value="">All Statuses</option>
+                {% for s in all_statuses %}
+                <option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+            <select name="priority" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white">
+                <option value="">All Priorities</option>
+                {% for p in all_priorities %}
+                <option value="{{ p }}" {% if filters.priority == p %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+            <select name="category" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white">
+                <option value="">All Categories</option>
+                {% for c in all_types %}
+                <option value="{{ c }}" {% if filters.category == c %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="rounded-xl bg-brand-600 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-brand-500">
+                <i class="fa-solid fa-filter mr-1"></i>Filter
+            </button>
+            <a href="{{ url_for('issue_tracker.all_issues') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">
+                Clear
+            </a>
+        </form>
+    </div>
+
+    <!-- Issues Table -->
+    <div class="glass-panel rounded-2xl border border-white/5 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="border-b border-white/10 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">
+                        <th class="px-4 py-3">ID</th>
+                        <th class="px-4 py-3">Date</th>
+                        <th class="px-4 py-3">Issue</th>
+                        <th class="px-4 py-3">Type</th>
+                        <th class="px-4 py-3">Priority</th>
+                        <th class="px-4 py-3">Status</th>
+                        <th class="px-4 py-3">Owner</th>
+                        <th class="px-4 py-3">Department</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for issue in issues %}
+                    <tr class="hover:bg-white/[0.02] transition-colors">
+                        <td class="px-4 py-3">
+                            <a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="font-bold text-cyan-400 hover:text-cyan-300">#{{ issue.row_id }}</a>
+                        </td>
+                        <td class="px-4 py-3 text-slate-400">{{ issue.issue_date }}</td>
+                        <td class="px-4 py-3">
+                            <a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="font-medium text-white hover:text-cyan-300">{{ issue.issue }}</a>
+                        </td>
+                        <td class="px-4 py-3"><span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.type_badge }}">{{ issue.issue_type }}</span></td>
+                        <td class="px-4 py-3"><span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.priority_badge }}">{{ issue.priority }}</span></td>
+                        <td class="px-4 py-3"><span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.status_badge }}">{{ issue.status }}</span></td>
+                        <td class="px-4 py-3 text-slate-400">{{ issue.responsible_person_display }}</td>
+                        <td class="px-4 py-3 text-slate-400">{{ issue.involved_departments_display }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="px-4 py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-inbox text-4xl text-slate-600"></i>
+                            <p class="mt-3">No issues found matching your filters.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if stats.pages > 1 %}
+        <div class="flex items-center justify-between border-t border-white/10 px-4 py-3">
+            <p class="text-xs text-slate-500">Page {{ stats.page }} of {{ stats.pages }}</p>
+            <div class="flex gap-2">
+                {% if stats.page > 1 %}
+                <a href="?page={{ stats.page - 1 }}&search={{ filters.search }}&status={{ filters.status }}&priority={{ filters.priority }}&category={{ filters.category }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10">Previous</a>
+                {% endif %}
+                {% if stats.page < stats.pages %}
+                <a href="?page={{ stats.page + 1 }}&search={{ filters.search }}&status={{ filters.status }}&priority={{ filters.priority }}&category={{ filters.category }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

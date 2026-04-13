@@ -220,6 +220,27 @@ QUALITY_DEFAULT_SEVERITY = 'MINOR'
 
 
 # =============================================================================
+# FLOW PUSH NOTIFICATION SETTINGS (WebPush/VAPID)
+# =============================================================================
+
+# VAPID Keys for Web Push Notifications
+# Generate new keys using:
+#   python -c "from webpush import vapid; v = vapid.VAPID(); print(v.public_key, v.private_key)"
+# Or use the generate_vapid_keys.py script
+
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEY-hwQ6_Hdk7VJ4fTNt1P1S0qX63wxwwtrfbnfPDPGwpckcjeTF337se9o6Ncgn5lp6rHPSzoJq_rwDUAqlI_oQ')
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgIrq9m4IxBGkkkOX315urB7sbbkE7_GIvRGD0csfA6hehRANCAARj6HBDr8d2TtUnh9M23U_VLSpfrfDHDC2t9ud88M8bClyRyN5MXffux72jo1yCfmWnqsc9LOgmr-vANQCqUj-h')
+
+# VAPID subject (mailto or URL for emergency contact)
+VAPID_SUBJECT = os.environ.get('VAPID_SUBJECT', 'mailto:notifications@example.com')
+
+# Flow notification settings
+FLOW_PUSH_ENABLED = True
+FLOW_NOTIFICATION_SOUND_ENABLED = True
+FLOW_NOTIFICATION_VIBRATE = True
+
+
+# =============================================================================
 # EXPORT CONFIGURATION HELPERS
 # =============================================================================
 

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">Team Tasks</h1>
+            <p class="mt-1 text-sm text-slate-400">Tasks for your team and department.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="{{ url_for('task_center.task_dashboard') }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                <i class="fa-solid fa-arrow-left mr-2"></i>Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Workload Summary -->
+    {% if workload %}
+    <div class="glass-panel rounded-3xl border border-white/5 p-6">
+        <h3 class="text-lg font-bold text-white">Team Workload</h3>
+        <div class="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6">
+            {% for w in workload %}
+            <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+                <p class="text-xs font-bold text-white">{{ w.username or 'Unassigned' }}</p>
+                <p class="mt-2 text-2xl font-black text-brand-400">{{ w.task_count }}</p>
+                <p class="mt-1 text-[10px] uppercase tracking-widest text-slate-500">
+                    {% if w.critical_count > 0 %}{{ w.critical_count }} critical{% endif %}
+                </p>
+                {% if w.overdue_count > 0 %}
+                <p class="mt-1 text-[10px] uppercase tracking-widest text-rose-400">{{ w.overdue_count }} overdue</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-3xl border border-white/5 p-6">
+        <form method="GET" class="grid grid-cols-1 gap-4 md:grid-cols-5">
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Department</label>
+                <select name="department" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none focus:border-brand-500">
+                    <option value="all">All Departments</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}" {% if filters.department == dept.id|string %}selected{% endif %}>{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                <select name="status" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none focus:border-brand-500">
+                    <option value="all">All Statuses</option>
+                    <option value="Open" {% if filters.status == 'Open' %}selected{% endif %}>Open</option>
+                    <option value="In Progress" {% if filters.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                    <option value="Review" {% if filters.status == 'Review' %}selected{% endif %}>Review</option>
+                </select>
+            </div>
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
+                <select name="priority" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none focus:border-brand-500">
+                    <option value="all">All Priorities</option>
+                    <option value="Critical" {% if filters.priority == 'Critical' %}selected{% endif %}>Critical</option>
+                    <option value="High" {% if filters.priority == 'High' %}selected{% endif %}>High</option>
+                    <option value="Medium" {% if filters.priority == 'Medium' %}selected{% endif %}>Medium</option>
+                    <option value="Low" {% if filters.priority == 'Low' %}selected{% endif %}>Low</option>
+                </select>
+            </div>
+            <div class="col-span-2 flex items-end gap-2">
+                <button type="submit" class="flex-1 rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-brand-500">
+                    <i class="fa-solid fa-filter mr-2"></i>Filter
+                </button>
+                <a href="{{ url_for('task_center.team_tasks') }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tasks Table -->
+    <div class="glass-panel rounded-3xl border border-white/5">
+        <div class="border-b border-white/5 bg-white/[0.02] p-6">
+            <h3 class="text-lg font-bold text-white">Team Tasks</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-[1200px] w-full text-left">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-800/50 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <th class="px-4 py-4">Task</th>
+                        <th class="px-4 py-4">Assigned To</th>
+                        <th class="px-4 py-4">Priority</th>
+                        <th class="px-4 py-4">Status</th>
+                        <th class="px-4 py-4">Progress</th>
+                        <th class="px-4 py-4">Department</th>
+                        <th class="px-4 py-4">Due Date</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/10">
+                    {% for task in tasks %}
+                    <tr class="hover:bg-white/[0.02]">
+                        <td class="px-4 py-4">
+                            <p class="font-bold text-white">{{ task.task_name }}</p>
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-300">
+                            {{ task.assigned_to_name or 'Unassigned' }}
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="badge badge-{{ task.priority|lower if task.priority else 'medium' }}">
+                                {{ task.priority or 'Medium' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="badge badge-{{ task.status|replace(' ', '_')|lower }}">
+                                {{ task.status or 'Open' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="flex items-center gap-2">
+                                <div class="h-2 w-20 rounded-full bg-white/10">
+                                    <div class="h-2 rounded-full bg-brand-500" style="width: {{ task.progress or 0 }}%"></div>
+                                </div>
+                                <span class="text-xs text-slate-400">{{ task.progress or 0 }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-300">
+                            {{ task.department_name or 'Unassigned' }}
+                        </td>
+                        <td class="px-4 py-4 text-sm {% if task.due_at and task.due_at < now.isoformat() and task.status not in ['Completed', 'Canceled'] %}text-rose-400{% else %}text-slate-300{% endif %}">
+                            {% if task.due_at %}{{ task.due_at[:10] }}{% else %}No due date{% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-4 py-12 text-center">
+                            <i class="fa-solid fa-users text-4xl text-slate-600/30"></i>
+                            <p class="mt-3 text-sm font-bold text-slate-500">No team tasks found</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="flex items-center justify-center gap-2">
+        {% if page > 1 %}
+        <a href="{{ url_for('task_center.team_tasks') }}?page={{ page - 1 }}&department={{ filters.department }}&status={{ filters.status }}&priority={{ filters.priority }}"
+           class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-white/10">
+            <i class="fa-solid fa-chevron-left mr-1"></i>Previous
+        </a>
+        {% endif %}
+        <span class="px-4 py-2 text-sm text-slate-500">Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="{{ url_for('task_center.team_tasks') }}?page={{ page + 1 }}&department={{ filters.department }}&status={{ filters.status }}&priority={{ filters.priority }}"
+           class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-white/10">
+            Next<i class="fa-solid fa-chevron-right ml-1"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

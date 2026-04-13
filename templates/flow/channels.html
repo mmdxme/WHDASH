@@ -1,0 +1,206 @@
+{% extends "flow/index.html" %}
+
+{% block title %}Channels - Flow{% endblock %}
+
+{% block sidebar %}{% endblock %}
+
+{% block main_content %}
+<main class="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900">
+    <header class="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-4 flex-shrink-0">
+        <div class="flex items-center gap-3">
+            <a href="/flow/" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+                <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+            </a>
+            <div>
+                <h2 class="font-semibold text-slate-800 dark:text-white">Channels</h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400">{{ channels|length if channels else 0 }} channels</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <button onclick="showJoinByCodeModal()" class="inline-flex items-center gap-2 px-3 py-2 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/50 transition-colors text-sm font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                </svg>
+                Join by Code
+            </button>
+            <a href="/flow/channels/create" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+                Create Channel
+            </a>
+        </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-4">
+        {% if categories %}
+            {% for category, cat_channels in categories.items() %}
+            <div class="mb-8">
+                <h3 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">{{ category }}</h3>
+                <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                    {% for channel in cat_channels %}
+                    <a href="/flow/channels/{{ channel.channel_id if channel.channel_id else channel.id }}"
+                       class="bg-white dark:bg-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow border border-slate-200 dark:border-slate-700">
+                        <div class="flex items-start gap-3">
+                            {% if channel.avatar_url %}
+                            <img src="{{ channel.avatar_url }}" alt="{{ channel.name }}" class="w-12 h-12 rounded-xl object-cover flex-shrink-0">
+                            {% else %}
+                            <img src="{{ url_for('static', filename='uploads/avatars/avatar_channel_green.png') }}" alt="{{ channel.name }}" class="w-12 h-12 rounded-xl object-cover flex-shrink-0">
+                            {% endif %}
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                    <h4 class="font-semibold text-slate-800 dark:text-white truncate">{{ channel.name }}</h4>
+                                    {% if channel.channel_type == 'private' %}
+                                    <span class="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-xs rounded-full">🔒 Private</span>
+                                    {% else %}
+                                    <span class="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs rounded-full font-mono">/ch/{{ channel.channel_id }}</span>
+                                    {% endif %}
+                                </div>
+                                {% if channel.description %}
+                                <p class="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{{ channel.description }}</p>
+                                {% endif %}
+                                <div class="flex items-center gap-4 mt-3 text-xs text-slate-400">
+                                    <span class="flex items-center gap-1">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                        </svg>
+                                        {{ channel.member_count }} members
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        {% elif channels %}
+            <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {% for channel in channels %}
+                <a href="/flow/channels/{{ channel.channel_id if channel.channel_id else channel.id }}"
+                   class="bg-white dark:bg-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow border border-slate-200 dark:border-slate-700">
+                    <div class="flex items-start gap-3">
+                        {% if channel.avatar_url %}
+                        <img src="{{ channel.avatar_url }}" alt="{{ channel.name }}" class="w-12 h-12 rounded-xl object-cover flex-shrink-0">
+                        {% else %}
+                        <img src="{{ url_for('static', filename='uploads/avatars/avatar_channel_green.png') }}" alt="{{ channel.name }}" class="w-12 h-12 rounded-xl object-cover flex-shrink-0">
+                        {% endif %}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <h4 class="font-semibold text-slate-800 dark:text-white truncate">{{ channel.name }}</h4>
+                                {% if channel.channel_type == 'private' %}
+                                <span class="px-2 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-xs rounded-full">🔒 Private</span>
+                                {% else %}
+                                <span class="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs rounded-full font-mono">/ch/{{ channel.channel_id }}</span>
+                                {% endif %}
+                            </div>
+                            {% if channel.description %}
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{{ channel.description }}</p>
+                            {% endif %}
+                            <p class="text-xs text-slate-400 mt-2">{{ channel.member_count }} members</p>
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="flex items-center justify-center h-full">
+                <div class="text-center">
+                    <div class="w-20 h-20 mx-auto mb-4 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
+                        <svg class="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                        </svg>
+                    </div>
+                    <h3 class="font-semibold text-slate-700 dark:text-slate-300 mb-2">No channels yet</h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Create your first channel to start collaborating</p>
+                    <a href="/flow/channels/create" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Create Channel
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</main>
+
+<!-- Join by Code Modal -->
+<div id="join-code-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeJoinByCodeModal()"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-6">
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 mx-auto mb-4 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center">
+                    <svg class="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
+                    </svg>
+                </div>
+                <h3 class="font-semibold text-slate-800 dark:text-white text-lg mb-2">Join Private Channel</h3>
+                <p class="text-sm text-slate-500 dark:text-slate-400">Enter the invite code shared by the channel admin</p>
+            </div>
+            <div class="space-y-4">
+                <input type="text" id="join-code-input" placeholder="Enter 8-character code"
+                       class="w-full px-4 py-3 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-center text-lg font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500 uppercase"
+                       maxlength="8">
+                <button onclick="joinByCode()" class="w-full px-4 py-3 bg-amber-500 text-white rounded-xl font-medium hover:bg-amber-600 transition-colors">
+                    Join Channel
+                </button>
+                <button onclick="closeJoinByCodeModal()" class="w-full px-4 py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    function showJoinByCodeModal() {
+        document.getElementById('join-code-modal').classList.remove('hidden');
+        document.getElementById('join-code-input').focus();
+    }
+
+    function closeJoinByCodeModal() {
+        document.getElementById('join-code-modal').classList.add('hidden');
+        document.getElementById('join-code-input').value = '';
+    }
+
+    function joinByCode() {
+        const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+        if (!code) {
+            alert('Please enter an invite code');
+            return;
+        }
+
+        fetch('/flow/api/channels/join-by-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = `/flow/channels/${data.channel_id}`;
+            } else {
+                alert(data.error || 'Failed to join channel. Please check the code and try again.');
+            }
+        })
+        .catch(err => {
+            alert('Failed to join channel: ' + err.message);
+        });
+    }
+
+    // Handle Enter key in join code input
+    document.getElementById('join-code-input').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            joinByCode();
+        }
+    });
+</script>
+{% endblock %}

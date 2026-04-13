@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .priority-critical { color: #ef4444; }
+    .priority-high { color: #f97316; }
+    .priority-medium { color: #eab308; }
+    .priority-low { color: #22c55e; }
+</style>
+
+<div class="space-y-6 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white tracking-tight">My Tasks</h1>
+            <p class="mt-1 text-sm text-slate-400">Tasks assigned to you. Stay on top of your workload.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="{{ url_for('task_center.task_dashboard') }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                <i class="fa-solid fa-arrow-left mr-2"></i>Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div class="glass-panel rounded-2xl border border-white/5 p-4">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total</p>
+            <h3 class="mt-2 text-2xl font-black text-white">{{ stats.total }}</h3>
+        </div>
+        <div class="glass-panel rounded-2xl border border-white/5 p-4">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Overdue</p>
+            <h3 class="mt-2 text-2xl font-black text-rose-400">{{ stats.overdue }}</h3>
+        </div>
+        <div class="glass-panel rounded-2xl border border-white/5 p-4">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Due Today</p>
+            <h3 class="mt-2 text-2xl font-black text-cyan-400">{{ stats.due_today }}</h3>
+        </div>
+        <div class="glass-panel rounded-2xl border border-white/5 p-4">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Upcoming</p>
+            <h3 class="mt-2 text-2xl font-black text-emerald-400">{{ stats.upcoming }}</h3>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-3xl border border-white/5 p-6">
+        <form method="GET" class="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Search</label>
+                <input type="text" name="q" value="{{ filters.q }}" placeholder="Search tasks..."
+                       class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none focus:border-brand-500">
+            </div>
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Status</label>
+                <select name="status" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none focus:border-brand-500">
+                    <option value="all">All Statuses</option>
+                    <option value="Open" {% if filters.status == 'Open' %}selected{% endif %}>Open</option>
+                    <option value="In Progress" {% if filters.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                    <option value="Review" {% if filters.status == 'Review' %}selected{% endif %}>Review</option>
+                </select>
+            </div>
+            <div>
+                <label class="mb-1 block text-[10px] font-black uppercase tracking-widest text-slate-500">Priority</label>
+                <select name="priority" class="w-full rounded-xl border border-white/10 bg-slate-900/70 px-4 py-3 text-sm text-white outline-none focus:border-brand-500">
+                    <option value="all">All Priorities</option>
+                    <option value="Critical" {% if filters.priority == 'Critical' %}selected{% endif %}>Critical</option>
+                    <option value="High" {% if filters.priority == 'High' %}selected{% endif %}>High</option>
+                    <option value="Medium" {% if filters.priority == 'Medium' %}selected{% endif %}>Medium</option>
+                    <option value="Low" {% if filters.priority == 'Low' %}selected{% endif %}>Low</option>
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="flex-1 rounded-xl bg-brand-600 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-white hover:bg-brand-500">
+                    <i class="fa-solid fa-filter mr-2"></i>Filter
+                </button>
+                <a href="{{ url_for('task_center.my_tasks') }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Tasks Table -->
+    <div class="glass-panel rounded-3xl border border-white/5">
+        <div class="border-b border-white/5 bg-white/[0.02] p-6">
+            <h3 class="text-lg font-bold text-white">My Tasks</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="min-w-[1200px] w-full text-left">
+                <thead>
+                    <tr class="border-b border-white/5 bg-slate-800/50 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">
+                        <th class="px-4 py-4">Task</th>
+                        <th class="px-4 py-4">Priority</th>
+                        <th class="px-4 py-4">Status</th>
+                        <th class="px-4 py-4">Progress</th>
+                        <th class="px-4 py-4">Due Date</th>
+                        <th class="px-4 py-4">Department</th>
+                        <th class="px-4 py-4 w-32 text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5 bg-slate-900/10">
+                    {% for task in tasks %}
+                    <tr class="hover:bg-white/[0.02]">
+                        <td class="px-4 py-4">
+                            <p class="font-bold text-white">{{ task.task_name }}</p>
+                            <p class="mt-1 text-xs text-slate-500">{{ task.description[:80] if task.description else '' }}</p>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="badge badge-{{ task.priority|lower if task.priority else 'medium' }}">
+                                {{ task.priority or 'Medium' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <span class="badge badge-{{ task.status|replace(' ', '_')|lower }}">
+                                {{ task.status or 'Open' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4">
+                            <div class="flex items-center gap-2">
+                                <div class="h-2 w-20 rounded-full bg-white/10">
+                                    <div class="h-2 rounded-full bg-brand-500" style="width: {{ task.progress or 0 }}%"></div>
+                                </div>
+                                <span class="text-xs text-slate-400">{{ task.progress or 0 }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-sm {% if task.due_at and task.due_at < now.isoformat() and task.status not in ['Completed', 'Canceled'] %}text-rose-400{% else %}text-slate-300{% endif %}">
+                            {% if task.due_at %}{{ task.due_at[:16].replace('T', ' ') }}{% else %}No due date{% endif %}
+                        </td>
+                        <td class="px-4 py-4 text-sm text-slate-300">
+                            {{ task.department_name or 'Unassigned' }}
+                        </td>
+                        <td class="px-4 py-4 text-center">
+                            <a href="{{ url_for('task_manager') }}?task_id={{ task.id }}" class="rounded-lg bg-blue-500/10 px-2 py-1 text-xs font-bold text-blue-400 hover:bg-blue-500/20">
+                                <i class="fa-solid fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-4 py-12 text-center">
+                            <i class="fa-solid fa-user-check text-4xl text-emerald-400/30"></i>
+                            <p class="mt-3 text-sm font-bold text-slate-500">No tasks assigned to you</p>
+                            <p class="mt-1 text-xs text-slate-600">Tasks you create or are assigned to you will appear here</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="flex items-center justify-center gap-2">
+        {% if page > 1 %}
+        <a href="{{ url_for('task_center.my_tasks') }}?page={{ page - 1 }}&status={{ filters.status }}&priority={{ filters.priority }}&q={{ filters.q }}"
+           class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-white/10">
+            <i class="fa-solid fa-chevron-left mr-1"></i>Previous
+        </a>
+        {% endif %}
+        <span class="px-4 py-2 text-sm text-slate-500">Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="{{ url_for('task_center.my_tasks') }}?page={{ page + 1 }}&status={{ filters.status }}&priority={{ filters.priority }}&q={{ filters.q }}"
+           class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-white/10">
+            Next<i class="fa-solid fa-chevron-right ml-1"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

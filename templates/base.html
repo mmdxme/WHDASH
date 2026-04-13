@@ -171,6 +171,31 @@
             color: var(--theme-text-primary);
         }
 
+        /* Pinned section styles */
+        .sidebar-section.is-pinned {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: var(--theme-sidebar-bg);
+        }
+
+        .sidebar-section.is-pinned .pin-btn {
+            color: var(--theme-primary);
+        }
+
+        .sidebar-section.is-pinned .pin-btn:hover {
+            background: var(--theme-primary-light);
+        }
+
+        .pin-btn.is-active {
+            color: var(--theme-primary);
+            transform: rotate(45deg);
+        }
+
+        .pin-btn.is-active i::before {
+            content: "\f08d";
+        }
+
         .sidebar-submenu {
             position: relative;
             margin: 0.15rem 0 0.05rem 0.75rem;
@@ -307,28 +332,49 @@
             color: var(--theme-primary-fg) !important;
         }
         /* Advanced Navigation Lifecycle Hooks */
-        #sidebar { 
-            width: 288px; 
-            transform: translateX(-100%); 
-            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        #sidebar {
+            width: 288px;
+            transform: translateX(-100%);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.4s;
             z-index: 50;
+            visibility: hidden;
         }
-        
+
         /* State 1: Expanded (Desktop & Mobile) */
-        #sidebar.expanded { transform: translateX(0); visibility: visible; }
-        
-        /* State 2: Compressed Workspace (Optional - but centering on absolute hidden now) */
-        .main-content { 
-            margin-left: 0; 
+        #sidebar.expanded {
+            transform: translateX(0);
+            visibility: visible;
+        }
+
+        /* Mobile: sidebar always fixed and visible when expanded */
+        @media (max-width: 1024px) {
+            #sidebar {
+                transform: translateX(-100%);
+            }
+            #sidebar.expanded {
+                transform: translateX(0);
+                visibility: visible;
+            }
+            /* Prevent body scroll when sidebar is open on mobile */
+            body.sidebar-open {
+                overflow: hidden;
+            }
+        }
+
+        /* State 2: Compressed Workspace */
+        .main-content {
+            margin-left: 0;
             transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        
-        body.sidebar-expanded .main-content { 
-            margin-left: 288px; 
+
+        body.sidebar-expanded .main-content {
+            margin-left: 288px;
         }
 
         @media (max-width: 1024px) {
-            body.sidebar-expanded .main-content { margin-left: 0; }
+            body.sidebar-expanded .main-content {
+                margin-left: 0;
+            }
         }
 
         body.pref-density-compact table th,
@@ -545,14 +591,6 @@
         /* Topbar hamburger icon rotation fix */
         html[dir="rtl"] #sidebar-toggle i {
             transform: scaleX(-1);
-        }
-
-        /* Prevent flash of unstyled content */
-        #sidebar {
-            visibility: hidden;
-        }
-        #sidebar.initialized {
-            visibility: visible;
         }
 
         /* ════════════════════════════════════════════════════════════
@@ -3830,6 +3868,9 @@
                 document.querySelectorAll('.sidebar-submenu').forEach(menu => {
                     state[menu.id] = !menu.classList.contains('hidden');
                 });
+                document.querySelectorAll('.sidebar-section').forEach(section => {
+                    state[section.id + '_pinned'] = section.classList.contains('is-pinned');
+                });
                 sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
             }
 
@@ -3867,6 +3908,26 @@
                 saveSidebarState();
             };
 
+            // ── Pin/Unpin Menu Sections ──
+            window.togglePin = function(sectionId) {
+                const section = document.getElementById(sectionId);
+                if (!section) return;
+                const pinBtn = section.querySelector('.pin-btn');
+                const isPinned = section.classList.toggle('is-pinned');
+                if (pinBtn) pinBtn.classList.toggle('is-active', isPinned);
+                saveSidebarState();
+            };
+
+            // Restore pinned state on load
+            document.querySelectorAll('.sidebar-section').forEach(section => {
+                const sectionId = section.id;
+                if (savedOpen[sectionId + '_pinned']) {
+                    section.classList.add('is-pinned');
+                    const pinBtn = section.querySelector('.pin-btn');
+                    if (pinBtn) pinBtn.classList.add('is-active');
+                }
+            });
+
             // Global Menu Search with debounce
             const globalSearch = document.getElementById('global-search');
             if (globalSearch) {
@@ -3876,10 +3937,33 @@
                     debounceTimer = setTimeout(() => {
                         const q = e.target.value.toLowerCase().trim();
                         const links = document.querySelectorAll('nav a');
+                        const buttons = document.querySelectorAll('nav button');
+                        
+                        // Reset all links and buttons first
                         links.forEach(link => {
-                            const text = link.textContent.toLowerCase();
-                            link.style.display = text.includes(q) ? '' : 'none';
+                            if (q === '') {
+                                link.style.display = '';
+                            }
                         });
+                        
+                        // Then filter based on query
+                        if (q !== '') {
+                            links.forEach(link => {
+                                const text = link.textContent.toLowerCase();
+                                link.style.display = text.includes(q) ? '' : 'none';
+                            });
+                            // Also show parent sections of matching links
+                            document.querySelectorAll('.sidebar-submenu').forEach(submenu => {
+                                submenu.classList.remove('hidden');
+                            });
+                            document.querySelectorAll('.sidebar-group-toggle').forEach(btn => {
+                                btn.classList.add('is-open');
+                                btn.setAttribute('aria-expanded', 'true');
+                            });
+                            document.querySelectorAll('.sidebar-chevron').forEach(chev => {
+                                chev.classList.add('rotate-180');
+                            });
+                        }
                     }, 150);
                 });
             }

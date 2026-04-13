@@ -1,0 +1,91 @@
+{% extends "flow/index.html" %}
+
+{% block title %}Reminders - Flow{% endblock %}
+
+{% block sidebar %}{% endblock %}
+
+{% block main_content %}
+<main class="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900">
+    <header class="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center px-4 flex-shrink-0">
+        <div class="flex items-center gap-3">
+            <a href="/flow/" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+                <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                </svg>
+            </a>
+            <div>
+                <h2 class="font-semibold text-slate-800 dark:text-white">Reminders</h2>
+            </div>
+        </div>
+    </header>
+    
+    <div class="flex-1 overflow-y-auto p-4">
+        {% if reminders %}
+            <div class="space-y-3 max-w-2xl mx-auto">
+                {% for reminder in reminders %}
+                <div class="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700">
+                    <div class="flex items-start gap-3">
+                        <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+                            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-medium text-slate-800 dark:text-white">{{ reminder.reminder_text or 'Reminder' }}</p>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">{{ reminder.content[:100] if reminder.content else '' }}</p>
+                            <div class="flex items-center gap-4 mt-2">
+                                {% if reminder.conversation_name %}
+                                <span class="text-xs text-blue-500"># {{ reminder.conversation_name }}</span>
+                                {% endif %}
+                                <span class="text-xs text-slate-400">{{ format_time(reminder.remind_at) }}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="completeReminder({{ reminder.id }})" class="p-2 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg text-green-500" title="Mark complete">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                </svg>
+                            </button>
+                            <button onclick="dismissReminder({{ reminder.id }})" class="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-red-500" title="Dismiss">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="flex items-center justify-center h-full">
+                <div class="text-center">
+                    <div class="w-20 h-20 mx-auto mb-4 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
+                        <svg class="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <h3 class="font-semibold text-slate-700 dark:text-slate-300 mb-2">No active reminders</h3>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Set reminders on messages to get notified later</p>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    function completeReminder(id) {
+        fetch(`/flow/api/reminders/${id}/complete`, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => { if (data.success) location.reload(); });
+    }
+    
+    function dismissReminder(id) {
+        fetch(`/flow/api/reminders/${id}/dismiss`, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => { if (data.success) location.reload(); });
+    }
+</script>
+{% endblock %}

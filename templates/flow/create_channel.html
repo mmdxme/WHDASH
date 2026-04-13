@@ -1,0 +1,280 @@
+{% extends "flow/index.html" %}
+
+{% block title %}Create Channel - Flow{% endblock %}
+
+{% block sidebar %}{% endblock %}
+
+{% block main_content %}
+<main class="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900">
+    <header class="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center px-4 flex-shrink-0">
+        <a href="/flow/channels" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg mr-2">
+            <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </a>
+        <h2 class="font-semibold text-slate-800 dark:text-white">Create Channel</h2>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-4">
+        <div class="max-w-xl mx-auto">
+            <form onsubmit="createChannel(event)" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Channel Name</label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">#</span>
+                        <input type="text" id="channel-name" required
+                               class="w-full pl-8 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="channel-name">
+                    </div>
+                </div>
+
+                <!-- Channel ID Section (for Public channels) -->
+                <div id="channel-id-section">
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        Channel ID <span class="text-slate-400">(URL address)</span>
+                    </label>
+                    <div class="relative">
+                        <span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">/flow/channels/</span>
+                        <input type="text" id="channel-id"
+                               class="w-full pl-36 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               placeholder="e.g., engineering-team">
+                    </div>
+                    <div class="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <h4 class="text-xs font-semibold text-blue-700 dark:text-blue-400 mb-2">💡 Channel ID Guide</h4>
+                        <ul class="text-xs text-blue-600 dark:text-blue-300 space-y-1">
+                            <li>• Minimum 3 characters</li>
+                            <li>• Use lowercase letters (a-z), numbers (0-9), hyphens (-), or dots (.)</li>
+                            <li>• Must start with a letter or number</li>
+                            <li>• Example: <code class="bg-blue-100 dark:bg-blue-800 px-1 rounded">engineering</code>, <code class="bg-blue-100 dark:bg-blue-800 px-1 rounded">sales.team</code>, <code class="bg-blue-100 dark:bg-blue-800 px-1 rounded">hr-people</code></li>
+                            <li>• Cannot be changed after creation</li>
+                        </ul>
+                    </div>
+                    <p id="channel-id-status" class="text-xs mt-2"></p>
+                </div>
+
+                <!-- Invite Code Section (for Private channels) -->
+                <div id="invite-code-section" class="hidden">
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        Invite Code <span class="text-slate-400">(Auto-generated)</span>
+                    </label>
+                    <div class="relative">
+                        <input type="text" id="invite-code-display" readonly
+                               class="w-full pl-4 pr-4 py-3 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-500 dark:text-slate-400"
+                               placeholder="Will be auto-generated">
+                        <button type="button" onclick="regenerateInviteCode()"
+                                class="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-700">
+                            🔄 Regenerate
+                        </button>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-2">Share this code with others to invite them to your private channel</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Description <span class="text-slate-400">(optional)</span></label>
+                    <textarea id="channel-description" rows="3"
+                             class="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                             placeholder="What's this channel about?"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Category</label>
+                    <select id="channel-category"
+                            class="w-full px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="">No category</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.name }}">{{ cat.name }}</option>
+                        {% endfor %}
+                        <option value="Company">Company</option>
+                        <option value="Departments">Departments</option>
+                        <option value="Operations">Operations</option>
+                        <option value="Projects">Projects</option>
+                        <option value="Social">Social</option>
+                        <option value="Leadership">Leadership</option>
+                        <option value="Planning">Planning</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Visibility</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center gap-3 p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-blue-500 transition-colors">
+                            <input type="radio" name="channel-type" value="public" checked
+                                   class="w-4 h-4 text-blue-500 focus:ring-blue-500"
+                                   onchange="toggleChannelType()">
+                            <div>
+                                <p class="font-medium text-slate-800 dark:text-white">Public</p>
+                                <p class="text-sm text-slate-500">Anyone in the organization can view and join via Channel ID</p>
+                            </div>
+                        </label>
+                        <label class="flex items-center gap-3 p-4 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl cursor-pointer hover:border-blue-500 transition-colors">
+                            <input type="radio" name="channel-type" value="private"
+                                   class="w-4 h-4 text-blue-500 focus:ring-blue-500"
+                                   onchange="toggleChannelType()">
+                            <div>
+                                <p class="font-medium text-slate-800 dark:text-white">Private</p>
+                                <p class="text-sm text-slate-500">Only invited members can join via Invite Code</p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-4">
+                    <a href="/flow/channels" class="px-6 py-3 text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white font-medium">
+                        Cancel
+                    </a>
+                    <button type="submit" class="px-6 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 font-medium transition-colors">
+                        Create Channel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // Channel ID validation
+    const channelIdInput = document.getElementById('channel-id');
+    const channelIdStatus = document.getElementById('channel-id-status');
+    const channelIdSection = document.getElementById('channel-id-section');
+    const inviteCodeSection = document.getElementById('invite-code-section');
+    const inviteCodeDisplay = document.getElementById('invite-code-display');
+
+    // Auto-generate channel ID from name
+    document.getElementById('channel-name').addEventListener('input', function(e) {
+        const name = e.target.value.trim();
+        const channelIdField = document.getElementById('channel-id');
+        if (name && !channelIdField.value) {
+            // Auto-generate from name if field is empty
+            channelIdField.value = name.toLowerCase()
+                .replace(/\s+/g, '-')
+                .replace(/[^a-z0-9-.]/g, '')
+                .substring(0, 50);
+            validateChannelId();
+        }
+    });
+
+    // Validate channel ID on blur
+    channelIdInput.addEventListener('blur', validateChannelId);
+    channelIdInput.addEventListener('input', validateChannelId);
+
+    function validateChannelId() {
+        const id = channelIdInput.value.trim().toLowerCase();
+
+        if (!id) {
+            channelIdStatus.textContent = '';
+            channelIdStatus.className = 'text-xs mt-2';
+            return false;
+        }
+
+        // Basic validation
+        if (id.length < 3) {
+            channelIdStatus.textContent = '❌ Channel ID must be at least 3 characters';
+            channelIdStatus.className = 'text-xs mt-2 text-red-500';
+            return false;
+        }
+
+        if (!/^[a-z0-9][a-z0-9.-]*$/.test(id)) {
+            channelIdStatus.textContent = '❌ Only lowercase letters, numbers, hyphens (-), and dots (.) allowed';
+            channelIdStatus.className = 'text-xs mt-2 text-red-500';
+            return false;
+        }
+
+        // Check availability via API
+        fetch(`/flow/api/channels/check-id?id=${encodeURIComponent(id)}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.available) {
+                    channelIdStatus.textContent = '✅ Channel ID is available';
+                    channelIdStatus.className = 'text-xs mt-2 text-green-500';
+                } else {
+                    channelIdStatus.textContent = '❌ Channel ID is already taken';
+                    channelIdStatus.className = 'text-xs mt-2 text-red-500';
+                }
+            })
+            .catch(() => {
+                // If check fails, assume it's OK
+                channelIdStatus.textContent = '';
+            });
+
+        return true;
+    }
+
+    // Toggle between public (channel ID) and private (invite code)
+    function toggleChannelType() {
+        const channelType = document.querySelector('input[name="channel-type"]:checked').value;
+
+        if (channelType === 'public') {
+            channelIdSection.classList.remove('hidden');
+            inviteCodeSection.classList.add('hidden');
+        } else {
+            channelIdSection.classList.add('hidden');
+            inviteCodeSection.classList.remove('hidden');
+            // Generate invite code for private channel
+            generateInviteCode();
+        }
+    }
+
+    function generateInviteCode() {
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let code = '';
+        for (let i = 0; i < 8; i++) {
+            code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        inviteCodeDisplay.value = code;
+    }
+
+    function regenerateInviteCode() {
+        generateInviteCode();
+    }
+
+    // Initialize
+    toggleChannelType();
+
+    function createChannel(event) {
+        event.preventDefault();
+
+        const name = document.getElementById('channel-name').value.trim();
+        const channelId = document.getElementById('channel-id').value.trim();
+        const description = document.getElementById('channel-description').value.trim();
+        const category = document.getElementById('channel-category').value;
+        const channelType = document.querySelector('input[name="channel-type"]:checked').value;
+        const inviteCode = channelType === 'private' ? document.getElementById('invite-code-display').value : null;
+
+        // Validate channel ID for public channels
+        if (channelType === 'public') {
+            if (channelId.length < 3) {
+                alert('Channel ID must be at least 3 characters');
+                return;
+            }
+            if (!/^[a-z0-9][a-z0-9.-]*$/.test(channelId)) {
+                alert('Invalid Channel ID format');
+                return;
+            }
+        }
+
+        fetch('/flow/api/channels/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name,
+                channel_id: channelId || null,
+                description,
+                category,
+                channel_type: channelType,
+                invite_code: inviteCode
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = `/flow/channels/${data.channel_db_id}`;
+            } else {
+                alert(data.error || 'Failed to create channel');
+            }
+        });
+    }
+</script>
+{% endblock %}

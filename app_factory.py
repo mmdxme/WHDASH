@@ -244,6 +244,43 @@ def register_context_processors(app: Flask):
             session['csrf_token'] = secrets.token_hex(32)
         return {'csrf_token': session.get('csrf_token')}
 
+    @app.context_processor
+    def inject_format_time():
+        """Inject format_time function for human-readable timestamps."""
+        from datetime import datetime
+        def format_time(value):
+            if value is None:
+                return ''
+            if isinstance(value, str):
+                try:
+                    dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                except (ValueError, AttributeError):
+                    return value
+            elif isinstance(value, datetime):
+                dt = value
+            else:
+                return str(value)
+
+            now = datetime.now()
+            diff = now - dt
+            total_seconds = diff.total_seconds()
+
+            if total_seconds < 0:
+                return dt.strftime('%H:%M')
+            if total_seconds < 60:
+                return 'now'
+            if total_seconds < 3600:
+                minutes = int(total_seconds / 60)
+                return f'{minutes}m'
+            if total_seconds < 86400:
+                hours = int(total_seconds / 3600)
+                return f'{hours}h'
+            if total_seconds < 604800:
+                days = int(total_seconds / 86400)
+                return f'{days}d'
+            return dt.strftime('%Y-%m-%d')
+        return {'format_time': format_time}
+
 
 # =============================================================================
 # ERROR HANDLERS

@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Issue Tracker</p>
+            <h1 class="mt-2 text-2xl font-extrabold tracking-tight text-white">Issue #{{ issue.row_id }}</h1>
+            <p class="mt-1 text-sm text-slate-400">{{ issue.issue }}</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{{ url_for('issue_tracker.all_issues') }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">
+                <i class="fa-solid fa-arrow-left mr-1"></i>Back
+            </a>
+            {% if can_edit %}
+            <button onclick="changeStatusModal()" class="rounded-xl bg-brand-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white hover:bg-brand-500">
+                <i class="fa-solid fa-pen mr-1"></i>Change Status
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <!-- Main Details -->
+        <div class="xl:col-span-2 space-y-6">
+            <!-- Issue Header Card -->
+            <div class="glass-panel rounded-2xl border border-white/5 p-6">
+                <div class="flex flex-wrap items-center gap-3 mb-4">
+                    <span class="rounded-lg border px-3 py-1 text-sm font-black uppercase {{ issue.priority_badge }}">{{ issue.priority }}</span>
+                    <span class="rounded-lg border px-3 py-1 text-sm font-black uppercase {{ issue.status_badge }}">{{ issue.status }}</span>
+                    <span class="rounded-lg border px-3 py-1 text-sm font-black uppercase {{ issue.type_badge }}">{{ issue.issue_type }}</span>
+                    {% if issue.sla_status == 'breached' %}
+                    <span class="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1 text-sm font-black uppercase text-red-300">SLA BREACHED</span>
+                    {% elif issue.sla_status == 'at_risk' %}
+                    <span class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-sm font-black uppercase text-amber-300">SLA AT RISK</span>
+                    {% endif %}
+                </div>
+                <h2 class="text-xl font-bold text-white mb-4">{{ issue.issue }}</h2>
+                <div class="prose prose-invert prose-sm max-w-none">
+                    <p class="text-slate-400">{{ issue.impact or 'No impact description provided.' }}</p>
+                </div>
+            </div>
+
+            <!-- Issue Fields -->
+            <div class="glass-panel rounded-2xl border border-white/5 p-6">
+                <h3 class="mb-4 text-lg font-bold text-white">Issue Details</h3>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Reported By</p>
+                        <p class="mt-1 text-white">{{ issue.reported_by_display }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Writer</p>
+                        <p class="mt-1 text-white">{{ issue.writer_display }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Issue Date</p>
+                        <p class="mt-1 text-white">{{ issue.issue_date }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Target Resolution</p>
+                        <p class="mt-1 text-white">{{ issue.target_resolution_date or '--' }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Responsible Section</p>
+                        <p class="mt-1 text-white">{{ issue.responsible_section_display }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Responsible Person</p>
+                        <p class="mt-1 text-white">{{ issue.responsible_person_display }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Involved Departments</p>
+                        <p class="mt-1 text-white">{{ issue.involved_departments_display }}</p>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Pareto Law</p>
+                        <p class="mt-1 text-white">{{ issue.pareto_display }}</p>
+                    </div>
+                    <div class="col-span-2">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Root Cause</p>
+                        <p class="mt-1 text-white">{{ issue.root_cause or '--' }}</p>
+                    </div>
+                    <div class="col-span-2">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Action Plan</p>
+                        <p class="mt-1 text-white">{{ issue.action_plan or '--' }}</p>
+                    </div>
+                    <div class="col-span-2">
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Progress Note</p>
+                        <p class="mt-1 text-white">{{ issue.progress_note or '--' }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Comments -->
+            <div class="glass-panel rounded-2xl border border-white/5 p-6">
+                <h3 class="mb-4 text-lg font-bold text-white">Discussion</h3>
+                <div class="space-y-4">
+                    {% for comment in comments %}
+                    <div class="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-cyan-300">{{ comment.commenter_name or 'Unknown' }}</span>
+                            <span class="text-xs text-slate-500">{{ comment.created_at }}</span>
+                        </div>
+                        <p class="text-sm text-white">{{ comment.comment }}</p>
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-slate-500">No comments yet. Add the first comment below.</p>
+                    {% endfor %}
+                </div>
+                {% if can_edit %}
+                <form id="commentForm" class="mt-4">
+                    <textarea id="commentInput" rows="3" placeholder="Add a comment..." class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none resize-none"></textarea>
+                    <button type="submit" class="mt-2 rounded-xl bg-brand-600 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-brand-500">
+                        <i class="fa-solid fa-comment mr-1"></i>Add Comment
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Actions -->
+            {% if can_edit %}
+            <div class="glass-panel rounded-2xl border border-white/5 p-5">
+                <h3 class="mb-4 text-sm font-bold text-white">Quick Actions</h3>
+                <div class="space-y-2">
+                    <button onclick="changeStatus('In Progress')" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10 text-left">
+                        <i class="fa-solid fa-play mr-2 text-blue-400"></i>Start Work
+                    </button>
+                    <button onclick="changeStatus('Pending Review')" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10 text-left">
+                        <i class="fa-solid fa-eye mr-2 text-violet-400"></i>Submit for Review
+                    </button>
+                    <button onclick="changeStatus('Resolved')" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10 text-left">
+                        <i class="fa-solid fa-check mr-2 text-teal-400"></i>Mark Resolved
+                    </button>
+                    <button onclick="changeStatus('Closed')" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10 text-left">
+                        <i class="fa-solid fa-times mr-2 text-emerald-400"></i>Close Issue
+                    </button>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Attachments -->
+            <div class="glass-panel rounded-2xl border border-white/5 p-5">
+                <h3 class="mb-4 text-sm font-bold text-white">Attachments</h3>
+                <div class="space-y-2">
+                    {% for attachment in attachments %}
+                    <div class="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-paperclip text-xs text-slate-500"></i>
+                            <span class="text-xs text-slate-300">{{ attachment.filename or 'File' }}</span>
+                        </div>
+                        <span class="text-xs text-slate-500">{{ attachment.file_size or 0 }} KB</span>
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-slate-500">No attachments.</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Audit History -->
+            <div class="glass-panel rounded-2xl border border-white/5 p-5">
+                <h3 class="mb-4 text-sm font-bold text-white">History</h3>
+                <div class="space-y-3">
+                    {% for entry in history[:15] %}
+                    <div class="flex items-start gap-2">
+                        <div class="mt-1 rounded-full bg-slate-700 p-1">
+                            <i class="fa-solid fa-history text-[8px] text-slate-400"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs text-slate-300">
+                                <span class="font-medium text-cyan-300">{{ entry.actor_name or 'System' }}</span>
+                                {{ entry.action_type|replace('_', ' ') }}
+                            </p>
+                            <p class="text-xs text-slate-500 truncate">{{ entry.note or '' }}</p>
+                            <p class="text-xs text-slate-600">{{ entry.created_at }}</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-slate-500">No history records.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function changeStatus(newStatus) {
+    fetch('{{ url_for("issue_tracker.change_status", issue_id=issue.id) }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+    }).then(r => r.json()).then(d => {
+        if (d.success) location.reload();
+        else alert(d.message);
+    });
+}
+
+document.getElementById('commentForm')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const comment = document.getElementById('commentInput').value.trim();
+    if (!comment) return;
+    fetch('{{ url_for("issue_tracker.add_comment", issue_id=issue.id) }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment })
+    }).then(r => r.json()).then(d => {
+        if (d.success) location.reload();
+        else alert(d.message);
+    });
+});
+</script>
+{% endblock %}

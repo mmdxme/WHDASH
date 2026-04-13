@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .stat-card { transition: transform 0.2s, box-shadow 0.2s; }
+    .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+    .glass-panel { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); }
+</style>
+
+<div class="space-y-8 pb-20 fade-in">
+    <!-- Header -->
+    <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Issue Tracker</p>
+            <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">Issue Dashboard</h1>
+            <p class="mt-2 max-w-3xl text-sm text-slate-400">Overview of all issue activities, SLA health, and team performance metrics.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <a href="{{ url_for('issue_tracker.all_issues') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                <i class="fa-solid fa-list mr-2"></i>All Issues
+            </a>
+            <a href="{{ url_for('issue_tracker.backlog') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                <i class="fa-solid fa-archive mr-2"></i>Backlog
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-5">
+        <div class="stat-card glass-panel rounded-2xl border border-white/5 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Total Issues</p>
+            <h3 class="mt-2 text-3xl font-black text-white">{{ stats.total }}</h3>
+            <p class="mt-1 text-xs text-slate-500">All registered issues</p>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-sky-500/20 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-sky-300">Open</p>
+            <h3 class="mt-2 text-3xl font-black text-sky-300">{{ stats.open }}</h3>
+            <p class="mt-1 text-xs text-slate-500">Needs ownership</p>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-blue-500/20 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-blue-300">In Progress</p>
+            <h3 class="mt-2 text-3xl font-black text-blue-300">{{ stats.in_progress }}</h3>
+            <p class="mt-1 text-xs text-slate-500">Active work ongoing</p>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-violet-500/20 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-violet-300">Pending Review</p>
+            <h3 class="mt-2 text-3xl font-black text-violet-300">{{ stats.pending_review }}</h3>
+            <p class="mt-1 text-xs text-slate-500">Awaiting validation</p>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-rose-500/20 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-rose-300">High Priority</p>
+            <h3 class="mt-2 text-3xl font-black text-rose-300">{{ stats.high_priority }}</h3>
+            <p class="mt-1 text-xs text-slate-500">Urgent attention</p>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-amber-500/20 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-amber-300">SLA At Risk</p>
+            <h3 class="mt-2 text-3xl font-black text-amber-300">{{ stats.sla_at_risk }}</h3>
+            <p class="mt-1 text-xs text-slate-500">Due within 48h</p>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-red-500/20 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-red-300">SLA Breached</p>
+            <h3 class="mt-2 text-3xl font-black text-red-300">{{ stats.sla_breached }}</h3>
+            <p class="mt-1 text-xs text-slate-500">Past target date</p>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-emerald-500/20 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-emerald-300">Resolved</p>
+            <h3 class="mt-2 text-3xl font-black text-emerald-300">{{ stats.resolved }}</h3>
+            <p class="mt-1 text-xs text-slate-500">Solution provided</p>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-white/10 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Backlog</p>
+            <h3 class="mt-2 text-3xl font-black text-white">{{ stats.backlog }}</h3>
+            <p class="mt-1 text-xs text-slate-500">Untriaged issues</p>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-orange-500/20 p-5">
+            <p class="text-[10px] font-black uppercase tracking-widest text-orange-300">Unassigned</p>
+            <h3 class="mt-2 text-3xl font-black text-orange-300">{{ stats.unassigned }}</h3>
+            <p class="mt-1 text-xs text-slate-500">No owner yet</p>
+        </div>
+    </div>
+
+    <!-- My Stats & Charts Row -->
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        <!-- Status Chart -->
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <h3 class="text-lg font-bold text-white">Issues by Status</h3>
+            <canvas id="statusChart" height="200" class="mt-4"></canvas>
+        </div>
+        <!-- Priority Chart -->
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <h3 class="text-lg font-bold text-white">Issues by Priority</h3>
+            <canvas id="priorityChart" height="200" class="mt-4"></canvas>
+        </div>
+        <!-- Department Chart -->
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <h3 class="text-lg font-bold text-white">Top Departments</h3>
+            <canvas id="deptChart" height="200" class="mt-4"></canvas>
+        </div>
+    </div>
+
+    <!-- Recent Issues & Activity -->
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <!-- Recent Issues -->
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Recent Issues</h3>
+                <a href="{{ url_for('issue_tracker.all_issues') }}" class="text-xs text-cyan-400 hover:text-cyan-300">View All</a>
+            </div>
+            <div class="space-y-3">
+                {% for issue in issues[:8] %}
+                <a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] p-4 hover:bg-white/[0.05] transition-colors">
+                    <div class="flex items-center gap-3">
+                        <span class="rounded-lg bg-slate-700 px-2 py-1 text-xs font-bold text-slate-300">#{{ issue.row_id }}</span>
+                        <div>
+                            <p class="text-sm font-medium text-white truncate max-w-[200px]">{{ issue.issue }}</p>
+                            <p class="text-xs text-slate-500">{{ issue.issue_date }}</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-end gap-1">
+                        <span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.priority_badge }}">{{ issue.priority }}</span>
+                        <span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.status_badge }}">{{ issue.status }}</span>
+                    </div>
+                </a>
+                {% else %}
+                <div class="flex flex-col items-center justify-center rounded-xl border border-white/5 bg-white/[0.02] p-8">
+                    <i class="fa-solid fa-inbox text-4xl text-slate-600"></i>
+                    <p class="mt-3 text-sm text-slate-500">No issues found. Create the first one!</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="glass-panel rounded-3xl border border-white/5 p-6">
+            <div class="mb-4 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">Recent Activity</h3>
+                <a href="{{ url_for('issue_tracker.audit') }}" class="text-xs text-cyan-400 hover:text-cyan-300">View Audit Log</a>
+            </div>
+            <div class="space-y-3">
+                {% for entry in recent_history[:8] %}
+                <div class="flex items-start gap-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
+                    <div class="mt-1 rounded-full bg-cyan-500/20 p-2">
+                        <i class="fa-solid fa-history text-xs text-cyan-400"></i>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm text-white">
+                            <span class="font-medium text-cyan-300">{{ entry.actor_name or 'System' }}</span>
+                            <span class="text-slate-400">{{ entry.action_type|replace('_', ' ') }}</span>
+                        </p>
+                        <p class="mt-1 text-xs text-slate-500 truncate">{{ entry.note or '' }} — Issue #{{ entry.row_id }}</p>
+                        <p class="mt-1 text-xs text-slate-600">{{ entry.created_at }}</p>
+                    </div>
+                </div>
+                {% else %}
+                <div class="flex flex-col items-center justify-center rounded-xl border border-white/5 bg-white/[0.02] p-8">
+                    <i class="fa-solid fa-history text-4xl text-slate-600"></i>
+                    <p class="mt-3 text-sm text-slate-500">No activity recorded yet.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Executive Summary -->
+    <div class="glass-panel rounded-3xl border border-white/5 p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Executive Summary</h3>
+        <div class="grid grid-cols-2 gap-4 md:grid-cols-4 xl:grid-cols-6">
+            <div class="rounded-2xl border border-rose-400/20 bg-rose-500/10 p-4">
+                <p class="text-[10px] font-black uppercase tracking-widest text-rose-200">High Priority Open</p>
+                <div class="mt-2 text-2xl font-black text-white">{{ issue_report.summary.high_priority_open }}</div>
+            </div>
+            <div class="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4">
+                <p class="text-[10px] font-black uppercase tracking-widest text-amber-200">Unassigned Owners</p>
+                <div class="mt-2 text-2xl font-black text-white">{{ issue_report.summary.unassigned_owner }}</div>
+            </div>
+            <div class="rounded-2xl border border-cyan-400/20 bg-cyan-500/10 p-4">
+                <p class="text-[10px] font-black uppercase tracking-widest text-cyan-200">Missing Root Cause</p>
+                <div class="mt-2 text-2xl font-black text-white">{{ issue_report.summary.missing_root_cause }}</div>
+            </div>
+            <div class="rounded-2xl border border-violet-400/20 bg-violet-500/10 p-4">
+                <p class="text-[10px] font-black uppercase tracking-widest text-violet-200">Missing Action Plan</p>
+                <div class="mt-2 text-2xl font-black text-white">{{ issue_report.summary.missing_action_plan }}</div>
+            </div>
+            <div class="rounded-2xl border border-sky-400/20 bg-sky-500/10 p-4">
+                <p class="text-[10px] font-black uppercase tracking-widest text-sky-200">Total Open</p>
+                <div class="mt-2 text-2xl font-black text-white">{{ issue_report.executive.total_open }}</div>
+            </div>
+            <div class="rounded-2xl border border-blue-400/20 bg-blue-500/10 p-4">
+                <p class="text-[10px] font-black uppercase tracking-widest text-blue-200">Total In Progress</p>
+                <div class="mt-2 text-2xl font-black text-white">{{ issue_report.executive.total_in_progress }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const statusData = {{ issue_report.status_chart | tojson | safe }};
+    const priorityData = {{ issue_report.priority_chart | tojson | safe }};
+    const deptData = {{ issue_report.department_chart | tojson | safe }};
+
+    const chartDefaults = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } }
+    };
+
+    new Chart(document.getElementById('statusChart'), {
+        type: 'doughnut',
+        data: {
+            labels: statusData.map(s => s.label),
+            datasets: [{ data: statusData.map(s => s.total), backgroundColor: ['#38bdf8','#3b82f6','#a855f7','#64748b','#f59e0b','#14b8a6','#10b981'], borderWidth: 0 }]
+        },
+        options: { ...chartDefaults, cutout: '60%' }
+    });
+
+    new Chart(document.getElementById('priorityChart'), {
+        type: 'bar',
+        data: {
+            labels: priorityData.map(p => p.label),
+            datasets: [{ data: priorityData.map(p => p.total), backgroundColor: ['#f43f5e','#f59e0b','#10b981'], borderWidth: 0 }]
+        },
+        options: { ...chartDefaults, scales: { x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' } }, y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true } } }
+    });
+
+    new Chart(document.getElementById('deptChart'), {
+        type: 'bar',
+        data: {
+            labels: deptData.map(d => d.label),
+            datasets: [{ data: deptData.map(d => d.total), backgroundColor: '#22d3ee', borderWidth: 0 }]
+        },
+        options: { ...chartDefaults, indexAxis: 'y', scales: { x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }, y: { ticks: { color: '#94a3b8' }, grid: { display: false } } } }
+    });
+});
+</script>
+{% endblock %}
