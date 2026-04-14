@@ -37,8 +37,33 @@ DEBUG = ENV == 'development'
 SECRET_KEY = os.environ.get('SECRET_KEY')
 if not SECRET_KEY:
     if ENV == 'production':
-        raise RuntimeError("SECRET_KEY environment variable must be set in production")
-    SECRET_KEY = 'change-me-in-development'
+        raise RuntimeError(
+            "SECRET_KEY environment variable must be set in production. "
+            "Generate a secure key with: python -c \"import secrets; print(secrets.token_hex(32))\""
+        )
+    # Development-only weak key - NEVER used in production
+    SECRET_KEY = os.environ.get('DEV_SECRET_KEY', 'dev-only-insecure-key-do-not-use-in-prod')
+
+# Ensure SECRET_KEY is sufficiently long for security
+if len(SECRET_KEY) < 32 and ENV == 'production':
+    raise RuntimeError("SECRET_KEY must be at least 32 characters (64 hex digits) for adequate security")
+
+# VAPID keys for Web Push - MUST come from environment in production
+_VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
+_VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
+if not _VAPID_PUBLIC_KEY or not _VAPID_PRIVATE_KEY:
+    if ENV == 'production':
+        raise RuntimeError(
+            "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY environment variables must be set in production. "
+            "Generate keys with: python -c \"from webpush import vapid; v = vapid.VAPID(); print('PUBLIC:', v.public_key); print('PRIVATE:', v.private_key)\""
+        )
+    # Development fallback - use insecure defaults
+    _VAPID_PUBLIC_KEY = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEY-hwQ6_Hdk7VJ4fTNt1P1S0qX63wxwwtrfbnfPDPGwpckcjeTF337se9o6Ncgn5lp6rHPSzoJq_rwDUAqlI_oQ'
+    _VAPID_PRIVATE_KEY = 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgIrq9m4IxBGkkkOX315urB7sbbkE7_GIvRGD0csfA6hehRANCAARj6HBDr8d2TtUnh9M23U_VLSpfrfDHDC2t9ud88M8bClyRyN5MXffux72jo1yCfmWnqsc9LOgmr-vANQCqUj+h'
+
+VAPID_PUBLIC_KEY = _VAPID_PUBLIC_KEY
+VAPID_PRIVATE_KEY = _VAPID_PRIVATE_KEY
+VAPID_SUBJECT = os.environ.get('VAPID_SUBJECT', 'mailto:notifications@example.com')
 
 
 # =============================================================================
@@ -66,6 +91,8 @@ MAX_DOCUMENT_SIZE = 50 * 1024 * 1024  # 50MB
 SESSION_TYPE = 'filesystem'
 SESSION_PERMANENT = True
 PERMANENT_SESSION_LIFETIME = 120  # minutes
+# Session file directory - use a persistent location
+SESSION_FILE_DIR = os.path.join(BASE_DIR, 'flask_session')
 
 
 # =============================================================================
@@ -197,7 +224,7 @@ LOGIN_LOCKOUT_MINUTES = 15
 
 DEFAULT_DEPRECIATION_METHOD = 'straight_line'
 DEFAULT_USEFUL_LIFE_YEARS = 5
-DEFAULT Salvage_VALUE_PERCENT = 10
+DEFAULT_SALVAGE_VALUE_PERCENT = 10
 
 
 # =============================================================================

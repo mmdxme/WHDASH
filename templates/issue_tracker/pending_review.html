@@ -4,43 +4,99 @@
 <div class="space-y-6 pb-20 fade-in">
     <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Issue Tracker</p>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-violet-300">Issue Tracker</p>
             <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">Pending Review</h1>
             <p class="mt-2 text-sm text-slate-400">{{ stats.total }} issues awaiting validation and sign-off.</p>
         </div>
-    </div>
-
-    <div class="glass-panel rounded-2xl border border-white/5 overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead>
-                    <tr class="border-b border-white/10 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">
-                        <th class="px-4 py-3">ID</th>
-                        <th class="px-4 py-3">Issue</th>
-                        <th class="px-4 py-3">Type</th>
-                        <th class="px-4 py-3">Priority</th>
-                        <th class="px-4 py-3">Owner</th>
-                        <th class="px-4 py-3">Root Cause</th>
-                        <th class="px-4 py-3">Created</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-white/5">
-                    {% for issue in issues %}
-                    <tr class="hover:bg-white/[0.02] transition-colors">
-                        <td class="px-4 py-3"><a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="font-bold text-cyan-400 hover:text-cyan-300">#{{ issue.row_id }}</a></td>
-                        <td class="px-4 py-3"><a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="font-medium text-white hover:text-cyan-300">{{ issue.issue }}</a></td>
-                        <td class="px-4 py-3"><span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.type_badge }}">{{ issue.issue_type }}</span></td>
-                        <td class="px-4 py-3"><span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.priority_badge }}">{{ issue.priority }}</span></td>
-                        <td class="px-4 py-3 text-slate-400">{{ issue.responsible_person_display }}</td>
-                        <td class="px-4 py-3 text-slate-400">{{ issue.root_cause or '--' }}</td>
-                        <td class="px-4 py-3 text-slate-400">{{ issue.issue_date }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="7" class="px-4 py-12 text-center text-slate-500"><i class="fa-solid fa-clock text-4xl text-slate-600"></i><p class="mt-3">No issues pending review.</p></td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="flex items-center gap-3">
+            {% if stats.total > 0 %}
+            <span class="rounded-xl border border-violet-500/20 bg-violet-500/10 px-4 py-2 text-xs font-bold text-violet-300">
+                <i class="fa-solid fa-hourglass-half mr-2"></i>{{ stats.total }} Awaiting Review
+            </span>
+            {% endif %}
         </div>
     </div>
+
+    {% if stats.total == 0 %}
+    <div class="flex flex-col items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-16">
+        <i class="fa-solid fa-check-circle text-5xl text-emerald-400"></i>
+        <p class="mt-4 text-lg font-bold text-emerald-300">All Clear!</p>
+        <p class="mt-2 text-sm text-slate-500">No issues pending review right now.</p>
+        <a href="{{ url_for('issue_tracker.in_progress') }}" class="mt-6 rounded-xl border border-white/10 bg-white/5 px-5 py-2 text-xs font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">
+            View In Progress
+        </a>
+    </div>
+    {% else %}
+    <div class="glass-panel rounded-2xl border border-violet-500/10 overflow-hidden">
+        <div class="border-b border-violet-500/10 bg-violet-500/5 px-4 py-3">
+            <p class="text-xs font-bold text-violet-300"><i class="fa-solid fa-eye mr-2"></i>Issues submitted for review — click to review or approve</p>
+        </div>
+        <div class="divide-y divide-white/5">
+            {% for issue in issues %}
+            <div class="flex items-start justify-between p-4 hover:bg-white/[0.02] transition-colors">
+                <div class="flex items-start gap-4 flex-1">
+                    <a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="font-bold text-violet-400 hover:text-violet-300 whitespace-nowrap">#{{ issue.row_id }}</a>
+                    <div class="flex-1 min-w-0">
+                        <a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="font-medium text-white hover:text-cyan-300 block truncate">{{ issue.issue }}</a>
+                        <div class="mt-1 flex flex-wrap items-center gap-2">
+                            <span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.type_badge }}">{{ issue.issue_type }}</span>
+                            <span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.priority_badge }}">{{ issue.priority }}</span>
+                            <span class="text-xs text-slate-500">Owner: {{ issue.responsible_person_display }}</span>
+                            <span class="text-xs text-slate-500">{{ issue.issue_date }}</span>
+                        </div>
+                        {% if issue.root_cause %}
+                        <p class="mt-2 text-xs text-slate-400 line-clamp-1"><span class="font-medium text-slate-500">Root Cause:</span> {{ issue.root_cause }}</p>
+                        {% endif %}
+                        {% if issue.action_plan %}
+                        <p class="mt-1 text-xs text-slate-400 line-clamp-1"><span class="font-medium text-slate-500">Action Plan:</span> {{ issue.action_plan }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if can_edit %}
+                <div class="flex items-center gap-2 ml-4 shrink-0">
+                    <a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-black uppercase text-slate-300 hover:bg-white/10">
+                        View
+                    </a>
+                    <button onclick="reviewIssue({{ issue.id }}, '{{ issue.row_id }}')" class="rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-[10px] font-black uppercase text-violet-300 hover:bg-violet-500/20">
+                        Review
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 </div>
+
+<script>
+const CSRF_TOKEN = "{{ csrf_token }}";
+
+async function reviewIssue(issueId, rowId) {
+    Swal.fire({
+        title: `Review Issue #${rowId}`,
+        html: `<p style="color:#94a3b8;margin-bottom:12px;font-size:13px">Approve to mark Resolved, or Reject to return to In Progress.</p>
+               <textarea id="rv_comment" class="swal2-textarea" placeholder="Review comment (optional)..." style="min-height:80px"></textarea>`,
+        showDenyButton: true, showCancelButton: true,
+        confirmButtonText: '<i class="fa-solid fa-check mr-1"></i>Approve', denyButtonText: '<i class="fa-solid fa-times mr-1"></i>Reject & Return',
+        background: '#1e293b', color: '#fff', confirmButtonColor: '#10b981', denyButtonColor: '#ef4444',
+    }).then(async result => {
+        if (result.isDismissed) return;
+        const action = result.isConfirmed ? 'approve' : 'reject';
+        const comment = document.getElementById('rv_comment')?.value || '';
+        const res = await fetch(`/issues/review/${issueId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+            body: JSON.stringify({ csrf_token: CSRF_TOKEN, action, comment })
+        });
+        const data = await res.json();
+        if (data.success) {
+            Swal.fire({ icon: 'success', title: result.isConfirmed ? 'Approved!' : 'Rejected', text: data.message, background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false });
+            setTimeout(() => location.reload(), 1200);
+        } else {
+            Swal.fire({ icon: 'error', title: 'Error', text: data.message, background: '#1e293b', color: '#fff' });
+        }
+    });
+}
+</script>
 {% endblock %}

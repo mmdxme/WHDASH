@@ -16,11 +16,14 @@
             <p class="mt-2 max-w-3xl text-sm text-slate-400">Overview of all issue activities, SLA health, and team performance metrics.</p>
         </div>
         <div class="flex flex-wrap items-center gap-3">
-            <a href="{{ url_for('issue_tracker.all_issues') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+            <button onclick="openCreateModal()" class="rounded-xl bg-cyan-600 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-white hover:bg-cyan-500 transition-all">
+                <i class="fa-solid fa-plus mr-2"></i>New Issue
+            </button>
+            <a href="{{ url_for('issue_tracker.all_issues') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
                 <i class="fa-solid fa-list mr-2"></i>All Issues
             </a>
-            <a href="{{ url_for('issue_tracker.backlog') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
-                <i class="fa-solid fa-archive mr-2"></i>Backlog
+            <a href="{{ url_for('issue_tracker.sla_breaches') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                <i class="fa-solid fa-triangle-exclamation mr-2"></i>SLA Breaches
             </a>
         </div>
     </div>
@@ -76,6 +79,16 @@
             <p class="text-[10px] font-black uppercase tracking-widest text-orange-300">Unassigned</p>
             <h3 class="mt-2 text-3xl font-black text-orange-300">{{ stats.unassigned }}</h3>
             <p class="mt-1 text-xs text-slate-500">No owner yet</p>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-rose-500/20 p-5 cursor-pointer" onclick="window.location='{{ url_for('issue_tracker.sla_breaches') }}'">
+            <p class="text-[10px] font-black uppercase tracking-widest text-rose-300">Overdue</p>
+            <h3 class="mt-2 text-3xl font-black text-rose-300">{{ overdue_count }}</h3>
+            <p class="mt-1 text-xs text-slate-500">Past target date</p>
+        </div>
+        <div class="stat-card glass-panel rounded-2xl border border-sky-500/20 p-5 cursor-pointer" onclick="window.location='{{ url_for('issue_tracker.my_issues') }}'">
+            <p class="text-[10px] font-black uppercase tracking-widest text-sky-300">My Open Issues</p>
+            <h3 class="mt-2 text-3xl font-black text-sky-300">{{ my_issues_count }}</h3>
+            <p class="mt-1 text-xs text-slate-500">Created by me</p>
         </div>
     </div>
 
@@ -233,5 +246,58 @@ document.addEventListener('DOMContentLoaded', function() {
         options: { ...chartDefaults, indexAxis: 'y', scales: { x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }, y: { ticks: { color: '#94a3b8' }, grid: { display: false } } } }
     });
 });
+</script>
+
+<!-- ══ Quick Create Modal ════════════════════════════════════════════════════ -->
+<div id="createModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div class="w-full max-w-xl mx-4 glass-panel rounded-3xl border border-white/10 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
+            <h2 class="text-lg font-bold text-white"><i class="fa-solid fa-plus-circle mr-2 text-cyan-400"></i>New Issue</h2>
+            <button onclick="closeCreateModal()" class="rounded-full p-2 text-slate-400 hover:bg-white/10 hover:text-white"><i class="fa-solid fa-times"></i></button>
+        </div>
+        <div class="p-6 space-y-4">
+            <input id="ci_title" type="text" placeholder="Issue title *" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none">
+            <div class="grid grid-cols-2 gap-3">
+                <select id="ci_type" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white">
+                    <option value="Problem">Problem</option><option value="Suggestion">Suggestion</option><option value="Issue">Issue</option>
+                </select>
+                <select id="ci_priority" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white">
+                    <option value="Medium">Medium Priority</option><option value="High">High Priority</option><option value="Low">Low Priority</option>
+                </select>
+            </div>
+            <input id="ci_departments" type="text" placeholder="Departments (e.g. Warehouse/Sales)" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none">
+            <div id="ciError" class="hidden rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"></div>
+        </div>
+        <div class="flex items-center justify-end gap-3 border-t border-white/10 px-6 py-4">
+            <button onclick="closeCreateModal()" class="rounded-xl border border-white/10 bg-white/5 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">Cancel</button>
+            <button onclick="submitCreateIssue()" id="ciSubmitBtn" class="rounded-xl bg-cyan-600 px-6 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-cyan-500">
+                <i class="fa-solid fa-save mr-1"></i>Create Issue
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+const CSRF_TOKEN = "{{ csrf_token }}";
+function openCreateModal() { document.getElementById('createModal').classList.remove('hidden'); document.getElementById('createModal').classList.add('flex'); document.getElementById('ci_title').focus(); }
+function closeCreateModal() { document.getElementById('createModal').classList.add('hidden'); document.getElementById('createModal').classList.remove('flex'); }
+document.getElementById('createModal')?.addEventListener('click', function(e) { if (e.target === this) closeCreateModal(); });
+
+async function submitCreateIssue() {
+    const btn = document.getElementById('ciSubmitBtn');
+    const errDiv = document.getElementById('ciError');
+    const title = document.getElementById('ci_title').value.trim();
+    if (!title) { errDiv.textContent = 'Title is required.'; errDiv.classList.remove('hidden'); return; }
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Creating...'; errDiv.classList.add('hidden');
+    try {
+        const res = await fetch('{{ url_for("issue_tracker.create_issue") }}', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+            body: JSON.stringify({ csrf_token: CSRF_TOKEN, issue: title, issue_type: document.getElementById('ci_type').value, priority: document.getElementById('ci_priority').value, involved_departments: document.getElementById('ci_departments').value })
+        });
+        const data = await res.json();
+        if (data.success) { if (data.redirect) window.location.href = data.redirect; else location.reload(); }
+        else { errDiv.textContent = data.message; errDiv.classList.remove('hidden'); btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-save mr-1"></i>Create Issue'; }
+    } catch(err) { errDiv.textContent = 'Network error.'; errDiv.classList.remove('hidden'); btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-save mr-1"></i>Create Issue'; }
+}
 </script>
 {% endblock %}

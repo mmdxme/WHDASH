@@ -125,7 +125,7 @@
                          id="bubble-{{ message.id }}"
                          oncontextmenu="handleMessageRightClick(event, '{{ message.id }}'); return false;">
                         <div class="message-content bidi-text">
-                            {{ message.content | safe if message.content else '' }}
+                            {{ escape_html(message.content) if message.content else '' }}
                         </div>
                     </div>
                     
@@ -163,6 +163,21 @@
     {% if membership %}
     <!-- Message Input -->
     <div class="p-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
+        <!-- Reply preview -->
+        <div id="reply-preview" class="mb-2 hidden">
+            <div class="flex items-center justify-between bg-slate-100 dark:bg-slate-700 rounded-xl p-3">
+                <div class="flex items-center gap-2">
+                    <div class="w-1 h-8 bg-blue-500 rounded-full"></div>
+                    <p class="text-sm text-slate-700 dark:text-slate-300">Replying to a message</p>
+                </div>
+                <button onclick="cancelReply()" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-600 rounded">
+                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
         <form onsubmit="sendChannelMessage(event)" class="flex items-end gap-2">
             <div class="flex-1 flex items-end gap-1 bg-slate-100 dark:bg-slate-700 rounded-2xl px-4 py-2">
                 <button type="button" onclick="showEmojiPicker()" class="p-2 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full">
@@ -171,10 +186,11 @@
                     </svg>
                 </button>
                 <textarea id="message-input" rows="1"
-                         class="flex-1 bg-transparent border-0 resize-none focus:outline-none py-2 text-slate-800 dark:text-white placeholder-slate-400"
+                         class="flex-1 bg-transparent border-0 resize-none focus:outline-none py-2 text-slate-800 dark:text-white placeholder-slate-400 bidi-text"
                          placeholder="Message #{{ channel.name }}"
+                         dir="auto"
                          onkeydown="handleChannelInputKeydown(event)"
-                         oninput="autoResize(this)"></textarea>
+                         oninput="autoResize(this); updateInputDirection(this)"></textarea>
             </div>
             <button type="submit" class="p-3 bg-blue-500 hover:bg-blue-600 text-white rounded-full">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -291,11 +307,117 @@
     </div>
 </div>
 
+<!-- Channel Members Modal -->
+<div id="channel-members-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeChannelMembers()"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h3 class="font-semibold text-slate-800 dark:text-white">Channel Members</h3>
+            <button onclick="closeChannelMembers()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="p-4 max-h-80 overflow-y-auto">
+            <div id="channel-members-list" class="space-y-2">
+                {% if members %}
+                    {% for member in members %}
+                    <div class="member-item flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl mb-2">
+                        <div class="flex-shrink-0">
+                            {% if member.avatar_url %}
+                            <img src="{{ member.avatar_url }}" alt="{{ member.display_name }}" class="w-10 h-10 rounded-full object-cover">
+                            {% else %}
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-white font-semibold">
+                                {{ (member.display_name or member.username or 'U')[0]|upper }}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="font-medium text-slate-800 dark:text-white truncate">{{ member.display_name or member.username }}</p>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">{{ member.role|title }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-center text-slate-400 py-4">No members found</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Leave Channel Confirmation Modal -->
+<div id="leave-channel-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeLeaveChannelModal()"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                </svg>
+            </div>
+            <h3 class="font-semibold text-slate-800 dark:text-white text-lg mb-2">Leave Channel?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Are you sure you want to leave this channel? You will lose access to all messages and files shared in this channel.</p>
+            <div class="space-y-2">
+                <button onclick="confirmLeaveChannel()" class="w-full px-4 py-2.5 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition-colors">
+                    Leave Channel
+                </button>
+                <button onclick="closeLeaveChannelModal()" class="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Emoji Picker Modal -->
+<div id="emoji-picker-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeEmojiPicker()"></div>
+    <div class="absolute bottom-20 left-1/2 -translate-x-1/2 w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h3 class="font-semibold text-slate-800 dark:text-white">Emoji</h3>
+            <button onclick="closeEmojiPicker()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div id="emoji-grid" class="grid grid-cols-8 gap-1 p-4 max-h-64 overflow-y-auto"></div>
+    </div>
+</div>
+
+<!-- GIF Picker Modal -->
+<div id="gif-picker-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeGifPicker()"></div>
+    <div class="absolute bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h3 class="font-semibold text-slate-800 dark:text-white">GIF</h3>
+            <button onclick="closeGifPicker()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="p-4">
+            <input type="text" id="gif-search-input" placeholder="Search GIFs..."
+                   class="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border-0 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+                   onkeyup="if(event.key==='Enter') searchGifs()">
+            <button onclick="searchGifs()" class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition-colors mb-3">
+                Search
+            </button>
+            <div id="gif-results" class="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                <p class="text-center text-slate-400 py-4 col-span-3">Search for GIFs</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Channel Settings Modal -->
 <div id="channel-settings-modal" class="fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-black/50" onclick="closeChannelSettings()"></div>
-    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
-        <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in max-h-[90vh] overflow-y-auto">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-800">
             <h3 class="font-semibold text-slate-800 dark:text-white">Channel Settings</h3>
             <button onclick="closeChannelSettings()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
                 <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -348,6 +470,29 @@
                        class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
 
+            <!-- Flow Publishing Settings (only for admins) -->
+            {% if membership and membership.role == 'admin' %}
+            <div class="border-t border-slate-200 dark:border-slate-700 pt-5">
+                <h4 class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Flow Publishing</h4>
+
+                <!-- Allow publish to Flow toggle -->
+                <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700 rounded-xl mb-3">
+                    <div>
+                        <p class="font-medium text-slate-800 dark:text-white">Allow Publish to Flow</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Let members publish messages to Flow</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="settings-allow-publish" class="sr-only peer" onchange="togglePublishSetting()">
+                        <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
+                    </label>
+                </div>
+
+                <p class="text-xs text-slate-500 dark:text-slate-400">
+                    When enabled, channel members can share selected messages to the Flow feed.
+                </p>
+            </div>
+            {% endif %}
+
             <div class="flex justify-end gap-3 pt-2">
                 <button onclick="closeChannelSettings()" class="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200">Cancel</button>
                 <button onclick="saveChannelSettings()" class="px-4 py-2 bg-blue-500 text-white rounded-xl font-medium hover:bg-blue-600">Save Changes</button>
@@ -376,38 +521,124 @@
         const content = input.value.trim();
         if (!content) return;
 
+        // Validate conversationId is not null
+        if (!conversationId) {
+            showNotification('Error', 'Unable to send message - conversation not loaded');
+            return;
+        }
+
         console.log('Sending to conversation:', conversationId, 'content:', content);
 
         const sendBtn = event.target.querySelector('button[type="submit"]');
         if (sendBtn) sendBtn.disabled = true;
 
+        const payload = { conversation_id: conversationId, content };
+        if (replyToId) {
+            payload.reply_to_id = replyToId;
+        }
+
         fetch('/flow/api/messages/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ conversation_id: conversationId, content })
+            body: JSON.stringify(payload)
         }).then(async r => {
             const data = await r.json();
             console.log('Response:', r.status, data);
             return data;
         }).then(data => {
-              if (data.success) {
+              if (data.success && data.message) {
+                  addChannelMessageToUI(data.message);
                   input.value = '';
-                  location.reload();
+                  replyToId = null;
+                  cancelReply();
               } else {
-                  alert(data.error || 'Failed to send message');
+                  showNotification('Error', data.error || 'Failed to send message');
               }
           }).catch(err => {
               console.error('Send message error:', err);
-              alert('Failed to send message: ' + err.message);
+              showNotification('Error', 'Failed to send message');
           }).finally(() => {
               if (sendBtn) sendBtn.disabled = false;
           });
     }
 
+    function addChannelMessageToUI(message) {
+        const container = document.getElementById('messages-container');
+        if (!container) return;
+        // Remove empty state if present
+        const emptyState = container.querySelector('.flex.items-center.justify-center.h-full');
+        if (emptyState) emptyState.remove();
+
+        const isSent = message.sender_id == currentUser;
+        const senderAvatar = message.sender_avatar || '/static/uploads/avatars/avatar_channel_green.png';
+        const bubbleId = 'bubble-' + message.id;
+
+        const html = `
+            <div class="message-wrapper flex ${isSent ? 'justify-end' : 'justify-start'} animate-slide-in w-full"
+                 data-message-id="${message.id}"
+                 data-message-type="${message.message_type || 'text'}"
+                 data-sender-id="${message.sender_id}"
+                 data-is-pinned="false"
+                 data-has-attachment="false">
+                ${!isSent ? `
+                <div class="flex gap-2 max-w-full">
+                    <div class="flex-shrink-0">
+                        <img src="${senderAvatar}" alt="${message.sender_name || 'User'}" class="w-8 h-8 rounded-full object-cover">
+                    </div>
+                ` : ''}
+                <div class="flex flex-col ${isSent ? 'items-end' : 'items-start'} gap-1 ${isSent ? 'max-w-full' : ''}">
+                    ${!isSent ? `<span class="text-xs text-slate-500 dark:text-slate-400 font-medium">${message.sender_name || 'Unknown'}</span>` : ''}
+                    <div class="message-bubble ${isSent ? 'sent' : 'received'}" id="${bubbleId}">
+                        <div class="message-content bidi-text">${escapeHtml(message.content || '')}</div>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs text-slate-400">
+                        <span>${formatTime(message.created_at)}</span>
+                    </div>
+                </div>
+                ${!isSent ? '</div>' : ''}
+            </div>
+        `;
+
+        container.insertAdjacentHTML('beforeend', html);
+        scrollToBottom();
+    }
+
+    function scrollToBottom() {
+        const container = document.getElementById('messages-container');
+        if (container) {
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function formatTime(value) {
+        if (!value) return 'now';
+        let dt;
+        if (typeof value === 'string') {
+            try { dt = new Date(value.replace('Z', '+00:00')); }
+            catch (e) { return value; }
+        } else if (value instanceof Date) { dt = value; }
+        else { return String(value); }
+        const now = new Date();
+        const diff = now - dt;
+        const totalSeconds = diff / 1000;
+        if (totalSeconds < 0) return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (totalSeconds < 60) return 'now';
+        if (totalSeconds < 3600) return `${Math.floor(totalSeconds / 60)}m`;
+        if (totalSeconds < 86400) return `${Math.floor(totalSeconds / 3600)}h`;
+        if (totalSeconds < 604800) return `${Math.floor(totalSeconds / 86400)}d`;
+        return dt.toLocaleDateString();
+    }
+
     function handleChannelInputKeydown(event) {
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
-            event.target.form.requestSubmit();
+            sendChannelMessage(event);
         }
     }
 
@@ -419,14 +650,53 @@
             });
     }
 
-    function leaveChannel() {
-        if (confirm('Leave this channel?')) {
-            fetch(`/flow/api/channels/${channelId}/leave`, { method: 'POST' })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.success) window.location.href = '/flow/channels';
-                });
+    function updateInputDirection(textarea) {
+        const text = textarea.value;
+        if (text) {
+            const rtlPattern = /[\u0591-\u07FF\u200F\u202B\u202E\uFB1D-\uFDFD\uFE70-\uFEFC]/;
+            textarea.dir = rtlPattern.test(text) ? 'rtl' : 'ltr';
+        } else {
+            textarea.dir = document.documentElement.dir || 'ltr';
         }
+    }
+
+    function leaveChannel() {
+        // Show confirmation modal instead of browser confirm
+        const modal = document.getElementById('leave-channel-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+        }
+    }
+
+    function confirmLeaveChannel() {
+        const modal = document.getElementById('leave-channel-modal');
+        if (modal) modal.classList.add('hidden');
+
+        fetch(`/flow/api/channels/${channelId}/leave`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                showNotification('Left Channel', 'You have left the channel');
+                // Redirect to channels list after a short delay
+                setTimeout(() => {
+                    window.location.href = data.redirect_url || '/flow/channels';
+                }, 1000);
+            } else {
+                showNotification('Error', data.error || 'Failed to leave channel');
+            }
+        })
+        .catch(err => {
+            console.error('Leave channel error:', err);
+            showNotification('Error', 'Failed to leave channel');
+        });
+    }
+
+    function closeLeaveChannelModal() {
+        const modal = document.getElementById('leave-channel-modal');
+        if (modal) modal.classList.add('hidden');
     }
 
     function showJoinByCodeModal() {
@@ -476,7 +746,11 @@
     }
 
     function showChannelMembers() {
-        alert('Members panel coming soon');
+        document.getElementById('channel-members-modal').classList.remove('hidden');
+    }
+
+    function closeChannelMembers() {
+        document.getElementById('channel-members-modal').classList.add('hidden');
     }
 
     function showChannelSettings() {
@@ -491,27 +765,65 @@
     function uploadChannelAvatar(input) {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
+
+        // Validate file type and size
+        if (!file.type.startsWith('image/')) {
+            showNotification('Error', 'Please select an image file');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            showNotification('Error', 'Image must be less than 5MB');
+            return;
+        }
+
+        const preview = document.getElementById('settings-channel-avatar');
+        preview.src = URL.createObjectURL(file);
+
+        // Actually upload the avatar
         const formData = new FormData();
         formData.append('file', file);
         formData.append('target_type', 'channel');
         formData.append('target_id', channelId);
 
-        const preview = document.getElementById('settings-channel-avatar');
-        preview.src = URL.createObjectURL(file);
-        channelAvatarUploaded = true;
+        fetch('/flow/api/upload/avatar', {
+            method: 'POST',
+            body: formData
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                // Store the uploaded avatar URL for later use when saving settings
+                channelAvatarUploaded = data.avatar_url;
+                preview.src = data.avatar_url;
+            } else {
+                showNotification('Error', data.error || 'Failed to upload avatar');
+                channelAvatarUploaded = false;
+            }
+        }).catch(err => {
+            console.error('Avatar upload error:', err);
+            showNotification('Error', 'Failed to upload avatar');
+            channelAvatarUploaded = false;
+        });
     }
 
     function saveChannelSettings() {
         const name = document.getElementById('settings-channel-name').value.trim();
         const description = document.getElementById('settings-channel-description').value.trim();
         const category = document.getElementById('settings-channel-category').value.trim();
+        const allowPublish = document.getElementById('settings-allow-publish')?.checked || false;
 
         if (!name) {
-            alert('Channel name is required');
+            showNotification('Error', 'Channel name is required');
             return;
         }
 
         const data = { name, description, category };
+
+        // If avatar was uploaded via uploadChannelAvatar, include the URL
+        if (channelAvatarUploaded && typeof channelAvatarUploaded === 'string') {
+            data.avatar_url = channelAvatarUploaded;
+        }
+
+        // Include Flow publishing setting
+        data.settings = JSON.stringify({ allow_publish_to_flow: allowPublish });
 
         fetch(`/flow/api/channels/${channelId}/update`, {
             method: 'POST',
@@ -519,27 +831,113 @@
             body: JSON.stringify(data)
         }).then(r => r.json()).then(result => {
             if (result.success) {
-                const headerAvatarImg = document.getElementById('channel-avatar-img');
-                const settingsAvatarImg = document.getElementById('settings-channel-avatar');
-                if (headerAvatarImg && settingsAvatarImg && channelAvatarUploaded) {
-                    headerAvatarImg.src = settingsAvatarImg.src;
-                }
-
-                // Update header name
-                const nameEl = document.querySelector('header h2');
-                if (nameEl) nameEl.textContent = name;
-
+                updateChannelHeaderUI(name);
                 closeChannelSettings();
-                showNotification('Settings saved', 'Channel updated successfully');
+                showNotification('Success', 'Channel updated successfully');
             } else {
-                alert(result.error || 'Failed to save settings');
+                showNotification('Error', result.error || 'Failed to save settings');
             }
         });
+    }
+
+    function togglePublishSetting() {
+        // This function is called when the publish toggle changes
+        // No action needed here as the value is read when saving
+    }
+
+    function updateChannelHeaderUI(name) {
+        // Update header avatar if changed
+        const headerAvatarImg = document.getElementById('channel-avatar-img');
+        const settingsAvatarImg = document.getElementById('settings-channel-avatar');
+        if (headerAvatarImg && settingsAvatarImg && channelAvatarUploaded) {
+            headerAvatarImg.src = settingsAvatarImg.src;
+        }
+        // Update name
+        const nameEl = document.querySelector('header h2');
+        if (nameEl) nameEl.textContent = name;
     }
 
     function autoResize(textarea) {
         textarea.style.height = 'auto';
         textarea.style.height = Math.min(textarea.scrollHeight, 128) + 'px';
+    }
+
+    function showEmojiPicker() {
+        const modal = document.getElementById('emoji-picker-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            renderEmojiGrid();
+        }
+    }
+
+    function closeEmojiPicker() {
+        const modal = document.getElementById('emoji-picker-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    function renderEmojiGrid() {
+        const grid = document.getElementById('emoji-grid');
+        if (!grid) return;
+        const emojis = [
+            '😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘',
+            '👍', '👎', '👏', '🙌', '🤝', '🙏', '💪', '❤️', '🧡', '💛', '💚', '💙', '💜', '🔥', '⭐', '✨', '🎉'
+        ];
+        grid.innerHTML = emojis.map(emoji =>
+            `<button onclick="insertEmoji('${emoji}')" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-xl transition-colors">${emoji}</button>`
+        ).join('');
+    }
+
+    function insertEmoji(emoji) {
+        const input = document.getElementById('message-input');
+        if (input) {
+            input.value += emoji;
+            input.focus();
+        }
+        closeEmojiPicker();
+    }
+
+    function showGifPicker() {
+        const modal = document.getElementById('gif-picker-modal');
+        if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeGifPicker() {
+        const modal = document.getElementById('gif-picker-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    function searchGifs() {
+        const query = document.getElementById('gif-search-input')?.value;
+        if (!query) return;
+        fetch(`https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(query)}&limit=20`)
+            .then(r => r.json())
+            .then(data => renderGifResults(data.data || []))
+            .catch(err => showNotification('Error', 'Failed to search GIFs'));
+    }
+
+    function renderGifResults(gifs) {
+        const container = document.getElementById('gif-results');
+        if (!container) return;
+        if (gifs.length === 0) {
+            container.innerHTML = '<p class="text-center text-slate-400 py-4">No GIFs found</p>';
+            return;
+        }
+        container.innerHTML = gifs.map(gif =>
+            `<button onclick="selectGif('${gif.images.fixed_height.url}')" class="p-1 hover:opacity-80 transition-opacity">
+                <img src="${gif.images.fixed_height.url}" alt="${gif.title}" class="max-h-32 rounded-lg">
+            </button>`
+        ).join('');
+    }
+
+    function selectGif(url) {
+        fetch('/flow/api/messages/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversation_id: conversationId, content: `<img src="${url}" class="max-w-full rounded-lg">`, message_type: 'image' })
+        }).then(r => r.json()).then(data => {
+            if (data.success) addChannelMessageToUI(data.message);
+        });
+        closeGifPicker();
     }
 
     // ============================================
@@ -650,9 +1048,18 @@
         const bubble = document.getElementById('bubble-' + messageId);
         if (bubble) {
             const contentEl = bubble.querySelector('.message-content');
+            const content = contentEl ? contentEl.textContent : bubble.textContent;
+            // Update preview text
+            const previewText = document.querySelector('#reply-preview p:last-child');
+            if (previewText) previewText.textContent = content.substring(0, 100);
             document.getElementById('reply-preview').classList.remove('hidden');
             document.getElementById('message-input').focus();
         }
+    }
+
+    function cancelReply() {
+        replyToId = null;
+        document.getElementById('reply-preview').classList.add('hidden');
     }
 
     function copyMessageText(messageId) {
@@ -777,10 +1184,16 @@
         if (!selectedMessageId || !conversationId) return;
         const bubble = document.getElementById('bubble-' + selectedMessageId);
         const contentEl = bubble ? bubble.querySelector('.message-content') : null;
-        const content = contentEl ? contentEl.innerHTML : '';
+        // Use textContent to prevent XSS instead of innerHTML
+        const content = contentEl ? escapeHtml(contentEl.textContent || '') : '';
         fetch('/flow/api/messages/send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ conversation_id: conversationId, content, message_type: 'text' })
+            body: JSON.stringify({
+                conversation_id: conversationId,
+                content,
+                message_type: 'text',
+                metadata: JSON.stringify({ forwarded_from_id: selectedMessageId })
+            })
         }).then(r => r.json()).then(data => {
             if (data.success) { showNotification('Forwarded', 'Message forwarded'); closeForwardModal(); }
         });

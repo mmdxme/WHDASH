@@ -126,13 +126,16 @@
         /* Bidirectional text handling */
         .bidi-text {
             unicode-bidi: plaintext;
-            direction: ltr;
+            direction: auto;
             text-align: start;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
         .message-content {
             unicode-bidi: plaintext;
-            direction: ltr;
+            direction: auto;
             text-align: start;
             white-space: pre-wrap;
             word-wrap: break-word;
@@ -142,13 +145,11 @@
         /* Sent messages - align based on direction preference */
         .message-bubble.sent .message-content {
             text-align: right;
-            direction: rtl;
         }
 
         /* Received messages - always LTR for English/foreign text */
         .message-bubble.received .message-content {
             text-align: left;
-            direction: ltr;
         }
 
         [dir="rtl"] .message-content {
@@ -448,6 +449,15 @@
                 <button onclick="switchTab('groups')" class="tab-btn flex-1 py-3 text-sm font-medium text-slate-500 hover:text-slate-700" data-tab="groups">
                     Groups
                 </button>
+                <button onclick="switchTab('flow')" class="tab-btn flex-1 py-3 text-sm font-medium text-slate-500 hover:text-slate-700" data-tab="flow" id="flow-tab-btn">
+                    <span class="flex items-center justify-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                        </svg>
+                        Flow
+                    </span>
+                    <span id="flow-tab-indicator" class="tab-indicator hidden ml-1 w-2 h-2 bg-blue-500 rounded-full"></span>
+                </button>
             </div>
             {% endblock %}
             
@@ -627,6 +637,24 @@
                     </div>
                 {% endif %}
             </div>
+
+            <!-- Flow feed list -->
+            <div id="flow-list" class="conversation-list flex-1 overflow-y-auto hidden">
+                <div class="p-4">
+                    <h3 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">Flow Feed</h3>
+                    <div id="flow-feed-content">
+                        <div class="text-center py-8">
+                            <div class="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                                <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                                </svg>
+                            </div>
+                            <h3 class="font-semibold text-slate-700 dark:text-slate-300 mb-2">Flow Feed</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400">Posts from public groups and shared content will appear here</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
             {% endblock %}
             
             {% block sidebar_footer %}
@@ -764,7 +792,7 @@
         <div class="absolute bottom-20 right-4 w-[360px] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
             <div class="p-3 border-b border-slate-200 dark:border-slate-700">
                 <div class="flex items-center gap-2 mb-3">
-                    <input type="text" placeholder="Search GIFs..." 
+                    <input type="text" placeholder="Search GIFs..."
                            class="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-700 border-0 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                            id="gif-search-input">
                     <button onclick="searchGifs()" class="px-3 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600">Search</button>
@@ -778,6 +806,58 @@
             </div>
             <div class="p-3 max-h-80 overflow-y-auto" id="gif-results">
                 <p class="text-center text-slate-400 text-sm py-8">Search for GIFs to send</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Search Modal -->
+    <div id="search-modal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/50" onclick="closeSearchModal()"></div>
+        <div class="absolute top-[10%] left-1/2 -translate-x-1/2 w-full max-w-2xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+            <div class="p-4 border-b border-slate-200 dark:border-slate-700">
+                <div class="flex items-center gap-3">
+                    <div class="flex-1 relative">
+                        <input type="text" id="global-search-input" placeholder="Search users, channels, groups, messages..."
+                               class="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-slate-700 border-0 rounded-xl text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                               oninput="debouncedGlobalSearch(this.value)"
+                               onkeydown="handleSearchKeydown(event)">
+                        <svg class="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                    </div>
+                    <button onclick="closeSearchModal()" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+                        <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <!-- Search scope tabs -->
+                <div class="flex gap-2 mt-3">
+                    <button onclick="setSearchScope('all')" class="search-scope-btn px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm font-medium" data-scope="all">All</button>
+                    <button onclick="setSearchScope('users')" class="search-scope-btn px-3 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-medium" data-scope="users">Users</button>
+                    <button onclick="setSearchScope('channels')" class="search-scope-btn px-3 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-medium" data-scope="channels">Channels</button>
+                    <button onclick="setSearchScope('groups')" class="search-scope-btn px-3 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-medium" data-scope="groups">Groups</button>
+                    <button onclick="setSearchScope('messages')" class="search-scope-btn px-3 py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg text-sm font-medium" data-scope="messages">Messages</button>
+                </div>
+            </div>
+            <div class="p-4 max-h-96 overflow-y-auto" id="search-results-container">
+                <div class="text-center text-slate-400 py-8" id="search-placeholder">
+                    <svg class="w-12 h-12 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <p>Type to search across Flow</p>
+                </div>
+                <div id="search-results" class="space-y-2 hidden"></div>
+                <div id="search-loading" class="hidden text-center py-8">
+                    <div class="w-8 h-8 mx-auto border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-sm text-slate-400 mt-2">Searching...</p>
+                </div>
+                <div id="search-no-results" class="hidden text-center py-8">
+                    <svg class="w-12 h-12 mx-auto mb-3 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <p class="text-slate-400">No results found</p>
+                </div>
             </div>
         </div>
     </div>
@@ -796,13 +876,16 @@
     
     {% block scripts %}
     <script>
+        console.log('[Flow] Script loading...');
+
         // Global state
         let currentUser = {{ user.id | tojson }};
         let currentConversation = null;
         let pollingInterval = null;
-        
+
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
+            console.log('[Flow] DOM loaded, initializing...');
             initApp();
         });
         
@@ -1124,10 +1207,15 @@
             pollForUpdates();
             pollingInterval = setInterval(pollForUpdates, 5000);
         }
-        
+
         function pollForUpdates() {
             fetch('/flow/api/updates')
-                .then(r => r.json())
+                .then(r => {
+                    if (!r.ok) {
+                        throw new Error('Not authorized');
+                    }
+                    return r.json();
+                })
                 .then(data => {
                     // Update unread counts
                     if (data.unread) {
@@ -1141,7 +1229,13 @@
                         showNotification('Reminder', 'You have a reminder!');
                     }
                 })
-                .catch(console.error);
+                .catch(err => {
+                    console.log('[Flow] Polling stopped:', err.message);
+                    // Stop polling if not authorized
+                    if (err.message === 'Not authorized') {
+                        clearInterval(pollingInterval);
+                    }
+                });
         }
 
         function updateConversationBadge(convId, unreadCount, mentionCount) {
@@ -1181,16 +1275,26 @@
         
         // Tab switching
         function switchTab(tab) {
+            console.log('[Flow] Switching to tab:', tab);
+
             // Update button styles
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.classList.remove('text-blue-600', 'border-b-2', 'border-blue-600');
                 btn.classList.add('text-slate-500');
             });
 
+            // Hide all tab indicators
+            document.querySelectorAll('.tab-indicator').forEach(ind => ind.classList.add('hidden'));
+
             const activeBtn = document.querySelector(`[data-tab="${tab}"]`);
             if (activeBtn) {
                 activeBtn.classList.add('text-blue-600', 'border-b-2', 'border-blue-600');
                 activeBtn.classList.remove('text-slate-500');
+                // Show indicator for this tab
+                const indicator = activeBtn.querySelector('.tab-indicator');
+                if (indicator) indicator.classList.remove('hidden');
+            } else {
+                console.error('[Flow] No button found for tab:', tab);
             }
 
             // Show/hide content lists
@@ -1201,6 +1305,15 @@
             const targetList = document.getElementById(`${tab}-list`);
             if (targetList) {
                 targetList.classList.remove('hidden');
+                console.log('[Flow] Showed tab content:', targetList.id);
+            } else {
+                console.error('[Flow] No content list found for tab:', tab, '- looking for:', tab + '-list');
+            }
+
+            // Load Flow feed if switching to flow tab
+            if (tab === 'flow') {
+                console.log('[Flow] Loading Flow feed...');
+                loadFlowFeed();
             }
 
             // Update URL hash for bookmarking
@@ -1210,9 +1323,129 @@
         // Initialize tab from URL hash
         function initTabFromHash() {
             const hash = window.location.hash.replace('#', '');
-            if (['chats', 'channels', 'groups'].includes(hash)) {
+            console.log('[Flow] Initializing tab from hash:', hash);
+            if (['chats', 'channels', 'groups', 'flow'].includes(hash)) {
                 switchTab(hash);
+            } else {
+                // Default to chats tab if no hash
+                console.log('[Flow] No hash, defaulting to chats tab');
             }
+        }
+
+        // Debug: manually trigger flow tab
+        window.testFlowTab = function() {
+            console.log('[Flow] Manual test - switching to flow tab');
+            switchTab('flow');
+        };
+
+        // Load Flow feed content
+        function loadFlowFeed() {
+            const container = document.getElementById('flow-feed-content');
+            if (!container) {
+                console.error('[Flow] Flow feed container not found');
+                return;
+            }
+
+            // Show loading state
+            container.innerHTML = `
+                <div class="text-center py-8">
+                    <div class="w-12 h-12 mx-auto mb-4 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-sm text-slate-500">Loading Flow feed...</p>
+                </div>
+            `;
+
+            // Fetch flow feed data
+            fetch('/flow/api/flow/feed')
+                .then(r => {
+                    console.log('[Flow] API response status:', r.status);
+                    if (!r.ok) {
+                        throw new Error('HTTP ' + r.status);
+                    }
+                    return r.json();
+                })
+                .then(data => {
+                    console.log('[Flow] API response data:', data);
+                    if (data.success && data.posts && data.posts.length > 0) {
+                        renderFlowFeed(data.posts);
+                    } else {
+                        container.innerHTML = `
+                            <div class="text-center py-8">
+                                <div class="w-16 h-16 mx-auto mb-4 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+                                    </svg>
+                                </div>
+                                <h3 class="font-semibold text-slate-700 dark:text-slate-300 mb-2">No Flow posts yet</h3>
+                                <p class="text-sm text-slate-500 dark:text-slate-400">Posts from public groups and shared content will appear here</p>
+                            </div>
+                        `;
+                    }
+                })
+                .catch(err => {
+                    console.error('[Flow] Flow feed error:', err);
+                    container.innerHTML = `
+                        <div class="text-center py-8">
+                            <div class="w-16 h-16 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                                <svg class="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                            </div>
+                            <h3 class="font-semibold text-slate-700 dark:text-slate-300 mb-2">Failed to load Flow</h3>
+                            <p class="text-sm text-slate-500 dark:text-slate-400">Error: ${err.message}</p>
+                            <button onclick="loadFlowFeed()" class="mt-3 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+                                Retry
+                            </button>
+                        </div>
+                    `;
+                });
+        }
+
+        function renderFlowFeed(posts) {
+            const container = document.getElementById('flow-feed-content');
+            if (!container) return;
+
+            container.innerHTML = posts.map(post => `
+                <div class="flow-post bg-white dark:bg-slate-800 rounded-xl p-4 mb-3 border border-slate-200 dark:border-slate-700 hover:shadow-md transition-shadow cursor-pointer"
+                     onclick="window.location.href='/flow${post.source_url}'">
+                    <div class="flex items-start gap-3">
+                        ${post.author_avatar ? `<img src="${post.author_avatar}" class="w-10 h-10 rounded-full object-cover">` : `<div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-semibold">${(post.author_name || 'U')[0].toUpperCase()}</div>`}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span class="font-semibold text-slate-800 dark:text-white">${escapeHtml(post.author_name || 'Unknown')}</span>
+                                <span class="text-xs text-slate-400">${formatTimeAgo(post.created_at)}</span>
+                                ${post.source_type === 'channel' ? `<span class="px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs rounded-full"># ${escapeHtml(post.source_name || '')}</span>` : ''}
+                                ${post.source_type === 'group' ? `<span class="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 text-xs rounded-full">${escapeHtml(post.source_name || '')}</span>` : ''}
+                            </div>
+                            <p class="text-slate-700 dark:text-slate-300 mt-1 line-clamp-3">${escapeHtml(post.content || '')}</p>
+                            ${post.attachment_url ? `<img src="${post.attachment_url}" class="mt-2 rounded-lg max-h-48 object-cover">` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function formatTimeAgo(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            const now = new Date();
+            const diff = now - date;
+            const seconds = Math.floor(diff / 1000);
+            const minutes = Math.floor(seconds / 60);
+            const hours = Math.floor(minutes / 60);
+            const days = Math.floor(hours / 24);
+
+            if (days > 7) return date.toLocaleDateString();
+            if (days > 0) return `${days}d ago`;
+            if (hours > 0) return `${hours}h ago`;
+            if (minutes > 0) return `${minutes}m ago`;
+            return 'Just now';
         }
         
         // Sidebar toggle for mobile
@@ -1227,12 +1460,178 @@
                 window.location.href = `/flow/search?q=${encodeURIComponent(query)}`;
             }
         }
-        
+
+        let currentSearchScope = 'all';
+        let searchDebounceTimer = null;
+
         function showSearch() {
-            const searchInput = document.getElementById('global-search');
-            if (searchInput) {
-                searchInput.focus();
+            const modal = document.getElementById('search-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                document.getElementById('global-search-input').focus();
             }
+        }
+
+        function closeSearchModal() {
+            const modal = document.getElementById('search-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                document.getElementById('global-search-input').value = '';
+                document.getElementById('search-results').classList.add('hidden');
+                document.getElementById('search-results').innerHTML = '';
+                document.getElementById('search-placeholder').classList.remove('hidden');
+                document.getElementById('search-no-results').classList.add('hidden');
+            }
+        }
+
+        function setSearchScope(scope) {
+            currentSearchScope = scope;
+            document.querySelectorAll('.search-scope-btn').forEach(btn => {
+                if (btn.dataset.scope === scope) {
+                    btn.classList.remove('bg-slate-100', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+                    btn.classList.add('bg-blue-500', 'text-white');
+                } else {
+                    btn.classList.add('bg-slate-100', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+                    btn.classList.remove('bg-blue-500', 'text-white');
+                }
+            });
+            // Re-run search if there's a query
+            const query = document.getElementById('global-search-input').value;
+            if (query.length >= 2) {
+                performGlobalSearch(query);
+            }
+        }
+
+        function debouncedGlobalSearch(query) {
+            clearTimeout(searchDebounceTimer);
+            if (query.length < 2) {
+                document.getElementById('search-results').classList.add('hidden');
+                document.getElementById('search-placeholder').classList.remove('hidden');
+                document.getElementById('search-no-results').classList.add('hidden');
+                return;
+            }
+            searchDebounceTimer = setTimeout(() => performGlobalSearch(query), 300);
+        }
+
+        function handleSearchKeydown(event) {
+            if (event.key === 'Escape') {
+                closeSearchModal();
+            }
+        }
+
+        function performGlobalSearch(query) {
+            const resultsContainer = document.getElementById('search-results');
+            const placeholder = document.getElementById('search-placeholder');
+            const loading = document.getElementById('search-loading');
+            const noResults = document.getElementById('search-no-results');
+
+            placeholder.classList.add('hidden');
+            resultsContainer.classList.add('hidden');
+            noResults.classList.add('hidden');
+            loading.classList.remove('hidden');
+
+            fetch(`/flow/api/search/comprehensive?q=${encodeURIComponent(query)}&scope=${currentSearchScope}&limit=20`)
+                .then(r => r.json())
+                .then(data => {
+                    loading.classList.add('hidden');
+                    if (data.success) {
+                        const results = data.results;
+                        const hasResults = (
+                            (currentSearchScope === 'all' && (results.users.length > 0 || results.channels.length > 0 || results.groups.length > 0 || results.messages.length > 0)) ||
+                            (currentSearchScope === 'users' && results.users.length > 0) ||
+                            (currentSearchScope === 'channels' && results.channels.length > 0) ||
+                            (currentSearchScope === 'groups' && results.groups.length > 0) ||
+                            (currentSearchScope === 'messages' && results.messages.length > 0)
+                        );
+
+                        if (hasResults) {
+                            renderSearchResults(results, currentSearchScope);
+                            resultsContainer.classList.remove('hidden');
+                        } else {
+                            noResults.classList.remove('hidden');
+                        }
+                    } else {
+                        noResults.classList.remove('hidden');
+                    }
+                })
+                .catch(err => {
+                    console.error('Search error:', err);
+                    loading.classList.add('hidden');
+                    noResults.classList.remove('hidden');
+                });
+        }
+
+        function renderSearchResults(results, scope) {
+            const container = document.getElementById('search-results');
+            let html = '';
+
+            if (scope === 'all') {
+                if (results.users && results.users.length > 0) {
+                    html += `<div class="mb-4"><h4 class="text-xs font-semibold text-slate-400 uppercase mb-2">Users</h4><div class="space-y-1">`;
+                    results.users.slice(0, 5).forEach(user => {
+                        html += `<a href="/flow/profile/${user.id}" class="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" onclick="closeSearchModal()">
+                            <img src="${user.avatar_url || '/static/uploads/avatars/avatar_private_blue.png'}" class="w-8 h-8 rounded-full object-cover">
+                            <div><p class="font-medium text-slate-800 dark:text-white">${escapeHtml(user.display_name)}</p><p class="text-xs text-slate-500">@${escapeHtml(user.username || '')}</p></div>
+                        </a>`;
+                    });
+                    html += `</div></div>`;
+                }
+                if (results.channels && results.channels.length > 0) {
+                    html += `<div class="mb-4"><h4 class="text-xs font-semibold text-slate-400 uppercase mb-2">Channels</h4><div class="space-y-1">`;
+                    results.channels.slice(0, 5).forEach(ch => {
+                        html += `<a href="/flow/channels/${ch.channel_id || ch.id}" class="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" onclick="closeSearchModal()">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-white font-bold">#</div>
+                            <div><p class="font-medium text-slate-800 dark:text-white">${escapeHtml(ch.name)}</p><p class="text-xs text-slate-500">${ch.member_count} members</p></div>
+                        </a>`;
+                    });
+                    html += `</div></div>`;
+                }
+                if (results.groups && results.groups.length > 0) {
+                    html += `<div class="mb-4"><h4 class="text-xs font-semibold text-slate-400 uppercase mb-2">Groups</h4><div class="space-y-1">`;
+                    results.groups.slice(0, 5).forEach(gp => {
+                        html += `<a href="/flow/groups/${gp.id}" class="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" onclick="closeSearchModal()">
+                            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">${(gp.name || 'G')[0].toUpperCase()}</div>
+                            <div><p class="font-medium text-slate-800 dark:text-white">${escapeHtml(gp.name)}</p><p class="text-xs text-slate-500">${gp.member_count} members</p></div>
+                        </a>`;
+                    });
+                    html += `</div></div>`;
+                }
+                if (results.messages && results.messages.length > 0) {
+                    html += `<div class="mb-4"><h4 class="text-xs font-semibold text-slate-400 uppercase mb-2">Messages</h4><div class="space-y-1">`;
+                    results.messages.slice(0, 5).forEach(msg => {
+                        html += `<a href="/flow/search?q=${encodeURIComponent(msg.content ? msg.content.substring(0, 50) : '')}" class="block p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" onclick="closeSearchModal()">
+                            <p class="text-sm text-slate-700 dark:text-slate-300 line-clamp-2">${escapeHtml(msg.content ? msg.content.substring(0, 100) : '')}</p>
+                            <p class="text-xs text-slate-400 mt-1">${escapeHtml(msg.conversation_name || 'Unknown')} • ${escapeHtml(msg.sender_name || 'Unknown')}</p>
+                        </a>`;
+                    });
+                    html += `</div></div>`;
+                }
+            } else if (scope === 'users' && results.users) {
+                html = results.users.map(user => `<a href="/flow/profile/${user.id}" class="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" onclick="closeSearchModal()">
+                    <img src="${user.avatar_url || '/static/uploads/avatars/avatar_private_blue.png'}" class="w-10 h-10 rounded-full object-cover">
+                    <div><p class="font-medium text-slate-800 dark:text-white">${escapeHtml(user.display_name)}</p><p class="text-xs text-slate-500">@${escapeHtml(user.username || '')}${user.department ? ' • ' + escapeHtml(user.department) : ''}</p></div>
+                </a>`).join('');
+            } else if (scope === 'channels' && results.channels) {
+                html = results.channels.map(ch => `<a href="/flow/channels/${ch.channel_id || ch.id}" class="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" onclick="closeSearchModal()">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-green-600 flex items-center justify-center text-white font-bold text-lg">#</div>
+                    <div><p class="font-medium text-slate-800 dark:text-white">${escapeHtml(ch.name)}</p><p class="text-xs text-slate-500">${ch.member_count} members • ${ch.channel_type}</p></div>
+                </a>`).join('');
+            } else if (scope === 'groups' && results.groups) {
+                html = results.groups.map(gp => `<a href="/flow/groups/${gp.id}" class="flex items-center gap-3 p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg" onclick="closeSearchModal()">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-lg">${(gp.name || 'G')[0].toUpperCase()}</div>
+                    <div><p class="font-medium text-slate-800 dark:text-white">${escapeHtml(gp.name)}</p><p class="text-xs text-slate-500">${gp.member_count} members • ${gp.group_type}</p></div>
+                </a>`).join('');
+            } else if (scope === 'messages' && results.messages) {
+                html = results.messages.map(msg => `<a href="/flow/search?q=${encodeURIComponent(msg.content ? msg.content.substring(0, 50) : '')}" class="block p-3 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg mb-2" onclick="closeSearchModal()">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="font-medium text-slate-800 dark:text-white">${escapeHtml(msg.sender_name || 'Unknown')}</span>
+                        <span class="text-xs text-slate-400">in ${escapeHtml(msg.conversation_name || 'Unknown')}</span>
+                    </div>
+                    <p class="text-sm text-slate-600 dark:text-slate-300 line-clamp-2">${escapeHtml(msg.content || '')}</p>
+                </a>`).join('');
+            }
+
+            container.innerHTML = html || '<p class="text-center text-slate-400 py-4">No results found</p>';
         }
         
         // Emoji picker

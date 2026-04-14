@@ -634,8 +634,18 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     function getMultiValues(selectEl) {
-        if (selectEl.choicesInstance) return selectEl.choicesInstance.getValue(true).join(',');
-        return Array.from(selectEl.selectedOptions).map(o => o.value).join(',');
+        if (selectEl && selectEl.choicesInstance && typeof selectEl.choicesInstance.getValue === 'function') {
+            try {
+                return selectEl.choicesInstance.getValue(true).join(',');
+            } catch (e) {
+                console.debug(`[Choices] getMultiValues fell back to native for`, selectEl.id, e);
+            }
+        }
+        // Fallback: native select
+        if (selectEl) {
+            return Array.from(selectEl.selectedOptions).map(o => o.value).join(',');
+        }
+        return '';
     }
 
     // ── Choices.js Init ──
@@ -648,37 +658,73 @@ document.addEventListener('DOMContentLoaded', () => {
         openOnFocus: false
     };
 
+    const choicesAvailable = typeof Choices !== 'undefined';
+
     ['filter_company', 'filter_category', 'filter_brand', 'filter_status', 'filter_vitality', 'filter_health_status'].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
-            try {
-                el.choicesInstance = new Choices(el, choiceConfig);
-                el.addEventListener('change', fetchInventory);
-            } catch (err) {
-                el.addEventListener('change', fetchInventory);
+            // Reset any stale instance before re-init
+            if (el.choicesInstance && typeof el.choicesInstance.destroy === 'function') {
+                try { el.choicesInstance.destroy(); } catch (_) {}
             }
+            el.choicesInstance = null;
+
+            if (choicesAvailable) {
+                try {
+                    el.choicesInstance = new Choices(el, choiceConfig);
+                    console.log(`[Choices] Initialized successfully on #${id}`);
+                } catch (err) {
+                    console.error(`[Choices] CRITICAL failed to initialize on #${id}:`, err);
+                    el.choicesInstance = null;
+                }
+            } else {
+                console.warn(`[Choices] Choices.js library not loaded, #${id} will use native select`);
+            }
+            el.addEventListener('change', fetchInventory);
         }
     });
 
     window.toggleAll = function(selectId) {
         const el = document.getElementById(selectId);
-        if (!el || !el.choicesInstance) return;
+        if (!el) return;
         const ci = el.choicesInstance;
-        const currentSelected = ci.getValue(true);
-        const allValues = Array.from(el.querySelectorAll('option')).map(o => o.value);
-        if (currentSelected.length === allValues.length) {
-            ci.removeActiveItems();
-        } else {
-            ci.removeActiveItems();
-            allValues.forEach(v => ci.setChoiceByValue(v));
+        if (!ci) {
+            // Fallback: toggle native select all
+            const options = Array.from(el.querySelectorAll('option'));
+            const allSelected = options.every(o => o.selected);
+            options.forEach(o => { o.selected = !allSelected; });
+            el.dispatchEvent(new Event('change'));
+            return;
+        }
+        try {
+            const currentSelected = ci.getValue(true);
+            const allValues = Array.from(el.querySelectorAll('option')).map(o => o.value);
+            if (currentSelected.length === allValues.length) {
+                ci.removeActiveItems();
+            } else {
+                ci.removeActiveItems();
+                allValues.forEach(v => ci.setChoiceByValue(v));
+            }
+        } catch (err) {
+            console.warn(`[Choices] toggleAll failed on #${selectId}:`, err);
         }
         fetchInventory();
     };
 
     window.clearAll = function(selectId) {
         const el = document.getElementById(selectId);
-        if (!el || !el.choicesInstance) return;
-        el.choicesInstance.removeActiveItems();
+        if (!el) return;
+        const ci = el.choicesInstance;
+        if (!ci) {
+            Array.from(el.options).forEach(o => { o.selected = false; });
+            el.dispatchEvent(new Event('change'));
+            return;
+        }
+        try {
+            ci.removeActiveItems();
+        } catch (err) {
+            console.warn(`[Choices] clearAll failed on #${selectId}:`, err);
+        }
         fetchInventory();
     };
 
@@ -686,7 +732,12 @@ document.addEventListener('DOMContentLoaded', () => {
     window.resetAllFilters = function() {
         ['filter_company', 'filter_category', 'filter_brand', 'filter_status', 'filter_vitality', 'filter_health_status'].forEach(id => {
             const el = document.getElementById(id);
-            if (el && el.choicesInstance) el.choicesInstance.removeActiveItems();
+            if (!el) return;
+            if (el.choicesInstance) {
+                try { el.choicesInstance.removeActiveItems(); } catch (e) { /* ignore */ }
+            } else {
+                Array.from(el.options).forEach(o => { o.selected = false; });
+            }
         });
         if (F.zone) F.zone.value = '';
         fetchInventory();

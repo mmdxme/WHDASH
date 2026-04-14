@@ -16,6 +16,10 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/choices.js/public/assets/styles/choices.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/choices.js/public/assets/scripts/choices.min.js"></script>
 
+    <!-- Quick Tools Panel -->
+    <script src="{{ url_for('static', filename='js/quick_tools.js') }}"></script>
+    <meta name="csrf-token" content="{{ csrf_token }}">
+
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -33,7 +37,8 @@
 
     <style>
         :root {
-            --app-font-family: {{ user_preferences.font_stack|safe }};
+            {% set _font_stack = user_preferences.font_stack %}
+            --app-font-family: {{ _font_stack if _font_stack and _font_stack.lower() != 'none' and _font_stack != '' else 'Outfit, sans-serif' }};
             --app-font-size: {{ user_preferences.font_size_value }};
             --app-font-weight: {{ user_preferences.font_weight_value }};
         }
@@ -68,10 +73,930 @@
         .fade-in {
             animation: fadeIn 0.4s ease-out forwards;
         }
-        
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ================================================
+           QUICK TOOLS FLOATING PANEL
+           ================================================ */
+
+        /* Floating Action Button */
+        #quick-tools-fab {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 1.5rem;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .quick-fab-btn {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--theme-primary) 0%, var(--theme-primary-hover) 100%);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.25rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 4px rgba(var(--theme-primary-rgb), 0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .quick-fab-btn:hover {
+            transform: scale(1.1);
+            box-shadow: 0 6px 30px rgba(0, 0, 0, 0.4), 0 0 0 6px rgba(var(--theme-primary-rgb), 0.3);
+        }
+
+        .quick-fab-btn:active {
+            transform: scale(0.95);
+        }
+
+        .quick-fab-btn .fa-flask { transition: opacity 0.2s; }
+        .quick-fab-btn .quick-fab-close { display: none; transition: opacity 0.2s; }
+
+        #quick-tools-fab.active .quick-fab-btn .fa-flask { display: none; }
+        #quick-tools-fab.active .quick-fab-btn .quick-fab-close { display: inline; }
+
+        .quick-fab-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 6px;
+            border-radius: 10px;
+            background: var(--theme-danger, #ef4444);
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Quick Tools Panel */
+        #quick-tools-panel {
+            position: fixed;
+            bottom: 5.5rem;
+            left: 1.5rem;
+            width: 340px;
+            max-height: 520px;
+            border-radius: 1rem;
+            background: var(--theme-surface);
+            border: 1px solid var(--theme-border);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+            z-index: 9998;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(20px) scale(0.95);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #quick-tools-panel.open {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0) scale(1);
+        }
+
+        .quick-panel-header {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--theme-border);
+            gap: 0.5rem;
+        }
+
+        .quick-panel-tabs {
+            display: flex;
+            gap: 0.25rem;
+            flex: 1;
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+
+        .quick-panel-tabs::-webkit-scrollbar { display: none; }
+
+        .quick-tab {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.5rem 0.6rem;
+            border: none;
+            background: transparent;
+            color: var(--theme-text-muted);
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 48px;
+        }
+
+        .quick-tab:hover {
+            background: var(--theme-sidebar-hover-bg);
+            color: var(--theme-text-primary);
+        }
+
+        .quick-tab.active {
+            background: var(--theme-primary-light);
+            color: var(--theme-primary);
+        }
+
+        .quick-tab i { font-size: 1rem; }
+        .quick-tab span { font-size: 0.65rem; font-weight: 600; }
+
+        .quick-panel-close {
+            width: 32px;
+            height: 32px;
+            border-radius: 0.5rem;
+            border: 1px solid var(--theme-border);
+            background: var(--theme-surface);
+            color: var(--theme-text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .quick-panel-close:hover {
+            background: var(--theme-danger);
+            color: white;
+            border-color: var(--theme-danger);
+        }
+
+        .quick-panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .quick-tool-content {
+            display: none;
+        }
+
+        .quick-tool-content.active {
+            display: block;
+        }
+
+        /* Calculator Styles */
+        .calc-display {
+            background: var(--theme-bg);
+            border: 1px solid var(--theme-border);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .calc-expression {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: var(--theme-text-secondary);
+            font-size: 1.25rem;
+            font-family: 'Space Grotesk', monospace;
+            text-align: right;
+            outline: none;
+        }
+
+        .calc-result {
+            color: var(--theme-primary);
+            font-size: 1.75rem;
+            font-weight: 700;
+            font-family: 'Space Grotesk', monospace;
+            text-align: right;
+            min-height: 2rem;
+        }
+
+        .calc-buttons {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+        }
+
+        .calc-btn {
+            height: 44px;
+            border-radius: 0.5rem;
+            border: 1px solid var(--theme-border);
+            background: var(--theme-input-bg);
+            color: var(--theme-text-primary);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .calc-btn:hover {
+            background: var(--theme-sidebar-hover-bg);
+            border-color: var(--theme-border-focus);
+        }
+
+        .calc-btn:active {
+            transform: scale(0.95);
+        }
+
+        .calc-btn.calc-op {
+            background: var(--theme-primary-light);
+            color: var(--theme-primary);
+            border-color: var(--theme-primary);
+        }
+
+        .calc-btn.calc-op:hover {
+            background: var(--theme-primary);
+            color: white;
+        }
+
+        .calc-btn.calc-equals {
+            background: var(--theme-success);
+            color: white;
+            border-color: var(--theme-success);
+        }
+
+        .calc-btn.calc-equals:hover {
+            filter: brightness(1.1);
+        }
+
+        .calc-btn.calc-clear {
+            background: var(--theme-danger);
+            color: white;
+            border-color: var(--theme-danger);
+        }
+
+        .calc-btn.calc-zero { grid-column: span 2; }
+
+        .calc-actions {
+            margin-top: 0.75rem;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .calc-copy-btn {
+            padding: 0.4rem 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--theme-border);
+            background: var(--theme-surface);
+            color: var(--theme-text-secondary);
+            font-size: 0.75rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: all 0.2s;
+        }
+
+        .calc-copy-btn:hover {
+            background: var(--theme-primary-light);
+            color: var(--theme-primary);
+            border-color: var(--theme-primary);
+        }
+
+        /* Notes Styles */
+        .notes-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .notes-input-area {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .note-title-input,
+        .note-content-input {
+            width: 100%;
+            padding: 0.6rem 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--theme-border);
+            background: var(--theme-input-bg);
+            color: var(--theme-text-primary);
+            font-family: inherit;
+            font-size: 0.875rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .note-title-input:focus,
+        .note-content-input:focus {
+            border-color: var(--theme-input-focus-border);
+            box-shadow: 0 0 0 3px var(--theme-input-focus-ring);
+        }
+
+        .note-content-input {
+            min-height: 60px;
+            resize: vertical;
+        }
+
+        .notes-color-picker {
+            display: flex;
+            gap: 0.4rem;
+        }
+
+        .color-btn {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .color-btn:hover, .color-btn.active {
+            transform: scale(1.2);
+            border-color: white;
+            box-shadow: 0 0 0 2px var(--theme-border);
+        }
+
+        .notes-add-btn {
+            padding: 0.6rem 1rem;
+            border-radius: 0.5rem;
+            border: none;
+            background: var(--theme-primary);
+            color: white;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .notes-add-btn:hover {
+            background: var(--theme-primary-hover);
+            transform: translateY(-1px);
+        }
+
+        .notes-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .notes-empty, .reminders-empty, .favorites-empty {
+            text-align: center;
+            padding: 1.5rem;
+            color: var(--theme-text-muted);
+        }
+
+        .notes-empty i, .reminders-empty i, .favorites-empty i {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            opacity: 0.5;
+        }
+
+        .notes-empty p, .reminders-empty p, .favorites-empty p {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .notes-empty span, .reminders-empty span, .favorites-empty span {
+            font-size: 0.75rem;
+            opacity: 0.7;
+        }
+
+        .note-item {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.6rem;
+            border-radius: 0.5rem;
+            background: var(--theme-input-bg);
+            border: 1px solid var(--theme-border);
+            transition: all 0.2s;
+        }
+
+        .note-item:hover {
+            border-color: var(--theme-border-focus);
+        }
+
+        .note-item.pinned {
+            border-color: var(--theme-primary);
+            background: var(--theme-primary-light);
+        }
+
+        .note-color-bar {
+            width: 4px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .note-content-wrapper {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .note-title {
+            font-weight: 600;
+            font-size: 0.8rem;
+            color: var(--theme-text-primary);
+            margin-bottom: 0.2rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .note-text {
+            font-size: 0.8rem;
+            color: var(--theme-text-secondary);
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .note-time {
+            font-size: 0.65rem;
+            color: var(--theme-text-muted);
+            margin-top: 0.3rem;
+        }
+
+        .note-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .note-actions button {
+            width: 24px;
+            height: 24px;
+            border-radius: 0.25rem;
+            border: none;
+            background: transparent;
+            color: var(--theme-text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            transition: all 0.2s;
+        }
+
+        .note-actions button:hover {
+            background: var(--theme-sidebar-hover-bg);
+            color: var(--theme-text-primary);
+        }
+
+        .note-actions .note-delete:hover {
+            background: var(--theme-danger);
+            color: white;
+        }
+
+        .note-pin.active {
+            color: var(--theme-primary) !important;
+        }
+
+        /* Task/Issue Form Styles */
+        .task-form-container, .issue-form-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .task-form, .issue-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .form-group label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--theme-text-secondary);
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 0.6rem 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--theme-border);
+            background: var(--theme-input-bg);
+            color: var(--theme-text-primary);
+            font-family: inherit;
+            font-size: 0.875rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: var(--theme-input-focus-border);
+            box-shadow: 0 0 0 3px var(--theme-input-focus-ring);
+        }
+
+        .form-group textarea {
+            min-height: 50px;
+            resize: vertical;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .task-create-btn, .issue-create-btn {
+            padding: 0.75rem 1rem;
+            border-radius: 0.5rem;
+            border: none;
+            background: var(--theme-success);
+            color: white;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .task-create-btn:hover, .issue-create-btn:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        /* Reminder Styles */
+        .reminders-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .reminder-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .reminder-form input[type="text"],
+        .reminder-form input[type="datetime-local"] {
+            width: 100%;
+            padding: 0.6rem 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--theme-border);
+            background: var(--theme-input-bg);
+            color: var(--theme-text-primary);
+            font-family: inherit;
+            font-size: 0.875rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .reminder-form input:focus {
+            border-color: var(--theme-input-focus-border);
+            box-shadow: 0 0 0 3px var(--theme-input-focus-ring);
+        }
+
+        .reminder-time-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .reminder-time-row input[type="datetime-local"] {
+            flex: 1;
+        }
+
+        .reminder-presets {
+            display: flex;
+            gap: 0.25rem;
+            flex-wrap: wrap;
+        }
+
+        .preset-btn {
+            padding: 0.4rem 0.6rem;
+            border-radius: 0.35rem;
+            border: 1px solid var(--theme-border);
+            background: var(--theme-surface);
+            color: var(--theme-text-secondary);
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .preset-btn:hover {
+            background: var(--theme-primary-light);
+            color: var(--theme-primary);
+            border-color: var(--theme-primary);
+        }
+
+        .reminder-add-btn {
+            padding: 0.6rem 1rem;
+            border-radius: 0.5rem;
+            border: none;
+            background: var(--theme-warning);
+            color: #1a1a1a;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+        }
+
+        .reminder-add-btn:hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+
+        .reminders-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .reminder-item {
+            display: flex;
+            gap: 0.6rem;
+            padding: 0.6rem;
+            border-radius: 0.5rem;
+            background: var(--theme-input-bg);
+            border: 1px solid var(--theme-border);
+            transition: all 0.2s;
+            align-items: center;
+        }
+
+        .reminder-item:hover {
+            border-color: var(--theme-border-focus);
+        }
+
+        .reminder-item.overdue {
+            border-color: var(--theme-danger);
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .reminder-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 0.5rem;
+            background: var(--theme-warning);
+            color: #1a1a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .reminder-icon.overdue {
+            background: var(--theme-danger);
+            color: white;
+        }
+
+        .reminder-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .reminder-title {
+            font-weight: 600;
+            font-size: 0.8rem;
+            color: var(--theme-text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .reminder-time {
+            font-size: 0.7rem;
+            color: var(--theme-text-muted);
+        }
+
+        .reminder-actions {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .reminder-actions button {
+            width: 26px;
+            height: 26px;
+            border-radius: 0.35rem;
+            border: none;
+            background: transparent;
+            color: var(--theme-text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            transition: all 0.2s;
+        }
+
+        .reminder-actions button:hover {
+            background: var(--theme-sidebar-hover-bg);
+            color: var(--theme-text-primary);
+        }
+
+        .reminder-done:hover {
+            background: var(--theme-success) !important;
+            color: white !important;
+        }
+
+        .reminder-snooze:hover {
+            background: var(--theme-warning) !important;
+            color: #1a1a1a !important;
+        }
+
+        .reminder-delete:hover {
+            background: var(--theme-danger) !important;
+            color: white !important;
+        }
+
+        /* Favorites Styles */
+        .favorites-container {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .favorites-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--theme-text-secondary);
+        }
+
+        .add-favorite-btn {
+            width: 28px;
+            height: 28px;
+            border-radius: 0.5rem;
+            border: 1px solid var(--theme-border);
+            background: var(--theme-surface);
+            color: var(--theme-text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            transition: all 0.2s;
+        }
+
+        .add-favorite-btn:hover {
+            background: var(--theme-primary);
+            color: white;
+            border-color: var(--theme-primary);
+        }
+
+        .favorites-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            max-height: 240px;
+            overflow-y: auto;
+        }
+
+        .fav-item {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            background: var(--theme-input-bg);
+            border: 1px solid var(--theme-border);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .fav-item:hover {
+            border-color: var(--theme-border-focus);
+            background: var(--theme-sidebar-hover-bg);
+        }
+
+        .fav-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 0.5rem;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+            flex-shrink: 0;
+        }
+
+        .fav-label {
+            flex: 1;
+            font-size: 0.8rem;
+            font-weight: 500;
+            color: var(--theme-text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .fav-delete {
+            width: 24px;
+            height: 24px;
+            border-radius: 0.25rem;
+            border: none;
+            background: transparent;
+            color: var(--theme-text-muted);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            opacity: 0;
+            transition: all 0.2s;
+        }
+
+        .fav-item:hover .fav-delete {
+            opacity: 1;
+        }
+
+        .fav-delete:hover {
+            background: var(--theme-danger);
+            color: white;
+        }
+
+        /* RTL Support */
+        [dir="rtl"] #quick-tools-fab {
+            left: auto;
+            right: 1.5rem;
+        }
+
+        [dir="rtl"] #quick-tools-panel {
+            left: auto;
+            right: 1.5rem;
+        }
+
+        [dir="rtl"] .quick-panel-tabs {
+            flex-direction: row-reverse;
+        }
+
+        [dir="rtl"] .quick-tab {
+            flex-direction: column;
+        }
+
+        /* Mobile Responsive */
+        @media (max-width: 480px) {
+            #quick-tools-fab {
+                bottom: 1rem;
+                left: 1rem;
+            }
+
+            #quick-tools-panel {
+                bottom: 4.5rem;
+                left: 1rem;
+                right: 1rem;
+                width: auto;
+                max-height: 70vh;
+            }
+
+            .quick-fab-btn {
+                width: 48px;
+                height: 48px;
+                font-size: 1.1rem;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .calc-buttons {
+                gap: 0.35rem;
+            }
+
+            .calc-btn {
+                height: 40px;
+                font-size: 0.9rem;
+            }
         }
 
         /* Custom Scrollbar - Theme aware */
@@ -85,6 +1010,11 @@
             background: var(--theme-primary-light);
             border: 1px solid var(--theme-primary);
             color: var(--theme-primary);
+        }
+
+        /* Favorites star in sidebar */
+        .sidebar-favorites-star {
+            color: #f59e0b;
         }
 
         .sidebar-section {
@@ -173,10 +1103,8 @@
 
         /* Pinned section styles */
         .sidebar-section.is-pinned {
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            background: var(--theme-sidebar-bg);
+            background: color-mix(in srgb, var(--theme-primary) 8%, var(--theme-sidebar-bg));
+            border-radius: 0.5rem;
         }
 
         .sidebar-section.is-pinned .pin-btn {
@@ -184,16 +1112,52 @@
         }
 
         .sidebar-section.is-pinned .pin-btn:hover {
-            background: var(--theme-primary-light);
+            background: color-mix(in srgb, var(--theme-primary) 15%, transparent);
         }
 
+        /* Pin button active state: rotate thumbtack 45deg to look "pushed in" */
+        .sidebar-section.is-pinned .pin-btn .fa-thumbtack {
+            transform: rotate(45deg);
+        }
+
+        /* Search dimmed state */
+        .sidebar-section.search-dimmed {
+            opacity: 0.35;
+        }
+
+        /* Pinned sections container (always visible, not scrolled with nav) */
+        #pinned-sections-container {
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Regular sidebar sections container */
+        #sidebar-sections-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        /* Ensure sidebar-section works identically in both containers */
+        #pinned-sections-container .sidebar-section,
+        #sidebar-sections-container .sidebar-section {
+            margin-bottom: 0.1rem;
+        }
+
+        /* Pinned divider spacing */
+        #pinned-divider {
+            margin-top: 0.25rem;
+            margin-bottom: 0.25rem;
+        }
+
+        /* Active pin icon: rotate 45deg and use filled bookmark icon to show "pinned" state */
         .pin-btn.is-active {
             color: var(--theme-primary);
             transform: rotate(45deg);
         }
 
-        .pin-btn.is-active i::before {
-            content: "\f08d";
+        .pin-btn.is-active i {
+            font-weight: 900;
         }
 
         .sidebar-submenu {
@@ -3631,8 +4595,9 @@
             </div>
 
             <!-- Nav Links -->
-            <nav class="flex-1 px-3 py-3 overflow-y-auto">
-                <div class="mb-3 px-1">
+            <nav class="flex-1 flex flex-col overflow-y-auto">
+                <!-- Search bar (always visible at top of nav) -->
+                <div class="mb-3 px-1 pt-1">
                     <div class="relative group">
                         <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 group-focus-within:text-brand-400 transition-colors">
                             <i class="fa-solid fa-magnifying-glass text-sm"></i>
@@ -3641,7 +4606,20 @@
                     </div>
                 </div>
 
-                {% include 'all_menus.html' %}
+                <!-- Pinned sections: always visible, always expanded -->
+                <div id="pinned-sections-container" class="px-3 pb-2">
+                    <!-- Pinned sections are moved here by JS when pinned -->
+                </div>
+
+                <!-- Divider between pinned and regular sections -->
+                <div id="pinned-divider" class="px-5 pb-1 hidden">
+                    <div class="border-t border-white/10"></div>
+                </div>
+
+                <!-- Regular scrollable sections -->
+                <div id="sidebar-sections-container" class="flex-1 px-3 pb-3">
+                    {% include 'all_menus.html' %}
+                </div>
             </nav>
 
             <!-- User footer -->
@@ -3813,27 +4791,112 @@
             const isMobile = window.innerWidth < 1024;
 
             // Load saved state (only on desktop, mobile starts closed)
-            const savedState = sessionStorage.getItem(STORAGE_KEY);
-            const savedOpen = savedState ? JSON.parse(savedState) : {};
+            let savedState = null;
+            let savedOpen = {};
+            try {
+                savedState = sessionStorage.getItem(STORAGE_KEY);
+                savedOpen = savedState ? JSON.parse(savedState) : {};
+            } catch (e) {
+                console.warn('[Sidebar] Failed to parse saved state:', e);
+                savedOpen = {};
+            }
 
-            // Restore submenu states from sessionStorage
-            document.querySelectorAll('.sidebar-submenu').forEach(menu => {
-                const menuId = menu.id;
-                if (savedOpen[menuId] === true) {
-                    menu.classList.remove('hidden');
-                    const btn = menu.previousElementSibling;
-                    if (btn && btn.classList.contains('sidebar-group-toggle')) {
-                        btn.classList.add('is-open');
-                        btn.setAttribute('aria-expanded', 'true');
-                        const chevron = btn.querySelector('.fa-chevron-down');
-                        if (chevron) chevron.classList.add('rotate-180');
+            const nav = sidebar.querySelector('nav');
+            const pinnedContainer = document.getElementById('pinned-sections-container');
+            const sectionsContainer = document.getElementById('sidebar-sections-container');
+            const pinnedDivider = document.getElementById('pinned-divider');
+
+            // ── Helper: open a submenu and sync all visual states ──
+            function openSubMenu(menuEl) {
+                menuEl.classList.remove('hidden');
+                const btn = menuEl.previousElementSibling;
+                if (btn && btn.classList.contains('sidebar-group-toggle')) {
+                    btn.classList.add('is-open');
+                    btn.setAttribute('aria-expanded', 'true');
+                    const chevron = btn.querySelector('.sidebar-chevron');
+                    if (chevron) {
+                        chevron.classList.remove('fa-arrow-up-right-from-square');
+                        chevron.classList.add('fa-chevron-down', 'rotate-180');
                     }
+                }
+            }
+
+            // ── Helper: close a submenu and sync all visual states ──
+            function closeSubMenu(menuEl) {
+                menuEl.classList.add('hidden');
+                const btn = menuEl.previousElementSibling;
+                if (btn && btn.classList.contains('sidebar-group-toggle')) {
+                    btn.classList.remove('is-open');
+                    btn.setAttribute('aria-expanded', 'false');
+                    const chevron = btn.querySelector('.sidebar-chevron');
+                    if (chevron) {
+                        chevron.classList.remove('rotate-180');
+                        chevron.classList.add('fa-chevron-down');
+                        // Restore arrow-right-from-square on the Dashboard section
+                        if (btn.querySelector('.fa-arrow-up-right-from-square')) {
+                            chevron.classList.remove('fa-chevron-down');
+                            chevron.classList.add('fa-arrow-up-right-from-square');
+                        }
+                    }
+                }
+            }
+
+            // ── Helper: move a section to/from the pinned container ──
+            function moveSectionToPinned(section) {
+                if (pinnedContainer && section.parentElement !== pinnedContainer) {
+                    pinnedContainer.appendChild(section);
+                    pinnedDivider.classList.remove('hidden');
+                }
+            }
+
+            function moveSectionToRegular(section) {
+                if (sectionsContainer && section.parentElement !== sectionsContainer) {
+                    sectionsContainer.appendChild(section);
+                    if (pinnedContainer && pinnedContainer.children.length === 0) {
+                        pinnedDivider.classList.add('hidden');
+                    }
+                }
+            }
+
+            // ── Restore submenu states from sessionStorage ──
+            document.querySelectorAll('.sidebar-submenu').forEach(menu => {
+                if (savedOpen[menu.id] === true) {
+                    openSubMenu(menu);
                 }
             });
 
-            // Apply sidebar expanded state (desktop: use saved pref or default open; mobile: closed)
-            if (!isMobile && !prefersCompactSidebar) {
-                if (savedState === null || savedOpen.sidebarExpanded !== false) {
+            // ── Restore pinned sections (move to pinned container on init) ──
+            document.querySelectorAll('.sidebar-section').forEach(section => {
+                const shouldPin = savedOpen[section.id + '_pinned'];
+                if (shouldPin) {
+                    section.classList.add('is-pinned');
+                    const pinBtn = section.querySelector('.pin-btn');
+                    if (pinBtn) pinBtn.classList.add('is-active');
+                    // Pinned sections should have their submenu open
+                    const submenu = section.querySelector('.sidebar-submenu');
+                    if (submenu) openSubMenu(submenu);
+                    // Move to pinned container
+                    moveSectionToPinned(section);
+                }
+            });
+
+            // ── Apply sidebar expanded state ──
+            // Desktop: always expand on init unless compact preference is set.
+            // Mobile: always start collapsed (overlay handles it).
+            // Priority: user saved state > compact preference > default open.
+            const sidebarExpandedSaved = savedOpen && savedOpen.sidebarExpanded === true;
+            const sidebarCollapsedSaved = savedOpen && savedOpen.sidebarExpanded === false;
+
+            if (!isMobile) {
+                if (sidebarExpandedSaved) {
+                    // User explicitly saved "expanded" state — respect it
+                    sidebar.classList.add('expanded');
+                    document.body.classList.add('sidebar-expanded');
+                } else if (prefersCompactSidebar || sidebarCollapsedSaved) {
+                    // Compact mode or user saved "collapsed" — keep sidebar hidden initially
+                    // Clicking anywhere in sidebar will expand it (see click handler below)
+                } else {
+                    // Default: expand on first load
                     sidebar.classList.add('expanded');
                     document.body.classList.add('sidebar-expanded');
                 }
@@ -3841,7 +4904,7 @@
             // Mark as initialized to prevent FOUC
             sidebar.classList.add('initialized');
 
-            // Expand on sidebar click (if compact)
+            // Expand on sidebar click (if compact on desktop)
             sidebar.addEventListener('click', (e) => {
                 if (window.innerWidth >= 768 && !sidebar.classList.contains('expanded')) {
                     sidebar.classList.add('expanded');
@@ -3859,11 +4922,11 @@
                 });
             }
 
-            // ── Persist sidebar state on toggle ──
+            // ── Persist sidebar state ──
             function saveSidebarState() {
                 const state = {
                     sidebarExpanded: sidebar.classList.contains('expanded'),
-                    scrollTop: nav.scrollTop
+                    scrollTop: nav ? nav.scrollTop : 0
                 };
                 document.querySelectorAll('.sidebar-submenu').forEach(menu => {
                     state[menu.id] = !menu.classList.contains('hidden');
@@ -3871,17 +4934,19 @@
                 document.querySelectorAll('.sidebar-section').forEach(section => {
                     state[section.id + '_pinned'] = section.classList.contains('is-pinned');
                 });
-                sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                try {
+                    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                } catch (e) {
+                    console.warn('[Sidebar] Failed to save state:', e);
+                }
             }
 
-            const nav = sidebar.querySelector('nav');
-
             // Restore scroll position after state is restored
-            if (savedOpen.scrollTop) {
+            if (nav && savedOpen.scrollTop) {
                 nav.scrollTop = savedOpen.scrollTop;
             }
 
-            // Override toggleSidebar to save state
+            // ── Override toggleSidebar ──
             window.toggleSidebar = function() {
                 const sidebar = document.getElementById('sidebar');
                 const overlay = document.getElementById('sidebar-overlay');
@@ -3894,16 +4959,21 @@
                 }
                 saveSidebarState();
             };
-            // Override toggleSubMenu to save state
+
+            // ── Override toggleSubMenu ──
             window.toggleSubMenu = function(id, btn) {
                 const menu = document.getElementById(id);
-                const chevron = btn.querySelector('.fa-chevron-down');
+                if (!menu) return;
 
-                menu.classList.toggle('hidden');
-                btn.classList.toggle('is-open');
-                btn.setAttribute('aria-expanded', menu.classList.contains('hidden') ? 'false' : 'true');
-                if (chevron) {
-                    chevron.classList.toggle('rotate-180');
+                const isHidden = menu.classList.contains('hidden');
+                if (isHidden) {
+                    openSubMenu(menu);
+                    // Load favorites when opening favorites menu
+                    if (id === 'favorites-menu' && window.loadSidebarFavorites) {
+                        window.loadSidebarFavorites();
+                    }
+                } else {
+                    closeSubMenu(menu);
                 }
                 saveSidebarState();
             };
@@ -3912,59 +4982,111 @@
             window.togglePin = function(sectionId) {
                 const section = document.getElementById(sectionId);
                 if (!section) return;
+
+                const wasPinned = section.classList.contains('is-pinned');
                 const pinBtn = section.querySelector('.pin-btn');
-                const isPinned = section.classList.toggle('is-pinned');
-                if (pinBtn) pinBtn.classList.toggle('is-active', isPinned);
+                const submenu = section.querySelector('.sidebar-submenu');
+
+                if (wasPinned) {
+                    // Unpin: remove visual state and move back to regular container
+                    section.classList.remove('is-pinned');
+                    if (pinBtn) pinBtn.classList.remove('is-active');
+                    moveSectionToRegular(section);
+                } else {
+                    // Pin: add visual state + open submenu + move to pinned container
+                    section.classList.add('is-pinned');
+                    if (pinBtn) pinBtn.classList.add('is-active');
+                    if (submenu) openSubMenu(submenu);
+                    moveSectionToPinned(section);
+                }
                 saveSidebarState();
             };
 
-            // Restore pinned state on load
-            document.querySelectorAll('.sidebar-section').forEach(section => {
-                const sectionId = section.id;
-                if (savedOpen[sectionId + '_pinned']) {
-                    section.classList.add('is-pinned');
-                    const pinBtn = section.querySelector('.pin-btn');
-                    if (pinBtn) pinBtn.classList.add('is-active');
-                }
-            });
-
-            // Global Menu Search with debounce
+            // ── Global Menu Search with debounce ──
             const globalSearch = document.getElementById('global-search');
             if (globalSearch) {
                 let debounceTimer;
+                // Track which links were hidden BY the current search (not originally hidden)
+                const searchHiddenLinks = new Set();
+                let isSearchActive = false;
+
                 globalSearch.addEventListener('input', function(e) {
                     clearTimeout(debounceTimer);
                     debounceTimer = setTimeout(() => {
                         const q = e.target.value.toLowerCase().trim();
-                        const links = document.querySelectorAll('nav a');
-                        const buttons = document.querySelectorAll('nav button');
-                        
-                        // Reset all links and buttons first
-                        links.forEach(link => {
-                            if (q === '') {
-                                link.style.display = '';
+
+                        if (q === '') {
+                            // Fully reset search state
+                            isSearchActive = false;
+                            searchHiddenLinks.clear();
+
+                            // Restore all sidebar-section and sidebar-group-toggle to their pre-search state
+                            document.querySelectorAll('.sidebar-section').forEach(section => {
+                                // Remove search-dimmed styling
+                                section.classList.remove('search-dimmed');
+                                // Restore submenu states from sessionStorage
+                                const submenu = section.querySelector('.sidebar-submenu');
+                                if (submenu) {
+                                    if (savedOpen[submenu.id] === true) {
+                                        openSubMenu(submenu);
+                                    } else {
+                                        closeSubMenu(submenu);
+                                    }
+                                }
+                            });
+                            return;
+                        }
+
+                        isSearchActive = true;
+                        searchHiddenLinks.clear();
+
+                        // Show all links first (remove any previous search hiding)
+                        document.querySelectorAll('nav a').forEach(link => {
+                            link.style.display = '';
+                            link.classList.remove('search-hidden');
+                        });
+                        // Reset all submenus and toggles to open state for search results
+                        document.querySelectorAll('.sidebar-submenu').forEach(submenu => {
+                            submenu.classList.remove('hidden');
+                        });
+                        document.querySelectorAll('.sidebar-group-toggle').forEach(btn => {
+                            btn.classList.add('is-open');
+                            btn.setAttribute('aria-expanded', 'true');
+                        });
+                        document.querySelectorAll('.sidebar-chevron').forEach(chev => {
+                            chev.classList.add('rotate-180');
+                        });
+
+                        // Now filter: hide links that don't match
+                        document.querySelectorAll('nav a').forEach(link => {
+                            const text = link.textContent.toLowerCase().trim();
+                            if (!text.includes(q)) {
+                                link.style.display = 'none';
+                                link.classList.add('search-hidden');
+                                searchHiddenLinks.add(link);
                             }
                         });
-                        
-                        // Then filter based on query
-                        if (q !== '') {
-                            links.forEach(link => {
-                                const text = link.textContent.toLowerCase();
-                                link.style.display = text.includes(q) ? '' : 'none';
+
+                        // If nothing matched, show a hint by dimming all sections
+                        const visibleLinks = document.querySelectorAll('nav a:not(.search-hidden)');
+                        if (visibleLinks.length === 0) {
+                            document.querySelectorAll('.sidebar-section').forEach(section => {
+                                section.classList.add('search-dimmed');
                             });
-                            // Also show parent sections of matching links
-                            document.querySelectorAll('.sidebar-submenu').forEach(submenu => {
-                                submenu.classList.remove('hidden');
-                            });
-                            document.querySelectorAll('.sidebar-group-toggle').forEach(btn => {
-                                btn.classList.add('is-open');
-                                btn.setAttribute('aria-expanded', 'true');
-                            });
-                            document.querySelectorAll('.sidebar-chevron').forEach(chev => {
-                                chev.classList.add('rotate-180');
+                        } else {
+                            document.querySelectorAll('.sidebar-section').forEach(section => {
+                                section.classList.remove('search-dimmed');
                             });
                         }
                     }, 150);
+                });
+
+                // Clear search on Escape
+                globalSearch.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && globalSearch.value) {
+                        globalSearch.value = '';
+                        globalSearch.dispatchEvent(new Event('input'));
+                    }
                 });
             }
 

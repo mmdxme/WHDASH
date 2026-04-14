@@ -5,17 +5,27 @@
     <!-- Header -->
     <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Issue Tracker</p>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('issue_tracker.all_issues') }}" class="text-slate-500 hover:text-slate-300 text-sm">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </a>
+                <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Issue Tracker</p>
+            </div>
             <h1 class="mt-2 text-2xl font-extrabold tracking-tight text-white">Issue #{{ issue.row_id }}</h1>
-            <p class="mt-1 text-sm text-slate-400">{{ issue.issue }}</p>
+            <p class="mt-1 text-sm text-slate-400 max-w-2xl">{{ issue.issue }}</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-            <a href="{{ url_for('issue_tracker.all_issues') }}" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">
-                <i class="fa-solid fa-arrow-left mr-1"></i>Back
-            </a>
             {% if can_edit %}
-            <button onclick="changeStatusModal()" class="rounded-xl bg-brand-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white hover:bg-brand-500">
-                <i class="fa-solid fa-pen mr-1"></i>Change Status
+            <button onclick="openEditModal()" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">
+                <i class="fa-solid fa-edit mr-1"></i>Edit
+            </button>
+            <button onclick="toggleWatch()" id="watchBtn" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs font-black uppercase tracking-widest {{ 'text-cyan-400 border-cyan-500/30' if is_watching else 'text-slate-300' }} hover:bg-white/10">
+                <i class="fa-{{ 'solid' if is_watching else 'regular' }} fa-eye mr-1"></i>{{ 'Watching' if is_watching else 'Watch' }}
+            </button>
+            {% endif %}
+            {% if can_approve and issue.status == 'Pending Review' %}
+            <button onclick="openReviewModal()" class="rounded-xl bg-violet-600 px-4 py-2 text-xs font-black uppercase tracking-widest text-white hover:bg-violet-500">
+                <i class="fa-solid fa-check-double mr-1"></i>Review
             </button>
             {% endif %}
         </div>
@@ -95,23 +105,24 @@
 
             <!-- Comments -->
             <div class="glass-panel rounded-2xl border border-white/5 p-6">
-                <h3 class="mb-4 text-lg font-bold text-white">Discussion</h3>
-                <div class="space-y-4">
+                <h3 class="mb-4 text-lg font-bold text-white">Discussion <span class="text-sm font-normal text-slate-500">({{ comments|length }})</span></h3>
+                <div id="commentsBox" class="space-y-4 max-h-96 overflow-y-auto">
                     {% for comment in comments %}
                     <div class="rounded-xl border border-white/5 bg-white/[0.02] p-4">
                         <div class="flex items-center justify-between mb-2">
                             <span class="text-sm font-medium text-cyan-300">{{ comment.commenter_name or 'Unknown' }}</span>
                             <span class="text-xs text-slate-500">{{ comment.created_at }}</span>
                         </div>
-                        <p class="text-sm text-white">{{ comment.comment }}</p>
+                        <p class="text-sm text-white whitespace-pre-wrap">{{ comment.comment }}</p>
                     </div>
                     {% else %}
-                    <p class="text-sm text-slate-500">No comments yet. Add the first comment below.</p>
+                    <p id="noCommentMsg" class="py-4 text-sm text-slate-500 text-center">No comments yet. Be the first to comment.</p>
                     {% endfor %}
                 </div>
                 {% if can_edit %}
                 <form id="commentForm" class="mt-4">
-                    <textarea id="commentInput" rows="3" placeholder="Add a comment..." class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none resize-none"></textarea>
+                    <textarea id="commentInput" rows="3" placeholder="Add a comment or work note..."
+                              class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none resize-none"></textarea>
                     <button type="submit" class="mt-2 rounded-xl bg-brand-600 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-brand-500">
                         <i class="fa-solid fa-comment mr-1"></i>Add Comment
                     </button>
@@ -125,41 +136,111 @@
             <!-- Actions -->
             {% if can_edit %}
             <div class="glass-panel rounded-2xl border border-white/5 p-5">
-                <h3 class="mb-4 text-sm font-bold text-white">Quick Actions</h3>
+                <h3 class="mb-3 text-sm font-bold text-white">Quick Actions</h3>
                 <div class="space-y-2">
-                    <button onclick="changeStatus('In Progress')" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10 text-left">
+                    {% if issue.status not in ('In Progress',) %}
+                    <button onclick="changeStatus('In Progress')" class="w-full rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-2 text-xs text-white hover:bg-blue-500/10 text-left transition-colors">
                         <i class="fa-solid fa-play mr-2 text-blue-400"></i>Start Work
                     </button>
-                    <button onclick="changeStatus('Pending Review')" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10 text-left">
+                    {% endif %}
+                    {% if issue.status == 'In Progress' %}
+                    <button onclick="changeStatus('Pending Review')" class="w-full rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-2 text-xs text-white hover:bg-violet-500/10 text-left transition-colors">
                         <i class="fa-solid fa-eye mr-2 text-violet-400"></i>Submit for Review
                     </button>
-                    <button onclick="changeStatus('Resolved')" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10 text-left">
+                    {% endif %}
+                    {% if issue.status not in ('Resolved', 'Closed') %}
+                    <button onclick="changeStatus('Resolved')" class="w-full rounded-xl border border-teal-500/20 bg-teal-500/5 px-4 py-2 text-xs text-white hover:bg-teal-500/10 text-left transition-colors">
                         <i class="fa-solid fa-check mr-2 text-teal-400"></i>Mark Resolved
                     </button>
-                    <button onclick="changeStatus('Closed')" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10 text-left">
-                        <i class="fa-solid fa-times mr-2 text-emerald-400"></i>Close Issue
+                    {% endif %}
+                    {% if issue.status == 'Resolved' %}
+                    <button onclick="changeStatus('Closed')" class="w-full rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-2 text-xs text-white hover:bg-emerald-500/10 text-left transition-colors">
+                        <i class="fa-solid fa-lock mr-2 text-emerald-400"></i>Close Issue
                     </button>
+                    {% endif %}
+                    {% if issue.status in ('Resolved', 'Closed') %}
+                    <button onclick="reopenIssue()" class="w-full rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-2 text-xs text-white hover:bg-amber-500/10 text-left transition-colors">
+                        <i class="fa-solid fa-rotate-left mr-2 text-amber-400"></i>Reopen
+                    </button>
+                    {% endif %}
+                </div>
+                <div class="mt-3 pt-3 border-t border-white/10 space-y-2">
+                    <button onclick="openAssignModal()" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10 text-left transition-colors">
+                        <i class="fa-solid fa-user-check mr-2 text-slate-400"></i>Assign Issue
+                    </button>
+                    <button onclick="openEscalateModal()" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-amber-300 hover:bg-amber-500/5 text-left transition-colors">
+                        <i class="fa-solid fa-arrow-up-right-dots mr-2 text-amber-400"></i>Escalate
+                    </button>
+                    {% if can_manage %}
+                    <button onclick="openSLAExtendModal()" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-xs text-white hover:bg-white/10 text-left transition-colors">
+                        <i class="fa-solid fa-clock mr-2 text-slate-400"></i>Extend SLA
+                    </button>
+                    {% endif %}
                 </div>
             </div>
             {% endif %}
 
             <!-- Attachments -->
             <div class="glass-panel rounded-2xl border border-white/5 p-5">
-                <h3 class="mb-4 text-sm font-bold text-white">Attachments</h3>
-                <div class="space-y-2">
+                <div class="mb-4 flex items-center justify-between">
+                    <h3 class="text-sm font-bold text-white">Attachments</h3>
+                    {% if can_edit %}
+                    <button onclick="document.getElementById('attachFileInput').click()" class="text-xs text-cyan-400 hover:text-cyan-300">
+                        <i class="fa-solid fa-plus mr-1"></i>Attach
+                    </button>
+                    <input id="attachFileInput" type="file" class="hidden" multiple onchange="uploadAttachments(this)">
+                    {% endif %}
+                </div>
+                <div id="attachmentList" class="space-y-2">
                     {% for attachment in attachments %}
-                    <div class="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+                    <div id="attach-{{ attachment.id }}" class="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
                         <div class="flex items-center gap-2">
-                            <i class="fa-solid fa-paperclip text-xs text-slate-500"></i>
-                            <span class="text-xs text-slate-300">{{ attachment.filename or 'File' }}</span>
+                            <i class="fa-solid fa-file text-xs text-slate-400"></i>
+                            <a href="{{ url_for('issue_tracker.download_attachment', attachment_id=attachment.id) }}" class="text-xs text-slate-300 hover:text-cyan-300" title="{{ attachment.filename }}">
+                                {{ (attachment.filename or 'File')[:35] }}{% if (attachment.filename or '')|length > 35 %}...{% endif %}
+                            </a>
                         </div>
-                        <span class="text-xs text-slate-500">{{ attachment.file_size or 0 }} KB</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs text-slate-500">{{ ((attachment.file_size or 0) / 1024)|round(1) }} KB</span>
+                            {% if can_edit %}
+                            <button onclick="deleteAttachment({{ attachment.id }})" class="text-slate-600 hover:text-red-400 transition-colors text-xs">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                            {% endif %}
+                        </div>
                     </div>
                     {% else %}
-                    <p class="text-sm text-slate-500">No attachments.</p>
+                    <div id="noAttachMsg" class="text-center py-4">
+                        <i class="fa-solid fa-paperclip text-2xl text-slate-600"></i>
+                        <p class="mt-2 text-xs text-slate-500">No attachments yet.</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div id="uploadProgress" class="hidden mt-3">
+                    <div class="rounded-full bg-white/10 h-1.5">
+                        <div id="uploadBar" class="rounded-full bg-cyan-500 h-1.5 transition-all" style="width:0%"></div>
+                    </div>
+                    <p class="mt-1 text-xs text-slate-500">Uploading...</p>
+                </div>
+            </div>
+
+            <!-- Escalations -->
+            {% if escalations %}
+            <div class="glass-panel rounded-2xl border border-amber-500/20 p-5">
+                <h3 class="mb-3 text-sm font-bold text-amber-300"><i class="fa-solid fa-arrow-up-right-dots mr-2"></i>Escalations</h3>
+                <div class="space-y-2">
+                    {% for esc in escalations %}
+                    <div class="rounded-lg border border-amber-500/10 bg-amber-500/5 px-3 py-2 text-xs">
+                        <p class="text-amber-300 font-medium">Level {{ esc.escalation_level }} — {{ esc.created_at }}</p>
+                        <p class="mt-1 text-slate-400">By: {{ esc.escalated_by_name or 'Unknown' }} → To: {{ esc.escalated_to_name or 'Management' }}</p>
+                        {% if esc.reason %}
+                        <p class="mt-1 text-slate-300">{{ esc.reason }}</p>
+                        {% endif %}
+                    </div>
                     {% endfor %}
                 </div>
             </div>
+            {% endif %}
 
             <!-- Audit History -->
             <div class="glass-panel rounded-2xl border border-white/5 p-5">
@@ -189,29 +270,265 @@
 </div>
 
 <script>
-function changeStatus(newStatus) {
-    fetch('{{ url_for("issue_tracker.change_status", issue_id=issue.id) }}', {
+const CSRF_TOKEN = "{{ csrf_token }}";
+const ISSUE_ID = {{ issue.id }};
+
+// ─── Status Change ────────────────────────────────────────────────────────────
+async function changeStatus(newStatus) {
+    const result = await Swal.fire({
+        icon: 'question', title: 'Change Status',
+        text: `Set status to "${newStatus}"?`,
+        showCancelButton: true, confirmButtonText: 'Yes, Change',
+        background: '#1e293b', color: '#fff', confirmButtonColor: '#0891b2',
+    });
+    if (!result.isConfirmed) return;
+
+    const res = await fetch(`{{ url_for('issue_tracker.change_status', issue_id=0) }}`.replace('/0', `/${ISSUE_ID}`), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-    }).then(r => r.json()).then(d => {
-        if (d.success) location.reload();
-        else alert(d.message);
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+        body: JSON.stringify({ csrf_token: CSRF_TOKEN, status: newStatus })
+    });
+    const data = await res.json();
+    if (data.success) { Swal.fire({ icon: 'success', title: 'Updated', text: data.message, background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false }); setTimeout(() => location.reload(), 1200); }
+    else Swal.fire({ icon: 'error', title: 'Error', text: data.message, background: '#1e293b', color: '#fff' });
+}
+
+// ─── Reopen ───────────────────────────────────────────────────────────────────
+async function reopenIssue() {
+    const { value: reason } = await Swal.fire({
+        title: 'Reopen Issue', input: 'textarea', inputLabel: 'Reason for reopening',
+        inputPlaceholder: 'Please explain why this issue needs to be reopened...',
+        showCancelButton: true, confirmButtonText: 'Reopen',
+        background: '#1e293b', color: '#fff', confirmButtonColor: '#f59e0b',
+        inputAttributes: { rows: 3 },
+    });
+    if (reason === undefined) return;
+
+    const res = await fetch(`{{ url_for('issue_tracker.reopen_issue', issue_id=0) }}`.replace('/0', `/${ISSUE_ID}`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+        body: JSON.stringify({ csrf_token: CSRF_TOKEN, reason: reason || 'Reopened by user' })
+    });
+    const data = await res.json();
+    if (data.success) { location.reload(); }
+    else Swal.fire({ icon: 'error', title: 'Error', text: data.message, background: '#1e293b', color: '#fff' });
+}
+
+// ─── Watch Toggle ─────────────────────────────────────────────────────────────
+async function toggleWatch() {
+    const res = await fetch(`{{ url_for('issue_tracker.toggle_watch', issue_id=0) }}`.replace('/0', `/${ISSUE_ID}`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+        body: JSON.stringify({ csrf_token: CSRF_TOKEN })
+    });
+    const data = await res.json();
+    if (data.success) {
+        const btn = document.getElementById('watchBtn');
+        if (data.watching) {
+            btn.innerHTML = '<i class="fa-solid fa-eye mr-1"></i>Watching';
+            btn.classList.add('text-cyan-400', 'border-cyan-500/30');
+            btn.classList.remove('text-slate-300');
+        } else {
+            btn.innerHTML = '<i class="fa-regular fa-eye mr-1"></i>Watch';
+            btn.classList.remove('text-cyan-400', 'border-cyan-500/30');
+            btn.classList.add('text-slate-300');
+        }
+    }
+}
+
+// ─── Comment Form ─────────────────────────────────────────────────────────────
+document.getElementById('commentForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const input = document.getElementById('commentInput');
+    const comment = input.value.trim();
+    if (!comment) return;
+    const btn = this.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Adding...';
+
+    const res = await fetch(`{{ url_for('issue_tracker.add_comment', issue_id=0) }}`.replace('/0', `/${ISSUE_ID}`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+        body: JSON.stringify({ csrf_token: CSRF_TOKEN, comment })
+    });
+    const data = await res.json();
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-comment mr-1"></i>Add Comment';
+    if (data.success) {
+        input.value = '';
+        const box = document.getElementById('commentsBox');
+        const noMsg = document.getElementById('noCommentMsg');
+        if (noMsg) noMsg.remove();
+        const div = document.createElement('div');
+        div.className = 'rounded-xl border border-white/5 bg-white/[0.02] p-4';
+        div.innerHTML = `<div class="flex items-center justify-between mb-2"><span class="text-sm font-medium text-cyan-300">${data.comment.commenter_name}</span><span class="text-xs text-slate-500">${data.comment.created_at}</span></div><p class="text-sm text-white">${data.comment.comment.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`;
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    } else {
+        Swal.fire({ icon: 'error', title: 'Error', text: data.message, background: '#1e293b', color: '#fff' });
+    }
+});
+
+// ─── Attachment Upload ────────────────────────────────────────────────────────
+async function uploadAttachments(input) {
+    const files = [...input.files];
+    if (!files.length) return;
+    const progress = document.getElementById('uploadProgress');
+    const bar = document.getElementById('uploadBar');
+    progress.classList.remove('hidden');
+
+    for (let i = 0; i < files.length; i++) {
+        bar.style.width = `${Math.round((i / files.length) * 100)}%`;
+        const fd = new FormData();
+        fd.append('file', files[i]);
+        fd.append('csrf_token', CSRF_TOKEN);
+        try {
+            const res = await fetch(`{{ url_for('issue_tracker.upload_attachment', issue_id=0) }}`.replace('/0', `/${ISSUE_ID}`), {
+                method: 'POST',
+                headers: { 'X-CSRF-Token': CSRF_TOKEN },
+                body: fd
+            });
+            const data = await res.json();
+            if (data.success) {
+                const list = document.getElementById('attachmentList');
+                const noMsg = document.getElementById('noAttachMsg');
+                if (noMsg) noMsg.remove();
+                list.insertAdjacentHTML('afterbegin', `<div class="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2"><div class="flex items-center gap-2"><i class="fa-solid fa-file text-xs text-slate-400"></i><span class="text-xs text-slate-300">${data.filename}</span></div><span class="text-xs text-slate-500">${Math.round(data.size/1024)} KB</span></div>`);
+            }
+        } catch(err) { /* skip */ }
+    }
+    bar.style.width = '100%';
+    setTimeout(() => { progress.classList.add('hidden'); bar.style.width = '0%'; }, 1000);
+    input.value = '';
+}
+
+async function deleteAttachment(id) {
+    const result = await Swal.fire({
+        icon: 'warning', title: 'Delete Attachment',
+        text: 'Are you sure? This cannot be undone.',
+        showCancelButton: true, confirmButtonText: 'Delete',
+        background: '#1e293b', color: '#fff', confirmButtonColor: '#ef4444',
+    });
+    if (!result.isConfirmed) return;
+    const res = await fetch(`/issues/attachment/${id}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+        body: JSON.stringify({ csrf_token: CSRF_TOKEN })
+    });
+    const data = await res.json();
+    if (data.success) {
+        const el = document.getElementById(`attach-${id}`);
+        if (el) el.remove();
+    }
+}
+
+// ─── Assign Modal ─────────────────────────────────────────────────────────────
+function openAssignModal() {
+    Swal.fire({
+        title: 'Assign Issue',
+        html: `<input id="sa_assignee" class="swal2-input" placeholder="Assignee username" value="{{ issue.responsible_person or '' }}">
+               <input id="sa_section" class="swal2-input" placeholder="Section/Team (optional)" value="{{ issue.responsible_section or '' }}">`,
+        showCancelButton: true, confirmButtonText: 'Assign',
+        background: '#1e293b', color: '#fff', confirmButtonColor: '#0891b2',
+        preConfirm: async () => {
+            const assignee = document.getElementById('sa_assignee').value.trim();
+            const section = document.getElementById('sa_section').value.trim();
+            const res = await fetch(`/issues/assign/${ISSUE_ID}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+                body: JSON.stringify({ csrf_token: CSRF_TOKEN, assignee, section })
+            });
+            return await res.json();
+        }
+    }).then(result => {
+        if (result.isConfirmed && result.value?.success) {
+            Swal.fire({ icon: 'success', title: 'Assigned', text: result.value.message, background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false });
+            setTimeout(() => location.reload(), 1200);
+        }
     });
 }
 
-document.getElementById('commentForm')?.addEventListener('submit', function(e) {
-    e.preventDefault();
-    const comment = document.getElementById('commentInput').value.trim();
-    if (!comment) return;
-    fetch('{{ url_for("issue_tracker.add_comment", issue_id=issue.id) }}', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comment })
-    }).then(r => r.json()).then(d => {
-        if (d.success) location.reload();
-        else alert(d.message);
+// ─── Escalate Modal ───────────────────────────────────────────────────────────
+function openEscalateModal() {
+    Swal.fire({
+        title: 'Escalate Issue',
+        html: `<input id="se_to" class="swal2-input" placeholder="Escalate to (username)">
+               <textarea id="se_reason" class="swal2-textarea" placeholder="Reason for escalation..."></textarea>`,
+        showCancelButton: true, confirmButtonText: 'Escalate',
+        background: '#1e293b', color: '#fff', confirmButtonColor: '#f59e0b',
+        preConfirm: async () => {
+            const reason = document.getElementById('se_reason').value.trim();
+            if (!reason) { Swal.showValidationMessage('Please provide a reason.'); return; }
+            const res = await fetch(`/issues/escalate/${ISSUE_ID}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+                body: JSON.stringify({ csrf_token: CSRF_TOKEN, escalate_to: document.getElementById('se_to').value.trim(), reason })
+            });
+            return await res.json();
+        }
+    }).then(result => {
+        if (result.isConfirmed && result.value?.success) {
+            Swal.fire({ icon: 'success', title: 'Escalated', text: result.value.message, background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false });
+            setTimeout(() => location.reload(), 1200);
+        }
     });
-});
+}
+
+// ─── SLA Extend Modal ─────────────────────────────────────────────────────────
+function openSLAExtendModal() {
+    Swal.fire({
+        title: 'Extend SLA',
+        html: `<label style="color:#94a3b8;font-size:12px">New Target Resolution Date</label>
+               <input id="sla_date" type="date" class="swal2-input" value="{{ issue.target_resolution_date or '' }}">
+               <input id="sla_reason" class="swal2-input" placeholder="Reason for extension">`,
+        showCancelButton: true, confirmButtonText: 'Extend SLA',
+        background: '#1e293b', color: '#fff', confirmButtonColor: '#f59e0b',
+        preConfirm: async () => {
+            const new_date = document.getElementById('sla_date').value;
+            if (!new_date) { Swal.showValidationMessage('Please provide a new date.'); return; }
+            const res = await fetch(`/issues/sla-extend/${ISSUE_ID}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+                body: JSON.stringify({ csrf_token: CSRF_TOKEN, new_date, reason: document.getElementById('sla_reason').value })
+            });
+            return await res.json();
+        }
+    }).then(result => {
+        if (result.isConfirmed && result.value?.success) {
+            Swal.fire({ icon: 'success', title: 'SLA Extended', text: result.value.message, background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false });
+            setTimeout(() => location.reload(), 1200);
+        }
+    });
+}
+
+// ─── Review Modal ─────────────────────────────────────────────────────────────
+function openReviewModal() {
+    Swal.fire({
+        title: 'Review Issue Resolution',
+        html: `<p style="color:#94a3b8;font-size:13px;margin-bottom:16px">Approve to mark Resolved, or Reject to return to In Progress.</p>
+               <textarea id="rv_comment" class="swal2-textarea" placeholder="Review comment (optional)..."></textarea>`,
+        showDenyButton: true, showCancelButton: true,
+        confirmButtonText: 'Approve Resolution', denyButtonText: 'Reject & Return',
+        background: '#1e293b', color: '#fff',
+        confirmButtonColor: '#10b981', denyButtonColor: '#ef4444',
+    }).then(async result => {
+        if (result.isDismissed) return;
+        const action = result.isConfirmed ? 'approve' : 'reject';
+        const comment = document.getElementById('rv_comment')?.value || '';
+        const res = await fetch(`/issues/review/${ISSUE_ID}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+            body: JSON.stringify({ csrf_token: CSRF_TOKEN, action, comment })
+        });
+        const data = await res.json();
+        if (data.success) { Swal.fire({ icon: 'success', title: action === 'approve' ? 'Approved' : 'Rejected', text: data.message, background: '#1e293b', color: '#fff', timer: 1500, showConfirmButton: false }); setTimeout(() => location.reload(), 1200); }
+        else Swal.fire({ icon: 'error', title: 'Error', text: data.message, background: '#1e293b', color: '#fff' });
+    });
+}
+
+// ─── Edit Modal ───────────────────────────────────────────────────────────────
+function openEditModal() {
+    window.location.href = `{{ url_for('issue_tracker.edit_issue', issue_id=issue.id) }}`;
+}
 </script>
 {% endblock %}

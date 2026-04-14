@@ -267,8 +267,8 @@ def initialize_flow_tables():
         ''')
 
         # Add channel_id column if missing (for existing tables created before this column was added)
-        db.execute("PRAGMA table_info(flow_channels)")
-        existing_cols = [col[1] for col in db.fetchall()]
+        cur = db.execute("PRAGMA table_info(flow_channels)")
+        existing_cols = [col[1] for col in cur.fetchall()]
         if 'channel_id' not in existing_cols:
             db.execute("ALTER TABLE flow_channels ADD COLUMN channel_id TEXT")
         

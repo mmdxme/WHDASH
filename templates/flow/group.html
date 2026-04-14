@@ -81,7 +81,7 @@
                     <div class="message-bubble {% if message.sender_id == user.id %}sent{% else %}received{% endif %}"
                          id="bubble-{{ message.id }}"
                          oncontextmenu="handleMessageRightClick(event, '{{ message.id }}'); return false;">
-                        <div class="message-content bidi-text">{{ message.content | safe if message.content else '' }}</div>
+                        <div class="message-content bidi-text">{{ escape_html(message.content) if message.content else '' }}</div>
                     </div>
                     <div class="flex items-center gap-2 text-xs text-slate-400">
                         <span>{{ format_time(message.created_at) }}</span>
@@ -139,10 +139,11 @@
                     </svg>
                 </button>
                 <textarea id="message-input" rows="1"
-                         class="flex-1 bg-transparent border-0 resize-none focus:outline-none py-2 text-slate-800 dark:text-white placeholder-slate-400"
+                         class="flex-1 bg-transparent border-0 resize-none focus:outline-none py-2 text-slate-800 dark:text-white placeholder-slate-400 bidi-text"
                          placeholder="Message {{ group.name }}"
+                         dir="auto"
                          onkeydown="handleGroupInputKeydown(event)"
-                         oninput="autoResize(this)"></textarea>
+                         oninput="autoResize(this); updateInputDirection(this)"></textarea>
             </div>
             <button type="submit" class="p-3 bg-blue-500 hover:bg-blue-600 text-white rounded-full">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -262,6 +263,84 @@
     </div>
 </div>
 
+<!-- Member Action Modal -->
+<div id="member-action-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeMemberActionModal()"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-6 text-center">
+            <div class="w-16 h-16 mx-auto mb-4 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center">
+                <svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+            </div>
+            <h3 class="font-semibold text-slate-800 dark:text-white text-lg mb-2">Member Actions</h3>
+            <p id="member-action-name" class="text-sm text-slate-500 dark:text-slate-400 mb-6"></p>
+            <div class="space-y-3">
+                <div class="flex items-center gap-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-xl cursor-pointer" onclick="document.getElementById('action-remove').click()">
+                    <input type="radio" name="member-action" id="action-remove" value="remove" class="hidden">
+                    <div class="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/50 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div class="text-left">
+                        <p class="font-medium text-red-600 dark:text-red-400">Remove from group</p>
+                        <p class="text-xs text-red-500 dark:text-red-500">Member will lose access to this group</p>
+                    </div>
+                </div>
+                <button onclick="confirmMemberAction()" class="w-full px-4 py-3 bg-blue-500 text-white rounded-xl font-medium hover:bg-blue-600 transition-colors">
+                    Confirm Action
+                </button>
+                <button onclick="closeMemberActionModal()" class="w-full px-4 py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Emoji Picker Modal -->
+<div id="emoji-picker-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeEmojiPicker()"></div>
+    <div class="absolute bottom-20 left-1/2 -translate-x-1/2 w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h3 class="font-semibold text-slate-800 dark:text-white">Emoji</h3>
+            <button onclick="closeEmojiPicker()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div id="emoji-grid" class="grid grid-cols-8 gap-1 p-4 max-h-64 overflow-y-auto"></div>
+    </div>
+</div>
+
+<!-- GIF Picker Modal -->
+<div id="gif-picker-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeGifPicker()"></div>
+    <div class="absolute bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h3 class="font-semibold text-slate-800 dark:text-white">GIF</h3>
+            <button onclick="closeGifPicker()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="p-4">
+            <input type="text" id="gif-search-input" placeholder="Search GIFs..."
+                   class="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border-0 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+                   onkeyup="if(event.key==='Enter') searchGifs()">
+            <button onclick="searchGifs()" class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition-colors mb-3">
+                Search
+            </button>
+            <div id="gif-results" class="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                <p class="text-center text-slate-400 py-4 col-span-3">Search for GIFs</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Group Settings Modal -->
 <div id="group-settings-modal" class="fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-black/50" onclick="closeGroupSettings()"></div>
@@ -338,24 +417,46 @@
         const content = input.value.trim();
         if (!content) return;
 
+        const payload = { conversation_id: conversationId, content };
+        if (replyToId) {
+            payload.reply_to_id = replyToId;
+        }
+
         fetch('/flow/api/messages/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ conversation_id: conversationId, content, reply_to_id: replyToId })
+            body: JSON.stringify(payload)
         }).then(r => r.json())
-          .then(data => { if (data.success) location.reload(); });
+          .then(data => {
+              if (data.success && data.message) {
+                  addGroupMessageToUI(data.message);
+                  input.value = '';
+                  replyToId = null;
+                  cancelReply();
+              }
+          });
     }
 
     function handleGroupInputKeydown(event) {
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
-            event.target.form.requestSubmit();
+            sendGroupMessage(event);
         }
     }
 
     function autoResize(textarea) {
         textarea.style.height = 'auto';
         textarea.style.height = Math.min(textarea.scrollHeight, 128) + 'px';
+    }
+
+    function updateInputDirection(textarea) {
+        const text = textarea.value;
+        if (text) {
+            const rtlPattern = /[\u0591-\u07FF\u200F\u202B\u202E\uFB1D-\uFDFD\uFE70-\uFEFC]/;
+            textarea.dir = rtlPattern.test(text) ? 'rtl' : 'ltr';
+        } else {
+            textarea.dir = document.documentElement.dir || 'ltr';
+        }
     }
 
     function showGroupMembers() {
@@ -376,15 +477,31 @@
     }
 
     function showMemberActions(userId, userName) {
-        const isAdmin = currentUser === {{ group.created_by }} || 
+        const isAdmin = currentUser === {{ group.created_by }} ||
             {{ membership.role in ['owner', 'admin']|tojson }};
-        
+
         if (!isAdmin || parseInt(userId) === currentUser) return;
 
-        const action = confirm(`What would you like to do with ${userName}?\n\nClick OK to remove from group.\nClick Cancel to close.`);
-        if (action) {
-            removeGroupMember(userId);
+        // Show action modal instead of ugly confirm()
+        selectedMemberForAction = { userId, userName };
+        document.getElementById('member-action-name').textContent = userName;
+        document.getElementById('member-action-modal').classList.remove('hidden');
+    }
+
+    let selectedMemberForAction = null;
+
+    function confirmMemberAction() {
+        if (!selectedMemberForAction) return;
+        const action = document.querySelector('input[name="member-action"]:checked')?.value;
+        if (action === 'remove') {
+            removeGroupMember(selectedMemberForAction.userId);
         }
+        closeMemberActionModal();
+    }
+
+    function closeMemberActionModal() {
+        document.getElementById('member-action-modal').classList.add('hidden');
+        selectedMemberForAction = null;
     }
 
     function removeGroupMember(userId) {
@@ -420,14 +537,43 @@
     function uploadGroupAvatar(input) {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
+
+        // Validate file type and size
+        if (!file.type.startsWith('image/')) {
+            showNotification('Error', 'Please select an image file');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            showNotification('Error', 'Image must be less than 5MB');
+            return;
+        }
+
+        const preview = document.getElementById('settings-group-avatar');
+        preview.src = URL.createObjectURL(file);
+
+        // Actually upload the avatar
         const formData = new FormData();
         formData.append('file', file);
         formData.append('target_type', 'group');
         formData.append('target_id', groupId);
 
-        const preview = document.getElementById('settings-group-avatar');
-        preview.src = URL.createObjectURL(file);
-        groupAvatarUploaded = true;
+        fetch('/flow/api/upload/avatar', {
+            method: 'POST',
+            body: formData
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                // Store the uploaded avatar URL for later use when saving settings
+                groupAvatarUploaded = data.avatar_url;
+                preview.src = data.avatar_url;
+            } else {
+                showNotification('Error', data.error || 'Failed to upload avatar');
+                groupAvatarUploaded = false;
+            }
+        }).catch(err => {
+            console.error('Avatar upload error:', err);
+            showNotification('Error', 'Failed to upload avatar');
+            groupAvatarUploaded = false;
+        });
     }
 
     function saveGroupSettings() {
@@ -440,6 +586,11 @@
         }
 
         const data = { name, description };
+
+        // If avatar was uploaded via uploadGroupAvatar, include the URL
+        if (groupAvatarUploaded && typeof groupAvatarUploaded === 'string') {
+            data.avatar_url = groupAvatarUploaded;
+        }
 
         fetch(`/flow/api/groups/${groupId}/update`, {
             method: 'POST',
@@ -577,8 +728,16 @@
 
     function startReply(messageId) {
         replyToId = messageId;
-        document.getElementById('reply-preview').classList.remove('hidden');
-        document.getElementById('message-input').focus();
+        const bubble = document.getElementById('bubble-' + messageId);
+        if (bubble) {
+            const contentEl = bubble.querySelector('.message-content');
+            const content = contentEl ? contentEl.textContent : bubble.textContent;
+            // Update preview text
+            const previewText = document.querySelector('#reply-preview p:last-child');
+            if (previewText) previewText.textContent = content.substring(0, 100);
+            document.getElementById('reply-preview').classList.remove('hidden');
+            document.getElementById('message-input').focus();
+        }
     }
 
     function copyMessageText(messageId) {
@@ -696,11 +855,118 @@
         if (!selectedMessageId || !conversationId) return;
         const bubble = document.getElementById('bubble-' + selectedMessageId);
         const contentEl = bubble ? bubble.querySelector('.message-content') : null;
-        const content = contentEl ? contentEl.innerHTML : '';
+        // Use textContent to safely get plain text content, prevent XSS
+        const content = contentEl ? escapeHtml(contentEl.textContent || '') : '';
         fetch('/flow/api/messages/send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ conversation_id: conversationId, content, message_type: 'text' })
+            body: JSON.stringify({
+                conversation_id: conversationId,
+                content,
+                message_type: 'text',
+                metadata: JSON.stringify({ forwarded_from_id: selectedMessageId })
+            })
         }).then(r => r.json()).then(data => { if (data.success) { showNotification('Forwarded', 'Message forwarded'); closeForwardModal(); } });
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function formatTime(value) {
+        if (!value) return 'now';
+        let dt;
+        if (typeof value === 'string') {
+            try { dt = new Date(value.replace('Z', '+00:00')); }
+            catch (e) { return value; }
+        } else if (value instanceof Date) { dt = value; }
+        else { return String(value); }
+        const now = new Date();
+        const diff = now - dt;
+        const totalSeconds = diff / 1000;
+        if (totalSeconds < 0) return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        if (totalSeconds < 60) return 'now';
+        if (totalSeconds < 3600) return `${Math.floor(totalSeconds / 60)}m`;
+        if (totalSeconds < 86400) return `${Math.floor(totalSeconds / 3600)}h`;
+        if (totalSeconds < 604800) return `${Math.floor(totalSeconds / 86400)}d`;
+        return dt.toLocaleDateString();
+    }
+
+    function showEmojiPicker() {
+        const modal = document.getElementById('emoji-picker-modal');
+        if (modal) { modal.classList.remove('hidden'); renderEmojiGrid(); }
+    }
+
+    function closeEmojiPicker() {
+        const modal = document.getElementById('emoji-picker-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    function renderEmojiGrid() {
+        const grid = document.getElementById('emoji-grid');
+        if (!grid) return;
+        const emojis = ['😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '😉', '😍', '🥰', '😘', '👍', '👎', '👏', '🙌', '🤝', '🙏', '💪', '❤️', '🧡', '💛', '💚', '💙', '💜', '🔥', '⭐', '✨', '🎉'];
+        grid.innerHTML = emojis.map(emoji => `<button onclick="insertEmoji('${emoji}')" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-xl transition-colors">${emoji}</button>`).join('');
+    }
+
+    function insertEmoji(emoji) {
+        const input = document.getElementById('message-input');
+        if (input) { input.value += emoji; input.focus(); }
+        closeEmojiPicker();
+    }
+
+    function showGifPicker() {
+        const modal = document.getElementById('gif-picker-modal');
+        if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeGifPicker() {
+        const modal = document.getElementById('gif-picker-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    function searchGifs() {
+        const query = document.getElementById('gif-search-input')?.value;
+        if (!query) return;
+        fetch(`https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(query)}&limit=20`)
+            .then(r => r.json())
+            .then(data => renderGifResults(data.data || []))
+            .catch(err => showNotification('Error', 'Failed to search GIFs'));
+    }
+
+    function renderGifResults(gifs) {
+        const container = document.getElementById('gif-results');
+        if (!container) return;
+        if (gifs.length === 0) { container.innerHTML = '<p class="text-center text-slate-400 py-4">No GIFs found</p>'; return; }
+        container.innerHTML = gifs.map(gif => `<button onclick="selectGif('${gif.images.fixed_height.url}')" class="p-1 hover:opacity-80 transition-opacity"><img src="${gif.images.fixed_height.url}" alt="${gif.title}" class="max-h-32 rounded-lg"></button>`).join('');
+    }
+
+    function selectGif(url) {
+        fetch('/flow/api/messages/send', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ conversation_id: conversationId, content: `<img src="${url}" class="max-w-full rounded-lg">`, message_type: 'image' })
+        }).then(r => r.json()).then(data => { if (data.success) addGroupMessageToUI(data.message); });
+        closeGifPicker();
+    }
+
+    function addGroupMessageToUI(message) {
+        const container = document.getElementById('messages-container');
+        if (!container) return;
+        // Remove empty state if present
+        const emptyState = container.querySelector('.flex.items-center.justify-center.h-full');
+        if (emptyState) emptyState.remove();
+        const isSent = message.sender_id == currentUser;
+        const senderAvatar = message.sender_avatar || '/static/uploads/avatars/avatar_group_purple.png';
+        const bubbleId = 'bubble-' + message.id;
+        const html = `<div class="message-wrapper flex ${isSent ? 'justify-end' : 'justify-start'} animate-slide-in w-full" data-message-id="${message.id}" data-message-type="${message.message_type || 'text'}" data-sender-id="${message.sender_id}" data-is-pinned="false" data-has-attachment="false">${!isSent ? `<div class="flex gap-2 max-w-full"><div class="flex-shrink-0"><img src="${senderAvatar}" alt="${message.sender_name || 'User'}" class="w-8 h-8 rounded-full object-cover"></div></div>` : ''}<div class="flex flex-col ${isSent ? 'items-end' : 'items-start'} gap-1 ${isSent ? 'max-w-full' : ''}">${!isSent ? `<span class="text-xs text-slate-500 dark:text-slate-400 font-medium">${message.sender_name || 'Unknown'}</span>` : ''}<div class="message-bubble ${isSent ? 'sent' : 'received'}" id="${bubbleId}"><div class="message-content bidi-text">${escapeHtml(message.content || '')}</div></div><div class="flex items-center gap-2 text-xs text-slate-400"><span>${formatTime(message.created_at)}</span></div></div>${!isSent ? '</div>' : ''}</div>`;
+        container.insertAdjacentHTML('beforeend', html);
+        scrollToBottomGroup();
+    }
+
+    function scrollToBottomGroup() {
+        const container = document.getElementById('messages-container');
+        if (container) container.scrollTop = container.scrollHeight;
     }
 
     function showNotification(title, body) {

@@ -15,7 +15,7 @@
             </a>
             <div>
                 <h2 class="font-semibold text-slate-800 dark:text-white">Channels</h2>
-                <p class="text-xs text-slate-500 dark:text-slate-400">{{ channels|length if channels else 0 }} channels</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400" id="channel-count">{{ channels|length if channels else 0 }} channels</p>
             </div>
         </div>
 
@@ -35,15 +35,49 @@
         </div>
     </header>
 
-    <div class="flex-1 overflow-y-auto p-4">
+    <!-- Search and Filter Bar -->
+    <div class="px-4 py-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Search Input -->
+            <div class="flex-1 min-w-[200px] relative">
+                <input type="text" id="channel-search" placeholder="Search channels..."
+                       class="w-full pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-slate-700 border-0 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       oninput="filterChannels()">
+                <svg class="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+            </div>
+
+            <!-- Filter Dropdown -->
+            <select id="filter-type" class="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 border-0 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" onchange="filterChannels()">
+                <option value="all">All Types</option>
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+            </select>
+
+            <select id="filter-category" class="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 border-0 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" onchange="filterChannels()">
+                <option value="all">All Categories</option>
+                {% if categories %}
+                    {% for category in categories.keys() %}
+                    <option value="{{ category }}">{{ category }}</option>
+                    {% endfor %}
+                {% endif %}
+            </select>
+        </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto p-4" id="channels-container">
         {% if categories %}
             {% for category, cat_channels in categories.items() %}
-            <div class="mb-8">
+            <div class="channel-category mb-8" data-category="{{ category }}">
                 <h3 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-3">{{ category }}</h3>
-                <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3 channel-grid">
                     {% for channel in cat_channels %}
                     <a href="/flow/channels/{{ channel.channel_id if channel.channel_id else channel.id }}"
-                       class="bg-white dark:bg-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow border border-slate-200 dark:border-slate-700">
+                       class="channel-card bg-white dark:bg-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow border border-slate-200 dark:border-slate-700"
+                       data-name="{{ channel.name|lower }}"
+                       data-type="{{ channel.channel_type }}"
+                       data-description="{{ channel.description|lower if channel.description else '' }}">
                         <div class="flex items-start gap-3">
                             {% if channel.avatar_url %}
                             <img src="{{ channel.avatar_url }}" alt="{{ channel.name }}" class="w-12 h-12 rounded-xl object-cover flex-shrink-0">
@@ -69,6 +103,9 @@
                                         </svg>
                                         {{ channel.member_count }} members
                                     </span>
+                                    {% if channel.category %}
+                                    <span class="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-xs">{{ channel.category }}</span>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
@@ -78,10 +115,13 @@
             </div>
             {% endfor %}
         {% elif channels %}
-            <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3 channel-grid" id="channels-grid">
                 {% for channel in channels %}
                 <a href="/flow/channels/{{ channel.channel_id if channel.channel_id else channel.id }}"
-                   class="bg-white dark:bg-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow border border-slate-200 dark:border-slate-700">
+                   class="channel-card bg-white dark:bg-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow border border-slate-200 dark:border-slate-700"
+                   data-name="{{ channel.name|lower }}"
+                   data-type="{{ channel.channel_type }}"
+                   data-description="{{ channel.description|lower if channel.description else '' }}">
                     <div class="flex items-start gap-3">
                         {% if channel.avatar_url %}
                         <img src="{{ channel.avatar_url }}" alt="{{ channel.name }}" class="w-12 h-12 rounded-xl object-cover flex-shrink-0">
@@ -107,14 +147,14 @@
                 {% endfor %}
             </div>
         {% else %}
-            <div class="flex items-center justify-center h-full">
+            <div id="no-channels" class="flex items-center justify-center h-full">
                 <div class="text-center">
                     <div class="w-20 h-20 mx-auto mb-4 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
                         <svg class="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
                         </svg>
                     </div>
-                    <h3 class="font-semibold text-slate-700 dark:text-slate-300 mb-2">No channels yet</h3>
+                    <h3 class="font-semibold text-slate-700 dark:text-slate-300 mb-2">No channels found</h3>
                     <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">Create your first channel to start collaborating</p>
                     <a href="/flow/channels/create" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -125,6 +165,19 @@
                 </div>
             </div>
         {% endif %}
+
+        <!-- Empty search results -->
+        <div id="no-search-results" class="hidden flex items-center justify-center h-full">
+            <div class="text-center">
+                <div class="w-20 h-20 mx-auto mb-4 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
+                    <svg class="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </div>
+                <h3 class="font-semibold text-slate-700 dark:text-slate-300 mb-2">No matching channels</h3>
+                <p class="text-sm text-slate-500 dark:text-slate-400">Try a different search term or filter</p>
+            </div>
+        </div>
     </div>
 </main>
 
@@ -143,10 +196,11 @@
                 <p class="text-sm text-slate-500 dark:text-slate-400">Enter the invite code shared by the channel admin</p>
             </div>
             <div class="space-y-4">
-                <input type="text" id="join-code-input" placeholder="Enter 8-character code"
+                <input type="text" id="join-code-input" placeholder="Enter code"
                        class="w-full px-4 py-3 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-center text-lg font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500 uppercase"
-                       maxlength="8">
-                <button onclick="joinByCode()" class="w-full px-4 py-3 bg-amber-500 text-white rounded-xl font-medium hover:bg-amber-600 transition-colors">
+                       maxlength="20">
+                <div id="join-code-error" class="hidden text-center text-red-500 text-sm"></div>
+                <button onclick="joinByCode()" id="join-code-btn" class="w-full px-4 py-3 bg-amber-500 text-white rounded-xl font-medium hover:bg-amber-600 transition-colors">
                     Join Channel
                 </button>
                 <button onclick="closeJoinByCodeModal()" class="w-full px-4 py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
@@ -163,20 +217,36 @@
 <script>
     function showJoinByCodeModal() {
         document.getElementById('join-code-modal').classList.remove('hidden');
+        document.getElementById('join-code-input').value = '';
+        document.getElementById('join-code-error').classList.add('hidden');
         document.getElementById('join-code-input').focus();
     }
 
     function closeJoinByCodeModal() {
         document.getElementById('join-code-modal').classList.add('hidden');
         document.getElementById('join-code-input').value = '';
+        document.getElementById('join-code-error').classList.add('hidden');
     }
 
     function joinByCode() {
         const code = document.getElementById('join-code-input').value.trim().toUpperCase();
+        const errorDiv = document.getElementById('join-code-error');
+        const btn = document.getElementById('join-code-btn');
+
         if (!code) {
-            alert('Please enter an invite code');
+            errorDiv.textContent = 'Please enter an invite code';
+            errorDiv.classList.remove('hidden');
             return;
         }
+
+        if (code.length < 4) {
+            errorDiv.textContent = 'Code must be at least 4 characters';
+            errorDiv.classList.remove('hidden');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Joining...';
 
         fetch('/flow/api/channels/join-by-code', {
             method: 'POST',
@@ -186,13 +256,23 @@
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                window.location.href = `/flow/channels/${data.channel_id}`;
+                closeJoinByCodeModal();
+                showNotification('Success', `Joined ${data.channel_name}`);
+                // Redirect to the channel
+                window.location.href = data.redirect_url || `/flow/channels/${data.channel_id}`;
             } else {
-                alert(data.error || 'Failed to join channel. Please check the code and try again.');
+                errorDiv.textContent = data.error || 'Failed to join channel. Please check the code and try again.';
+                errorDiv.classList.remove('hidden');
+                btn.disabled = false;
+                btn.textContent = 'Join Channel';
             }
         })
         .catch(err => {
-            alert('Failed to join channel: ' + err.message);
+            console.error('Join by code error:', err);
+            errorDiv.textContent = 'Failed to join channel. Please try again.';
+            errorDiv.classList.remove('hidden');
+            btn.disabled = false;
+            btn.textContent = 'Join Channel';
         });
     }
 
@@ -202,5 +282,70 @@
             joinByCode();
         }
     });
+
+    // Channel filtering
+    function filterChannels() {
+        const searchQuery = document.getElementById('channel-search').value.toLowerCase().trim();
+        const typeFilter = document.getElementById('filter-type').value;
+        const categoryFilter = document.getElementById('filter-category').value;
+
+        let visibleCount = 0;
+        const cards = document.querySelectorAll('.channel-card');
+        const noResults = document.getElementById('no-search-results');
+        const noChannels = document.getElementById('no-channels');
+
+        cards.forEach(card => {
+            const name = card.dataset.name || '';
+            const description = card.dataset.description || '';
+            const type = card.dataset.type || '';
+            const category = card.closest('.channel-category')?.dataset.category || '';
+
+            // Search filter
+            const matchesSearch = !searchQuery ||
+                name.includes(searchQuery) ||
+                description.includes(searchQuery);
+
+            // Type filter
+            const matchesType = typeFilter === 'all' ||
+                (typeFilter === 'public' && type !== 'private') ||
+                (typeFilter === 'private' && type === 'private');
+
+            // Category filter
+            const matchesCategory = categoryFilter === 'all' || category === categoryFilter;
+
+            if (matchesSearch && matchesType && matchesCategory) {
+                card.style.display = '';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        // Show/hide category headers
+        document.querySelectorAll('.channel-category').forEach(cat => {
+            const hasVisible = cat.querySelectorAll('.channel-card:not([style*="display: none"])').length > 0;
+            cat.style.display = hasVisible ? '' : 'none';
+        });
+
+        // Update count
+        document.getElementById('channel-count').textContent = `${visibleCount} channels`;
+
+        // Show appropriate empty state
+        if (noChannels) {
+            noChannels.style.display = cards.length === 0 ? '' : 'none';
+        }
+        if (noResults) {
+            noResults.classList.toggle('hidden', visibleCount > 0 || cards.length === 0);
+            noResults.classList.toggle('flex', visibleCount === 0 && cards.length > 0);
+        }
+    }
+
+    function showNotification(title, body) {
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-4 right-4 bg-slate-800 text-white px-4 py-3 rounded-xl shadow-lg z-50 animate-slide-in';
+        toast.innerHTML = `<strong>${title}</strong><p class="text-sm text-slate-300">${body}</p>`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
 </script>
 {% endblock %}

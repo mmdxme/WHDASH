@@ -4,43 +4,95 @@
 <div class="space-y-6 pb-20 fade-in">
     <div class="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-cyan-300">Issue Tracker</p>
+            <p class="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-300">Issue Tracker</p>
             <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">Closed Issues</h1>
             <p class="mt-2 text-sm text-slate-400">{{ stats.total }} permanently closed issues for reference and audit.</p>
         </div>
+        <div class="flex gap-3">
+            <a href="{{ url_for('issue_tracker.export_issues') }}?status=Closed" class="rounded-xl border border-white/10 bg-white/5 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">
+                <i class="fa-solid fa-download mr-1"></i>Export
+            </a>
+        </div>
     </div>
 
-    <div class="glass-panel rounded-2xl border border-white/5 overflow-hidden">
+    <!-- Search -->
+    <div class="glass-panel rounded-2xl border border-white/5 p-4">
+        <form method="GET" class="flex gap-3">
+            <input type="text" name="search" value="{{ filters.search }}" placeholder="Search closed issues..."
+                   class="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none">
+            <button type="submit" class="rounded-xl bg-brand-600 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-brand-500">Filter</button>
+        </form>
+    </div>
+
+    {% if issues %}
+    <div class="glass-panel rounded-2xl border border-emerald-500/10 overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b border-white/10 text-left text-[10px] font-black uppercase tracking-widest text-slate-500">
                         <th class="px-4 py-3">ID</th>
                         <th class="px-4 py-3">Issue</th>
-                        <th class="px-4 py-3">Type</th>
                         <th class="px-4 py-3">Priority</th>
                         <th class="px-4 py-3">Owner</th>
+                        <th class="px-4 py-3">Root Cause</th>
                         <th class="px-4 py-3">Final Status</th>
                         <th class="px-4 py-3">Closed Date</th>
+                        {% if can_manage %}
+                        <th class="px-4 py-3">Actions</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-white/5">
                     {% for issue in issues %}
                     <tr class="hover:bg-white/[0.02] transition-colors">
-                        <td class="px-4 py-3"><a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="font-bold text-cyan-400 hover:text-cyan-300">#{{ issue.row_id }}</a></td>
-                        <td class="px-4 py-3"><a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="font-medium text-white hover:text-cyan-300">{{ issue.issue }}</a></td>
-                        <td class="px-4 py-3"><span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.type_badge }}">{{ issue.issue_type }}</span></td>
+                        <td class="px-4 py-3"><a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="font-bold text-emerald-400 hover:text-emerald-300">#{{ issue.row_id }}</a></td>
+                        <td class="px-4 py-3 max-w-xs">
+                            <a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="font-medium text-white hover:text-cyan-300 line-clamp-2">{{ issue.issue }}</a>
+                        </td>
                         <td class="px-4 py-3"><span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.priority_badge }}">{{ issue.priority }}</span></td>
                         <td class="px-4 py-3 text-slate-400">{{ issue.responsible_person_display }}</td>
-                        <td class="px-4 py-3 text-slate-400">{{ issue.final_status_display }}</td>
-                        <td class="px-4 py-3 text-slate-400">{{ issue.target_resolution_date or '--' }}</td>
+                        <td class="px-4 py-3 text-slate-400 max-w-xs truncate" title="{{ issue.root_cause or '' }}">{{ issue.root_cause or '--' }}</td>
+                        <td class="px-4 py-3 text-xs">
+                            {% if issue.final_status_display and issue.final_status_display != '--' %}
+                            <span class="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-bold text-emerald-300">{{ issue.final_status_display }}</span>
+                            {% else %}
+                            <span class="text-slate-500">--</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-slate-400 whitespace-nowrap">{{ issue.target_resolution_date or '--' }}</td>
+                        {% if can_manage %}
+                        <td class="px-4 py-3">
+                            <button onclick="reopenIssue({{ issue.id }}, {{ issue.row_id }})" class="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] font-black uppercase text-amber-300 hover:bg-amber-500/20">Reopen</button>
+                        </td>
+                        {% endif %}
                     </tr>
-                    {% else %}
-                    <tr><td colspan="7" class="px-4 py-12 text-center text-slate-500"><i class="fa-solid fa-times-circle text-4xl text-slate-600"></i><p class="mt-3">No closed issues yet.</p></td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
+    {% else %}
+    <div class="flex flex-col items-center justify-center rounded-2xl border border-white/5 bg-white/[0.02] p-16">
+        <i class="fa-solid fa-times-circle text-5xl text-slate-600"></i>
+        <p class="mt-4 text-lg font-bold text-slate-400">No closed issues</p>
+        <p class="mt-2 text-sm text-slate-500">Closed issues will appear here for permanent record.</p>
+    </div>
+    {% endif %}
 </div>
+
+<script>
+const CSRF_TOKEN = "{{ csrf_token }}";
+async function reopenIssue(id, rowId) {
+    const result = await Swal.fire({
+        icon: 'warning', title: `Reopen Issue #${rowId}?`, input: 'text', inputLabel: 'Reason for reopening',
+        inputPlaceholder: 'Required...', showCancelButton: true, confirmButtonText: 'Reopen',
+        background: '#1e293b', color: '#fff', confirmButtonColor: '#f59e0b',
+        preConfirm: (reason) => { if (!reason) { Swal.showValidationMessage('Reason is required.'); } return reason; }
+    });
+    if (!result.isConfirmed) return;
+    const res = await fetch(`/issues/reopen/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN }, body: JSON.stringify({ csrf_token: CSRF_TOKEN, reason: result.value }) });
+    const data = await res.json();
+    if (data.success) { location.reload(); }
+}
+</script>
 {% endblock %}

@@ -127,7 +127,7 @@
                          id="bubble-{{ message.id }}"
                          oncontextmenu="handleMessageRightClick(event, '{{ message.id }}'); return false;">
                         <div class="message-content bidi-text">
-                            {{ message.content | safe if message.content else '' }}
+                            {{ escape_html(message.content) if message.content else '' }}
                         </div>
                         
                         {% if message.reactions %}
@@ -250,10 +250,10 @@
                 <input type="file" id="file-input" class="hidden" multiple onchange="handleFileSelect(event)">
                 
                 <textarea id="message-input" name="content" rows="1"
-                          class="flex-1 bg-transparent border-0 resize-none focus:outline-none focus:ring-0 py-2 text-slate-800 dark:text-white placeholder-slate-400 max-h-32"
-                          placeholder="Type a message..."
+                          class="flex-1 bg-transparent border-0 resize-none focus:outline-none focus:ring-0 py-2 text-slate-800 dark:text-white placeholder-slate-400 max-h-32 bidi-text"
+                          placeholder="Type a message..." dir="auto"
                           onkeydown="handleInputKeydown(event)"
-                          oninput="autoResize(this); sendTyping()"></textarea>
+                          oninput="autoResize(this); updateInputDirection(this); sendTyping()"></textarea>
                 
                 <button type="button" onclick="startVoiceNote()" class="p-2 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-full transition-colors" title="Voice Note">
                     <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -408,6 +408,50 @@
         </div>
     </div>
 </div>
+
+<!-- Emoji Picker Modal -->
+<div id="emoji-picker-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeEmojiPicker()"></div>
+    <div class="absolute bottom-20 left-1/2 -translate-x-1/2 w-full max-w-sm bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h3 class="font-semibold text-slate-800 dark:text-white">Emoji</h3>
+            <button onclick="closeEmojiPicker()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div id="emoji-grid" class="grid grid-cols-8 gap-1 p-4 max-h-64 overflow-y-auto">
+            <!-- Emojis populated by JS -->
+        </div>
+    </div>
+</div>
+
+<!-- GIF Picker Modal -->
+<div id="gif-picker-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeGifPicker()"></div>
+    <div class="absolute bottom-20 left-1/2 -translate-x-1/2 w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h3 class="font-semibold text-slate-800 dark:text-white">GIF</h3>
+            <button onclick="closeGifPicker()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="p-4">
+            <input type="text" id="gif-search-input" placeholder="Search GIFs..."
+                   class="w-full px-4 py-2 bg-slate-100 dark:bg-slate-700 border-0 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+                   onkeyup="if(event.key==='Enter') searchGifs()">
+            <button onclick="searchGifs()" class="w-full px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition-colors mb-3">
+                Search
+            </button>
+            <div id="gif-results" class="grid grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+                <p class="text-center text-slate-400 py-4 col-span-3">Search for GIFs</p>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -442,15 +486,54 @@
     function startPollingMessages() {
         // Poll for new messages every 3 seconds
         setInterval(pollMessages, 3000);
+        // Also poll for typing indicators
+        setInterval(pollTyping, 2000);
     }
-    
+
+    let lastMessageTime = null;
+    let lastMessageIds = new Set();
+
     function pollMessages() {
         fetch(`/flow/api/conversations/${currentConversationId}/messages`)
             .then(r => r.json())
             .then(data => {
-                // Update messages if there are new ones
-                // This is a simplified implementation
-                console.log('Polled messages:', data.messages?.length || 0);
+                if (data.messages && data.messages.length > 0) {
+                    // Get IDs of existing messages to avoid duplicates
+                    const existingIds = new Set();
+                    document.querySelectorAll('.message-wrapper[data-message-id]').forEach(el => {
+                        existingIds.add(el.dataset.messageId);
+                    });
+
+                    // Filter to only new messages (by ID not in DOM)
+                    const newMessages = data.messages.filter(m => !existingIds.has(m.id));
+
+                    if (newMessages.length > 0) {
+                        console.log('New messages found:', newMessages.length);
+                        // Add each new message to UI
+                        newMessages.reverse().forEach(msg => {
+                            if (!document.getElementById('bubble-' + msg.id)) {
+                                addMessageToUI(msg);
+                            }
+                        });
+                    }
+                }
+            })
+            .catch(console.error);
+    }
+
+    function pollTyping() {
+        fetch(`/flow/api/typing/${currentConversationId}`)
+            .then(r => r.json())
+            .then(data => {
+                const indicator = document.getElementById('typing-indicator');
+                const typingText = document.getElementById('typing-text');
+                if (indicator && typingText && data.typing && data.typing.length > 0) {
+                    const names = data.typing.map(t => t.display_name || 'Someone').join(', ');
+                    typingText.textContent = `${names} ${data.typing.length === 1 ? 'is' : 'are'} typing...`;
+                    indicator.classList.remove('hidden');
+                } else if (indicator) {
+                    indicator.classList.add('hidden');
+                }
             })
             .catch(console.error);
     }
@@ -471,61 +554,64 @@
 
         if (!content && !editingMessageId) return;
 
-        const payload = {
-            conversation_id: currentConversationId,
-            content: content,
-            reply_to_id: replyToId
-        };
-
         if (editingMessageId) {
-            payload.message_id = editingMessageId;
+            // Edit existing message
             fetch(`/flow/api/messages/${editingMessageId}/edit`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content })
-            }).then(() => {
-                cancelEdit();
-                input.value = '';
+                body: JSON.stringify({ content, message_id: editingMessageId })
+            }).then(r => r.json()).then(data => {
+                if (data.success) {
+                    // Update message in UI
+                    const bubble = document.getElementById('bubble-' + editingMessageId);
+                    if (bubble) {
+                        const contentDiv = bubble.querySelector('.message-content');
+                        if (contentDiv) contentDiv.textContent = content;
+                    }
+                    cancelEdit();
+                    input.value = '';
+                    showNotification('Edited', 'Message updated');
+                } else {
+                    showNotification('Error', data.error || 'Failed to edit message');
+                }
+            }).catch(err => {
+                console.error('Edit error:', err);
+                showNotification('Error', 'Failed to edit message');
             });
         } else {
-            try {
-                console.log('Sending payload:', payload);
-                fetch('/flow/api/messages/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                }).then(r => {
-                    console.log('Response status:', r.status);
-                    return r.json();
-                })
-                  .then(data => {
-                      console.log('send response:', data);
-                      console.log('data.success:', data.success);
-                      console.log('data.message:', data.message);
-                      console.log('data.message.id:', data.message?.id);
-                      console.log('data.message.content:', data.message?.content);
-                      if (data.success) {
-                          console.log('calling addMessageToUI with:', data.message);
-                          try {
-                              addMessageToUI(data.message);
-                              input.value = '';
-                              cancelReply();
-                          } catch(e) {
-                              console.error('Error in addMessageToUI:', e);
-                              showNotification('Error', 'Failed to display message');
-                          }
-                      } else {
-                          console.error('Send failed:', data.error);
-                          showNotification('Error', data.error || 'Failed to send message');
-                      }
-                  })
-                  .catch(err => {
-                      console.error('Send error:', err);
-                      showNotification('Error', 'Failed to send message');
-                  });
-            } catch(e) {
-                console.error('Outer trycatch error:', e);
-            }
+            // Send new message
+            const payload = {
+                conversation_id: currentConversationId,
+                content: content,
+                reply_to_id: replyToId
+            };
+
+            console.log('Sending payload:', payload);
+            fetch('/flow/api/messages/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(r => {
+                console.log('Response status:', r.status);
+                return r.json();
+            }).then(data => {
+                console.log('send response:', data);
+                if (data.success && data.message) {
+                    console.log('calling addMessageToUI with:', data.message);
+                    try {
+                        addMessageToUI(data.message);
+                    } catch(e) {
+                        console.error('Error in addMessageToUI:', e);
+                        showNotification('Error', 'Failed to display message');
+                    }
+                } else {
+                    console.error('Send failed:', data.error);
+                    showNotification('Error', data.error || 'Failed to send message');
+                }
+            }).catch(err => {
+                console.error('Send error:', err);
+                showNotification('Error', 'Failed to send message');
+            });
         }
     }
     
@@ -542,6 +628,13 @@
             return;
         }
         console.log('container found, children:', container.children.length);
+        
+        // Remove empty state if present
+        const emptyState = container.querySelector('.flex.items-center.justify-center.h-full');
+        if (emptyState) {
+            console.log('Removing empty state');
+            emptyState.remove();
+        }
         
         const isSent = message.sender_id == currentUser;
         console.log('isSent:', isSent);
@@ -588,6 +681,11 @@
         const insertedEl = document.querySelector(`[data-message-id="${messageId}"]`);
         console.log('inserted element:', insertedEl);
         
+        // Clear input AFTER successful DOM insertion
+        const input = document.getElementById('message-input');
+        if (input) input.value = '';
+        cancelReply();
+        
         scrollToBottom();
     }
     
@@ -596,11 +694,68 @@
         div.textContent = text;
         return div.innerHTML;
     }
-    
+
+    function formatTime(value) {
+        if (!value) return 'now';
+
+        let dt;
+        if (typeof value === 'string') {
+            try {
+                dt = new Date(value.replace('Z', '+00:00'));
+            } catch (e) {
+                return value;
+            }
+        } else if (value instanceof Date) {
+            dt = value;
+        } else {
+            return String(value);
+        }
+
+        const now = new Date();
+        const diff = now - dt;
+        const totalSeconds = diff / 1000;
+
+        if (totalSeconds < 0) {
+            return dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        if (totalSeconds < 60) return 'now';
+        if (totalSeconds < 3600) {
+            const mins = Math.floor(totalSeconds / 60);
+            return `${mins}m`;
+        }
+        if (totalSeconds < 86400) {
+            const hours = Math.floor(totalSeconds / 3600);
+            return `${hours}h`;
+        }
+        if (totalSeconds < 604800) {
+            const days = Math.floor(totalSeconds / 86400);
+            return `${days}d`;
+        }
+        return dt.toLocaleDateString();
+    }
+
     function handleInputKeydown(event) {
         if (event.key === 'Enter' && !event.shiftKey) {
             event.preventDefault();
-            document.getElementById('message-form').requestSubmit();
+            // Directly call sendMessage instead of using requestSubmit to avoid double-trigger
+            sendMessage(event);
+        }
+    }
+
+    function updateInputDirection(textarea) {
+        // Detect direction based on first strong character
+        const text = textarea.value;
+        if (text) {
+            // Check if text starts with RTL characters (Persian/Arabic/Hebrew)
+            const rtlPattern = /[\u0591-\u07FF\u200F\u202B\u202E\uFB1D-\uFDFD\uFE70-\uFEFC]/;
+            if (rtlPattern.test(text)) {
+                textarea.dir = 'rtl';
+            } else {
+                textarea.dir = 'ltr';
+            }
+        } else {
+            // Default direction based on page direction
+            textarea.dir = document.documentElement.dir || 'ltr';
         }
     }
     
@@ -689,9 +844,7 @@
                 startEditingMessage(selectedMessageId);
                 break;
             case 'delete':
-                if (confirm('Delete this message?')) {
-                    deleteMessage(selectedMessageId);
-                }
+                showDeleteModal(selectedMessageId);
                 break;
         }
     }
@@ -789,12 +942,26 @@
             stopVoiceNote();
             return;
         }
-        
+
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
                 voiceRecording = true;
                 mediaRecorder = new MediaRecorder(stream);
-                
+
+                // Create a promise to capture the blob when data is available
+                let recordedChunks = [];
+                let dataResolve = null;
+                const dataPromise = new Promise(resolve => {
+                    dataResolve = resolve;
+                });
+
+                // Set ondataavailable BEFORE start() to avoid race condition
+                mediaRecorder.ondataavailable = function(e) {
+                    if (e.data.size > 0) {
+                        recordedChunks.push(e.data);
+                    }
+                };
+
                 // Show recording UI
                 const inputArea = document.querySelector('#message-form');
                 const recordingHtml = `
@@ -810,16 +977,21 @@
                     </div>
                 `;
                 inputArea.insertAdjacentHTML('beforebegin', recordingHtml);
-                
+
                 // Start recording timer
                 let seconds = 0;
                 window.recordingInterval = setInterval(() => {
                     seconds++;
                     const mins = Math.floor(seconds / 60);
                     const secs = seconds % 60;
-                    document.getElementById('recording-time').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+                    const timeEl = document.getElementById('recording-time');
+                    if (timeEl) timeEl.textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
                 }, 1000);
-                
+
+                // Store data promise resolver for use in stop
+                window.mediaRecorderDataResolve = dataResolve;
+                window.recordedChunks = recordedChunks;
+
                 mediaRecorder.start();
             })
             .catch(err => {
@@ -827,38 +999,166 @@
                 showNotification('Microphone access denied', 'Please allow microphone access to record voice notes');
             });
     }
-    
+
     function stopVoiceNote() {
         if (!voiceRecording || !mediaRecorder) return;
-        
+
         voiceRecording = false;
         clearInterval(window.recordingInterval);
-        
+
+        // Stop recording - ondataavailable will be called before onstop
         mediaRecorder.stop();
         mediaRecorder.stream.getTracks().forEach(track => track.stop());
-        
+
         // Remove recording UI
-        document.getElementById('voice-recording')?.remove();
-        
-        // Get recorded blob and upload
-        mediaRecorder.ondataavailable = function(e) {
-            const blob = e.data;
-            const file = new File([blob], 'voice_note.webm', { type: 'audio/webm' });
-            uploadAndSendFile(file);
+        const recordingEl = document.getElementById('voice-recording');
+        if (recordingEl) recordingEl.remove();
+
+        // Get recorded blob and upload after recorder stops
+        mediaRecorder.onstop = function() {
+            const chunks = window.recordedChunks || [];
+            if (chunks.length > 0) {
+                const blob = new Blob(chunks, { type: 'audio/webm' });
+                const file = new File([blob], 'voice_note.webm', { type: 'audio/webm' });
+                uploadAndSendFile(file);
+            } else {
+                showNotification('Error', 'No audio recorded');
+            }
+            // Cleanup
+            window.recordedChunks = null;
+            window.mediaRecorderDataResolve = null;
+            mediaRecorder = null;
         };
-        
-        mediaRecorder = null;
     }
     
     function showConversationInfo() {
         const panel = document.getElementById('conversation-info-panel');
-        panel.classList.toggle('hidden');
+        if (panel) panel.classList.remove('hidden');
     }
-    
+
     function hideConversationInfo() {
-        document.getElementById('conversation-info-panel').classList.add('hidden');
+        const panel = document.getElementById('conversation-info-panel');
+        if (panel) panel.classList.add('hidden');
     }
-    
+
+    function showSearch() {
+        // Navigate to search page with current conversation context
+        window.location.href = '/flow/search';
+    }
+
+    function showEmojiPicker() {
+        // Show emoji picker modal
+        const modal = document.getElementById('emoji-picker-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            // Load common emojis
+            renderEmojiGrid();
+        }
+    }
+
+    function closeEmojiPicker() {
+        const modal = document.getElementById('emoji-picker-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    function renderEmojiGrid() {
+        const grid = document.getElementById('emoji-grid');
+        if (!grid) return;
+
+        // Common emoji set
+        const emojis = [
+            '😀', '😃', '😄', '😁', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘',
+            '😗', '😙', '😚', '😋', '😛', '😜', '🤪', '😝', '🤑', '🤗', '🤭', '🤫', '🤔', '🤐', '🤨', '😐',
+            '😑', '😶', '😏', '😒', '🙄', '😬', '🤥', '😌', '😔', '😪', '🤤', '😴', '😷', '🤒', '🤕', '🤢',
+            '👍', '👎', '👏', '🙌', '🤝', '🙏', '💪', '🤘', '🤟', '✌️', '🤞', '👌', '🤌', '👈', '👉', '👆', '👇',
+            '❤️', '🧡', '💛', '💚', '💙', '💜', '🖤', '🤍', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘',
+            '🔥', '⭐', '✨', '💥', '💫', '💦', '💨', '🎉', '🎊', '🎈', '🎁', '🏆', '🥇', '🥈', '🥉', '⚡',
+            '😎', '🤓', '🧐', '😤', '😡', '😠', '🤬', '😈', '👹', '👺', '💀', '☠️', '👻', '👽', '👾', '🤖',
+            '💩', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾', '🙈', '🙉', '🙊', '💋', '💌', '💘'
+        ];
+
+        grid.innerHTML = emojis.map(emoji =>
+            `<button onclick="insertEmoji('${emoji}')" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg text-xl transition-colors">${emoji}</button>`
+        ).join('');
+    }
+
+    function insertEmoji(emoji) {
+        const input = document.getElementById('message-input');
+        if (input) {
+            input.value += emoji;
+            input.focus();
+        }
+        closeEmojiPicker();
+    }
+
+    function showGifPicker() {
+        // Show GIF picker modal
+        const modal = document.getElementById('gif-picker-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+        }
+    }
+
+    function closeGifPicker() {
+        const modal = document.getElementById('gif-picker-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    function searchGifs() {
+        const query = document.getElementById('gif-search-input')?.value;
+        if (!query) return;
+
+        // Using Giphy API (public beta key - for demo purposes)
+        // In production, use your own API key
+        fetch(`https://api.giphy.com/v1/gifs/search?api_key=dc6zaTOxFJmzC&q=${encodeURIComponent(query)}&limit=20`)
+            .then(r => r.json())
+            .then(data => {
+                renderGifResults(data.data || []);
+            })
+            .catch(err => {
+                console.error('GIF search error:', err);
+                showNotification('Error', 'Failed to search GIFs');
+            });
+    }
+
+    function renderGifResults(gifs) {
+        const container = document.getElementById('gif-results');
+        if (!container) return;
+
+        if (gifs.length === 0) {
+            container.innerHTML = '<p class="text-center text-slate-400 py-4">No GIFs found</p>';
+            return;
+        }
+
+        container.innerHTML = gifs.map(gif =>
+            `<button onclick="selectGif('${gif.images.fixed_height.url}')" class="p-1 hover:opacity-80 transition-opacity">
+                <img src="${gif.images.fixed_height.url}" alt="${gif.title}" class="max-h-32 rounded-lg">
+            </button>`
+        ).join('');
+    }
+
+    function selectGif(url) {
+        // Send GIF as a message
+        fetch('/flow/api/messages/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                conversation_id: currentConversationId,
+                content: `<img src="${url}" class="max-w-full rounded-lg">`,
+                message_type: 'image'
+            })
+        }).then(r => r.json()).then(data => {
+            if (data.success) {
+                addMessageToUI(data.message);
+            }
+        });
+        closeGifPicker();
+    }
+
+    function triggerFileUpload() {
+        document.getElementById('file-input')?.click();
+    }
+
     function startCall(type) {
         // Get other participant ID for private chat
         {% if other_members and other_members[0] %}
@@ -1311,11 +1611,12 @@
     function forwardMessageTo(conversationId) {
         if (!selectedMessageId || !conversationId) return;
         
-        // Get the message content
+        // Get the message content using textContent (not innerHTML) to prevent XSS
         const bubble = document.getElementById('bubble-' + selectedMessageId);
         const contentEl = bubble ? bubble.querySelector('.message-content') : null;
-        const content = contentEl ? contentEl.innerHTML : '';
-        
+        // Use textContent to safely get plain text content
+        const content = contentEl ? escapeHtml(contentEl.textContent || '') : '';
+
         // Send the message to the target conversation
         fetch('/flow/api/messages/send', {
             method: 'POST',
@@ -1324,7 +1625,7 @@
                 conversation_id: conversationId,
                 content: content,
                 message_type: 'text',
-                forwarded_from_id: selectedMessageId
+                metadata: JSON.stringify({ forwarded_from_id: selectedMessageId })
             })
         })
         .then(r => r.json())

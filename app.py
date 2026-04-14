@@ -2,6 +2,15 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from functools import wraps
+import os
+
+# Load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed, rely on system environment variables
+
 import secrets
 import hmac
 import hashlib
@@ -50,6 +59,7 @@ from document_routes import register_document_routes
 from workflow_routes import register_workflow_routes
 from task_center_routes import register_task_center_routes
 from flow_routes import register_flow_routes
+from quick_tools_routes import register_quick_tools_routes
 
 # =============================================================================
 # UNIFIED PLATFORM MODULES (Enterprise Integration)
@@ -118,19 +128,40 @@ from theme_engine import (
 
 app = Flask(__name__)
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DEFAULT_SECRET_KEY = 'change-me-in-production'
-app.secret_key = os.environ.get('SECRET_KEY', DEFAULT_SECRET_KEY)
-app.config['TEMPLATES_AUTO_RELOAD'] = True
-app.jinja_env.auto_reload = True
 
-DATABASE = os.environ.get('DATABASE_PATH', os.path.join(BASE_DIR, 'warehouse.db'))
-UPLOAD_FOLDER = os.environ.get(
-    'UPLOAD_FOLDER',
-    os.path.join(BASE_DIR, 'static', 'uploads', 'avatars')
-)
+# Import configuration from centralized config module
+from config import SECRET_KEY, ENV, DATABASE_PATH as CONFIG_DATABASE_PATH, UPLOAD_FOLDER as CONFIG_UPLOAD_FOLDER
+import config as app_config
+
+app.secret_key = SECRET_KEY
+app.config['TEMPLATES_AUTO_RELOAD'] = app_config.DEBUG
+app.jinja_env.auto_reload = app_config.DEBUG
+
+# Register escape_html as a Jinja2 filter available to all templates
+import html
+@app.template_filter('escape_html')
+def _escape_html(text):
+    return html.escape(text) if text else ''
+
+# Session cookie security settings
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to session cookie
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection for cookies
+app.config['SESSION_COOKIE_SECURE'] = ENV == 'production'  # Only send cookie over HTTPS in production
+
+DATABASE = os.environ.get('DATABASE_PATH', CONFIG_DATABASE_PATH)
+UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', CONFIG_UPLOAD_FOLDER)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# Ensure session directory exists for persistent sessions
+try:
+    import app_config as config_module
+    if hasattr(config_module, 'SESSION_FILE_DIR'):
+        app.config['SESSION_FILE_DIR'] = config_module.SESSION_FILE_DIR
+        os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
+except ImportError:
+    pass
 
 
 def ensure_database_directory():
@@ -426,6 +457,9 @@ register_document_routes(app)
 
 # Register Workflow / BPM routes
 register_workflow_routes(app)
+
+# Register Quick Tools routes
+register_quick_tools_routes(app)
 
 # Register Business Intelligence routes
 from bi_routes import register_bi_routes
@@ -1126,27 +1160,27 @@ def init_db():
                     seed_issue['issue'],
                     1 if seed_issue.get('pareto_law') else 0,
                     involved_departments,
-                    '',
+                    seed_issue.get('section_team', ''),
                     seed_issue.get('issue_type', 'Problem'),
                     seed_issue.get('writer', ''),
                     seed_issue.get('reported_by', ''),
                     seed_issue.get('priority', 'Medium'),
                     seed_issue.get('status', 'Open'),
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
+                    seed_issue.get('responsible_section', ''),
+                    seed_issue.get('responsible_person', ''),
+                    seed_issue.get('root_cause', ''),
+                    seed_issue.get('impact', ''),
+                    seed_issue.get('action_plan', ''),
+                    seed_issue.get('resources_needed', ''),
+                    seed_issue.get('target_resolution_date', '') or None,
+                    seed_issue.get('first_follow_up_date', '') or None,
+                    seed_issue.get('first_follow_up_notes', ''),
+                    seed_issue.get('second_follow_up_date', '') or None,
+                    seed_issue.get('second_follow_up_notes', ''),
+                    seed_issue.get('follow_up_by', ''),
+                    seed_issue.get('progress_note', ''),
+                    seed_issue.get('linked_issues', ''),
+                    seed_issue.get('final_status', ''),
                     created_by_user_id
                 )
             )
@@ -1708,9 +1742,10 @@ def build_user_preferences(raw_preferences=None):
     font_stack_map = {option['value']: option['stack'] for option in USER_FONT_FAMILY_OPTIONS}
     font_size_map = {option['value']: option['size'] for option in USER_FONT_SIZE_OPTIONS}
     font_weight_map = {option['value']: option['weight'] for option in USER_FONT_WEIGHT_OPTIONS}
-    preferences['font_stack'] = font_stack_map.get(preferences['font_family'], "'Outfit', sans-serif")
-    preferences['font_size_value'] = font_size_map.get(preferences['font_size'], '16px')
-    preferences['font_weight_value'] = font_weight_map.get(preferences['font_weight'], '400')
+    _font_stack = font_stack_map.get(preferences['font_family']) or "'Outfit', sans-serif"
+    preferences['font_stack'] = _font_stack if _font_stack and _font_stack.lower() != 'none' else "'Outfit', sans-serif"
+    preferences['font_size_value'] = font_size_map.get(preferences['font_size']) or '16px'
+    preferences['font_weight_value'] = font_weight_map.get(preferences['font_weight']) or '400'
     preferences['timezone_label'] = preferences['timezone'].split('/')[-1].replace('_', ' ')
     preferences['is_dark'] = is_dark_theme(preferences['theme'])
 
@@ -2417,50 +2452,77 @@ def build_task_base_query(args):
 def login():
     if 'user_id' in session:
         return redirect(url_for('index'))
-        
+
+    # Track login attempts for rate limiting
+    login_attempts = session.get('login_attempts', 0)
+    last_attempt = session.get('last_login_attempt')
+
+    # Rate limiting check
+    if last_attempt:
+        import time
+        time_since_last = time.time() - last_attempt
+        # Block after 5 failed attempts for 15 minutes
+        if login_attempts >= 5 and time_since_last < 900:
+            flash("Too many login attempts. Please try again after 15 minutes.", "error")
+            return render_template('login.html')
+
     if request.method == 'POST':
         username = request.form.get('username', '').strip()
         password = request.form.get('password', '')
-        
+
         if username and password:
             db = get_db()
-            user = db.execute("SELECT * FROM users WHERE username = ? OR email = ?", (username, username)).fetchone()
-            
-            if user and check_password_hash(user['password'], password):
-                session.clear()
-                session.permanent = True
-                session['user_id'] = user['id']
-                session['username'] = user['username']
-                session['role_id'] = user['role_id']
-                session['profile_pic'] = user['profile_pic']
-                
-                role = db.execute("SELECT role_name, company_id, can_edit_stock, can_manage_users FROM roles WHERE id = ?", (user['role_id'],)).fetchone()
-                
-                session['role_name'] = role['role_name']
-                session['company_id'] = role['company_id']
-                session['can_edit_stock'] = bool(role['can_edit_stock'])
-                session['can_manage_users'] = bool(role['can_manage_users'])
+            try:
+                user = db.execute("SELECT * FROM users WHERE username = ? OR email = ?", (username, username)).fetchone()
 
-                # Load marketing permissions for the user
-                try:
-                    from marketing_models import get_user_marketing_permissions
-                    session['marketing_permissions'] = get_user_marketing_permissions(user['id'])
-                except Exception:
-                    session['marketing_permissions'] = []
+                if user and check_password_hash(user['password'], password):
+                    # Reset login attempts on success
+                    session.pop('login_attempts', None)
+                    session.pop('last_login_attempt', None)
 
-                # Load Customer Intelligence permissions for the user
-                try:
-                    from customer_intelligence_routes import get_ci_permissions
-                    session['ci_permissions'] = get_ci_permissions(user['id'])
-                except Exception:
-                    session['ci_permissions'] = []
+                    # Regenerate session ID to prevent session fixation
+                    session.clear()
+                    session.permanent = True
 
-                return redirect(url_for('index'))
-            else:
-                flash("Invalid username or password.", "error")
+                    # Store user data
+                    session['user_id'] = user['id']
+                    session['username'] = user['username']
+                    session['role_id'] = user['role_id']
+                    session['profile_pic'] = user['profile_pic']
+
+                    role = db.execute("SELECT role_name, company_id, can_edit_stock, can_manage_users FROM roles WHERE id = ?", (user['role_id'],)).fetchone()
+
+                    session['role_name'] = role['role_name']
+                    session['company_id'] = role['company_id']
+                    session['can_edit_stock'] = bool(role['can_edit_stock'])
+                    session['can_manage_users'] = bool(role['can_manage_users'])
+
+                    # Load marketing permissions for the user
+                    try:
+                        from marketing_models import get_user_marketing_permissions
+                        session['marketing_permissions'] = get_user_marketing_permissions(user['id'])
+                    except Exception:
+                        session['marketing_permissions'] = []
+
+                    # Load Customer Intelligence permissions for the user
+                    try:
+                        from customer_intelligence_routes import get_ci_permissions
+                        session['ci_permissions'] = get_ci_permissions(user['id'])
+                    except Exception:
+                        session['ci_permissions'] = []
+
+                    return redirect(url_for('index'))
+                else:
+                    # Increment failed login attempts
+                    import time
+                    session['login_attempts'] = login_attempts + 1
+                    session['last_login_attempt'] = time.time()
+                    flash("Invalid username or password.", "error")
+            finally:
+                db.close()
         else:
             flash("Please fill in all fields.", "error")
-            
+
     return render_template('login.html')
 
 @app.route('/login/google')

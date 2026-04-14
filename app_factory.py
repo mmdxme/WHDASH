@@ -40,6 +40,12 @@ def create_app(config_name: str = None) -> Flask:
     # Load configuration
     load_config(app, config_name)
     
+    # Register escape_html as a Jinja2 filter available to all templates
+    import html
+    @app.template_filter('escape_html')
+    def _escape_html(text):
+        return html.escape(text) if text else ''
+    
     # Initialize core systems
     initialize_core(app)
     
@@ -50,7 +56,7 @@ def load_config(app: Flask, config_name: str = None):
     """Load configuration from config module and environment."""
     from config import (
         SECRET_KEY, DATABASE_PATH, DEBUG, ENV,
-        UPLOAD_FOLDER, PERMANENT_SESSION_LIFETIME,
+        UPLOAD_FOLDER, PERMANENT_SESSION_LIFETIME, SESSION_FILE_DIR,
         APP_NAME, DEFAULT_LANGUAGE, DEFAULT_THEME
     )
     
@@ -65,9 +71,10 @@ def load_config(app: Flask, config_name: str = None):
     app.config['DEFAULT_LANGUAGE'] = DEFAULT_LANGUAGE
     app.config['DEFAULT_THEME'] = DEFAULT_THEME
     
-    # Session
+    # Session - use filesystem session with persistent directory
     app.config['SESSION_TYPE'] = 'filesystem'
     app.config['SESSION_PERMANENT'] = True
+    app.config['SESSION_FILE_DIR'] = SESSION_FILE_DIR
 
 
 def initialize_core(app: Flask):

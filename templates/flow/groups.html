@@ -15,10 +15,10 @@
             </a>
             <div>
                 <h2 class="font-semibold text-slate-800 dark:text-white">Groups</h2>
-                <p class="text-xs text-slate-500 dark:text-slate-400">{{ groups|length if groups else 0 }} groups</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400" id="group-count">{{ groups|length if groups else 0 }} groups</p>
             </div>
         </div>
-        
+
         <a href="/flow/groups/create" class="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-sm font-medium">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -26,13 +26,38 @@
             Create Group
         </a>
     </header>
-    
+
+    <!-- Search and Filter Bar -->
+    <div class="px-4 py-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+        <div class="flex flex-wrap items-center gap-3">
+            <!-- Search Input -->
+            <div class="flex-1 min-w-[200px] relative">
+                <input type="text" id="group-search" placeholder="Search groups..."
+                       class="w-full pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-slate-700 border-0 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       oninput="filterGroups()">
+                <svg class="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+            </div>
+
+            <!-- Filter Dropdown -->
+            <select id="filter-type" class="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 border-0 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" onchange="filterGroups()">
+                <option value="all">All Types</option>
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+            </select>
+        </div>
+    </div>
+
     <div class="flex-1 overflow-y-auto p-4">
         {% if groups %}
-            <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3" id="groups-grid">
                 {% for group in groups %}
-                <a href="/flow/group/{{ group.id }}" 
-                   class="bg-white dark:bg-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow border border-slate-200 dark:border-slate-700">
+                <a href="/flow/groups/{{ group.id }}"
+                   class="group-card bg-white dark:bg-slate-800 rounded-xl p-4 hover:shadow-md transition-shadow border border-slate-200 dark:border-slate-700"
+                   data-name="{{ group.name|lower }}"
+                   data-type="{{ group.group_type }}"
+                   data-description="{{ group.description|lower if group.description else '' }}">
                     <div class="flex items-start gap-3">
                         {% if group.avatar_url %}
                         <img src="{{ group.avatar_url }}" alt="{{ group.name }}" class="w-12 h-12 rounded-xl object-cover flex-shrink-0">
@@ -65,7 +90,7 @@
                 {% endfor %}
             </div>
         {% else %}
-            <div class="flex items-center justify-center h-full">
+            <div id="no-groups" class="flex items-center justify-center h-full">
                 <div class="text-center">
                     <div class="w-20 h-20 mx-auto mb-4 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
                         <svg class="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,6 +108,70 @@
                 </div>
             </div>
         {% endif %}
+
+        <!-- Empty search results -->
+        <div id="no-search-results" class="hidden flex items-center justify-center h-full">
+            <div class="text-center">
+                <div class="w-20 h-20 mx-auto mb-4 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center">
+                    <svg class="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </div>
+                <h3 class="font-semibold text-slate-700 dark:text-slate-300 mb-2">No matching groups</h3>
+                <p class="text-sm text-slate-500 dark:text-slate-400">Try a different search term or filter</p>
+            </div>
+        </div>
     </div>
 </main>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+    // Group filtering
+    function filterGroups() {
+        const searchQuery = document.getElementById('group-search').value.toLowerCase().trim();
+        const typeFilter = document.getElementById('filter-type').value;
+
+        let visibleCount = 0;
+        const cards = document.querySelectorAll('.group-card');
+        const noResults = document.getElementById('no-search-results');
+        const noGroups = document.getElementById('no-groups');
+
+        cards.forEach(card => {
+            const name = card.dataset.name || '';
+            const description = card.dataset.description || '';
+            const type = card.dataset.type || '';
+
+            // Search filter
+            const matchesSearch = !searchQuery ||
+                name.includes(searchQuery) ||
+                description.includes(searchQuery);
+
+            // Type filter
+            const matchesType = typeFilter === 'all' ||
+                (typeFilter === 'public' && type !== 'private') ||
+                (typeFilter === 'private' && type === 'private');
+
+            if (matchesSearch && matchesType) {
+                card.style.display = '';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+
+        // Update count
+        document.getElementById('group-count').textContent = `${visibleCount} groups`;
+
+        // Show appropriate empty state
+        if (noGroups) {
+            noGroups.style.display = cards.length === 0 ? '' : 'none';
+        }
+        if (noResults) {
+            noResults.classList.toggle('hidden', visibleCount > 0 || cards.length === 0);
+            noResults.classList.toggle('flex', visibleCount === 0 && cards.length > 0);
+        }
+    }
+</script>
 {% endblock %}

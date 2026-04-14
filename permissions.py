@@ -282,6 +282,17 @@ MODULE_PERMISSIONS = {
             'settings': ['view', 'edit'],
         }
     },
+    'quicktools': {
+        'label': 'Quick Tools',
+        'resources': {
+            'tools': ['view', 'use'],
+            'notes': ['view', 'create', 'edit', 'delete'],
+            'reminders': ['view', 'create', 'edit', 'delete'],
+            'favorites': ['view', 'create', 'edit', 'delete'],
+            'calculator': ['view', 'use'],
+            'settings': ['view', 'edit'],
+        }
+    },
     'procurement': {
         'label': 'Procurement & Purchasing',
         'resources': {

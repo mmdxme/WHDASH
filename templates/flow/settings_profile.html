@@ -113,10 +113,22 @@
 {{ super() }}
 <script>
     let avatarChanged = false;
+    let uploadedAvatarUrl = null;
 
     function previewAvatar(input) {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
+
+        // Validate file type and size
+        if (!file.type.startsWith('image/')) {
+            showNotification('Error', 'Please select an image file');
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            showNotification('Error', 'Image must be less than 5MB');
+            return;
+        }
+
         const preview = document.getElementById('profile-avatar-preview');
         preview.src = URL.createObjectURL(file);
         avatarChanged = true;
@@ -126,9 +138,11 @@
         event.preventDefault();
 
         const avatarInput = document.getElementById('profile-avatar-input');
+        const submitBtn = event.target.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
 
         // If avatar changed, upload it first, then save profile
-        if (avatarChanged && avatarInput.files[0]) {
+        if (avatarChanged && avatarInput.files && avatarInput.files[0]) {
             const formData = new FormData();
             formData.append('file', avatarInput.files[0]);
             formData.append('target_type', 'user');
@@ -136,41 +150,112 @@
             fetch('/flow/api/upload/avatar', {
                 method: 'POST',
                 body: formData
-            }).then(r => r.json()).then(uploadResult => {
-                if (uploadResult.success) {
-                    saveProfileData();
+            })
+            .then(r => r.json())
+            .then(uploadResult => {
+                if (uploadResult.success && uploadResult.avatar_url) {
+                    uploadedAvatarUrl = uploadResult.avatar_url;
+                    return saveProfileData();
                 } else {
-                    alert(uploadResult.error || 'Failed to upload avatar');
+                    throw new Error(uploadResult.error || 'Failed to upload avatar');
                 }
+            })
+            .then(result => {
+                if (result && result.success) {
+                    showNotification('Success', 'Profile updated successfully');
+                    setTimeout(() => window.location.href = '/flow/settings', 1500);
+                }
+            })
+            .catch(err => {
+                console.error('Save profile error:', err);
+                showNotification('Error', err.message || 'Failed to save profile');
+            })
+            .finally(() => {
+                if (submitBtn) submitBtn.disabled = false;
             });
         } else {
-            saveProfileData();
+            saveProfileData()
+            .then(result => {
+                if (result && result.success) {
+                    showNotification('Success', 'Profile updated successfully');
+                    setTimeout(() => window.location.href = '/flow/settings', 1500);
+                }
+            })
+            .catch(err => {
+                console.error('Save profile error:', err);
+                showNotification('Error', err.message || 'Failed to save profile');
+            })
+            .finally(() => {
+                if (submitBtn) submitBtn.disabled = false;
+            });
         }
     }
 
-    function saveProfileData() {
+    async function saveProfileData() {
         const data = {
-            display_name: document.getElementById('display-name').value,
-            username: document.getElementById('username').value,
-            bio: document.getElementById('bio').value,
-            department: document.getElementById('department').value,
-            job_title: document.getElementById('job-title').value,
-            phone: document.getElementById('phone').value,
-            status_text: document.getElementById('status-text').value
+            display_name: document.getElementById('display-name').value.trim(),
+            username: document.getElementById('username').value.trim(),
+            bio: document.getElementById('bio').value.trim(),
+            department: document.getElementById('department').value.trim(),
+            job_title: document.getElementById('job-title').value.trim(),
+            phone: document.getElementById('phone').value.trim()
         };
 
-        fetch('/flow/api/settings/update', {
+        // Include avatar URL if uploaded
+        if (uploadedAvatarUrl) {
+            data.avatar_url = uploadedAvatarUrl;
+        }
+
+        // Validate
+        if (!data.display_name) {
+            throw new Error('Display name is required');
+        }
+
+        // Save profile data
+        const response = await fetch('/flow/api/settings/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
-        })
-        .then(r => r.json())
-        .then(result => {
-            if (result.success) {
-                showNotification('Profile updated', 'Your changes have been saved');
-                setTimeout(() => window.location.href = '/flow/settings', 1500);
-            }
         });
+
+        // Check if response is JSON
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            console.error('Expected JSON but got:', contentType, text.substring(0, 200));
+            throw new Error('Server returned an unexpected response. Please try again.');
+        }
+
+        const result = await response.json();
+
+        if (!result.success) {
+            throw new Error(result.error || 'Failed to save profile');
+        }
+
+        // Save status text
+        const statusText = document.getElementById('status-text').value.trim();
+        if (statusText) {
+            const statusResponse = await fetch('/flow/api/status/set', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status_type: 'online',
+                    status_text: statusText
+                })
+            });
+
+            const statusContentType = statusResponse.headers.get('content-type');
+            if (!statusContentType || !statusContentType.includes('application/json')) {
+                console.warn('Status API did not return JSON');
+            } else {
+                const statusResult = await statusResponse.json();
+                if (!statusResult.success) {
+                    console.warn('Failed to save status:', statusResult.error);
+                }
+            }
+        }
+
+        return { success: true };
     }
 </script>
 {% endblock %}

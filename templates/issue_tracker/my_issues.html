@@ -8,6 +8,11 @@
             <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">My Issues</h1>
             <p class="mt-2 text-sm text-slate-400">Issues you created, reported, or are responsible for.</p>
         </div>
+        {% if can_edit %}
+        <button onclick="openCreateModal()" class="rounded-xl bg-cyan-600 px-5 py-2.5 text-[10px] font-black uppercase tracking-widest text-white hover:bg-cyan-500">
+            <i class="fa-solid fa-plus mr-2"></i>New Issue
+        </button>
+        {% endif %}
     </div>
 
     <div class="glass-panel rounded-2xl border border-white/5 p-4">
@@ -68,7 +73,7 @@
             <a href="{{ url_for('issue_tracker.issue_detail', issue_id=issue.id) }}" class="flex items-center justify-between px-4 py-3 hover:bg-white/[0.02] transition-colors">
                 <div class="flex items-center gap-3">
                     <span class="font-bold text-slate-500">#{{ issue.row_id }}</span>
-                    <span class="text-sm text-white">{{ issue.issue }}</span>
+                    <span class="text-sm text-white line-clamp-1">{{ issue.issue }}</span>
                 </div>
                 <span class="rounded-lg border px-2 py-0.5 text-[10px] font-black uppercase {{ issue.status_badge }}">{{ issue.status }}</span>
             </a>
@@ -77,4 +82,50 @@
     </div>
     {% endif %}
 </div>
+
+<!-- Create Modal (same as all_issues.html) -->
+{% if can_edit %}
+<div id="createModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/70 backdrop-blur-sm">
+    <div class="w-full max-w-xl mx-4 glass-panel rounded-3xl border border-white/10 shadow-2xl">
+        <div class="flex items-center justify-between border-b border-white/10 px-6 py-4">
+            <h2 class="text-lg font-bold text-white"><i class="fa-solid fa-plus-circle mr-2 text-cyan-400"></i>New Issue</h2>
+            <button onclick="closeCreateModal()" class="rounded-full p-2 text-slate-400 hover:bg-white/10 hover:text-white"><i class="fa-solid fa-times"></i></button>
+        </div>
+        <div class="p-6 space-y-4">
+            <input id="ci_title" type="text" placeholder="Issue title *" class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none">
+            <div class="grid grid-cols-2 gap-3">
+                <select id="ci_type" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white"><option value="Problem">Problem</option><option value="Suggestion">Suggestion</option><option value="Issue">Issue</option></select>
+                <select id="ci_priority" class="rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white"><option value="Medium">Medium</option><option value="High">High</option><option value="Low">Low</option></select>
+            </div>
+            <textarea id="ci_impact" rows="2" placeholder="Describe the impact..." class="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-slate-500 focus:border-cyan-500/50 focus:outline-none resize-none"></textarea>
+            <div id="ciError" class="hidden rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300"></div>
+        </div>
+        <div class="flex items-center justify-end gap-3 border-t border-white/10 px-6 py-4">
+            <button onclick="closeCreateModal()" class="rounded-xl border border-white/10 bg-white/5 px-5 py-2 text-[10px] font-black uppercase tracking-widest text-slate-300 hover:bg-white/10">Cancel</button>
+            <button onclick="submitCreateIssue()" id="ciSubmitBtn" class="rounded-xl bg-cyan-600 px-6 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-cyan-500">
+                <i class="fa-solid fa-save mr-1"></i>Create Issue
+            </button>
+        </div>
+    </div>
+</div>
+<script>
+const CSRF_TOKEN = "{{ csrf_token }}";
+function openCreateModal() { document.getElementById('createModal').classList.remove('hidden'); document.getElementById('createModal').classList.add('flex'); }
+function closeCreateModal() { document.getElementById('createModal').classList.add('hidden'); document.getElementById('createModal').classList.remove('flex'); }
+async function submitCreateIssue() {
+    const btn = document.getElementById('ciSubmitBtn');
+    const errDiv = document.getElementById('ciError');
+    const title = document.getElementById('ci_title').value.trim();
+    if (!title) { errDiv.textContent = 'Title is required.'; errDiv.classList.remove('hidden'); return; }
+    btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i>Creating...'; errDiv.classList.add('hidden');
+    const res = await fetch('{{ url_for("issue_tracker.create_issue") }}', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN },
+        body: JSON.stringify({ csrf_token: CSRF_TOKEN, issue: title, issue_type: document.getElementById('ci_type').value, priority: document.getElementById('ci_priority').value, impact: document.getElementById('ci_impact').value })
+    });
+    const data = await res.json();
+    if (data.success) { if (data.redirect) window.location.href = data.redirect; else location.reload(); }
+    else { errDiv.textContent = data.message; errDiv.classList.remove('hidden'); btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-save mr-1"></i>Create Issue'; }
+}
+</script>
+{% endif %}
 {% endblock %}
