@@ -1,0 +1,141 @@
+{% extends "org_planning/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Back Button -->
+    <a href="{{ url_for('org_planning.workflows') }}" class="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+        <i class="fas fa-arrow-left"></i>
+        {{ t('back_to_workflows', lang) }}
+    </a>
+
+    <!-- Workflow Header -->
+    <div class="glass-panel rounded-xl overflow-hidden">
+        <div class="p-6 border-b border-gray-700/50">
+            <div class="flex items-start justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 flex items-center justify-center">
+                        <i class="fas fa-project-diagram text-cyan-400 text-2xl"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-3 mb-1">
+                            <h1 class="text-2xl font-bold text-white">{{ workflow.name }}</h1>
+                            <span class="badge badge-{{ 'success' if workflow.status == 'published' else 'secondary' }}">
+                                {{ workflow.status|Title }}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-3 text-sm text-gray-400">
+                            <span class="px-2 py-1 rounded bg-slate-700">{{ workflow.category or 'General' }}</span>
+                            <span>{{ t('version', lang) }} {{ workflow.version or 1 }}</span>
+                            <span><i class="fas fa-clock mr-1"></i>{{ workflow.estimated_duration_hours or 24 }}h</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    {% if workflow.status != 'published' %}
+                    <button class="btn-primary px-4 py-2 rounded-lg">
+                        <i class="fas fa-play mr-2"></i>{{ t('publish', lang) }}
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        {% if workflow.description %}
+        <div class="px-6 py-4 border-b border-gray-700/50">
+            <p class="text-gray-400">{{ workflow.description }}</p>
+        </div>
+        {% endif %}
+        
+        <div class="p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('module', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ workflow.module or '-' }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('entity_type', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ workflow.entity_type or '-' }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('risk_level', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ workflow.risk_level|Title if workflow.risk_level else 'Medium' }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('steps', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ steps|length }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Workflow Steps -->
+    <div class="glass-panel rounded-xl overflow-hidden">
+        <div class="p-5 border-b border-gray-700/50">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                        <i class="fas fa-list-ol text-blue-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('workflow_steps', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('steps_in_this_workflow', lang) }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        {% if steps %}
+        <div class="p-6">
+            <div class="relative">
+                <!-- Timeline -->
+                <div class="absolute left-6 top-0 bottom-0 w-0.5 bg-gray-700"></div>
+                
+                <div class="space-y-6">
+                    {% for step in steps %}
+                    <div class="relative flex items-start gap-6 pl-16">
+                        <div class="absolute left-4 w-5 h-5 rounded-full bg-{{ 'blue' if step.step_type == 'approval' else 'emerald' if step.step_type == 'start' else 'gray' }}-500 flex items-center justify-center z-10">
+                            <span class="text-white text-xs font-bold">{{ loop.index }}</span>
+                        </div>
+                        
+                        <div class="flex-1 glass-panel rounded-xl p-4">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-white font-semibold">{{ step.name }}</span>
+                                    <span class="badge badge-{{ 'info' if step.step_type == 'approval' else 'success' if step.step_type in ['start', 'end'] else 'secondary' }}">
+                                        {{ step.step_type|Title }}
+                                    </span>
+                                </div>
+                                {% if step.timeout_hours %}
+                                <span class="text-sm text-gray-400">
+                                    <i class="fas fa-clock mr-1"></i>{{ step.timeout_hours }}h
+                                </span>
+                                {% endif %}
+                            </div>
+                            
+                            {% if step.description %}
+                            <p class="text-gray-400 text-sm mb-3">{{ step.description }}</p>
+                            {% endif %}
+                            
+                            <div class="flex items-center gap-4 text-xs text-gray-500">
+                                <span>
+                                    <i class="fas fa-user mr-1"></i>
+                                    {{ step.assignee_role or step.assignee_type or 'Dynamic' }}
+                                </span>
+                                {% if step.is_optional %}
+                                <span class="badge badge-secondary">{{ t('optional', lang) }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="p-12 text-center">
+            <p class="text-gray-400">{{ t('no_steps_defined', lang) }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

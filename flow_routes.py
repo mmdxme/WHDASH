@@ -17,10 +17,13 @@ import os
 import json
 import uuid
 import base64
+import logging
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Blueprint, request, jsonify, session, redirect, url_for, render_template, send_file, Response
 from werkzeug.utils import secure_filename
+
+logger = logging.getLogger(__name__)
 
 try:
     from flow_models import (
@@ -58,6 +61,23 @@ except ImportError:
 
 flow_bp = Blueprint('flow', __name__, url_prefix='/flow', template_folder='templates/flow')
 
+
+def safe_is_json():
+    """Safely check if request is JSON (handles OSError on Windows)."""
+    try:
+        return request.content_type and 'application/json' in request.content_type
+    except OSError:
+        return False
+
+
+def safe_get_json():
+    """Safely get JSON data from request (handles OSError on Windows)."""
+    try:
+        return request.get_json()
+    except OSError:
+        return None
+
+
 # ============================================================================
 # CSRF PROTECTION FOR FLOW API
 # ============================================================================
@@ -71,8 +91,11 @@ def flow_csrf_protected(f):
             token = request.headers.get('X-CSRF-Token')
             if not token:
                 # Try to get from JSON body
-                if request.is_json and request.get_json():
-                    token = request.get_json().get('csrf_token')
+                try:
+                    if safe_is_json() and safe_get_json():
+                        token = safe_get_json().get('csrf_token')
+                except OSError:
+                    pass
             # Also allow cookie-based CSRF from browser
             if not token:
                 token = request.cookies.get('csrf_token')
@@ -172,7 +195,11 @@ os.makedirs(os.path.join(FLOW_UPLOAD_FOLDER, 'thumbnails'), exist_ok=True)
 
 def get_current_user():
     """Get current logged in user from session."""
-    user_id = session.get('user_id')
+    try:
+        user_id = session.get('user_id')
+    except RuntimeError:
+        # Session accessed outside request context
+        return None
     if not user_id:
         return None
     return get_one('SELECT * FROM users WHERE id = ?', (user_id,))
@@ -188,7 +215,7 @@ def get_user_direction():
             lang = prefs.get('language', 'en')
             return 'rtl' if lang in ['fa', 'ar', 'he', 'ur'] else 'ltr'
         return interface_dir
-    except Exception:
+    except (ImportError, Exception):
         return 'ltr'  # Default to left-to-right
 
 
@@ -229,10 +256,20 @@ def inject_flow_context():
             return f'{days}d'
         return dt.strftime('%Y-%m-%d')
 
+    def safe_escape_html(text):
+        """Safely escape HTML text, handling OSError on Windows."""
+        if not text:
+            return ''
+        try:
+            import html
+            return html.escape(str(text))
+        except Exception:
+            return str(text)
+
     return {
         'direction': get_user_direction(),
         'format_time': format_time,
-        'escape_html': lambda text: __import__('html').escape(text) if text else ''
+        'escape_html': safe_escape_html
     }
 
 
@@ -242,11 +279,18 @@ def require_login(f):
     def decorated_function(*args, **kwargs):
         user = get_current_user()
         if not user:
-            if request.is_json:
+            if safe_is_json():
                 return jsonify({'error': 'Unauthorized'}), 401
             return redirect('/login')
-        # Ensure flow profile exists
-        ensure_flow_profile(user['id'])
+        # Ensure flow profile exists (with error handling)
+        try:
+            ensure_flow_profile(user['id'])
+        except Exception as e:
+            import traceback
+            logger.error(f'ensure_flow_profile error for user {user["id"]}: {str(e)}')
+            traceback.print_exc()
+            if safe_is_json():
+                return jsonify({'error': 'Flow profile error', 'details': str(e)}), 500
         return f(*args, **kwargs)
     return decorated_function
 
@@ -476,11 +520,53 @@ def api_messages(conversation_id):
     return jsonify({'messages': messages})
 
 
+@flow_bp.route('/api/conversations/<conversation_id>/members')
+@require_login
+def api_conversation_members(conversation_id):
+    """Get members of a conversation."""
+    user = get_current_user()
+
+    # Check if user is a member
+    membership = get_one('''
+        SELECT * FROM flow_conversation_members
+        WHERE conversation_id = ? AND user_id = ?
+    ''', (conversation_id, user['id']))
+
+    if not membership:
+        return jsonify({'error': 'Access denied'}), 403
+
+    # Get conversation details
+    conversation = get_one('SELECT * FROM flow_conversations WHERE id = ?', (conversation_id,))
+    if not conversation:
+        return jsonify({'error': 'Conversation not found'}), 404
+
+    # Get all members
+    members = get_all('''
+        SELECT fcm.*, fup.display_name, fup.avatar_url, fup.username, fup.job_title,
+               fus.status_type as user_status
+        FROM flow_conversation_members fcm
+        LEFT JOIN flow_user_profiles fup ON fcm.user_id = fup.user_id
+        LEFT JOIN flow_user_status fus ON fcm.user_id = fus.user_id
+            AND (fus.status_expires_at IS NULL OR fus.status_expires_at > ?)
+        WHERE fcm.conversation_id = ?
+        ORDER BY fcm.role ASC, fup.display_name ASC
+    ''', (datetime.now().isoformat(), conversation_id))
+
+    return jsonify({
+        'conversation': {
+            'id': conversation['id'],
+            'name': conversation['name'],
+            'type': conversation['conversation_type']
+        },
+        'members': members,
+        'current_user_role': membership['role']
+    })
+
+
 @flow_bp.route('/api/messages/send', methods=['POST'])
 @require_login
 def api_send_message():
     """Send a new message."""
-    import sys
     import traceback
 
     try:
@@ -495,7 +581,7 @@ def api_send_message():
                 'remaining': remaining
             }), 429
 
-        data = request.get_json()
+        data = safe_get_json()
 
         conversation_id = data.get('conversation_id')
         content = data.get('content', '')
@@ -503,7 +589,7 @@ def api_send_message():
         reply_to_id = data.get('reply_to_id')
         metadata = data.get('metadata')
 
-        print(f'[FLOW DEBUG] api_send_message called: user={user["id"]}, conv={conversation_id}, content={content[:50] if content else "empty"}...', file=sys.stderr)
+        logger.debug(f'api_send_message called: user={user["id"]}, conv={conversation_id}, content={content[:50] if content else "empty"}...')
 
         if not conversation_id:
             return jsonify({'error': 'Conversation ID required'}), 400
@@ -518,14 +604,13 @@ def api_send_message():
         ''', (conversation_id, user['id']))
 
         if not membership:
-            print(f'[FLOW DEBUG] Access denied for user {user["id"]} to conversation {conversation_id}', file=sys.stderr)
-            # Let's also check what conversations exist for this user
+            logger.warning(f'Access denied for user {user["id"]} to conversation {conversation_id}')
             user_convs = get_all('SELECT * FROM flow_conversation_members WHERE user_id = ?', (user['id'],))
-            print(f'[FLOW DEBUG] User conversations: {[c["conversation_id"] for c in user_convs]}', file=sys.stderr)
+            logger.debug(f'User conversations: {[c["conversation_id"] for c in user_convs]}')
             return jsonify({'error': 'Access denied'}), 403
 
         msg_id = send_message(conversation_id, user['id'], content, message_type, reply_to_id, metadata)
-        print(f'[FLOW DEBUG] send_message returned msg_id={msg_id}', file=sys.stderr)
+        logger.debug(f'send_message returned msg_id={msg_id}')
 
         # Get the created message
         message = get_one('''
@@ -535,12 +620,11 @@ def api_send_message():
             WHERE m.id = ?
         ''', (msg_id,))
 
-        print(f'[FLOW DEBUG] get_one returned message={message}', file=sys.stderr)
+        logger.debug(f'get_one returned message={message}')
 
         return jsonify({'success': True, 'message': message, 'remaining': remaining - 1})
     except Exception as e:
-        print(f'[FLOW DEBUG] Exception in api_send_message: {e}', file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
+        logger.exception(f'Exception in api_send_message: {e}')
         return jsonify({'error': str(e)}), 500
 
 
@@ -549,12 +633,12 @@ def api_send_message():
 def api_react_message(message_id):
     """Add reaction to a message."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     emoji = data.get('emoji')
-    
+
     if not emoji:
         return jsonify({'error': 'Emoji required'}), 400
-    
+
     add_reaction(message_id, user['id'], emoji)
     return jsonify({'success': True})
 
@@ -564,14 +648,200 @@ def api_react_message(message_id):
 def api_unreact_message(message_id):
     """Remove reaction from a message."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     emoji = data.get('emoji')
-    
+
     if not emoji:
         return jsonify({'error': 'Emoji required'}), 400
-    
+
     remove_reaction(message_id, user['id'], emoji)
     return jsonify({'success': True})
+
+
+@flow_bp.route('/api/messages/<message_id>/react/toggle', methods=['POST'])
+@require_login
+def api_toggle_reaction(message_id):
+    """Toggle a reaction on a message - adds if not present, removes if present."""
+    user = get_current_user()
+    data = safe_get_json()
+    emoji = data.get('emoji', '👍')
+
+    if not emoji:
+        return jsonify({'error': 'Emoji required'}), 400
+
+    # Check if user already reacted with this emoji
+    existing = get_one('''
+        SELECT id FROM flow_message_reactions
+        WHERE message_id = ? AND user_id = ? AND emoji = ?
+    ''', (message_id, user['id'], emoji))
+
+    if existing:
+        remove_reaction(message_id, user['id'], emoji)
+        action = 'removed'
+    else:
+        add_reaction(message_id, user['id'], emoji)
+        action = 'added'
+
+    # Return updated reactions for this message
+    reactions = get_all('''
+        SELECT emoji, user_id FROM flow_message_reactions WHERE message_id = ?
+    ''', (message_id,))
+
+    reaction_dict = {}
+    for r in reactions:
+        if r['emoji'] not in reaction_dict:
+            reaction_dict[r['emoji']] = []
+        reaction_dict[r['emoji']].append(r['user_id'])
+
+    return jsonify({
+        'success': True,
+        'action': action,
+        'emoji': emoji,
+        'reactions': reaction_dict,
+        'user_reacted': action == 'added'
+    })
+
+
+@flow_bp.route('/api/messages/<message_id>/context-action', methods=['POST'])
+@require_login
+def api_message_context_action(message_id):
+    """Handle context menu actions on a message: copy, edit, delete, forward, pin, save."""
+    user = get_current_user()
+    data = safe_get_json()
+    action = data.get('action')
+    content = data.get('content')  # For edit
+
+    if not action:
+        return jsonify({'error': 'Action required'}), 400
+
+    # Get the message
+    message = get_one('SELECT * FROM flow_messages WHERE id = ?', (message_id,))
+    if not message:
+        return jsonify({'error': 'Message not found'}), 404
+
+    if message.get('is_deleted'):
+        return jsonify({'error': 'Message has been deleted'}), 400
+
+    # Check conversation membership for access
+    membership = get_one('''
+        SELECT * FROM flow_conversation_members
+        WHERE conversation_id = ? AND user_id = ?
+    ''', (message['conversation_id'], user['id']))
+    if not membership:
+        return jsonify({'error': 'Access denied'}), 403
+
+    if action == 'copy':
+        # Return message content for copying
+        return jsonify({
+            'success': True,
+            'action': 'copy',
+            'content': message.get('content', '')
+        })
+
+    elif action == 'edit':
+        # Check ownership
+        if message['sender_id'] != user['id']:
+            return jsonify({'error': 'Cannot edit this message'}), 403
+        # Check message age (24 hours)
+        from datetime import datetime
+        created_at = datetime.fromisoformat(message['created_at']) if message['created_at'] else None
+        if created_at:
+            age_hours = (datetime.now() - created_at).total_seconds() / 3600
+            if age_hours > 24:
+                return jsonify({'error': 'Message is too old to edit'}), 400
+
+        if content is None:
+            return jsonify({'error': 'Content required for edit'}), 400
+
+        with get_db_context() as db:
+            db.execute('''
+                UPDATE flow_messages
+                SET content = ?, is_edited = 1, edited_at = ?
+                WHERE id = ?
+            ''', (content, datetime.now().isoformat(), message_id))
+
+        updated = get_one('''
+            SELECT m.*, fup.display_name as sender_name, fup.avatar_url as sender_avatar
+            FROM flow_messages m
+            LEFT JOIN flow_user_profiles fup ON m.sender_id = fup.user_id
+            WHERE m.id = ?
+        ''', (message_id,))
+        return jsonify({'success': True, 'action': 'edit', 'message': updated})
+
+    elif action == 'delete':
+        if message['sender_id'] != user['id']:
+            return jsonify({'error': 'Cannot delete this message'}), 403
+
+        delete_scope = data.get('scope', 'me')
+        with get_db_context() as db:
+            if delete_scope == 'everyone':
+                db.execute('DELETE FROM flow_messages WHERE id = ?', (message_id,))
+            else:
+                db.execute('''
+                    UPDATE flow_messages
+                    SET is_deleted = 1, deleted_at = ?, delete_scope = 'me'
+                    WHERE id = ?
+                ''', (datetime.now().isoformat(), message_id))
+        return jsonify({'success': True, 'action': 'delete', 'scope': delete_scope})
+
+    elif action == 'forward':
+        target_conversation_id = data.get('conversation_id')
+        if not target_conversation_id:
+            return jsonify({'error': 'Target conversation ID required'}), 400
+
+        target_membership = get_one('''
+            SELECT * FROM flow_conversation_members WHERE conversation_id = ? AND user_id = ?
+        ''', (target_conversation_id, user['id']))
+        if not target_membership:
+            return jsonify({'error': 'Access denied to target conversation'}), 403
+
+        new_msg_id = send_message(
+            conversation_id=target_conversation_id,
+            sender_id=user['id'],
+            content=message['content'],
+            message_type=message['message_type'],
+            reply_to_id=None,
+            metadata=json.dumps({
+                'forwarded_from_id': message_id,
+                'original_sender': message['sender_id'],
+                'original_conversation': message['conversation_id']
+            })
+        )
+        return jsonify({'success': True, 'action': 'forward', 'message_id': new_msg_id})
+
+    elif action == 'pin':
+        # Check if already pinned
+        if message.get('is_pinned'):
+            # Unpin
+            with get_db_context() as db:
+                db.execute('UPDATE flow_messages SET is_pinned = 0 WHERE id = ?', (message_id,))
+            return jsonify({'success': True, 'action': 'unpin'})
+        else:
+            # Pin
+            with get_db_context() as db:
+                db.execute('UPDATE flow_messages SET is_pinned = 1 WHERE id = ?', (message_id,))
+            return jsonify({'success': True, 'action': 'pin'})
+
+    elif action == 'save':
+        # Toggle save
+        existing = get_one('''
+            SELECT id FROM flow_saved_messages WHERE user_id = ? AND message_id = ?
+        ''', (user['id'], message_id))
+        if existing:
+            with get_db_context() as db:
+                db.execute('DELETE FROM flow_saved_messages WHERE id = ?', (existing['id'],))
+            return jsonify({'success': True, 'action': 'unsave'})
+        else:
+            saved_id = generate_id()
+            with get_db_context() as db:
+                db.execute('''
+                    INSERT INTO flow_saved_messages (id, user_id, message_id, created_at)
+                    VALUES (?, ?, ?, ?)
+                ''', (saved_id, user['id'], message_id, datetime.now().isoformat()))
+            return jsonify({'success': True, 'action': 'save'})
+
+    else:
+        return jsonify({'error': f'Unknown action: {action}'}), 400
 
 
 @flow_bp.route('/api/messages/<message_id>/reminder', methods=['POST'])
@@ -579,7 +849,7 @@ def api_unreact_message(message_id):
 def api_set_reminder(message_id):
     """Set a reminder on a message."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     
     remind_at = data.get('remind_at')
     reminder_text = data.get('reminder_text')
@@ -596,7 +866,7 @@ def api_set_reminder(message_id):
 def api_edit_message(message_id):
     """Edit a message."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     content = data.get('content')
 
     if content is None:
@@ -649,7 +919,7 @@ def api_edit_message(message_id):
 def api_delete_message(message_id):
     """Delete a message."""
     user = get_current_user()
-    data = request.get_json() or {}
+    data = safe_get_json() or {}
     delete_scope = data.get('scope', 'me')  # 'me' or 'everyone'
 
     # Check ownership
@@ -680,7 +950,7 @@ def api_delete_message(message_id):
 def api_forward_message(message_id):
     """Forward a message to another conversation."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
 
     target_conversation_id = data.get('conversation_id')
     if not target_conversation_id:
@@ -869,7 +1139,7 @@ def api_unpin_conversation(conversation_id):
 def api_mute_conversation(conversation_id):
     """Mute/unmute a conversation."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     mute = data.get('mute', True)
     
     with get_db_context() as db:
@@ -920,7 +1190,7 @@ def api_archive_conversation(conversation_id):
 def api_delete_conversation(conversation_id):
     """Delete a conversation permanently (both sides) - for private chats only."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     delete_scope = data.get('scope', 'me')
 
     membership = get_one('''
@@ -1032,7 +1302,7 @@ def new_chat():
 def api_start_chat():
     """Start or get existing private chat with a user."""
     user = get_current_user()
-    data = request.get_json() or {}
+    data = safe_get_json() or {}
     other_user_id = data.get('user_id')
     
     if not other_user_id:
@@ -1105,21 +1375,88 @@ def create_channel_page():
     """Create a new channel."""
     user = get_current_user()
     
-    if not user_has_permission(user['id'], 'flow', 'channels', 'create'):
-        return render_template('flow/error.html', error='Permission denied', user=user), 403
-    
     profile = get_flow_profile(user['id'])
     status = get_user_status(user['id'])
     
+    if not user_has_permission(user['id'], 'flow', 'channels', 'create'):
+        # Build full context for error page (which extends flow/index.html)
+        error_conversations = get_user_conversations(user['id'])
+        error_channels = get_all('''
+            SELECT fc.id, fc.name, fc.description, fc.avatar_url, fc.channel_type, fc.category,
+                   fc.is_archived, fc.created_by, fc.created_at, fc.updated_at, fc.settings, fc.invite_code, fc.channel_id,
+                   (SELECT COUNT(*) FROM flow_channel_members WHERE channel_id = fc.id) as member_count
+            FROM flow_channels fc JOIN flow_channel_members fcm ON fc.id = fcm.channel_id
+            WHERE fcm.user_id = ? ORDER BY fc.name
+        ''', (user['id'],))
+        error_groups = get_all('''
+            SELECT fg.id, fg.name, fg.description, fg.avatar_url, fg.group_type, fg.created_by,
+                   fg.created_at, fg.updated_at, fg.settings,
+                   (SELECT COUNT(*) FROM flow_group_members WHERE group_id = fg.id) as member_count
+            FROM flow_groups fg JOIN flow_group_members fgm ON fg.id = fgm.group_id
+            WHERE fgm.user_id = ? ORDER BY fg.name
+        ''', (user['id'],))
+        error_notifications = get_all('''
+            SELECT * FROM flow_notifications WHERE user_id = ? AND is_read = 0 ORDER BY created_at DESC LIMIT 10
+        ''', (user['id'],))
+        error_unread_count = sum(c.get('unread_count', 0) for c in error_conversations)
+        return render_template('flow/error.html',
+            error='Permission denied', user=user, profile=profile, status=status,
+            conversations=error_conversations, channels=error_channels, groups=error_groups,
+            notifications=error_notifications, unread_count=error_unread_count,
+            page_title='Permission Denied', direction=get_user_direction()
+        ), 403
+    
     # Get categories
     categories = get_all('SELECT * FROM flow_channel_categories ORDER BY sort_order')
+    
+    # Get conversations for sidebar
+    conversations = get_user_conversations(user['id'])
+    
+    # Get channels for sidebar
+    channels = get_all('''
+        SELECT fc.id, fc.name, fc.description, fc.avatar_url, fc.channel_type, fc.category,
+               fc.is_archived, fc.created_by, fc.created_at, fc.updated_at, fc.settings, fc.invite_code, fc.channel_id,
+               (SELECT COUNT(*) FROM flow_channel_members WHERE channel_id = fc.id) as member_count
+        FROM flow_channels fc
+        JOIN flow_channel_members fcm ON fc.id = fcm.channel_id
+        WHERE fcm.user_id = ?
+        ORDER BY fc.name
+    ''', (user['id'],))
+    
+    # Get groups for sidebar
+    groups = get_all('''
+        SELECT fg.id, fg.name, fg.description, fg.avatar_url, fg.group_type, fg.created_by,
+               fg.created_at, fg.updated_at, fg.settings,
+               (SELECT COUNT(*) FROM flow_group_members WHERE group_id = fg.id) as member_count
+        FROM flow_groups fg
+        JOIN flow_group_members fgm ON fg.id = fgm.group_id
+        WHERE fgm.user_id = ?
+        ORDER BY fg.name
+    ''', (user['id'],))
+    
+    # Get unread count
+    unread_count = sum(c.get('unread_count', 0) for c in conversations)
+    
+    # Get notifications
+    notifications = get_all('''
+        SELECT * FROM flow_notifications
+        WHERE user_id = ? AND is_read = 0
+        ORDER BY created_at DESC
+        LIMIT 10
+    ''', (user['id'],))
     
     return render_template('flow/create_channel.html',
         user=user,
         profile=profile,
         status=status,
         categories=categories,
-        page_title='Create Channel'
+        conversations=conversations,
+        channels=channels,
+        groups=groups,
+        notifications=notifications,
+        unread_count=unread_count,
+        page_title='Create Channel',
+        direction=get_user_direction()
     )
 
 
@@ -1128,7 +1465,7 @@ def create_channel_page():
 def api_create_channel():
     """Create a new channel."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
 
     name = data.get('name')
     description = data.get('description', '')
@@ -1186,7 +1523,7 @@ def api_check_channel_id():
 def api_join_by_code():
     """Join a private channel using an invite code."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
 
     code = data.get('code', '').strip().upper()
 
@@ -1334,7 +1671,7 @@ def channel_view(channel_id):
         ''', (channel_id,))
 
     if not channel:
-        return render_template('flow/error.html', error='Channel not found', user=user), 404
+        return render_template('flow/error.html', error='Channel not found', user=user, direction=get_user_direction()), 404
 
     # Check membership
     membership = get_one('''
@@ -1342,20 +1679,31 @@ def channel_view(channel_id):
     ''', (channel['id'], user['id']))
     
     if not membership and not user_has_permission(user['id'], 'flow', 'channels', 'admin'):
-        return render_template('flow/error.html', error='Not a channel member', user=user), 403
+        return render_template('flow/error.html', error='Not a channel member', user=user, direction=get_user_direction()), 403
     
-    # Get channel conversation
+    # Get or create channel conversation
     conv = get_one('''
         SELECT * FROM flow_conversations
         WHERE name = ? AND conversation_type = 'channel'
     ''', (channel['name'],))
 
-    import sys
-    print(f'[FLOW DEBUG] channel_view: channel_id={channel_id}, channel_name={channel["name"]}', file=sys.stderr)
-    print(f'[FLOW DEBUG] channel_view: conv={conv}', file=sys.stderr)
-    if conv:
-        print(f'[FLOW DEBUG] channel_view: conv_id={conv["id"]}', file=sys.stderr)
-    
+    if not conv:
+        # Create a conversation for this channel
+        conv_id = generate_id()
+        now = datetime.now().isoformat()
+        with get_db_context() as db:
+            db.execute('''
+                INSERT INTO flow_conversations (id, conversation_type, name, created_by, last_message_at)
+                VALUES (?, 'channel', ?, ?, ?)
+            ''', (conv_id, channel['name'], user['id'], now))
+            db.execute('''
+                INSERT INTO flow_conversation_members (conversation_id, user_id, role, last_read_at)
+                VALUES (?, ?, 'owner', ?)
+            ''', (conv_id, user['id'], now))
+        conv = get_one('SELECT * FROM flow_conversations WHERE id = ?', (conv_id,))
+
+    logger.debug(f'channel_view: channel_id={channel_id}, channel_name={channel["name"]}, conv={conv}')
+
     messages = []
     if conv:
         messages = get_conversation_messages(conv['id'], user['id'], limit=100)
@@ -1380,7 +1728,8 @@ def channel_view(channel_id):
         messages=messages,
         members=members,
         membership=membership,
-        page_title=f'# {channel["name"]}'
+        page_title=f'# {channel["name"]}',
+        direction=get_user_direction()
     )
 
 
@@ -1403,8 +1752,7 @@ def api_join_channel(channel_id):
         SELECT * FROM flow_conversations WHERE name = ? AND conversation_type = 'channel'
     ''', (channel['name'],))
 
-    import sys
-    print(f'[FLOW DEBUG] join_channel: channel_id={channel_id}, channel_name={channel["name"]}, conv={conv}', file=sys.stderr)
+    logger.debug(f'join_channel: channel_id={channel_id}, channel_name={channel["name"]}, conv={conv}')
 
     with get_db_context() as db:
         db.execute('''
@@ -1417,11 +1765,59 @@ def api_join_channel(channel_id):
                 INSERT OR IGNORE INTO flow_conversation_members (conversation_id, user_id, role)
                 VALUES (?, ?, 'member')
             ''', (conv['id'], user['id']))
-            print(f'[FLOW DEBUG] join_channel: Added user {user["id"]} to conversation {conv["id"]}', file=sys.stderr)
+            logger.debug(f'join_channel: Added user {user["id"]} to conversation {conv["id"]}')
         else:
-            print(f'[FLOW DEBUG] join_channel: No conversation found for channel {channel["name"]}', file=sys.stderr)
+            logger.debug(f'join_channel: No conversation found for channel {channel["name"]}')
 
     log_audit(user['id'], 'channel_join', {'channel_id': channel_id}, 'flow')
+    return jsonify({'success': True})
+
+
+@flow_bp.route('/api/channels/<channel_id>/add-member', methods=['POST'])
+@require_login
+def api_add_channel_member(channel_id):
+    """Add a member to a channel."""
+    user = get_current_user()
+    data = safe_get_json()
+    new_user_id = data.get('user_id')
+    
+    if not new_user_id:
+        return jsonify({'error': 'User ID required'}), 400
+    
+    channel = get_one('''
+        SELECT id, name, description, avatar_url, channel_type, category,
+               is_archived, created_by, created_at, updated_at, settings, invite_code, channel_id
+        FROM flow_channels WHERE id = ?
+    ''', (channel_id,))
+    if not channel:
+        return jsonify({'error': 'Channel not found'}), 404
+    
+    # Check if requester is admin
+    membership = get_one('''
+        SELECT * FROM flow_channel_members WHERE channel_id = ? AND user_id = ? AND role = 'admin'
+    ''', (channel_id, user['id']))
+    
+    if not membership:
+        return jsonify({'error': 'Permission denied'}), 403
+    
+    # Get the conversation
+    conv = get_one('''
+        SELECT * FROM flow_conversations WHERE name = ? AND conversation_type = 'channel'
+    ''', (channel['name'],))
+    
+    with get_db_context() as db:
+        db.execute('''
+            INSERT OR IGNORE INTO flow_channel_members (channel_id, user_id, role)
+            VALUES (?, ?, 'member')
+        ''', (channel_id, new_user_id))
+        
+        if conv:
+            db.execute('''
+                INSERT OR IGNORE INTO flow_conversation_members (conversation_id, user_id, role)
+                VALUES (?, ?, 'member')
+            ''', (conv['id'], new_user_id))
+    
+    log_audit(user['id'], 'channel_add_member', {'channel_id': channel_id, 'new_user_id': new_user_id}, 'flow')
     return jsonify({'success': True})
 
 
@@ -1538,7 +1934,7 @@ def create_group_page():
 def api_create_group():
     """Create a new group."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     
     name = data.get('name')
     description = data.get('description', '')
@@ -1575,10 +1971,25 @@ def group_view(group_id):
     if not membership:
         return render_template('flow/error.html', error='Not a group member', user=user), 403
     
-    # Get group conversation
+    # Get or create group conversation
     conv = get_one('''
         SELECT * FROM flow_conversations WHERE name = ? AND conversation_type = 'group'
     ''', (group['name'],))
+    
+    if not conv:
+        # Create a conversation for this group
+        conv_id = generate_id()
+        now = datetime.now().isoformat()
+        with get_db_context() as db:
+            db.execute('''
+                INSERT INTO flow_conversations (id, conversation_type, name, created_by, last_message_at)
+                VALUES (?, 'group', ?, ?, ?)
+            ''', (conv_id, group['name'], user['id'], now))
+            db.execute('''
+                INSERT INTO flow_conversation_members (conversation_id, user_id, role, last_read_at)
+                VALUES (?, ?, 'owner', ?)
+            ''', (conv_id, user['id'], now))
+        conv = get_one('SELECT * FROM flow_conversations WHERE id = ?', (conv_id,))
     
     messages = []
     if conv:
@@ -1613,7 +2024,7 @@ def group_view(group_id):
 def api_add_group_member(group_id):
     """Add a member to a group."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     new_user_id = data.get('user_id')
     
     if not new_user_id:
@@ -1656,7 +2067,7 @@ def api_add_group_member(group_id):
 def api_remove_group_member(group_id):
     """Remove a member from a group."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     remove_user_id = data.get('user_id')
     
     if not remove_user_id:
@@ -1831,7 +2242,7 @@ def call_view(call_id):
 def api_start_call():
     """Start a new call."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     
     call_type = data.get('type', 'audio')  # audio or video
     participant_ids = data.get('participant_ids', [])
@@ -1881,7 +2292,7 @@ def api_leave_call(call_id):
 def api_delete_calls():
     """Delete selected call history for the current user."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
 
     call_ids = data.get('call_ids', [])
     if not call_ids:
@@ -1998,7 +2409,7 @@ def meeting_view(meeting_id):
 def api_start_meeting():
     """Start a new instant meeting."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     
     title = data.get('title', 'Instant Meeting')
     description = data.get('description', '')
@@ -2013,7 +2424,7 @@ def api_start_meeting():
 def api_meeting_chat(meeting_id):
     """Send a chat message in a meeting."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     content = data.get('content')
     
     if not content:
@@ -2062,7 +2473,7 @@ def notifications():
 def api_mark_notifications_read():
     """Mark notifications as read."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     notification_ids = data.get('notification_ids', [])
     
     if notification_ids:
@@ -2242,8 +2653,7 @@ def api_search_comprehensive():
         return jsonify({'success': True, 'results': results, 'query': query})
 
     except Exception as e:
-        import sys
-        print(f'[FLOW ERROR] Search error: {str(e)}', file=sys.stderr)
+        logger.error(f'Search error: {str(e)}')
         return jsonify({'error': 'Search failed', 'details': str(e)}), 500
 
 
@@ -2254,110 +2664,274 @@ def api_search_comprehensive():
 @flow_bp.route('/api/flow/feed')
 @require_login
 def api_flow_feed():
-    """Get Flow feed - posts from public groups and published content."""
+    """Get Flow feed - posts from flow_posts table (native + published)."""
+    import traceback
+    try:
+        user = get_current_user()
+        if not user:
+            return jsonify({'error': 'Unauthorized', 'details': 'User not logged in'}), 401
+
+        limit = int(request.args.get('limit', 50))
+        offset = int(request.args.get('offset', 0))
+
+        # Import the new function
+        from flow_models import get_flow_feed_posts
+        posts = get_flow_feed_posts(user['id'], limit=limit, offset=offset)
+        return jsonify({'success': True, 'posts': posts})
+    except Exception as e:
+        logger.error(f'Flow feed error: {str(e)}')
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to load Flow feed', 'details': str(e)}), 500
+
+
+@flow_bp.route('/api/flow/posts', methods=['POST'])
+@require_login
+def api_create_flow_post():
+    """Create a new native Flow post."""
     user = get_current_user()
-    limit = int(request.args.get('limit', 50))
+    data = safe_get_json()
+
+    content = data.get('content', '').strip()
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+
+    post_type = data.get('post_type', 'text')
+    media_url = data.get('media_url')
+    media_type = data.get('media_type')
 
     try:
-        posts = []
-
-        # Get posts from PUBLIC groups the user is a member of
-        # These posts appear automatically in Flow
-        public_group_posts = get_all('''
-            SELECT m.id, m.content, m.message_type, m.created_at, m.sender_id,
-                   fc.name as conversation_name, fc.id as conversation_id,
-                   'group' as source_type,
-                   fg.name as source_name, fg.id as source_id,
-                   fup.display_name as author_name, fup.avatar_url as author_avatar
-            FROM flow_messages m
-            JOIN flow_conversations fc ON m.conversation_id = fc.id
-            JOIN flow_groups fg ON fc.name = fg.name AND fc.conversation_type = 'group'
-            JOIN flow_group_members fgm ON fg.id = fgm.group_id AND fgm.user_id = ?
-            LEFT JOIN flow_user_profiles fup ON m.sender_id = fup.user_id
-            WHERE fg.group_type = 'public'
-            AND m.is_deleted = 0
-            AND m.message_type IN ('text', 'image')
-            ORDER BY m.created_at DESC
-            LIMIT ?
-        ''', (user['id'], limit))
-
-        for post in public_group_posts:
-            posts.append({
-                'id': post['id'],
-                'content': post['content'],
-                'message_type': post['message_type'],
-                'created_at': post['created_at'].isoformat() if post.get('created_at') else None,
-                'sender_id': post['sender_id'],
-                'author_name': post['author_name'],
-                'author_avatar': post['author_avatar'],
-                'source_type': 'group',
-                'source_name': post['source_name'],
-                'source_id': post['source_id'],
-                'conversation_id': post['conversation_id'],
-                'source_url': f'/groups/{post["source_id"]}'
-            })
-
-        # Sort by created_at descending
-        posts.sort(key=lambda x: x['created_at'] or '', reverse=True)
-
-        return jsonify({'success': True, 'posts': posts})
-
+        from flow_models import create_flow_post
+        post_id = create_flow_post(
+            author_id=user['id'],
+            content=content,
+            post_type=post_type,
+            media_url=media_url,
+            media_type=media_type
+        )
+        return jsonify({'success': True, 'post_id': post_id})
     except Exception as e:
-        import sys
-        print(f'[FLOW ERROR] Flow feed error: {str(e)}', file=sys.stderr)
-        return jsonify({'error': 'Failed to load Flow feed', 'details': str(e)}), 500
+        logger.error(f'Create post error: {str(e)}')
+        return jsonify({'error': 'Failed to create post'}), 500
+
+
+@flow_bp.route('/api/flow/posts/<post_id>/react', methods=['POST'])
+@require_login
+def api_flow_post_react(post_id):
+    """Add or remove reaction on a Flow post. Returns updated reactions."""
+    user = get_current_user()
+    data = safe_get_json()
+    emoji = data.get('emoji', '👍')
+    action = data.get('action', 'add')  # 'add', 'remove', or 'toggle'
+
+    try:
+        from flow_models import (
+            add_flow_post_reaction, remove_flow_post_reaction,
+            get_one, get_all
+        )
+
+        # Toggle logic: if action is 'toggle', check existing reaction
+        if action == 'toggle':
+            existing = get_one('''
+                SELECT id FROM flow_post_reactions
+                WHERE post_id = ? AND user_id = ? AND emoji = ?
+            ''', (post_id, user['id'], emoji))
+            if existing:
+                action = 'remove'
+            else:
+                action = 'add'
+
+        if action == 'remove':
+            remove_flow_post_reaction(post_id, user['id'], emoji)
+            reaction_action = 'removed'
+        else:
+            add_flow_post_reaction(post_id, user['id'], emoji)
+            reaction_action = 'added'
+
+        # Return updated reactions
+        reactions = get_all('''
+            SELECT emoji, user_id FROM flow_post_reactions WHERE post_id = ?
+        ''', (post_id,))
+
+        reaction_dict = {}
+        for r in reactions:
+            if r['emoji'] not in reaction_dict:
+                reaction_dict[r['emoji']] = []
+            reaction_dict[r['emoji']].append(r['user_id'])
+
+        # Get reaction counts
+        reaction_count = sum(len(users) for users in reaction_dict.values())
+
+        return jsonify({
+            'success': True,
+            'action': reaction_action,
+            'emoji': emoji,
+            'reactions': reaction_dict,
+            'reaction_count': reaction_count,
+            'user_reacted': reaction_action == 'added'
+        })
+    except Exception as e:
+        logger.error(f'Reaction error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@flow_bp.route('/api/flow/posts/<post_id>', methods=['GET'])
+@require_login
+def api_get_flow_post(post_id):
+    """Get a single Flow post with comments."""
+    user = get_current_user()
+
+    try:
+        from flow_models import get_one, get_all
+
+        post = get_one('SELECT * FROM flow_posts WHERE id = ? AND is_deleted = 0', (post_id,))
+        if not post:
+            return jsonify({'error': 'Post not found'}), 404
+
+        # Get reactions
+        reactions = get_all('''
+            SELECT emoji, user_id FROM flow_post_reactions WHERE post_id = ?
+        ''', (post_id,))
+
+        # Parse reactions into emoji groups
+        reaction_dict = {}
+        for r in reactions:
+            if r['emoji'] not in reaction_dict:
+                reaction_dict[r['emoji']] = []
+            reaction_dict[r['emoji']].append(r['user_id'])
+
+        # Get comments
+        comments = get_all('''
+            SELECT * FROM flow_post_comments
+            WHERE post_id = ? AND is_deleted = 0
+            ORDER BY created_at ASC
+        ''', (post_id,))
+
+        post['reactions'] = reaction_dict
+        post['comments'] = comments
+
+        # Check if current user has reacted
+        post['user_reacted'] = user['id'] in [uid for uids in reaction_dict.values() for uid in uids]
+
+        return jsonify({'success': True, 'post': post})
+    except Exception as e:
+        logger.error(f'Get post error: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@flow_bp.route('/api/flow/posts/<post_id>/comment', methods=['POST'])
+@require_login
+def api_flow_post_comment(post_id):
+    """Add a comment to a Flow post."""
+    user = get_current_user()
+    data = safe_get_json()
+    content = data.get('content', '').strip()
+
+    if not content:
+        return jsonify({'error': 'Content is required'}), 400
+
+    try:
+        from flow_models import add_flow_post_comment
+        comment_id = add_flow_post_comment(post_id, user['id'], content)
+        return jsonify({'success': True, 'comment_id': comment_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@flow_bp.route('/api/flow/posts/<post_id>', methods=['DELETE'])
+@require_login
+def api_delete_flow_post(post_id):
+    """Delete a Flow post."""
+    user = get_current_user()
+
+    try:
+        from flow_models import delete_flow_post
+        success = delete_flow_post(post_id, user['id'])
+        if success:
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Cannot delete this post'}), 403
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@flow_bp.route('/api/flow/posts/<post_id>/pin', methods=['POST'])
+@require_login
+def api_pin_flow_post(post_id):
+    """Pin or unpin a Flow post."""
+    user = get_current_user()
+    data = safe_get_json()
+    is_pinned = data.get('is_pinned', True)
+
+    try:
+        from flow_models import pin_flow_post
+        pin_flow_post(post_id, is_pinned)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @flow_bp.route('/api/flow/publish', methods=['POST'])
 @require_login
 def api_flow_publish():
-    """Publish a message to Flow from a private channel."""
+    """Publish a message to Flow from a Stream."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
 
     message_id = data.get('message_id')
-    if not message_id:
-        return jsonify({'error': 'Message ID required'}), 400
+    stream_id = data.get('stream_id')
 
-    # Get the message
-    message = get_one('''
-        SELECT m.*, fc.name as conversation_name, fc.conversation_type
-        FROM flow_messages m
-        JOIN flow_conversations fc ON m.conversation_id = fc.id
-        WHERE m.id = ?
-    ''', (message_id,))
+    if not message_id and not stream_id:
+        return jsonify({'error': 'Message ID or Stream ID required'}), 400
 
-    if not message:
-        return jsonify({'error': 'Message not found'}), 404
+    try:
+        from flow_models import publish_stream_to_flow
 
-    # Check if user has permission to publish
-    if message['conversation_type'] == 'channel':
-        # Check if user is a member of the channel
-        membership = get_one('''
-            SELECT * FROM flow_channel_members
-            WHERE channel_id = (SELECT id FROM flow_channels WHERE name = ?)
-            AND user_id = ?
-        ''', (message['conversation_name'], user['id']))
-        if not membership:
-            return jsonify({'error': 'You must be a member to publish'}), 403
+        if message_id and stream_id:
+            # Publishing specific message from a stream
+            post_id = publish_stream_to_flow(stream_id, message_id, user['id'])
+            if post_id:
+                return jsonify({'success': True, 'post_id': post_id})
+            else:
+                return jsonify({'error': 'Cannot publish: stream does not allow publishing or not a member'}), 403
+        else:
+            return jsonify({'error': 'Both message_id and stream_id are required'}), 400
 
-        # Check if channel allows publishing to Flow
-        channel = get_one('''
-            SELECT settings FROM flow_channels WHERE name = ?
-        ''', (message['conversation_name'],))
-        if channel and channel.get('settings'):
+    except Exception as e:
+        logger.error(f'Publish error: {str(e)}')
+        return jsonify({'error': 'Failed to publish'}), 500
+
+
+@flow_bp.route('/api/flow/streams/<stream_id>/publish-allowed', methods=['GET'])
+@require_login
+def api_stream_publish_allowed(stream_id):
+    """Check if current user can publish to Flow from a specific stream."""
+    user = get_current_user()
+
+    # Check if user is a member
+    membership = get_one('''
+        SELECT * FROM flow_channel_members WHERE channel_id = ? AND user_id = ?
+    ''', (stream_id, user['id']))
+
+    if not membership:
+        return jsonify({'allowed': False, 'reason': 'Not a member'})
+
+    # Check stream settings
+    stream = get_one('SELECT settings FROM flow_channels WHERE id = ?', (stream_id,))
+    if not stream:
+        return jsonify({'allowed': False, 'reason': 'Stream not found'})
+
+    settings = {}
+    if stream.get('settings'):
+        try:
             import json
-            settings = json.loads(channel['settings']) if isinstance(channel['settings'], str) else channel['settings']
-            if not settings.get('allow_publish_to_flow', False):
-                return jsonify({'error': 'This channel does not allow publishing to Flow'}), 403
+            settings = json.loads(stream['settings']) if isinstance(stream['settings'], str) else stream['settings']
+        except:
+            settings = {}
 
-    # Log the publication (in a real system, you might create a separate flow_feed_publications table)
-    log_audit(user['id'], 'flow_publish', {
-        'message_id': message_id,
-        'conversation': message['conversation_name']
-    }, 'flow')
-
-    return jsonify({'success': True, 'message': 'Published to Flow'})
+    if settings.get('allow_publish_to_flow', False):
+        return jsonify({'allowed': True})
+    else:
+        return jsonify({'allowed': False, 'reason': 'Stream does not allow publishing to Flow'})
 
 
 # ============================================================================
@@ -2440,7 +3014,7 @@ def settings():
 def api_update_settings():
     """Update user settings and profile."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
 
     # Update user settings (flow_user_settings table)
     update_user_settings(user['id'], data)
@@ -2459,7 +3033,7 @@ def api_update_settings():
 def api_set_status():
     """Set user status."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     
     status_type = data.get('status_type', 'online')
     status_text = data.get('status_text')
@@ -2502,7 +3076,7 @@ def api_unblock_user(user_id):
 def api_push_subscribe():
     """Subscribe to push notifications."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     
     if not data or 'subscription' not in data:
         return jsonify({'error': 'Subscription data required'}), 400
@@ -2555,7 +3129,7 @@ def api_push_subscribe():
 def api_push_unsubscribe():
     """Unsubscribe from push notifications."""
     user = get_current_user()
-    data = request.get_json() or {}
+    data = safe_get_json() or {}
     endpoint = data.get('endpoint')
     
     remove_push_subscription(user['id'], endpoint)
@@ -2636,7 +3210,7 @@ def api_push_vapid_key():
 def api_toggle_push_notifications():
     """Toggle push notifications on/off for a user."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     enabled = data.get('enabled', True)
     
     if enabled:
@@ -2808,7 +3382,7 @@ def api_upload_avatar():
 def api_update_group(group_id):
     """Update group settings (name, description, avatar_url)."""
     user = get_current_user()
-    data = request.get_json() or {}
+    data = safe_get_json() or {}
 
     group = get_one('SELECT * FROM flow_groups WHERE id = ?', (group_id,))
     if not group:
@@ -2840,7 +3414,7 @@ def api_update_group(group_id):
 def api_update_channel(channel_id):
     """Update channel settings (name, description, category, avatar_url, settings)."""
     user = get_current_user()
-    data = request.get_json() or {}
+    data = safe_get_json() or {}
 
     # Find by UUID or channel_id
     channel = get_one('''
@@ -2906,7 +3480,7 @@ def api_update_channel(channel_id):
 def api_set_typing():
     """Set typing indicator."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     
     conversation_id = data.get('conversation_id')
     is_typing = data.get('is_typing', True)
@@ -2948,7 +3522,7 @@ def api_get_typing(conversation_id):
 def api_update_presence():
     """Update user presence."""
     user = get_current_user()
-    data = request.get_json()
+    data = safe_get_json()
     
     status_type = data.get('status', 'online')
     update_presence(user['id'], status_type)
@@ -3079,7 +3653,6 @@ def api_seed_all():
     if not user_has_permission(user['id'], 'flow', 'channels', 'admin'):
         return jsonify({'error': 'Permission denied'}), 403
 
-    import sys
     from flow_models import (
         get_all, get_one, get_db_context, generate_id,
         create_channel, create_group, get_or_create_private_conversation, send_message
@@ -3109,7 +3682,7 @@ def api_seed_all():
     for name, channel_id, desc, ctype, cat in sample_channels:
         if validate_channel_id(channel_id) and is_channel_id_available(channel_id):
             db_id = create_channel(name, desc, creator_id, ctype, cat, channel_id)
-            print(f"[SEED] Created channel: {name}", file=sys.stderr)
+            logger.info(f'Created channel: {name}')
 
             # Add members
             with get_db_context() as db:
@@ -3152,7 +3725,7 @@ def api_seed_all():
     for i, (name, desc) in enumerate(sample_groups):
         member_ids = user_ids[i:i+4] if i+4 <= len(user_ids) else user_ids[:4]
         grp_id = create_group(name, desc, creator_id, 'private', member_ids)
-        print(f"[SEED] Created group: {name}", file=sys.stderr)
+        logger.info(f'Created group: {name}')
 
         # Add messages to group
         with get_db_context() as db:
@@ -3187,7 +3760,7 @@ def api_seed_all():
                 db.execute('''INSERT INTO flow_messages (id, conversation_id, sender_id, content, message_type, created_at)
                              VALUES (?, ?, ?, ?, 'text', ?)''',
                           (msg_id, conv_id, sender, msg, (datetime.now() - timedelta(hours=len(private_messages)-j)).isoformat()))
-        print(f"[SEED] Created private chat: user_{i} <-> user_{i+1}", file=sys.stderr)
+        logger.info(f'Created private chat: user_{i} <-> user_{i+1}')
 
     return jsonify({'success': True, 'message': 'Sample data created successfully'})
 
@@ -3348,5 +3921,4 @@ def register_flow_routes(app):
     try:
         initialize_flow()
     except Exception as e:
-        import sys
-        print(f"[FLOW] Initialization warning: {e}", file=sys.stderr)
+        logger.warning(f'Initialization warning: {e}')

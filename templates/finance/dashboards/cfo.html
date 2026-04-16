@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; backdrop-filter: blur(12px); }
+        .stat-card { transition: all 0.3s ease; }
+        .stat-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.5); }
+        .kpi-big { font-size: 2.5rem; font-weight: 700; line-height: 1.2; }
+        .amount { font-family: 'Courier New', monospace; }
+        .trend-badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .progress-bar { height: 12px; background: #334155; border-radius: 6px; overflow: hidden; }
+        .alert-urgent { border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.05); }
+        .alert-warning { border-left: 4px solid #f59e0b; background: rgba(245, 158, 11, 0.05); }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Executive financial overview and key performance indicators</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="/finance/dashboard" class="btn btn-outline">
+                    <i class="fas fa-th-large"></i> Main Dashboard
+                </a>
+                <button onclick="window.print()" class="btn btn-outline">
+                    <i class="fas fa-print"></i> Print
+                </button>
+            </div>
+        </div>
+
+        <!-- Hero Metrics Row -->
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+            <div class="glass-card stat-card p-5">
+                <p class="text-gray-400 text-sm mb-2">Total Revenue YTD</p>
+                <p class="kpi-big text-success amount">{{ "%.2f"|format(kpis.total_revenue) }}</p>
+                <span class="trend-badge bg-success/20 text-success mt-2 inline-block">
+                    <i class="fas fa-arrow-up mr-1"></i>{{ "%.1f"|format(kpis.revenue_growth) }}%
+                </span>
+            </div>
+            <div class="glass-card stat-card p-5">
+                <p class="text-gray-400 text-sm mb-2">Total Expenses YTD</p>
+                <p class="kpi-big text-warning amount">{{ "%.2f"|format(kpis.total_expenses) }}</p>
+                <span class="trend-badge bg-warning/20 text-warning mt-2 inline-block">
+                    <i class="fas fa-arrow-up mr-1"></i>{{ "%.1f"|format(kpis.expense_growth) }}%
+                </span>
+            </div>
+            <div class="glass-card stat-card p-5">
+                <p class="text-gray-400 text-sm mb-2">Net Income YTD</p>
+                <p class="kpi-big {% if kpis.net_income >= 0 %}text-success{% else %}text-danger{% endif %} amount">
+                    {{ "%.2f"|format(kpis.net_income) }}
+                </p>
+                <span class="trend-badge {% if kpis.net_margin >= 0 %}bg-success/20 text-success{% else %}bg-danger/20 text-danger{% endif %} mt-2 inline-block">
+                    {{ "%.1f"|format(kpis.net_margin) }}% Margin
+                </span>
+            </div>
+            <div class="glass-card stat-card p-5">
+                <p class="text-gray-400 text-sm mb-2">Return on Equity</p>
+                <p class="kpi-big text-info amount">{{ "%.2f"|format(kpis.roe) }}%</p>
+                <span class="trend-badge bg-info/20 text-info mt-2 inline-block">
+                    <i class="fas fa-chart-line mr-1"></i>ROE
+                </span>
+            </div>
+            <div class="glass-card stat-card p-5">
+                <p class="text-gray-400 text-sm mb-2">Current Ratio</p>
+                <p class="kpi-big {% if kpis.current_ratio >= 1.5 %}text-success{% elif kpis.current_ratio >= 1 %}text-warning{% else %}text-danger{% endif %} amount">
+                    {{ "%.2f"|format(kpis.current_ratio) }}
+                </p>
+                <span class="trend-badge bg-gray-700/50 text-gray-400 mt-2 inline-block">
+                    Assets / Liabilities
+                </span>
+            </div>
+            <div class="glass-card stat-card p-5">
+                <p class="text-gray-400 text-sm mb-2">Quick Ratio</p>
+                <p class="kpi-big {% if kpis.quick_ratio >= 1 %}text-success{% elif kpis.quick_ratio >= 0.5 %}text-warning{% else %}text-danger{% endif %} amount">
+                    {{ "%.2f"|format(kpis.quick_ratio) }}
+                </p>
+                <span class="trend-badge bg-gray-700/50 text-gray-400 mt-2 inline-block">
+                    Liquidity
+                </span>
+            </div>
+        </div>
+
+        <!-- Revenue & Profit Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div class="glass-card lg:col-span-2 p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-semibold text-white">Revenue & Profit Trend</h3>
+                    <div class="flex gap-4 text-sm">
+                        <span class="flex items-center gap-2"><i class="fas fa-circle text-success text-xs"></i> Revenue</span>
+                        <span class="flex items-center gap-2"><i class="fas fa-circle text-warning text-xs"></i> Expenses</span>
+                        <span class="flex items-center gap-2"><i class="fas fa-circle text-info text-xs"></i> Net Income</span>
+                    </div>
+                </div>
+                <div style="min-height: 350px;">
+                    <canvas id="revenueProfitChart"></canvas>
+                </div>
+            </div>
+
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Key Ratios</h3>
+                <div class="space-y-6">
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-gray-400">DSO (Days Sales Outstanding)</span>
+                            <span class="text-white font-semibold">{{ "%.1f"|format(kpis.dso) }}</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="bg-info h-full rounded-full" style="width: {{ [kpis.dso / 60 * 100, 100] | min }}%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Target: 45 days</p>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-gray-400">DPO (Days Payable Outstanding)</span>
+                            <span class="text-white font-semibold">{{ "%.1f"|format(kpis.dpo) }}</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="bg-success h-full rounded-full" style="width: {{ [kpis.dpo / 60 * 100, 100] | min }}%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Target: 30 days</p>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-gray-400">Cash Conversion Cycle</span>
+                            <span class="text-white font-semibold">{{ "%.1f"|format(kpis['CCC']) }} days</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="bg-primary h-full rounded-full" style="width: {{ [kpis['CCC'] / 90 * 100, 100] | min }}%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">DSO + DIO - DPO</p>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span class="text-gray-400">Gross Margin %</span>
+                            <span class="text-white font-semibold">{{ "%.1f"|format(kpis.gross_margin) }}%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="bg-success h-full rounded-full" style="width: {{ [kpis.gross_margin, 100] | min }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cash & Liquidity + Cost Analysis -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Cash & Liquidity</h3>
+                <div style="min-height: 280px;">
+                    <canvas id="cashLiquidityChart"></canvas>
+                </div>
+            </div>
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Expenses by Category</h3>
+                <div style="min-height: 280px;">
+                    <canvas id="expenseCategoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Balance Sheet Summary -->
+        <div class="glass-card p-6 mb-8">
+            <h3 class="text-xl font-semibold text-white mb-6">Balance Sheet Summary</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Assets -->
+                <div>
+                    <h4 class="text-lg font-semibold text-info mb-4 flex items-center gap-2">
+                        <i class="fas fa-landmark"></i> Assets
+                    </h4>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Current Assets</span>
+                            <span class="amount text-white">{{ "%.2f"|format(bs_summary.current_assets) }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Fixed Assets</span>
+                            <span class="amount text-white">{{ "%.2f"|format(bs_summary.fixed_assets) }}</span>
+                        </div>
+                        <div class="flex justify-between border-t border-gray-700 pt-3">
+                            <span class="font-semibold text-white">Total Assets</span>
+                            <span class="amount font-bold text-white">{{ "%.2f"|format(bs_summary.total_assets) }}</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Liabilities -->
+                <div>
+                    <h4 class="text-lg font-semibold text-danger mb-4 flex items-center gap-2">
+                        <i class="fas fa-file-invoice-dollar"></i> Liabilities
+                    </h4>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Current Liabilities</span>
+                            <span class="amount text-white">{{ "%.2f"|format(bs_summary.current_liabilities) }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Long-term Liabilities</span>
+                            <span class="amount text-white">{{ "%.2f"|format(bs_summary.long_term_liabilities) }}</span>
+                        </div>
+                        <div class="flex justify-between border-t border-gray-700 pt-3">
+                            <span class="font-semibold text-white">Total Liabilities</span>
+                            <span class="amount font-bold text-danger">{{ "%.2f"|format(bs_summary.total_liabilities) }}</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Equity -->
+                <div>
+                    <h4 class="text-lg font-semibold text-success mb-4 flex items-center gap-2">
+                        <i class="fas fa-scale-balanced"></i> Equity
+                    </h4>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Share Capital</span>
+                            <span class="amount text-white">{{ "%.2f"|format(bs_summary.share_capital) }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Retained Earnings</span>
+                            <span class="amount text-white">{{ "%.2f"|format(bs_summary.retained_earnings) }}</span>
+                        </div>
+                        <div class="flex justify-between border-t border-gray-700 pt-3">
+                            <span class="font-semibold text-white">Total Equity</span>
+                            <span class="amount font-bold text-success">{{ "%.2f"|format(bs_summary.total_equity) }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Period Comparison -->
+        <div class="glass-card p-6 mb-8">
+            <h3 class="text-xl font-semibold text-white mb-6">Period Comparison</h3>
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="text-left text-gray-400 text-sm uppercase">
+                            <th class="pb-4">Metric</th>
+                            <th class="pb-4 text-right">This Month</th>
+                            <th class="pb-4 text-right">Last Month</th>
+                            <th class="pb-4 text-right">Same Month LY</th>
+                            <th class="pb-4 text-right">MoM Change</th>
+                            <th class="pb-4 text-right">YoY Change</th>
+                        </tr>
+                    </thead>
+                    <tbody class="amount">
+                        {% for row in period_comparison %}
+                        <tr class="border-t border-gray-700">
+                            <td class="py-4 text-gray-300">{{ row.metric }}</td>
+                            <td class="py-4 text-right text-white">{{ "%.2f"|format(row.this_month) }}</td>
+                            <td class="py-4 text-right text-gray-400">{{ "%.2f"|format(row.last_month) }}</td>
+                            <td class="py-4 text-right text-gray-400">{{ "%.2f"|format(row.same_month_ly) }}</td>
+                            <td class="py-4 text-right {% if row.mom_change >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ "%.1f"|format(row.mom_change) }}%
+                            </td>
+                            <td class="py-4 text-right {% if row.yoy_change >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ "%.1f"|format(row.yoy_change) }}%
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Alerts & Actions + Drill-down Links -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Urgent Alerts -->
+            <div class="glass-card alert-urgent p-6">
+                <h3 class="text-xl font-semibold text-white mb-4">
+                    <i class="fas fa-exclamation-circle text-danger mr-2"></i>Urgent Actions Required
+                </h3>
+                <ul class="space-y-4">
+                    {% for alert in alerts %}
+                    <li class="flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-full bg-danger/20 flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-exclamation text-danger text-sm"></i>
+                        </div>
+                        <div>
+                            <p class="text-white font-medium">{{ alert.title }}</p>
+                            <p class="text-gray-400 text-sm">{{ alert.description }}</p>
+                            <a href="{{ alert.link }}" class="text-primary text-sm hover:underline mt-1 inline-block">Take Action →</a>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <!-- Drill-down Links -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-4">
+                    <i class="fas fa-th text-primary mr-2"></i>Drill-down Reports
+                </h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <a href="/finance/dashboard/ar" class="flex items-center gap-3 p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                        <i class="fas fa-hand-holding-usd text-2xl text-info"></i>
+                        <div>
+                            <p class="text-white font-medium">AR Collections</p>
+                            <p class="text-gray-400 text-xs">View collections dashboard</p>
+                        </div>
+                    </a>
+                    <a href="/finance/dashboard/ap" class="flex items-center gap-3 p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                        <i class="fas fa-file-invoice-dollar text-2xl text-warning"></i>
+                        <div>
+                            <p class="text-white font-medium">AP Payments</p>
+                            <p class="text-gray-400 text-xs">View payments dashboard</p>
+                        </div>
+                    </a>
+                    <a href="/finance/dashboard/treasury" class="flex items-center gap-3 p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                        <i class="fas fa-landmark text-2xl text-success"></i>
+                        <div>
+                            <p class="text-white font-medium">Treasury</p>
+                            <p class="text-gray-400 text-xs">Cash & liquidity</p>
+                        </div>
+                    </a>
+                    <a href="/finance/dashboard/budget" class="flex items-center gap-3 p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                        <i class="fas fa-calculator text-2xl text-primary"></i>
+                        <div>
+                            <p class="text-white font-medium">Budget</p>
+                            <p class="text-gray-400 text-xs">Budget vs actual</p>
+                        </div>
+                    </a>
+                    <a href="/finance/reports/ar-aging" class="flex items-center gap-3 p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                        <i class="fas fa-clock text-2xl text-danger"></i>
+                        <div>
+                            <p class="text-white font-medium">AR Aging</p>
+                            <p class="text-gray-400 text-xs">Aging detail</p>
+                        </div>
+                    </a>
+                    <a href="/finance/reports/ap-aging" class="flex items-center gap-3 p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
+                        <i class="fas fa-clock text-2xl text-warning"></i>
+                        <div>
+                            <p class="text-white font-medium">AP Aging</p>
+                            <p class="text-gray-400 text-xs">Aging detail</p>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Revenue & Profit Chart
+        const revenueProfitCtx = document.getElementById('revenueProfitChart').getContext('2d');
+        new Chart(revenueProfitCtx, {
+            type: 'line',
+            data: {
+                labels: {{ monthly_labels | tojson }},
+                datasets: [
+                    {
+                        label: 'Revenue',
+                        data: {{ revenue_data | tojson }},
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                    },
+                    {
+                        label: 'Expenses',
+                        data: {{ expense_data | tojson }},
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                    },
+                    {
+                        label: 'Net Income',
+                        data: {{ net_income_data | tojson }},
+                        borderColor: '#6366f1',
+                        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        borderDash: [5, 5],
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + context.parsed.y.toLocaleString();
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                    y: { 
+                        grid: { color: '#334155' }, 
+                        ticks: { 
+                            color: '#94a3b8', 
+                            callback: function(v) { return v.toLocaleString(); }
+                        } 
+                    }
+                },
+                interaction: {
+                    mode: 'nearest',
+                    axis: 'x',
+                    intersect: false
+                }
+            }
+        });
+
+        // Cash & Liquidity Chart
+        const cashLiquidityCtx = document.getElementById('cashLiquidityChart').getContext('2d');
+        new Chart(cashLiquidityCtx, {
+            type: 'line',
+            data: {
+                labels: {{ cash_labels | tojson }},
+                datasets: [
+                    {
+                        label: 'Cash Balance',
+                        data: {{ cash_data | tojson }},
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                        fill: true,
+                        tension: 0.4,
+                    },
+                    {
+                        label: 'AR Balance',
+                        data: {{ ar_data | tojson }},
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                    },
+                    {
+                        label: 'AP Balance',
+                        data: {{ ap_data | tojson }},
+                        borderColor: '#f59e0b',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        display: true,
+                        position: 'top',
+                        labels: { color: '#94a3b8' }
+                    }
+                },
+                scales: {
+                    x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                    y: { 
+                        grid: { color: '#334155' }, 
+                        ticks: { 
+                            color: '#94a3b8', 
+                            callback: function(v) { return v.toLocaleString(); }
+                        } 
+                    }
+                }
+            }
+        });
+
+        // Expense Category Chart (Stacked Bar)
+        const expenseCtx = document.getElementById('expenseCategoryChart').getContext('2d');
+        new Chart(expenseCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ expense_labels | tojson }},
+                datasets: {{ expense_datasets | tojson }}
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        display: true,
+                        position: 'top',
+                        labels: { color: '#94a3b8' }
+                    }
+                },
+                scales: {
+                    x: { stacked: true, grid: { display: false }, ticks: { color: '#94a3b8' } },
+                    y: { stacked: true, grid: { color: '#334155' }, ticks: { color: '#94a3b8' } }
+                }
+            }
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>

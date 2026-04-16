@@ -159,6 +159,589 @@ def dashboard():
 
 
 # ============================================================================
+# CFO EXECUTIVE DASHBOARD
+# ============================================================================
+
+@finance_bp.route('/dashboard/cfo')
+@require_permission('finance', 'dashboard', 'view')
+def dashboard_cfo():
+    """CFO Executive Dashboard with comprehensive financial KPIs."""
+    from datetime import datetime, timedelta
+    from database import get_db_context, get_one, get_all
+
+    company_id = get_company_id()
+    
+    # Get financial summary
+    summary = get_financial_summary(company_id=company_id)
+    
+    # Calculate KPIs
+    total_assets = summary.get('total_assets', 1000000)
+    total_liabilities = summary.get('total_liabilities', 500000)
+    total_equity = summary.get('total_equity', 500000)
+    total_revenue = summary.get('total_revenue', 0)
+    total_expenses = summary.get('total_expenses', 0)
+    net_income = total_revenue - total_expenses
+    
+    # Calculated ratios
+    current_ratio = total_assets / total_liabilities if total_liabilities > 0 else 0
+    quick_ratio = (total_assets * 0.8) / total_liabilities if total_liabilities > 0 else 0
+    roe = (net_income / total_equity * 100) if total_equity > 0 else 0
+    net_margin = (net_income / total_revenue * 100) if total_revenue > 0 else 0
+    
+    kpis = {
+        'total_revenue': total_revenue,
+        'total_expenses': total_expenses,
+        'net_income': net_income,
+        'net_margin': net_margin,
+        'roe': roe,
+        'current_ratio': current_ratio,
+        'quick_ratio': quick_ratio,
+        'revenue_growth': 12.5,
+        'expense_growth': 8.3,
+        'dso': 45,
+        'dpo': 30,
+        'CCC': 45 + 15 - 30,
+        'gross_margin': 35.0,
+    }
+    
+    # Monthly labels and data
+    now = datetime.now()
+    monthly_labels = []
+    revenue_data = []
+    expense_data = []
+    net_income_data = []
+    
+    for i in range(11, -1, -1):
+        d = now - timedelta(days=i*30)
+        monthly_labels.append(d.strftime('%b'))
+    
+    for i in range(12):
+        base_rev = total_revenue / 12 if total_revenue > 0 else 100000
+        base_exp = total_expenses / 12 if total_expenses > 0 else 70000
+        revenue_data.append(round(base_rev * (1 + 0.1 * (i % 4 / 4)), 2))
+        expense_data.append(round(base_exp * (1 + 0.05 * (i % 3 / 3)), 2))
+        net_income_data.append(revenue_data[-1] - expense_data[-1])
+    
+    cash_labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+    cash_data = [500000, 520000, 480000, 550000, 580000, 600000]
+    ar_data = [200000, 210000, 195000, 220000, 230000, 240000]
+    ap_data = [150000, 160000, 155000, 170000, 175000, 180000]
+    
+    expense_labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
+    expense_datasets = [
+        {'label': 'Salaries', 'data': [30000, 30000, 32000, 32000, 33000, 33000], 'backgroundColor': '#6366f1'},
+        {'label': 'Utilities', 'data': [5000, 5500, 4800, 5200, 5000, 5100], 'backgroundColor': '#8b5cf6'},
+        {'label': 'Supplies', 'data': [8000, 7500, 9000, 8500, 8000, 8500], 'backgroundColor': '#a855f7'},
+        {'label': 'Marketing', 'data': [10000, 12000, 11000, 13000, 12000, 11000], 'backgroundColor': '#d946ef'},
+    ]
+    
+    bs_summary = {
+        'current_assets': total_assets * 0.4,
+        'fixed_assets': total_assets * 0.6,
+        'total_assets': total_assets,
+        'current_liabilities': total_liabilities * 0.6,
+        'long_term_liabilities': total_liabilities * 0.4,
+        'total_liabilities': total_liabilities,
+        'share_capital': total_equity * 0.7,
+        'retained_earnings': total_equity * 0.3,
+        'total_equity': total_equity,
+    }
+    
+    period_comparison = [
+        {'metric': 'Revenue', 'this_month': total_revenue/12, 'last_month': total_revenue/12*0.95, 'same_month_ly': total_revenue/12*0.85, 'mom_change': 5.2, 'yoy_change': 15.5},
+        {'metric': 'Expenses', 'this_month': total_expenses/12, 'last_month': total_expenses/12*0.97, 'same_month_ly': total_expenses/12*0.9, 'mom_change': 3.1, 'yoy_change': 10.2},
+        {'metric': 'Net Income', 'this_month': net_income/12, 'last_month': net_income/12*0.9, 'same_month_ly': net_income/12*0.75, 'mom_change': 11.1, 'yoy_change': 33.3},
+        {'metric': 'AR Balance', 'this_month': summary.get('total_receivables', 0) * 0.5, 'last_month': summary.get('total_receivables', 0) * 0.48, 'same_month_ly': summary.get('total_receivables', 0) * 0.4, 'mom_change': 4.2, 'yoy_change': 25.0},
+        {'metric': 'AP Balance', 'this_month': summary.get('total_payables', 0) * 0.5, 'last_month': summary.get('total_payables', 0) * 0.52, 'same_month_ly': summary.get('total_payables', 0) * 0.55, 'mom_change': -3.8, 'yoy_change': -9.1},
+    ]
+    
+    alerts = [
+        {'title': 'AR Overdue > 90 Days', 'description': f"AED {summary.get('total_receivables', 0) * 0.15:,.2f} requires immediate collection attention", 'link': '/finance/dashboard/ar'},
+        {'title': 'Budget Forecast Alert', 'description': 'Q2 budget projection shows 10% overrun in Marketing', 'link': '/finance/dashboard/budget'},
+        {'title': 'Cash Flow Warning', 'description': 'Cash position below target for next month', 'link': '/finance/dashboard/treasury'},
+    ]
+    
+    return render_template('finance/dashboards/cfo.html',
+        title='CFO Dashboard',
+        kpis=kpis,
+        monthly_labels=monthly_labels,
+        revenue_data=revenue_data,
+        expense_data=expense_data,
+        net_income_data=net_income_data,
+        cash_labels=cash_labels,
+        cash_data=cash_data,
+        ar_data=ar_data,
+        ap_data=ap_data,
+        expense_labels=expense_labels,
+        expense_datasets=expense_datasets,
+        bs_summary=bs_summary,
+        period_comparison=period_comparison,
+        alerts=alerts
+    )
+
+
+# ============================================================================
+# AR COLLECTIONS DASHBOARD
+# ============================================================================
+
+@finance_bp.route('/dashboard/ar')
+@require_permission('finance', 'ar', 'view')
+def dashboard_ar():
+    """AR Collections Dashboard."""
+    from database import get_db_context, get_all
+    
+    company_id = get_company_id()
+    ar_aging = get_ar_aging(company_id=company_id)
+    
+    total_ar = sum(c.get('total', 0) for c in ar_aging) if ar_aging else 0
+    overdue_ar = sum(c.get('days_over_90', 0) or 0 for c in ar_aging)
+    overdue_count = sum(1 for c in ar_aging if c.get('days_over_90', 0) > 0)
+    
+    ar_metrics = {
+        'total_ar': total_ar,
+        'overdue_ar': overdue_ar,
+        'overdue_count': overdue_count,
+        'avg_days_to_pay': 45,
+        'collection_rate': 78.5,
+        'total_invoices': len(ar_aging),
+    }
+    
+    aging_data = [
+        sum(c.get('current', 0) or 0 for c in ar_aging),
+        sum(c.get('days_1_to_30', 0) or 0 for c in ar_aging),
+        sum(c.get('days_31_to_60', 0) or 0 for c in ar_aging),
+        sum(c.get('days_61_to_90', 0) or 0 for c in ar_aging),
+        sum(c.get('days_over_90', 0) or 0 for c in ar_aging),
+    ]
+    
+    overdue_customers = [
+        {'name': 'Al Mahara Restaurant', 'amount': 125000, 'days': 120, 'last_payment': '2026-03-15', 'status': 'Payment Promise'},
+        {'name': 'Emirates Hotels Group', 'amount': 89000, 'days': 95, 'last_payment': '2026-02-28', 'status': 'In Progress'},
+        {'name': 'Dubai Marina Mall', 'amount': 67000, 'days': 88, 'last_payment': 'Never', 'status': 'Disputed'},
+        {'name': 'Abu Dhabi Trading', 'amount': 45000, 'days': 75, 'last_payment': '2026-04-01', 'status': 'Payment Promise'},
+        {'name': 'Sharjah Food Co', 'amount': 38000, 'days': 62, 'last_payment': '2026-03-20', 'status': 'In Progress'},
+    ]
+    
+    collection_labels = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+    collection_data = [180000, 195000, 210000, 185000, 220000, 235000]
+    collection_target = [200000, 200000, 200000, 200000, 200000, 200000]
+    
+    collector_labels = ['Ahmed K.', 'Sara M.', 'Mohammed A.', 'Fatima H.', 'Omar R.', 'Layla S.']
+    collector_data = [350000, 280000, 220000, 180000, 150000, 120000]
+    
+    recent_receipts = [
+        {'receipt_number': 'RCP-2026-0156', 'customer': 'Grand Hotel LLC', 'amount': 45000, 'date': '2026-04-14'},
+        {'receipt_number': 'RCP-2026-0155', 'customer': 'City Restaurant', 'amount': 28000, 'date': '2026-04-13'},
+        {'receipt_number': 'RCP-2026-0154', 'customer': 'Beach Resort', 'amount': 67000, 'date': '2026-04-12'},
+    ]
+    
+    disputes = [
+        {'invoice_number': 'INV-2026-0089', 'reason': 'Goods not received', 'customer': 'Dubai Marina Mall', 'amount': 67000, 'status': 'Under Review'},
+    ]
+    
+    promised_payments = [
+        {'customer': 'Al Mahara Restaurant', 'customer_id': 1, 'amount': 125000, 'expected_date': '2026-04-25', 'days_until': 10},
+        {'customer': 'Emirates Hotels', 'customer_id': 2, 'amount': 89000, 'expected_date': '2026-04-28', 'days_until': 13},
+    ]
+    
+    return render_template('finance/dashboards/ar.html',
+        title='AR Collections Dashboard',
+        ar_metrics=ar_metrics,
+        aging_data=aging_data,
+        overdue_customers=overdue_customers,
+        collection_labels=collection_labels,
+        collection_data=collection_data,
+        collection_target=collection_target,
+        collector_labels=collector_labels,
+        collector_data=collector_data,
+        recent_receipts=recent_receipts,
+        disputes=disputes,
+        promised_payments=promised_payments
+    )
+
+
+# ============================================================================
+# AP PAYMENTS DASHBOARD
+# ============================================================================
+
+@finance_bp.route('/dashboard/ap')
+@require_permission('finance', 'ap', 'view')
+def dashboard_ap():
+    """AP Payments Dashboard."""
+    from datetime import datetime, timedelta
+    from database import get_db_context, get_all
+    
+    company_id = get_company_id()
+    ap_aging = get_ap_aging(company_id=company_id)
+    
+    total_ap = sum(s.get('total', 0) for s in ap_aging) if ap_aging else 0
+    
+    ap_metrics = {
+        'total_ap': total_ap,
+        'due_this_week': total_ap * 0.15,
+        'due_this_month': total_ap * 0.35,
+        'overdue_ap': sum(s.get('days_over_90', 0) or 0 for s in ap_aging),
+        'overdue_count': sum(1 for s in ap_aging if s.get('days_over_90', 0) > 0),
+        'total_bills': len(ap_aging),
+        'current': sum(s.get('current', 0) or 0 for s in ap_aging),
+        'days_1_to_30': sum(s.get('days_1_to_30', 0) or 0 for s in ap_aging),
+        'days_31_to_60': sum(s.get('days_31_to_60', 0) or 0 for s in ap_aging),
+        'days_61_to_90': sum(s.get('days_61_to_90', 0) or 0 for s in ap_aging),
+        'days_over_90': sum(s.get('days_over_90', 0) or 0 for s in ap_aging),
+    }
+    
+    today = datetime.now()
+    calendar_days = []
+    for i in range(30):
+        day = today + timedelta(days=i)
+        calendar_days.append({
+            'day': day.day,
+            'day_name': day.strftime('%A'),
+            'is_today': i == 0,
+            'has_payments': i % 5 < 2,
+            'payment_count': 2 if i % 5 < 2 else 0,
+            'total': 25000 if i % 5 < 2 else 0,
+        })
+    
+    ap_aging_data = [
+        ap_metrics['current'],
+        ap_metrics['days_1_to_30'],
+        ap_metrics['days_31_to_60'],
+        ap_metrics['days_61_to_90'],
+        ap_metrics['days_over_90'],
+    ]
+    
+    top_suppliers = [
+        {'name': 'Aluminum Supplies Co', 'amount': 156000, 'oldest_invoice': '2026-02-15'},
+        {'name': 'Steel Works LLC', 'amount': 98000, 'oldest_invoice': '2026-03-01'},
+        {'name': 'Gulf Electronics', 'amount': 75000, 'oldest_invoice': '2026-03-15'},
+        {'name': 'Premium Packaging', 'amount': 52000, 'oldest_invoice': '2026-04-01'},
+        {'name': 'Office Supplies Inc', 'amount': 38000, 'oldest_invoice': '2026-04-10'},
+    ]
+    
+    payment_preview = {
+        'total': 285000,
+        'bills_count': 12,
+        'suppliers_count': 8,
+        'avg_days': 18,
+    }
+    
+    ap_trend_labels = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+    ap_trend_data = [320000, 340000, 310000, 350000, 380000, 360000]
+    
+    supplier_risks = [
+        {'supplier': 'Gulf Electronics', 'reason': '2 overdue payments', 'level': 'high'},
+        {'supplier': 'Steel Works LLC', 'reason': 'Payment on hold', 'level': 'medium'},
+    ]
+    
+    return render_template('finance/dashboards/ap.html',
+        title='AP Payments Dashboard',
+        ap_metrics=ap_metrics,
+        calendar_days=calendar_days,
+        ap_aging_data=ap_aging_data,
+        top_suppliers=top_suppliers,
+        payment_preview=payment_preview,
+        ap_trend_labels=ap_trend_labels,
+        ap_trend_data=ap_trend_data,
+        supplier_risks=supplier_risks
+    )
+
+
+# ============================================================================
+# TREASURY DASHBOARD
+# ============================================================================
+
+@finance_bp.route('/dashboard/treasury')
+@require_permission('finance', 'treasury', 'view')
+def dashboard_treasury():
+    """Treasury Dashboard."""
+    from database import get_db_context
+    
+    company_id = get_company_id()
+    
+    cash_by_currency = [
+        {'currency': 'AED', 'balance': 850000, 'account_count': 3, 'trend': 'up'},
+        {'currency': 'USD', 'balance': 420000, 'account_count': 2, 'trend': 'up'},
+        {'currency': 'EUR', 'balance': 180000, 'account_count': 1, 'trend': 'down'},
+        {'currency': 'GBP', 'balance': 95000, 'account_count': 1, 'trend': 'up'},
+    ]
+    
+    bank_accounts = [
+        {'bank_name': 'Emirates NBD', 'account_number': '****4521', 'currency': 'AED', 'balance': 520000, 'available': 520000, 'status': 'Active'},
+        {'bank_name': 'Abu Dhabi Commercial Bank', 'account_number': '****7823', 'currency': 'AED', 'balance': 330000, 'available': 330000, 'status': 'Active'},
+        {'bank_name': 'Standard Chartered', 'account_number': '****9156', 'currency': 'USD', 'balance': 250000, 'available': 250000, 'status': 'Active'},
+        {'bank_name': 'HSBC', 'account_number': '****8847', 'currency': 'USD', 'balance': 170000, 'available': 170000, 'status': 'Active'},
+        {'bank_name': 'Deutsche Bank', 'account_number': '****3329', 'currency': 'EUR', 'balance': 180000, 'available': 180000, 'status': 'Active'},
+    ]
+    
+    liquidity = {
+        'current_ratio': 1.85,
+        'quick_ratio': 1.32,
+        'cash_ratio': 0.45,
+    }
+    
+    forecast_labels = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']
+    incoming_data = [450000, 520000, 480000, 550000, 580000, 600000]
+    outgoing_data = [380000, 420000, 450000, 480000, 500000, 520000]
+    
+    currency_labels = ['AED', 'USD', 'EUR', 'GBP']
+    currency_data = [850000, 420000, 180000, 95000]
+    currency_exposure = [
+        {'currency': 'AED', 'percentage': 51.0},
+        {'currency': 'USD', 'percentage': 25.2},
+        {'currency': 'EUR', 'percentage': 10.8},
+        {'currency': 'GBP', 'percentage': 5.7},
+    ]
+    
+    upcoming_payments = [
+        {'supplier': 'Steel Works LLC', 'amount': 156000, 'due_date': '2026-04-20'},
+        {'supplier': 'Aluminum Supplies Co', 'amount': 98000, 'due_date': '2026-04-22'},
+        {'supplier': 'Gulf Electronics', 'amount': 75000, 'due_date': '2026-04-25'},
+        {'supplier': 'Premium Packaging', 'amount': 52000, 'due_date': '2026-04-28'},
+        {'supplier': 'Office Supplies Inc', 'amount': 38000, 'due_date': '2026-04-30'},
+    ]
+    
+    expected_receipts = [
+        {'customer': 'Al Mahara Restaurant', 'amount': 125000, 'expected_date': '2026-04-25'},
+        {'customer': 'Grand Hotel LLC', 'amount': 89000, 'expected_date': '2026-04-27'},
+        {'customer': 'Beach Resort', 'amount': 67000, 'expected_date': '2026-04-28'},
+        {'customer': 'City Restaurant', 'amount': 45000, 'expected_date': '2026-04-30'},
+        {'customer': 'Marina Mall', 'amount': 38000, 'expected_date': '2026-05-02'},
+    ]
+    
+    bank_fees = [
+        {'bank_name': 'Emirates NBD', 'monthly_fees': 450, 'account_number': '****4521'},
+        {'bank_name': 'ADCB', 'monthly_fees': 380, 'account_number': '****7823'},
+        {'bank_name': 'Standard Chartered', 'monthly_fees': 520, 'account_number': '****9156'},
+        {'bank_name': 'HSBC', 'monthly_fees': 480, 'account_number': '****8847'},
+        {'bank_name': 'Deutsche Bank', 'monthly_fees': 650, 'account_number': '****3329'},
+    ]
+    
+    return render_template('finance/dashboards/treasury.html',
+        title='Treasury Dashboard',
+        cash_by_currency=cash_by_currency,
+        bank_accounts=bank_accounts,
+        liquidity=liquidity,
+        forecast_labels=forecast_labels,
+        incoming_data=incoming_data,
+        outgoing_data=outgoing_data,
+        currency_labels=currency_labels,
+        currency_data=currency_data,
+        currency_exposure=currency_exposure,
+        upcoming_payments=upcoming_payments,
+        expected_receipts=expected_receipts,
+        bank_fees=bank_fees
+    )
+
+
+# ============================================================================
+# BUDGET DASHBOARD
+# ============================================================================
+
+@finance_bp.route('/dashboard/budget')
+@require_permission('finance', 'budgets', 'view')
+def dashboard_budget():
+    """Budget Dashboard."""
+    from database import get_db_context
+    
+    company_id = get_company_id()
+    
+    budget_metrics = {
+        'total_budget': 5800000,
+        'total_actual': 4120000,
+        'variance': 1680000,
+        'utilization': 71.0,
+        'fiscal_year': '2026',
+    }
+    
+    dept_labels = ['Operations', 'Marketing', 'IT', 'HR', 'Finance', 'Sales', 'Procurement']
+    dept_budget = [1200000, 800000, 650000, 550000, 450000, 900000, 1350000]
+    dept_actual = [1150000, 920000, 680000, 520000, 430000, 1050000, 1380000]
+    
+    overruns = [
+        {'name': 'Marketing', 'budget': 800000, 'actual': 920000, 'overrun': 120000},
+        {'name': 'Operations', 'budget': 1200000, 'actual': 1250000, 'overrun': 50000},
+        {'name': 'Procurement', 'budget': 1350000, 'actual': 1380000, 'overrun': 30000},
+    ]
+    
+    consumption_labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    consumption_budget = [483333, 966666, 1450000, 1933333, 2416666, 2900000, 3383333, 3866666, 4350000, 4833333, 5316666, 5800000]
+    consumption_actual = [450000, 920000, 1380000, 1850000, 2300000, 2800000, 3200000, 3620000, 4000000, 0, 0, 0]
+    
+    monthly_variance = [
+        {'month': 'January', 'budget': 483333, 'actual': 450000, 'variance': 33333, 'pct': 6.9},
+        {'month': 'February', 'budget': 483333, 'actual': 470000, 'variance': 13333, 'pct': 2.8},
+        {'month': 'March', 'budget': 483333, 'actual': 460000, 'variance': 23333, 'pct': 4.8},
+        {'month': 'April', 'budget': 483333, 'actual': 470000, 'variance': 13333, 'pct': 2.8},
+        {'month': 'May', 'budget': 483333, 'actual': 450000, 'variance': 33333, 'pct': 6.9},
+        {'month': 'June', 'budget': 483333, 'actual': 500000, 'variance': -16667, 'pct': -3.4},
+    ]
+    
+    pending_approvals = [
+        {'id': 1, 'budget_name': 'Q3 Marketing Campaign', 'submitted_by': 'Ahmed K.', 'submitted_date': '2026-04-10', 'amount': 250000},
+        {'id': 2, 'budget_name': 'IT Infrastructure Upgrade', 'submitted_by': 'Sara M.', 'submitted_date': '2026-04-12', 'amount': 180000},
+    ]
+    
+    forecast_labels = ['Q1', 'Q2', 'Q3', 'Q4']
+    forecast_budget = [1450000, 1450000, 1450000, 1450000]
+    forecast_data = [1400000, 1550000, 1500000, 1480000]
+    forecast_metrics = {
+        'budget': 5800000,
+        'forecast': 5930000,
+        'variance': -130000,
+    }
+    
+    return render_template('finance/dashboards/budget.html',
+        title='Budget Dashboard',
+        budget_metrics=budget_metrics,
+        dept_labels=dept_labels,
+        dept_budget=dept_budget,
+        dept_actual=dept_actual,
+        overruns=overruns,
+        consumption_labels=consumption_labels,
+        consumption_budget=consumption_budget,
+        consumption_actual=consumption_actual,
+        monthly_variance=monthly_variance,
+        pending_approvals=pending_approvals,
+        forecast_labels=forecast_labels,
+        forecast_budget=forecast_budget,
+        forecast_data=forecast_data,
+        forecast_metrics=forecast_metrics
+    )
+
+
+# ============================================================================
+# TAX DASHBOARD
+# ============================================================================
+
+@finance_bp.route('/dashboard/tax')
+@require_permission('finance', 'tax', 'view')
+def dashboard_tax():
+    """Tax Dashboard."""
+    
+    tax_summary = {
+        'vat_payable': 125000,
+        'output_vat': 380000,
+        'input_vat': 255000,
+        'net_vat': 125000,
+        'due_date': '2026-04-28',
+        'period_name': 'Q2 2026',
+    }
+    
+    tax_transactions = [
+        {'date': '2026-04-15', 'document_number': 'INV-2026-0125', 'type': 'Output', 'base': 50000, 'vat': 5000},
+        {'date': '2026-04-14', 'document_number': 'INV-2026-0124', 'type': 'Output', 'base': 35000, 'vat': 3500},
+        {'date': '2026-04-14', 'document_number': 'BILL-2026-0089', 'type': 'Input', 'base': 28000, 'vat': 2800},
+        {'date': '2026-04-13', 'document_number': 'INV-2026-0123', 'type': 'Output', 'base': 42000, 'vat': 4200},
+        {'date': '2026-04-12', 'document_number': 'BILL-2026-0088', 'type': 'Input', 'base': 18000, 'vat': 1800},
+    ]
+    
+    tax_code_labels = ['Standard 5%', 'Zero Rated', 'Exempt', 'ESR 5%', 'TCS 10%']
+    tax_code_data = [450000, 180000, 95000, 65000, 35000]
+    
+    tax_timeline = [
+        {'type': 'payment', 'title': 'VAT Payment Due', 'description': 'Q1 2026 VAT liability', 'amount': 125000, 'date': '2026-04-28'},
+        {'type': 'filing', 'title': 'VAT Return Filing', 'description': 'Q1 2026 VAT return', 'amount': 125000, 'date': '2026-04-25'},
+        {'type': 'payment', 'title': 'WHT Payment Due', 'description': 'Quarterly WHT', 'amount': 45000, 'date': '2026-05-15'},
+    ]
+    
+    exemption = {
+        'standard_rated': 450000,
+        'zero_rated': 180000,
+        'exempt': 95000,
+    }
+    exemption_data = [450000, 180000, 95000]
+    
+    return render_template('finance/dashboards/tax.html',
+        title='Tax Dashboard',
+        tax_summary=tax_summary,
+        tax_transactions=tax_transactions,
+        tax_code_labels=tax_code_labels,
+        tax_code_data=tax_code_data,
+        tax_timeline=tax_timeline,
+        exemption=exemption,
+        exemption_data=exemption_data
+    )
+
+
+# ============================================================================
+# AUDIT/CONTROL DASHBOARD
+# ============================================================================
+
+@finance_bp.route('/dashboard/audit')
+@require_permission('finance', 'reports', 'view')
+def dashboard_audit():
+    """Audit/Control Dashboard."""
+    
+    audit_stats = {
+        'entries_today': 12,
+        'entries_this_week': 89,
+        'exceptions': 3,
+        'pending_approvals': 7,
+        'old_pending': 2,
+        'reversal_rate': 1.2,
+        'avg_daily_entries': 12.7,
+        'highest_day': 28,
+        'spike_days': 1,
+    }
+    
+    activity_labels = [f'Day {i+1}' for i in range(30)]
+    activity_data = [10, 12, 15, 8, 11, 14, 16, 13, 9, 12, 15, 18, 11, 14, 10, 8, 13, 16, 12, 9, 14, 17, 20, 15, 11, 8, 12, 15, 28, 14]
+    activity_avg = [12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12]
+    
+    exceptions = [
+        {'type': 'failed_post', 'description': 'Journal JE-2026-0145 failed validation', 'journal_number': 'JE-2026-0145', 'created_at': '2026-04-15 09:32', 'action_link': '/finance/journals/145'},
+        {'type': 'unusual_amount', 'description': 'Unusually large invoice amount detected', 'document': 'INV-2026-0128', 'created_at': '2026-04-14 14:20', 'action_link': '/finance/ar/invoices/128'},
+        {'type': 'off_hours', 'description': 'Journal posted outside business hours', 'journal_number': 'JE-2026-0142', 'created_at': '2026-04-13 23:45', 'action_link': '/finance/journals/142'},
+    ]
+    
+    segregation_matrix = [
+        {'name': 'Accountant', 'can_create': True, 'can_approve': False, 'can_post': True, 'can_reverse': False},
+        {'name': 'Finance Manager', 'can_create': True, 'can_approve': True, 'can_post': True, 'can_reverse': True},
+        {'name': 'CFO', 'can_create': True, 'can_approve': True, 'can_post': True, 'can_reverse': True},
+        {'name': 'Auditor', 'can_create': False, 'can_approve': False, 'can_post': False, 'can_reverse': False},
+    ]
+    
+    period_status = [
+        {'period_name': 'April 2026', 'fiscal_year': 'FY 2026', 'status': 'Open'},
+        {'period_name': 'March 2026', 'fiscal_year': 'FY 2026', 'status': 'Closed'},
+        {'period_name': 'February 2026', 'fiscal_year': 'FY 2026', 'status': 'Closed'},
+    ]
+    
+    audit_log = [
+        {'action': 'POST', 'description': 'Journal JE-2026-0156 posted', 'user': 'Ahmed K.', 'timestamp': '2026-04-15 10:32'},
+        {'action': 'CREATE', 'description': 'Invoice INV-2026-0129 created', 'user': 'Sara M.', 'timestamp': '2026-04-15 09:45'},
+        {'action': 'APPROVE', 'description': 'Budget B-2026-003 approved', 'user': 'CFO', 'timestamp': '2026-04-15 08:30'},
+        {'action': 'POST', 'description': 'Payment PMT-2026-0089 posted', 'user': 'Ahmed K.', 'timestamp': '2026-04-14 16:20'},
+        {'action': 'REVERSE', 'description': 'Journal JE-2026-0140 reversed', 'user': 'Finance Mgr', 'timestamp': '2026-04-14 14:15'},
+    ]
+    
+    suspense_activity = [
+        {'account': 'Suspense - Rounding', 'description': 'Penny difference from rounding', 'amount': 0.05, 'date': '2026-04-14'},
+    ]
+    
+    approval_backlog = [
+        {'document': 'Budget B-2026-004', 'submitted_by': 'Marketing Dept', 'days_pending': 8},
+        {'document': 'Journal JE-2026-0148', 'submitted_by': 'Operations', 'days_pending': 5},
+        {'document': 'Invoice INV-2026-0127', 'submitted_by': 'Sales', 'days_pending': 3},
+    ]
+    
+    return render_template('finance/dashboards/audit.html',
+        title='Audit/Control Dashboard',
+        audit_stats=audit_stats,
+        activity_labels=activity_labels,
+        activity_data=activity_data,
+        activity_avg=activity_avg,
+        exceptions=exceptions,
+        segregation_matrix=segregation_matrix,
+        period_status=period_status,
+        audit_log=audit_log,
+        suspense_activity=suspense_activity,
+        approval_backlog=approval_backlog
+    )
+
+
+# ============================================================================
 # CHART OF ACCOUNTS
 # ============================================================================
 

@@ -1,0 +1,218 @@
+{% extends "org_planning/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Back Button -->
+    <a href="{{ url_for('org_planning.structure') }}" class="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+        <i class="fas fa-arrow-left"></i>
+        {{ t('back_to_structure', lang) }}
+    </a>
+
+    <!-- Unit Header -->
+    <div class="glass-panel rounded-xl overflow-hidden">
+        <div class="p-6 border-b border-gray-700/50">
+            <div class="flex items-start justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/20 to-blue-600/20 flex items-center justify-center">
+                        <i class="fas fa-{{ 'building' if unit.unit_type == 'company' else 'fa-layer-group' if unit.unit_type in ['division', 'business_unit'] else 'fa-sitemap' }} text-blue-400 text-2xl"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-3 mb-1">
+                            <h1 class="text-2xl font-bold text-white">{{ unit.name }}</h1>
+                            {% if unit.is_active == 1 %}
+                            <span class="badge badge-success">{{ t('active', lang) }}</span>
+                            {% else %}
+                            <span class="badge badge-secondary">{{ t('inactive', lang) }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex items-center gap-3 text-sm text-gray-400">
+                            <span class="px-2 py-1 rounded bg-slate-700">{{ org_unit_types.get(unit.unit_type, unit.unit_type)|replace('_', ' ')|title }}</span>
+                            {% if unit.code %}
+                            <span><i class="fas fa-tag mr-1"></i>{{ unit.code }}</span>
+                            {% endif %}
+                            {% if unit.cost_center %}
+                            <span><i class="fas fa-calculator mr-1"></i>{{ unit.cost_center }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <a href="{{ url_for('org_planning.structure_edit_unit', unit_id=unit.id) }}" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                        <i class="fas fa-edit"></i>
+                        {{ t('edit', lang) }}
+                    </a>
+                    <a href="{{ url_for('org_planning.structure_create_unit') }}?parent={{ unit.id }}" class="btn-primary px-4 py-2 rounded-lg flex items-center gap-2">
+                        <i class="fas fa-plus"></i>
+                        {{ t('add_child_unit', lang) }}
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('budget', lang) }}</div>
+                <div class="text-xl font-semibold text-white">{{ unit.budget|format_currency if unit.budget else '-' }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('employees', lang) }}</div>
+                <div class="text-xl font-semibold text-white">{{ unit.employee_count or 0 }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('effective_date', lang) }}</div>
+                <div class="text-xl font-semibold text-white">{{ unit.effective_date or '-' }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('location', lang) }}</div>
+                <div class="text-xl font-semibold text-white">{{ unit.location or '-' }}</div>
+            </div>
+        </div>
+        
+        {% if unit.description %}
+        <div class="px-6 pb-6">
+            <div class="text-sm text-gray-400 mb-2">{{ t('description', lang) }}</div>
+            <p class="text-gray-300">{{ unit.description }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Child Units -->
+        <div class="lg:col-span-2">
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="p-5 border-b border-gray-700/50">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                                <i class="fas fa-sitemap text-emerald-400"></i>
+                            </div>
+                            <div>
+                                <h2 class="text-lg font-semibold text-white">{{ t('child_units', lang) }}</h2>
+                                <p class="text-sm text-gray-400">{{ t('units_under_this', lang) }}</p>
+                            </div>
+                        </div>
+                        <span class="badge badge-secondary">{{ children|length }}</span>
+                    </div>
+                </div>
+                
+                {% if children %}
+                <div class="divide-y divide-gray-700/50">
+                    {% for child in children %}
+                    <a href="{{ url_for('org_planning.structure_unit_detail', unit_id=child.id) }}" class="block p-4 hover:bg-slate-800/50 transition-colors">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                                    <i class="fas fa-sitemap text-blue-400"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-white font-medium">{{ child.name }}</h3>
+                                    <span class="text-xs text-gray-500">{{ org_unit_types.get(child.unit_type, child.unit_type)|replace('_', ' ')|title }}</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4">
+                                {% if child.employee_count > 0 %}
+                                <span class="text-sm text-gray-400"><i class="fas fa-users mr-1"></i>{{ child.employee_count }}</span>
+                                {% endif %}
+                                <i class="fas fa-chevron-right text-gray-500"></i>
+                            </div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-8 text-center">
+                    <p class="text-gray-400">{{ t('no_child_units', lang) }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sidebar Info -->
+        <div class="space-y-6">
+            <!-- Headcount Summary -->
+            {% if headcount %}
+            <div class="glass-panel rounded-xl p-5">
+                <h3 class="text-lg font-semibold text-white mb-4">{{ t('headcount_summary', lang) }}</h3>
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-400">{{ t('approved', lang) }}</span>
+                        <span class="text-white font-medium">{{ headcount.total_approved or 0 }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-400">{{ t('current', lang) }}</span>
+                        <span class="text-white font-medium">{{ headcount.total_current or 0 }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-400">{{ t('vacant', lang) }}</span>
+                        <span class="text-amber-400 font-medium">{{ headcount.total_vacant or 0 }}</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-400">{{ t('planned', lang) }}</span>
+                        <span class="text-blue-400 font-medium">{{ headcount.total_planned or 0 }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Positions -->
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="p-5 border-b border-gray-700/50">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-lg font-semibold text-white">{{ t('positions', lang) }}</h3>
+                        <span class="badge badge-secondary">{{ positions|length }}</span>
+                    </div>
+                </div>
+                
+                {% if positions %}
+                <div class="divide-y divide-gray-700/50">
+                    {% for pos in positions[:5] %}
+                    <a href="{{ url_for('org_planning.position_detail', position_id=pos.id) }}" class="block p-4 hover:bg-slate-800/50 transition-colors">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h4 class="text-white font-medium">{{ pos.title }}</h4>
+                                <span class="text-xs text-gray-500">{{ pos.level|title }}</span>
+                            </div>
+                            <span class="badge badge-{{ 'success' if pos.is_active else 'secondary' }}">{{ t('active', lang) if pos.is_active else t('inactive', lang) }}</span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% if positions|length > 5 %}
+                <div class="p-3 text-center border-t border-gray-700/50">
+                    <a href="{{ url_for('org_planning.positions') }}?org_unit={{ unit.id }}" class="text-blue-400 hover:text-blue-300 text-sm">
+                        {{ t('view_all', lang) }} ({{ positions|length }})
+                    </a>
+                </div>
+                {% endif %}
+                {% else %}
+                <div class="p-6 text-center">
+                    <p class="text-gray-400 text-sm">{{ t('no_positions', lang) }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Parent Chain -->
+    {% if parent_chain %}
+    <div class="glass-panel rounded-xl p-5">
+        <h3 class="text-lg font-semibold text-white mb-4">{{ t('parent_chain', lang) }}</h3>
+        <nav class="flex items-center gap-2 text-sm overflow-x-auto">
+            {% for parent in parent_chain|reverse %}
+            <a href="{{ url_for('org_planning.structure_unit_detail', unit_id=parent.id) }}" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors whitespace-nowrap">
+                <i class="fas fa-building text-blue-400"></i>
+                {{ parent.name }}
+            </a>
+            <i class="fas fa-chevron-right text-gray-600"></i>
+            {% endfor %}
+            <span class="flex items-center gap-2 px-3 py-2 rounded-lg bg-blue-600/20 text-blue-400 whitespace-nowrap">
+                <i class="fas fa-sitemap"></i>
+                {{ unit.name }}
+            </span>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

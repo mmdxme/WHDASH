@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .stat-card { transition: all 0.3s ease; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 30px -5px rgba(0,0,0,0.4); }
+        .amount { font-family: 'Courier New', monospace; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+        .calendar-day { min-height: 80px; }
+        .payment-today { background: rgba(239, 68, 68, 0.2); border: 2px solid #ef4444; }
+        .payment-week { background: rgba(245, 158, 11, 0.1); }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Accounts Payable payments overview</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="/finance/dashboard" class="btn btn-outline">
+                    <i class="fas fa-th-large"></i> Main Dashboard
+                </a>
+                <a href="/finance/ap/payments/create" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> New Payment
+                </a>
+            </div>
+        </div>
+
+        <!-- Top Metrics Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="glass-card stat-card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="w-12 h-12 bg-warning/20 rounded-full flex items-center justify-center">
+                        <i class="fas fa-file-invoice-dollar text-warning text-xl"></i>
+                    </div>
+                    <span class="badge bg-warning/20 text-warning">{{ ap_metrics.total_bills }} bills</span>
+                </div>
+                <p class="text-gray-400 text-sm mb-1">Total AP Outstanding</p>
+                <p class="text-3xl font-bold text-white amount">{{ "%.2f"|format(ap_metrics.total_ap) }}</p>
+            </div>
+
+            <div class="glass-card stat-card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="w-12 h-12 bg-danger/20 rounded-full flex items-center justify-center">
+                        <i class="fas fa-exclamation-circle text-danger text-xl"></i>
+                    </div>
+                    <span class="badge bg-danger/20 text-danger">{{ ap_metrics.overdue_count }} overdue</span>
+                </div>
+                <p class="text-gray-400 text-sm mb-1">Due This Week</p>
+                <p class="text-3xl font-bold text-danger amount">{{ "%.2f"|format(ap_metrics.due_this_week) }}</p>
+            </div>
+
+            <div class="glass-card stat-card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="w-12 h-12 bg-info/20 rounded-full flex items-center justify-center">
+                        <i class="fas fa-calendar text-info text-xl"></i>
+                    </div>
+                </div>
+                <p class="text-gray-400 text-sm mb-1">Due This Month</p>
+                <p class="text-3xl font-bold text-info amount">{{ "%.2f"|format(ap_metrics.due_this_month) }}</p>
+            </div>
+
+            <div class="glass-card stat-card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="w-12 h-12 bg-success/20 rounded-full flex items-center justify-center">
+                        <i class="fas fa-check-circle text-success text-xl"></i>
+                    </div>
+                </div>
+                <p class="text-gray-400 text-sm mb-1">Overdue AP</p>
+                <p class="text-3xl font-bold text-success amount">{{ "%.2f"|format(ap_metrics.overdue_ap) }}</p>
+            </div>
+        </div>
+
+        <!-- Due Calendar + Aging Buckets -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Due Calendar (Next 30 Days) -->
+            <div class="glass-card lg:col-span-2 p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Payment Calendar (Next 30 Days)</h3>
+                <div class="grid grid-cols-7 gap-2">
+                    {% for day in calendar_days %}
+                    <div class="calendar-day p-2 rounded-lg text-center {% if day.is_today %}bg-primary/20 border border-primary{% elif day.has_payments %}bg-warning/10{% endif %}">
+                        <p class="text-xs text-gray-400">{{ day.day_name[:3] }}</p>
+                        <p class="text-lg font-bold text-white">{{ day.day }}</p>
+                        {% if day.has_payments %}
+                        <p class="text-xs text-warning mt-1">{{ day.payment_count }} payment(s)</p>
+                        <p class="text-xs text-white font-semibold amount">{{ "%.0f"|format(day.total) }}</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Aging Buckets -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">AP Aging Summary</h3>
+                <div style="min-height: 250px;">
+                    <canvas id="apAgingChart"></canvas>
+                </div>
+                <div class="mt-4 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400 text-sm">Current</span>
+                        <span class="text-white font-semibold amount">{{ "%.2f"|format(ap_metrics.current) }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400 text-sm">1-30 Days</span>
+                        <span class="text-white font-semibold amount">{{ "%.2f"|format(ap_metrics.days_1_to_30) }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400 text-sm">31-60 Days</span>
+                        <span class="text-white font-semibold amount">{{ "%.2f"|format(ap_metrics.days_31_to_60) }}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-400 text-sm">61-90 Days</span>
+                        <span class="text-white font-semibold amount">{{ "%.2f"|format(ap_metrics.days_61_to_90) }}</span>
+                    </div>
+                    <div class="flex justify-between items-center border-t border-gray-700 pt-3">
+                        <span class="text-white font-semibold">90+ Days</span>
+                        <span class="text-danger font-semibold amount">{{ "%.2f"|format(ap_metrics.days_over_90) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Suppliers + Payment Run Preview -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Top 10 Suppliers by Exposure -->
+            <div class="glass-card p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-semibold text-white">Top Suppliers by Exposure</h3>
+                    <a href="/finance/ap/bills" class="text-primary hover:text-primary-dark text-sm">View All Bills</a>
+                </div>
+                <div class="overflow-x-auto">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Supplier</th>
+                                <th class="text-right">Amount Owed</th>
+                                <th class="text-right">Oldest Invoice</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for supplier in top_suppliers %}
+                            <tr>
+                                <td>
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 bg-warning/20 rounded-full flex items-center justify-center text-warning text-sm font-bold">
+                                            {{ supplier.name[:2].upper() }}
+                                        </div>
+                                        <span class="text-white">{{ supplier.name }}</span>
+                                    </div>
+                                </td>
+                                <td class="text-right amount text-warning font-semibold">{{ "%.2f"|format(supplier.amount) }}</td>
+                                <td class="text-right text-gray-400">{{ supplier.oldest_invoice }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="3" class="text-center text-gray-500 py-8">No supplier data</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Payment Run Preview -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Payment Run Preview</h3>
+                <div class="bg-gray-800/50 rounded-lg p-6 mb-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <span class="text-gray-400">If executed today:</span>
+                        <span class="text-2xl font-bold text-white amount">{{ "%.2f"|format(payment_preview.total) }}</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="text-center">
+                            <p class="text-3xl font-bold text-info">{{ payment_preview.bills_count }}</p>
+                            <p class="text-xs text-gray-400">Bills</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-3xl font-bold text-success">{{ payment_preview.suppliers_count }}</p>
+                            <p class="text-xs text-gray-400">Suppliers</p>
+                        </div>
+                        <div class="text-center">
+                            <p class="text-3xl font-bold text-warning">{{ "%.0f"|format(payment_preview.avg_days) }}</p>
+                            <p class="text-xs text-gray-400">Avg Days Due</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <a href="/finance/ap/payments/create" class="btn btn-primary flex-1 text-center">
+                        <i class="fas fa-play mr-2"></i>Run Payment
+                    </a>
+                    <a href="/finance/ap/payments" class="btn btn-outline flex-1 text-center">
+                        View All Payments
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- AP Trend + Supplier Risk -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- AP Trend Line Chart -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">AP Balance Trend (Last 6 Months)</h3>
+                <div style="min-height: 280px;">
+                    <canvas id="apTrendChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Supplier Risk Indicators -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Supplier Risk Indicators</h3>
+                <div class="space-y-4">
+                    {% for risk in supplier_risks %}
+                    <div class="flex items-center justify-between p-4 rounded-lg {% if risk.level == 'high' %}bg-danger/10 border border-danger/20{% elif risk.level == 'medium' %}bg-warning/10 border border-warning/20{% else %}bg-gray-800/50{% endif %}">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 bg-warning/20 rounded-full flex items-center justify-center">
+                                <i class="fas fa-exclamation-triangle text-warning"></i>
+                            </div>
+                            <div>
+                                <p class="text-white font-medium">{{ risk.supplier }}</p>
+                                <p class="text-gray-400 text-xs">{{ risk.reason }}</p>
+                            </div>
+                        </div>
+                        <span class="badge {% if risk.level == 'high' %}bg-danger text-danger{% elif risk.level == 'medium' %}bg-warning text-warning{% else %}bg-success text-success{% endif %}">
+                            {{ risk.level | upper }}
+                        </span>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-gray-500 py-8">No risk indicators</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // AP Aging Chart (Doughnut)
+        const agingCtx = document.getElementById('apAgingChart').getContext('2d');
+        new Chart(agingCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Current', '1-30', '31-60', '61-90', '90+'],
+                datasets: [{
+                    data: {{ ap_aging_data | tojson }},
+                    backgroundColor: ['#10b981', '#38bdf8', '#f59e0b', '#f97316', '#ef4444'],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: { color: '#94a3b8', boxWidth: 12, padding: 10 }
+                    }
+                },
+                cutout: '60%',
+            }
+        });
+
+        // AP Trend Line Chart
+        const trendCtx = document.getElementById('apTrendChart').getContext('2d');
+        new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: {{ ap_trend_labels | tojson }},
+                datasets: [{
+                    label: 'AP Balance',
+                    data: {{ ap_trend_data | tojson }},
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#f59e0b',
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                    y: { 
+                        grid: { color: '#334155' }, 
+                        ticks: { 
+                            color: '#94a3b8', 
+                            callback: function(v) { return v.toLocaleString(); }
+                        } 
+                    }
+                }
+            }
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>

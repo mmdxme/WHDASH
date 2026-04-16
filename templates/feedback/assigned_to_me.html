@@ -1,0 +1,100 @@
+{% extends "feedback/base.html" %}
+
+{% block header_actions %}
+<a href="{{ url_for('feedback.reports_list') }}" class="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors flex items-center gap-2">
+    <i class="fas fa-list mr-2"></i>
+    All Reports
+</a>
+{% endblock %}
+
+{% block feedback_content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-white mb-2">Assigned to Me</h1>
+    <p class="text-slate-400">Reports that need your attention</p>
+</div>
+
+<!-- Filters -->
+<div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 mb-6">
+    <form method="GET" class="flex flex-wrap items-center gap-4">
+        <div class="flex-1 min-w-[200px]">
+            <div class="relative">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                <input type="text" name="search" value="{{ filters.search or '' }}" placeholder="Search assigned reports..."
+                       class="w-full pl-10 pr-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50">
+            </div>
+        </div>
+        <div>
+            <select name="status" class="px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                <option value="">All Statuses</option>
+                <option value="New" {% if filters.status == 'New' %}selected{% endif %}>New</option>
+                <option value="Assigned" {% if filters.status == 'Assigned' %}selected{% endif %}>Assigned</option>
+                <option value="In Progress" {% if filters.status == 'In Progress' %}selected{% endif %}>In Progress</option>
+                <option value="Waiting for User" {% if filters.status == 'Waiting for User' %}selected{% endif %}>Waiting for User</option>
+                <option value="Resolved" {% if filters.status == 'Resolved' %}selected{% endif %}>Resolved</option>
+            </select>
+        </div>
+        <button type="submit" class="px-4 py-2.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-xl transition-colors">
+            <i class="fas fa-filter mr-2"></i>Filter
+        </button>
+        <a href="{{ url_for('feedback.assigned_to_me') }}" class="px-4 py-2.5 bg-slate-700/50 hover:bg-slate-700 text-slate-400 rounded-xl transition-colors">
+            Clear
+        </a>
+    </form>
+</div>
+
+<!-- Reports List -->
+<div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+    <div class="divide-y divide-slate-700/50">
+        {% for report in reports %}
+        <a href="{{ url_for('feedback.report_detail', report_id=report.id) }}" class="block px-6 py-5 hover:bg-slate-700/30 transition-colors">
+            <div class="flex items-start justify-between gap-4">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-xs font-mono text-slate-500">{{ report.reference_number }}</span>
+                        <span class="px-2 py-0.5 text-xs rounded-full {{ report.status_badge_class }}">{{ report.status }}</span>
+                        <span class="px-2 py-0.5 text-xs rounded-full {{ report.priority_badge_class }}">{{ report.priority }}</span>
+                        <span class="px-2 py-0.5 text-xs rounded-full {{ report.severity_badge_class }}">{{ report.severity }}</span>
+                    </div>
+                    <h3 class="text-white font-medium truncate mb-1">{{ report.title }}</h3>
+                    <p class="text-sm text-slate-400 line-clamp-1">{{ report.summary or report.description[:100] if report.description else 'No description' }}</p>
+                    <div class="flex items-center gap-4 mt-2 text-xs text-slate-500">
+                        <span><i class="fas fa-user mr-1"></i>{{ report.reporter_name or 'Anonymous' }}</span>
+                        {% if report.category_name %}
+                        <span><i class="fas fa-tag mr-1"></i>{{ report.category_name }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="text-right text-xs text-slate-500 whitespace-nowrap">
+                    <p>Assigned: {{ report.assigned_at[:10] if report.assigned_at else 'N/A' }}</p>
+                    <p class="mt-1">{{ report.comment_count or 0 }} comments</p>
+                    {% if report.sla_due_date %}
+                    <p class="mt-1 {% if report.sla_due_date < today %}text-rose-400{% endif %}">
+                        <i class="fas fa-clock mr-1"></i>SLA: {{ report.sla_due_date }}
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </a>
+        {% else %}
+        <div class="px-6 py-16 text-center">
+            <div class="w-16 h-16 bg-slate-700/50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-check-circle text-3xl text-emerald-400"></i>
+            </div>
+            <p class="text-slate-400 mb-2">No reports assigned to you</p>
+            <p class="text-sm text-slate-500">You're all caught up!</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if result.pages > 1 %}
+    <div class="px-6 py-4 border-t border-slate-700/50 flex items-center justify-center gap-2">
+        {% for p in range(1, result.pages + 1) %}
+        <a href="{{ url_for('feedback.assigned_to_me', page=p, status=filters.status, search=filters.search) }}"
+           class="px-3 py-2 {% if p == result.page %}bg-blue-500/20 text-blue-400 border border-blue-500/30{% else %}bg-slate-700/50 text-slate-400 border border-slate-600/50{% endif %} rounded-lg transition-colors">
+            {{ p }}
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

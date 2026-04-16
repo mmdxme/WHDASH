@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.5rem 1rem; border-bottom: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; text-align: right; white-space: nowrap; }
+        .run-header { background: #334155; font-weight: 700; color: #e5e7eb; padding: 0.75rem 1rem; }
+        .filter-bar { background: #1e293b; border-radius: 0.75rem; padding: 1rem; border: 1px solid #334155; margin-bottom: 1.5rem; }
+        @media print { body { background: white; color: black; } .card { border: 1px solid #ccc; background: white; } }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+            <div class="flex gap-2">
+                <a href="{{ url_for('finance.reports_depreciation', export=1, **filters) }}" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded text-white text-sm">Export</a>
+                <button onclick="window.print()" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded text-white text-sm">Print</button>
+            </div>
+        </div>
+
+        <div class="filter-bar">
+            <form method="get" class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Fiscal Year</label>
+                    <select name="fiscal_year_id" class="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
+                        <option value="">All Fiscal Years</option>
+                        {% for fy in fiscal_years %}
+                        <option value="{{ fy.id }}" {{ 'selected' if filters.fiscal_year_id == fy.id }}>{{ fy.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Start Date</label>
+                    <input type="date" name="start_date" value="{{ filters.start_date or '' }}" class="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">End Date</label>
+                    <input type="date" name="end_date" value="{{ filters.end_date or '' }}" class="bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white">
+                </div>
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded text-white">Generate</button>
+            </form>
+        </div>
+
+        <div class="card overflow-hidden">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Run Date</th>
+                        <th>Run #</th>
+                        <th>Asset Code</th>
+                        <th>Asset Name</th>
+                        <th>Category</th>
+                        <th class="text-right">Acquisition Cost</th>
+                        <th class="text-right">Useful Life</th>
+                        <th class="text-right">Depreciation This Run</th>
+                        <th class="text-right">Accumulated Depreciation</th>
+                        <th class="text-right">Book Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in entries %}
+                    <tr>
+                        <td>{{ entry.run_date }}</td>
+                        <td>{{ entry.run_number }}</td>
+                        <td>{{ entry.asset_code }}</td>
+                        <td>{{ entry.asset_name }}</td>
+                        <td>{{ entry.category_name or '-' }}</td>
+                        <td class="amount">{{ "%,.2f"|format(entry.acquisition_cost) }}</td>
+                        <td class="amount">{{ entry.useful_life_years }} years</td>
+                        <td class="amount">{{ "%,.2f"|format(entry.depreciation_this_run) }}</td>
+                        <td class="amount">{{ "%,.2f"|format(entry.accumulated_depreciation) }}</td>
+                        <td class="amount">{{ "%,.2f"|format(entry.acquisition_cost - entry.accumulated_depreciation) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="10" class="text-center text-gray-400 py-4">No depreciation entries found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

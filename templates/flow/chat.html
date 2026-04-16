@@ -5,7 +5,7 @@
 {% block sidebar %}{% endblock %}
 
 {% block main_content %}
-<main class="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900" oncontextmenu="return false;">
+<main class="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900" id="chat-main">
     <!-- Chat Header -->
     <header class="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-4 flex-shrink-0">
         <div class="flex items-center gap-3">
@@ -90,7 +90,9 @@
     </header>
     
     <!-- Messages Area -->
-    <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4 {% if settings and settings.chat_background == 'custom' %}bg-cover bg-center{% endif %}" {% if settings and settings.chat_background != 'custom' %}style="{% if settings.chat_background == 'white' %}background-color: #ffffff;{% elif settings.chat_background == 'red' %}background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);{% elif settings.chat_background == 'orange' %}background: linear-gradient(135deg, #fb923c 0%, #ea580c 100%);{% elif settings.chat_background == 'green' %}background: linear-gradient(135deg, #4ade80 0%, #16a34a 100%);{% elif settings.chat_background == 'blue' %}background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);{% elif settings.chat_background == 'black' %}background: linear-gradient(135deg, #374151 0%, #111827 100%);{% else %}background-color: #f8fafc;{% endif %}"{% endif %} onclick="handleMessagesClick(event)" {% if settings and settings.chat_background == 'custom' %}style="background-image: url('{{ settings.chat_background_custom }}');"{% endif %}>
+    <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-4"
+         style="{% if settings and settings.chat_background == 'custom' %}background-image: url('{{ settings.chat_background_custom }}'); background-size: cover; background-position: center;{% elif settings.chat_background == 'white' %}background-color: #ffffff;{% elif settings.chat_background == 'red' %}background: linear-gradient(135deg, #f87171 0%, #dc2626 100%);{% elif settings.chat_background == 'orange' %}background: linear-gradient(135deg, #fb923c 0%, #ea580c 100%);{% elif settings.chat_background == 'green' %}background: linear-gradient(135deg, #4ade80 0%, #16a34a 100%);{% elif settings.chat_background == 'blue' %}background: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);{% elif settings.chat_background == 'black' %}background: linear-gradient(135deg, #374151 0%, #111827 100%);{% else %}background-color: #f8fafc;{% endif %}"
+         onclick="handleMessagesClick(event)">
         {% if messages %}
             {% for message in messages %}
             <div class="message-wrapper flex {% if message.sender_id == user.id %}justify-end{% else %}justify-start{% endif %} animate-slide-in w-full"
@@ -125,7 +127,8 @@
 
                     <div class="message-bubble {% if message.sender_id == user.id %}sent{% else %}received{% endif %}"
                          id="bubble-{{ message.id }}"
-                         oncontextmenu="handleMessageRightClick(event, '{{ message.id }}'); return false;">
+                         data-message-id="{{ message.id }}"
+                         oncontextmenu="handleBubbleRightClick(event, '{{ message.id }}'); return false;">
                         <div class="message-content bidi-text">
                             {{ escape_html(message.content) if message.content else '' }}
                         </div>
@@ -134,18 +137,35 @@
                         <div class="flex flex-wrap gap-1 mt-2">
                             {% for reaction in message.reactions.split(',') %}
                                 {% if reaction %}
-                                <span class="reaction-badge {% if user.id|string in reaction %}active{% endif %}">
+                                <button class="reaction-badge {% if user.id|string in reaction %}active{% endif %}"
+                                        onclick="toggleMessageReaction('{{ message.id }}', '{{ reaction.split(':')[0] }}')"
+                                        title="{{ t('flow_reaction_add', 'Toggle reaction') }}">
                                     {{ reaction.split(':')[0] }}
                                     {% if reaction.split(':')[1] %}
                                     <span class="ml-1">{{ reaction.split(':')[1] }}</span>
                                     {% endif %}
-                                </span>
+                                </button>
                                 {% endif %}
                             {% endfor %}
+                            <button class="reaction-badge-add" onclick="showReactionPicker('{{ message.id }}', event)"
+                                    title="{{ t('flow_reaction_add', 'Add reaction') }}">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                            </button>
+                        </div>
+                        {% else %}
+                        <div class="flex items-center gap-1 mt-2">
+                            <button class="reaction-badge-add" onclick="showReactionPicker('{{ message.id }}', event)"
+                                    title="{{ t('flow_reaction_add', 'Add reaction') }}">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                            </button>
                         </div>
                         {% endif %}
                     </div>
-                    
+
                     <div class="flex items-center gap-2 text-xs text-slate-400">
                         <span>{{ format_time(message.created_at) }}</span>
                         {% if message.is_edited %}
@@ -154,7 +174,7 @@
                         {% if message.reply_to_id %}
                         <span class="text-blue-500">↩️ Reply</span>
                         {% endif %}
-                        
+
                         <!-- Message actions button -->
                         <button onclick="showMessageActions('{{ message.id }}')" class="opacity-0 hover:opacity-100 transition-opacity p-1">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -463,11 +483,135 @@
     let editingMessageId = null;
     let voiceRecording = false;
     let mediaRecorder = null;
-    
+
+    // ULTRA SIMPLE right-click handler at global level
+    document.addEventListener('contextmenu', function(e) {
+        var bubble = e.target.closest('.message-bubble');
+        if (bubble) {
+            e.preventDefault();
+            e.stopPropagation();
+            var msgId = bubble.id.replace('bubble-', '');
+            // Store position for menu
+            window._rightClickX = e.clientX;
+            window._rightClickY = e.clientY;
+            window._rightClickMsgId = msgId;
+            // Call the menu function
+            createAndShowMessageMenu(msgId);
+        }
+    });
+
+    function createAndShowMessageMenu(messageId) {
+        // Remove existing menu
+        var oldMenu = document.getElementById('message-context-menu');
+        if (oldMenu) oldMenu.remove();
+
+        // Get message data
+        var wrapper = document.querySelector('[data-message-id="' + messageId + '"]');
+        if (!wrapper) return;
+
+        var senderId = wrapper.dataset.senderId;
+        var messageType = wrapper.dataset.messageType || 'text';
+        var isPinned = wrapper.dataset.isPinned === '1' || wrapper.dataset.isPinned === 'true';
+        var hasAttachment = wrapper.dataset.hasAttachment === 'true';
+        var isMyMessage = senderId == currentUser;
+
+        // Build menu items
+        var items = [
+            '<div class="ctx-item" data-action="reply">↩️ Reply</div>',
+            '<div class="ctx-item" data-action="forward">🔁 Forward</div>',
+            '<div class="ctx-item" data-action="copy">📋 Copy Text</div>',
+            '<div class="ctx-item" data-action="' + (isPinned ? 'unpin' : 'pin') + '">📌 ' + (isPinned ? 'Unpin' : 'Pin') + '</div>'
+        ];
+
+        if (hasAttachment || ['voice', 'video', 'audio', 'file'].indexOf(messageType) >= 0) {
+            items.push('<div class="ctx-item" data-action="save">💾 Save Media</div>');
+        }
+
+        if (isMyMessage) {
+            items.push('<div class="ctx-divider"></div>');
+            items.push('<div class="ctx-item" data-action="edit">✏️ Edit</div>');
+            items.push('<div class="ctx-item ctx-danger" data-action="delete">🗑️ Delete</div>');
+        }
+
+        // Create menu
+        var menu = document.createElement('div');
+        menu.id = 'message-context-menu';
+        menu.className = 'message-context-menu';
+        menu.innerHTML = items.join('');
+
+        // Style the menu (inline as backup)
+        menu.style.cssText = 'position:fixed;z-index:99999;min-width:180px;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.15);border:1px solid #e2e8f0;padding:6px;display:flex;flex-direction:column;';
+
+        // Position
+        var x = window._rightClickX || 100;
+        var y = window._rightClickY || 100;
+        menu.style.left = x + 'px';
+        menu.style.top = y + 'px';
+
+        // Add to page
+        document.body.appendChild(menu);
+
+        // Add click handlers
+        var ctxItems = menu.querySelectorAll('.ctx-item');
+        for (var i = 0; i < ctxItems.length; i++) {
+            ctxItems[i].addEventListener('click', function() {
+                var action = this.dataset.action;
+                executeCtxAction(action, window._rightClickMsgId);
+                menu.remove();
+            });
+        }
+
+        // Close on click outside
+        setTimeout(function() {
+            document.addEventListener('click', closeCtxMenu);
+        }, 10);
+
+        // Adjust if off screen
+        var rect = menu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) menu.style.left = (x - rect.width) + 'px';
+        if (rect.bottom > window.innerHeight) menu.style.top = (y - rect.height) + 'px';
+    }
+
+    function closeCtxMenu() {
+        var menu = document.getElementById('message-context-menu');
+        if (menu) menu.remove();
+        document.removeEventListener('click', closeCtxMenu);
+    }
+
+    function executeCtxAction(action, msgId) {
+        if (!msgId) return;
+        switch(action) {
+            case 'reply':
+                startReply(msgId);
+                break;
+            case 'forward':
+                openForwardModal(msgId);
+                break;
+            case 'copy':
+                copyMessageText(msgId);
+                break;
+            case 'pin':
+                showPinModal(msgId, true);
+                break;
+            case 'unpin':
+                unpinMessage(msgId);
+                break;
+            case 'save':
+                saveMediaMessage(msgId);
+                break;
+            case 'edit':
+                startEditingMessage(msgId);
+                break;
+            case 'delete':
+                showDeleteModal(msgId);
+                break;
+        }
+    }
+
     document.addEventListener('DOMContentLoaded', function() {
         scrollToBottom();
         startPollingMessages();
-        
+
         // Listen for emoji selection
         window.addEventListener('emoji-selected', function(e) {
             const input = document.getElementById('message-input');
@@ -547,12 +691,19 @@
     }
     
     function sendMessage(event) {
-        if (event) event.preventDefault();
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
 
         const input = document.getElementById('message-input');
         const content = input.value.trim();
 
-        if (!content && !editingMessageId) return;
+        if (!content && !editingMessageId) return false;
+
+        // Clear the input immediately to prevent double-send
+        const currentContent = content;
+        input.value = '';
 
         if (editingMessageId) {
             // Edit existing message
@@ -621,21 +772,21 @@
         console.log('message.content:', message.content);
         console.log('message.sender_id:', message.sender_id);
         console.log('currentUser:', currentUser);
-        
+
         const container = document.getElementById('messages-container');
         if (!container) {
             console.error('messages-container not found!');
             return;
         }
         console.log('container found, children:', container.children.length);
-        
+
         // Remove empty state if present
         const emptyState = container.querySelector('.flex.items-center.justify-center.h-full');
         if (emptyState) {
             console.log('Removing empty state');
             emptyState.remove();
         }
-        
+
         const isSent = message.sender_id == currentUser;
         console.log('isSent:', isSent);
         const initials = (message.sender_name || '?')[0].toUpperCase();
@@ -643,12 +794,62 @@
 
         const messageId = message.id || 'NO_ID';
         const bubbleId = 'bubble-' + messageId;
-        
+
         console.log('messageId:', messageId);
         console.log('bubbleId:', bubbleId);
-        
+
+        // Build attachment preview if present
+        let attachmentHtml = '';
+        const metadata = typeof message.metadata === 'string' ? JSON.parse(message.metadata || '{}') : (message.metadata || {});
+        if (message.message_type === 'image' && metadata.file_url) {
+            attachmentHtml = `<img src="${metadata.file_url}" class="mt-2 rounded-lg max-h-48 object-cover cursor-pointer" onclick="openLightbox('${metadata.file_url}')" alt="Attachment">`;
+        } else if (message.message_type === 'video' && metadata.file_url) {
+            attachmentHtml = `<video class="mt-2 rounded-lg max-h-48" controls><source src="${metadata.file_url}" type="video/mp4">Your browser does not support video.</video>`;
+        } else if (message.message_type === 'audio' && metadata.file_url) {
+            attachmentHtml = `<audio class="mt-2 w-full" controls><source src="${metadata.file_url}" type="audio/mpeg">Your browser does not support audio.</audio>`;
+        } else if (message.message_type === 'file' && metadata.file_url) {
+            attachmentHtml = `<a href="${metadata.file_url}" download class="flex items-center gap-2 mt-2 p-2 bg-slate-100 dark:bg-slate-700 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600"><span class="text-xl">📄</span><span class="text-sm truncate">${escapeHtml(metadata.file_name || 'File')}</span></a>`;
+        } else if (message.message_type === 'voice' && metadata.file_url) {
+            attachmentHtml = `<audio class="mt-2 w-full" controls><source src="${metadata.file_url}" type="audio/webm">Your browser does not support audio.</audio>`;
+        }
+
+        // Build reactions HTML if present
+        let reactionsHtml = '';
+        if (message.reactions && Object.keys(message.reactions).length > 0) {
+            reactionsHtml = '<div class="flex flex-wrap gap-1 mt-2">';
+            Object.entries(message.reactions).forEach(([emoji, userIds]) => {
+                const count = userIds.length;
+                const isUserReacted = userIds.includes(currentUser);
+                reactionsHtml += `
+                    <button class="reaction-badge ${isUserReacted ? 'active' : ''}"
+                            onclick="toggleMessageReaction('${messageId}', '${emoji}')">
+                        <span>${emoji}</span>
+                        <span class="ml-1">${count}</span>
+                    </button>
+                `;
+            });
+            reactionsHtml += `<button class="reaction-badge-add" onclick="showReactionPicker('${messageId}', event)" title="{{ t('flow_reaction_add', 'Add reaction') }}">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                </svg>
+            </button></div>`;
+        } else {
+            reactionsHtml = `<div class="flex items-center gap-1 mt-2">
+                <button class="reaction-badge-add" onclick="showReactionPicker('${messageId}', event)" title="{{ t('flow_reaction_add', 'Add reaction') }}">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </button>
+            </div>`;
+        }
+
         const html = `
-            <div class="message-wrapper flex ${isSent ? 'justify-end' : 'justify-start'} animate-slide-in w-full" data-message-id="${messageId}">
+            <div class="message-wrapper flex ${isSent ? 'justify-end' : 'justify-start'} animate-slide-in w-full"
+                 data-message-id="${messageId}"
+                 data-sender-id="${message.sender_id}"
+                 data-message-type="${message.message_type || 'text'}"
+                 data-is-pinned="${message.is_pinned || false}"
+                 data-has-attachment="${['image', 'video', 'audio', 'file', 'voice'].includes(message.message_type)}">
                 ${!isSent ? `
                 <div class="flex gap-2 max-w-full">
                     <div class="flex-shrink-0">
@@ -657,11 +858,14 @@
                 ` : ''}
                 <div class="flex flex-col ${isSent ? 'items-end' : 'items-start'} gap-1 ${isSent ? 'max-w-full' : ''}">
                     ${!isSent ? `<span class="text-xs text-slate-500 dark:text-slate-400 font-medium">${message.sender_name || 'Unknown'}</span>` : ''}
-                    <div class="message-bubble ${isSent ? 'sent' : 'received'}" id="${bubbleId}">
+                    <div class="message-bubble ${isSent ? 'sent' : 'received'}" id="${bubbleId}" data-message-id="${messageId}" oncontextmenu="handleBubbleRightClick(event, '${messageId}'); return false;">
                         <div class="message-content bidi-text">${escapeHtml(message.content || '')}</div>
+                        ${attachmentHtml}
+                        ${reactionsHtml}
                     </div>
                     <div class="flex items-center gap-2 text-xs text-slate-400">
                         <span>${message.created_at ? formatTime(message.created_at) : 'now'}</span>
+                        ${message.is_edited ? '<span>(edited)</span>' : ''}
                         <button onclick="showMessageActions('${messageId}')" class="opacity-0 hover:opacity-100 transition-opacity p-1">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
@@ -676,17 +880,32 @@
         console.log('inserting HTML:', html.substring(0, 200) + '...');
         container.insertAdjacentHTML('beforeend', html);
         console.log('after insert, children:', container.children.length);
-        
+
         // Verify the element was inserted
         const insertedEl = document.querySelector(`[data-message-id="${messageId}"]`);
         console.log('inserted element:', insertedEl);
-        
+
+        // Reinitialize handlers for the new message
+        setTimeout(initMessageHandlers, 0);
+
         // Clear input AFTER successful DOM insertion
         const input = document.getElementById('message-input');
         if (input) input.value = '';
         cancelReply();
-        
+
         scrollToBottom();
+    }
+
+    // Open lightbox for images
+    function openLightbox(src) {
+        const overlay = document.createElement('div');
+        overlay.className = 'lightbox-overlay';
+        overlay.onclick = () => overlay.remove();
+        overlay.innerHTML = `
+            <button class="lightbox-close" onclick="this.closest('.lightbox-overlay').remove()">×</button>
+            <img src="${src}" alt="Image">
+        `;
+        document.body.appendChild(overlay);
     }
     
     function escapeHtml(text) {
@@ -1160,184 +1379,112 @@
     }
 
     function startCall(type) {
-        // Get other participant ID for private chat
-        {% if other_members and other_members[0] %}
-        const participantId = {{ other_members[0].user_id }};
+        // Get participant IDs based on conversation type
+        let participantIds = [];
+
+        {% if conversation.conversation_type == 'private' and other_members and other_members[0] %}
+            // Private chat - get the other user's ID
+            participantIds.push({{ other_members[0].user_id }});
+        {% elif conversation.conversation_type in ['group', 'channel'] and other_members %}
+            // Group or channel - get all member IDs except current user
+            {% for member in other_members %}
+                {% if member.user_id != user.id %}
+            participantIds.push({{ member.user_id }});
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+
+        if (participantIds.length === 0) {
+            showNotification('Call', 'No participants available for call');
+            return;
+        }
+
         fetch('/flow/api/call/start', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type, participant_ids: [participantId] })
+            body: JSON.stringify({ type, participant_ids: participantIds })
         })
         .then(r => r.json())
         .then(data => {
             if (data.success) {
                 window.location.href = `/flow/call/${data.call_id}`;
+            } else {
+                showNotification('Error', data.error || 'Failed to start call');
             }
+        })
+        .catch(err => {
+            console.error('Start call error:', err);
+            showNotification('Error', 'Failed to start call');
         });
-        {% else %}
-        showNotification('Call', 'Cannot start call in this conversation');
-        {% endif %}
     }
 
     // ============================================
     // RIGHT-CLICK CONTEXT MENU FOR MESSAGES
     // ============================================
-    
+
     let selectedMessageId = null;
     let selectedMessageData = null;
-    
-    function handleMessageRightClick(event, messageId) {
-        try {
-            console.log('handleMessageRightClick called', messageId);
-            event.preventDefault();
-            event.stopPropagation();
+    let longPressTimer = null;
+    let isLongPress = false;
+    let touchedMessageId = null;
 
-            const messageWrapper = document.querySelector(`[data-message-id="${messageId}"]`);
-            if (!messageWrapper) {
-                console.log('Message wrapper not found for', messageId);
-                return;
-            }
+    // Initialize event handlers for messages
+    document.addEventListener('DOMContentLoaded', function() {
+        initMessageHandlers();
+        // Also init after any AJAX messages load
+        setTimeout(initMessageHandlers, 500);
+    });
 
-            selectedMessageId = messageId;
-            selectedMessageData = {
-                senderId: messageWrapper.dataset.senderId,
-                messageType: messageWrapper.dataset.messageType,
-                isPinned: messageWrapper.dataset.isPinned === '1' || messageWrapper.dataset.isPinned === 'true',
-                hasAttachment: messageWrapper.dataset.hasAttachment === 'true'
-            };
+    function initMessageHandlers() {
+        const bubbles = document.querySelectorAll('.message-bubble');
+        console.log('Found message bubbles:', bubbles.length);
+        bubbles.forEach(bubble => {
+            // Skip if already has handler
+            if (bubble.dataset.handlerAttached) return;
+            bubble.dataset.handlerAttached = 'true';
 
-            console.log('selectedMessageData', selectedMessageData);
+            // Add touch handlers for mobile
+            let touchTimer = null;
+            bubble.addEventListener('touchstart', function(e) {
+                const messageId = this.id.replace('bubble-', '');
+                touchTimer = setTimeout(function() {
+                    const touch = e.touches[0];
+                    if (navigator.vibrate) navigator.vibrate(50);
+                    showMessageMenu(touch.clientX, touch.clientY, messageId);
+                }, 1000);
+            }, { passive: true });
 
-            showMessageContextMenu(event.clientX, event.clientY);
-        } catch(e) {
-            console.error('Error in handleMessageRightClick:', e);
-        }
+            bubble.addEventListener('touchmove', function(e) {
+                if (touchTimer) {
+                    clearTimeout(touchTimer);
+                    touchTimer = null;
+                }
+            }, { passive: true });
+
+            bubble.addEventListener('touchend', function(e) {
+                if (touchTimer) {
+                    clearTimeout(touchTimer);
+                    touchTimer = null;
+                }
+            }, { passive: true });
+        });
     }
-    
-    function showMessageContextMenu(x, y) {
-        console.log('showMessageContextMenu called at', x, y);
-        console.log('selectedMessageData', selectedMessageData);
 
-        const isMyMessage = selectedMessageData.senderId == currentUser;
-        const isPinned = selectedMessageData.isPinned;
-        
-        // Build context menu items
-        const menuItems = [
-            // Reply
-            { icon: '↩️', label: 'Reply', action: 'reply', show: true },
-            // Forward
-            { icon: '🔁', label: 'Forward', action: 'forward', show: true },
-            // Copy Text (only for text messages)
-            { icon: '📋', label: 'Copy Text', action: 'copy', show: selectedMessageData.messageType === 'text' || !selectedMessageData.messageType },
-            // Pin/Unpin
-            { icon: '📌', label: isPinned ? 'Unpin' : 'Pin', action: isPinned ? 'unpin' : 'pin', show: true },
-            // divider
-            { divider: true, show: true },
-        ];
-        
-        // Add save option for media messages
-        if (selectedMessageData.hasAttachment || ['voice', 'video', 'audio', 'file'].includes(selectedMessageData.messageType)) {
-            menuItems.push({ icon: '💾', label: 'Save Media', action: 'save', show: true });
-        }
-        
-        // Edit and Delete only for own messages
-        if (isMyMessage) {
-            menuItems.push({ icon: '✏️', label: 'Edit', action: 'edit', show: true });
-            menuItems.push({ icon: '🗑️', label: 'Delete', action: 'delete', danger: true, show: true });
-        }
-        
-        // Filter to only show items where show is true
-        const visibleItems = menuItems.filter(item => item.show !== false);
-        
-        // Create context menu
-        const contextMenu = document.createElement('div');
-        contextMenu.id = 'message-context-menu';
-        contextMenu.className = 'context-menu';
-        contextMenu.style.cssText = `position:fixed !important;left:${x}px !important;top:${y}px !important;z-index:99999 !important;display:block !important;visibility:visible !important;`;
-        contextMenu.innerHTML = visibleItems.map(item => {
-            if (item.divider) {
-                return '<div class="context-menu-divider"></div>';
-            }
-            return `
-                <div class="context-menu-item ${item.danger ? 'danger' : ''}" onclick="executeMessageContextAction('${item.action}')">
-                    <span class="context-menu-icon">${item.icon}</span>
-                    <span>${item.label}</span>
-                </div>
-            `;
-        }).join('');
+    // GLOBAL right-click handler - catches ALL right-clicks on the page
+    document.addEventListener('contextmenu', function(e) {
+        // Find if we're inside a message bubble
+        const bubble = e.target.closest('.message-bubble');
 
-        // Remove existing context menu if any
-        const existingMenu = document.getElementById('message-context-menu');
-        if (existingMenu) existingMenu.remove();
-
-        document.body.appendChild(contextMenu);
-
-        // Force reflow to ensure menu renders
-        contextMenu.offsetHeight;
-
-        console.log('Menu created:', contextMenu);
-        console.log('Menu HTML:', contextMenu.innerHTML);
-        console.log('Menu dimensions:', contextMenu.getBoundingClientRect());
-        console.log('Viewport:', window.innerWidth, window.innerHeight);
-        console.log('Body styles:', document.body.style.cssText);
-        
-        // Adjust position to stay within viewport
-        const rect = contextMenu.getBoundingClientRect();
-        if (rect.right > window.innerWidth) {
-            contextMenu.style.left = `${x - rect.width}px`;
+        if (bubble) {
+            e.preventDefault();
+            const messageId = bubble.id.replace('bubble-', '');
+            alert('Right-click works! Message ID: ' + messageId);
+            showMessageMenu(e.clientX, e.clientY, messageId);
         }
-        if (rect.bottom > window.innerHeight) {
-            contextMenu.style.top = `${y - rect.height}px`;
-        }
+    });
 
-        // Add click listener to close menu
-        setTimeout(() => {
-            document.addEventListener('click', closeMessageContextMenu);
-        }, 0);
-    }
-    
-    function closeMessageContextMenu(e) {
-        const menu = document.getElementById('message-context-menu');
-        if (menu) {
-            menu.remove();
-        }
-        document.removeEventListener('click', closeMessageContextMenu);
-        selectedMessageId = null;
-        selectedMessageData = null;
-    }
-    
-    function executeMessageContextAction(action) {
-        closeMessageContextMenu();
-        
-        if (!selectedMessageId) return;
-        
-        switch(action) {
-            case 'reply':
-                startReply(selectedMessageId);
-                break;
-            case 'forward':
-                openForwardModal(selectedMessageId);
-                break;
-            case 'copy':
-                copyMessageText(selectedMessageId);
-                break;
-            case 'pin':
-                showPinModal(selectedMessageId, true);
-                break;
-            case 'unpin':
-                unpinMessage(selectedMessageId);
-                break;
-            case 'save':
-                saveMediaMessage(selectedMessageId);
-                break;
-            case 'edit':
-                startEditingMessage(selectedMessageId);
-                break;
-            case 'delete':
-                showDeleteModal(selectedMessageId);
-                break;
-        }
-    }
+    // Old functions removed - using new inline version instead
+    // handleBubbleRightClick, showMessageMenu, closeMessageContextMenu, etc. are no longer used
     
     // Reply functionality
     function startReply(messageId) {
@@ -1372,7 +1519,72 @@
             });
         }
     }
-    
+
+    // Reaction toggle function
+    function toggleMessageReaction(messageId, emoji) {
+        fetch(`/flow/api/messages/${messageId}/react/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ emoji })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // Update UI optimistically or reload
+                pollMessages();
+            } else {
+                showNotification('Error', data.error || 'Failed to update reaction');
+            }
+        })
+        .catch(err => {
+            console.error('Reaction error:', err);
+            showNotification('Error', 'Failed to update reaction');
+        });
+    }
+
+    // Show reaction picker popup
+    function showReactionPicker(messageId, event) {
+        event.stopPropagation();
+
+        // Close any existing picker
+        closeAllReactionPickers();
+
+        const picker = document.createElement('div');
+        picker.className = 'reaction-picker-popup';
+        picker.id = 'reaction-picker-' + messageId;
+        picker.innerHTML = `
+            <div class="reaction-picker-grid">
+                <button onclick="toggleMessageReaction('${messageId}', '👍')" title="Like">👍</button>
+                <button onclick="toggleMessageReaction('${messageId}', '❤️')" title="Heart">❤️</button>
+                <button onclick="toggleMessageReaction('${messageId}', '🎉')" title="Celebrate">🎉</button>
+                <button onclick="toggleMessageReaction('${messageId}', '🔥')" title="Fire">🔥</button>
+                <button onclick="toggleMessageReaction('${messageId}', '😂')" title="Laugh">😂</button>
+                <button onclick="toggleMessageReaction('${messageId}', '😮')" title="Wow">😮</button>
+                <button onclick="toggleMessageReaction('${messageId}', '😢')" title="Sad">😢</button>
+                <button onclick="toggleMessageReaction('${messageId}', '😡')" title="Angry">😡</button>
+            </div>
+        `;
+
+        // Style
+        picker.style.cssText = 'position:absolute;z-index:1000;background:var(--flow-sidebar, white);border:1px solid var(--flow-border, #e2e8f0);border-radius:16px;padding:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15);';
+
+        // Position near click
+        const rect = event.target.getBoundingClientRect();
+        picker.style.left = rect.left + 'px';
+        picker.style.top = (rect.bottom + 5) + 'px';
+
+        document.body.appendChild(picker);
+
+        // Close on click outside
+        setTimeout(() => {
+            document.addEventListener('click', closeAllReactionPickers, { once: true });
+        }, 0);
+    }
+
+    function closeAllReactionPickers() {
+        document.querySelectorAll('.reaction-picker-popup').forEach(p => p.remove());
+    }
+
     // Pin functionality
     function showPinModal(messageId, isPin) {
         selectedMessageId = messageId;

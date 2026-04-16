@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .stat-card { transition: all 0.3s ease; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 30px -5px rgba(0,0,0,0.4); }
+        .amount { font-family: 'Courier New', monospace; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+        .progress-bar { height: 10px; background: #334155; border-radius: 5px; overflow: hidden; }
+        .over-budget { background: rgba(239, 68, 68, 0.1); }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Budget monitoring and variance analysis</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="/finance/dashboard" class="btn btn-outline">
+                    <i class="fas fa-th-large"></i> Main Dashboard
+                </a>
+                <a href="/finance/budgets/create" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> New Budget
+                </a>
+            </div>
+        </div>
+
+        <!-- Top Metrics Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="glass-card stat-card p-6">
+                <p class="text-gray-400 text-sm mb-2">Total Budget</p>
+                <p class="text-3xl font-bold text-white amount">{{ "%.2f"|format(budget_metrics.total_budget) }}</p>
+                <p class="text-xs text-gray-500 mt-1">FY {{ budget_metrics.fiscal_year }}</p>
+            </div>
+            <div class="glass-card stat-card p-6">
+                <p class="text-gray-400 text-sm mb-2">Total Actual</p>
+                <p class="text-3xl font-bold text-info amount">{{ "%.2f"|format(budget_metrics.total_actual) }}</p>
+                <p class="text-xs text-gray-500 mt-1">Year to date</p>
+            </div>
+            <div class="glass-card stat-card p-6">
+                <p class="text-gray-400 text-sm mb-2">Total Variance</p>
+                <p class="text-3xl font-bold {% if budget_metrics.variance >= 0 %}text-success{% else %}text-danger{% endif %} amount">
+                    {{ "%.2f"|format(budget_metrics.variance) }}
+                </p>
+                <p class="text-xs text-gray-500 mt-1">Budget - Actual</p>
+            </div>
+            <div class="glass-card stat-card p-6">
+                <p class="text-gray-400 text-sm mb-2">Budget Utilization</p>
+                <p class="text-3xl font-bold {% if budget_metrics.utilization > 100 %}text-danger{% elif budget_metrics.utilization > 80 %}text-warning{% else %}text-success{% endif %} amount">
+                    {{ "%.1f"|format(budget_metrics.utilization) }}%
+                </p>
+                <div class="progress-bar mt-2">
+                    <div class="h-full rounded-full {% if budget_metrics.utilization > 100 %}bg-danger{% elif budget_metrics.utilization > 80 %}bg-warning{% else %}bg-success{% endif %}" style="width: {{ [budget_metrics.utilization, 100] | min }}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Budget by Department + Top 10 Overruns -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Budget vs Actual by Department (Horizontal Bar) -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Budget vs Actual by Department</h3>
+                <div style="min-height: 300px;">
+                    <canvas id="deptBudgetChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Top 10 Overruns -->
+            <div class="glass-card p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="text-xl font-semibold text-white">Top Budget Overruns</h3>
+                    <span class="badge bg-danger/20 text-danger">{{ overruns | length }} departments</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Cost Center</th>
+                                <th class="text-right">Budget</th>
+                                <th class="text-right">Actual</th>
+                                <th class="text-right">Overrun</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in overruns[:10] %}
+                            <tr class="over-budget">
+                                <td class="text-white">{{ item.name }}</td>
+                                <td class="text-right amount text-gray-400">{{ "%.2f"|format(item.budget) }}</td>
+                                <td class="text-right amount text-warning">{{ "%.2f"|format(item.actual) }}</td>
+                                <td class="text-right amount text-danger font-bold">{{ "%.2f"|format(item.overrun) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-gray-500 py-8">No budget overruns</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Budget Consumption Trend + Monthly Variance -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Budget Consumption Trend -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Budget Consumption Trend</h3>
+                <div style="min-height: 280px;">
+                    <canvas id="consumptionTrendChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Monthly Variance Analysis -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Monthly Variance Analysis</h3>
+                <div class="overflow-x-auto">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                <th class="text-right">Budget</th>
+                                <th class="text-right">Actual</th>
+                                <th class="text-right">Variance</th>
+                                <th class="text-center">%</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in monthly_variance[:6] %}
+                            <tr>
+                                <td class="text-gray-300">{{ row.month }}</td>
+                                <td class="text-right amount text-gray-400">{{ "%.2f"|format(row.budget) }}</td>
+                                <td class="text-right amount text-white">{{ "%.2f"|format(row.actual) }}</td>
+                                <td class="text-right amount {% if row.variance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ "%.2f"|format(row.variance) }}
+                                </td>
+                                <td class="text-center">
+                                    <span class="px-2 py-1 rounded text-xs font-bold {% if row.variance >= 0 %}bg-success/20 text-success{% else %}bg-danger/20 text-danger{% endif %}">
+                                        {{ "%.1f"|format(row.pct) }}%
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Approvals + Forecast vs Budget -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Pending Approvals -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">
+                    <i class="fas fa-clock text-warning mr-2"></i>Pending Budget Approvals
+                </h3>
+                <div class="space-y-4">
+                    {% for request in pending_approvals %}
+                    <div class="flex items-center justify-between p-4 bg-gray-800/50 rounded-lg">
+                        <div>
+                            <p class="text-white font-medium">{{ request.budget_name }}</p>
+                            <p class="text-gray-400 text-sm">{{ request.submitted_by }} • {{ request.submitted_date }}</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-warning font-semibold amount">{{ "%.2f"|format(request.amount) }}</span>
+                            <a href="/finance/budgets/{{ request.id }}/approve" class="btn btn-primary btn-sm">
+                                <i class="fas fa-check"></i>
+                            </a>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-gray-500 py-8">No pending approvals</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Forecast vs Budget -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Forecast vs Budget</h3>
+                <div style="min-height: 220px;">
+                    <canvas id="forecastBudgetChart"></canvas>
+                </div>
+                <div class="mt-4 grid grid-cols-3 gap-4 text-center">
+                    <div>
+                        <p class="text-gray-400 text-sm">Budget</p>
+                        <p class="text-xl font-bold text-white amount">{{ "%.2f"|format(forecast_metrics.budget) }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-400 text-sm">Forecast</p>
+                        <p class="text-xl font-bold text-info amount">{{ "%.2f"|format(forecast_metrics.forecast) }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-400 text-sm">Variance</p>
+                        <p class="text-xl font-bold {% if forecast_metrics.variance >= 0 %}text-success{% else %}text-danger{% endif %} amount">
+                            {{ "%.2f"|format(forecast_metrics.variance) }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Department Budget Chart (Horizontal Bar)
+        const deptCtx = document.getElementById('deptBudgetChart').getContext('2d');
+        new Chart(deptCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ dept_labels | tojson }},
+                datasets: [
+                    {
+                        label: 'Budget',
+                        data: {{ dept_budget | tojson }},
+                        backgroundColor: 'rgba(99, 102, 241, 0.7)',
+                        borderRadius: 4,
+                    },
+                    {
+                        label: 'Actual',
+                        data: {{ dept_actual | tojson }},
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                        borderRadius: 4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: '#94a3b8' }
+                    }
+                },
+                scales: {
+                    x: { 
+                        grid: { color: '#334155' }, 
+                        ticks: { 
+                            color: '#94a3b8', 
+                            callback: function(v) { return v.toLocaleString(); }
+                        } 
+                    },
+                    y: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                }
+            }
+        });
+
+        // Consumption Trend Chart (Line)
+        const trendCtx = document.getElementById('consumptionTrendChart').getContext('2d');
+        new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: {{ consumption_labels | tojson }},
+                datasets: [
+                    {
+                        label: 'Budget',
+                        data: {{ consumption_budget | tojson }},
+                        borderColor: '#94a3b8',
+                        borderDash: [5, 5],
+                        fill: false,
+                        tension: 0.4,
+                    },
+                    {
+                        label: 'Actual',
+                        data: {{ consumption_actual | tojson }},
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: '#94a3b8' }
+                    }
+                },
+                scales: {
+                    x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
+                    y: { 
+                        grid: { color: '#334155' }, 
+                        ticks: { 
+                            color: '#94a3b8', 
+                            callback: function(v) { return v.toLocaleString(); }
+                        } 
+                    }
+                }
+            }
+        });
+
+        // Forecast vs Budget Chart (Bar)
+        const forecastCtx = document.getElementById('forecastBudgetChart').getContext('2d');
+        new Chart(forecastCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ forecast_labels | tojson }},
+                datasets: [
+                    {
+                        label: 'Budget',
+                        data: {{ forecast_budget | tojson }},
+                        backgroundColor: 'rgba(99, 102, 241, 0.7)',
+                        borderRadius: 4,
+                    },
+                    {
+                        label: 'Forecast',
+                        data: {{ forecast_data | tojson }},
+                        backgroundColor: 'rgba(245, 158, 11, 0.7)',
+                        borderRadius: 4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: '#94a3b8' }
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                    y: { 
+                        grid: { color: '#334155' }, 
+                        ticks: { 
+                            color: '#94a3b8', 
+                            callback: function(v) { return v.toLocaleString(); }
+                        } 
+                    }
+                }
+            }
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>

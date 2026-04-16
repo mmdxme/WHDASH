@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .bg-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .bg-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .bg-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; transition: all 0.2s; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; background: transparent; }
+        .btn-outline:hover { background: #334155; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: rgba(99, 102, 241, 0.05); }
+        .totals-row { background: #1e293b; font-weight: 700; }
+        .totals-row td { border-bottom: none; border-top: 2px solid #6366f1; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Manage and monitor fiscal year periods</p>
+            </div>
+            <a href="/finance/fiscal-years" class="btn btn-outline"><i class="fas fa-arrow-left"></i> Back to Fiscal Years</a>
+        </div>
+
+        <!-- Fiscal Year Info Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="card">
+                <div class="text-gray-400 text-sm mb-1">Fiscal Year</div>
+                <div class="text-xl font-bold text-white">{{ fy.name }}</div>
+            </div>
+            <div class="card">
+                <div class="text-gray-400 text-sm mb-1">Start Date</div>
+                <div class="text-xl font-bold text-white">{{ fy.start_date }}</div>
+            </div>
+            <div class="card">
+                <div class="text-gray-400 text-sm mb-1">End Date</div>
+                <div class="text-xl font-bold text-white">{{ fy.end_date }}</div>
+            </div>
+            <div class="card">
+                <div class="text-gray-400 text-sm mb-1">Status</div>
+                <div class="text-xl font-bold">
+                    {% if fy.status == 'Open' %}
+                        <span class="badge bg-success">Open</span>
+                    {% elif fy.status == 'Closed' %}
+                        <span class="badge bg-danger">Closed</span>
+                    {% else %}
+                        <span class="badge bg-warning">{{ fy.status }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Periods Table -->
+        <div class="card">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-semibold text-white"><i class="fas fa-calendar-alt mr-2 text-indigo-500"></i>Fiscal Periods</h2>
+                <span class="text-gray-400 text-sm">{{ periods|length }} periods</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Period Name</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Status</th>
+                        <th class="text-right">Entries</th>
+                        <th class="text-right">Total Debit</th>
+                        <th class="text-right">Total Credit</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set total_entries = 0 %}
+                    {% set total_debit = 0 %}
+                    {% set total_credit = 0 %}
+                    {% for p in periods %}
+                    {% set total_entries = total_entries + (p.entry_count or 0) %}
+                    {% set total_debit = total_debit + (p.total_debit or 0) %}
+                    {% set total_credit = total_credit + (p.total_credit or 0) %}
+                    <tr>
+                        <td class="font-medium text-white">{{ p.period_name }}</td>
+                        <td class="text-gray-300">{{ p.start_date }}</td>
+                        <td class="text-gray-300">{{ p.end_date }}</td>
+                        <td>
+                            {% if p.status == 'Open' %}
+                                <span class="badge bg-success"><i class="fas fa-lock-open mr-1"></i> Open</span>
+                            {% elif p.status == 'Closed' %}
+                                <span class="badge bg-danger"><i class="fas fa-lock mr-1"></i> Closed</span>
+                            {% else %}
+                                <span class="badge bg-warning">{{ p.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-right text-gray-300">{{ p.entry_count or 0 }}</td>
+                        <td class="text-right text-green-400">{{ "%.2f"|format(p.total_debit or 0) }}</td>
+                        <td class="text-right text-red-400">{{ "%.2f"|format(p.total_credit or 0) }}</td>
+                        <td class="text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <a href="/finance/fiscal-years/{{ fy.id }}/period/{{ p.id }}/entries" class="btn btn-outline text-xs px-2 py-1" title="View Entries">
+                                    <i class="fas fa-list"></i>
+                                </a>
+                                {% if p.status == 'Open' %}
+                                <form action="/finance/fiscal-years/{{ fy.id }}/period/{{ p.id }}/close" method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-danger text-xs px-2 py-1" title="Close Period" onclick="return confirm('Are you sure you want to close this period?');">
+                                        <i class="fas fa-lock"></i>
+                                    </button>
+                                </form>
+                                {% else %}
+                                <form action="/finance/fiscal-years/{{ fy.id }}/period/{{ p.id }}/reopen" method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-success text-xs px-2 py-1" title="Reopen Period" onclick="return confirm('Are you sure you want to reopen this period?');">
+                                        <i class="fas fa-lock-open"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center text-gray-500 py-8">No periods found for this fiscal year</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                {% if periods %}
+                <tfoot>
+                    <tr class="totals-row">
+                        <td colspan="4" class="text-white">TOTAL</td>
+                        <td class="text-right text-white">{{ total_entries }}</td>
+                        <td class="text-right text-green-400">{{ "%.2f"|format(total_debit) }}</td>
+                        <td class="text-right text-red-400">{{ "%.2f"|format(total_credit) }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="mt-8 flex gap-4">
+            <a href="/finance/fiscal-years/{{ fy.id }}" class="btn btn-outline">
+                <i class="fas fa-eye"></i> View Fiscal Year Details
+            </a>
+            <a href="/finance/fiscal-years/{{ fy.id }}/close-checklist" class="btn btn-outline">
+                <i class="fas fa-clipboard-check"></i> Close Checklist
+            </a>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

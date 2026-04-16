@@ -1,0 +1,193 @@
+{% extends "feedback/base.html" %}
+
+{% block header_actions %}
+<a href="{{ url_for('feedback.report_detail', report_id=report.id) }}" class="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors flex items-center gap-2">
+    <i class="fas fa-arrow-left"></i>
+    <span>Back to Report</span>
+</a>
+{% endblock %}
+
+{% block feedback_content %}
+<div class="max-w-4xl mx-auto">
+    <form method="POST" enctype="multipart/form-data" id="editReportForm">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <!-- Basic Information -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden mb-6">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h2 class="text-lg font-semibold text-white">Basic Information</h2>
+                <p class="text-sm text-slate-400 mt-1">Reference: {{ report.reference_number }}</p>
+            </div>
+            <div class="p-6 space-y-6">
+                <!-- Title -->
+                <div>
+                    <label class="block text-sm font-medium text-white mb-2">Title *</label>
+                    <input type="text" name="title" required maxlength="200" value="{{ report.title }}"
+                           class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                </div>
+
+                <!-- Report Type & Category -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Report Type</label>
+                        <select name="report_type" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                            {% for type_id, type_label in report_types %}
+                            <option value="{{ type_id }}" {% if report.report_type == type_id %}selected{% endif %}>{{ type_label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Category</label>
+                        <select name="category_id" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                            <option value="">Select a category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}" {% if report.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Priority & Severity -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Priority</label>
+                        <select name="priority" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                            {% for priority in priority_choices %}
+                            <option value="{{ priority }}" {% if report.priority == priority %}selected{% endif %}>{{ priority }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Severity</label>
+                        <select name="severity" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                            {% for severity in severity_choices %}
+                            <option value="{{ severity }}" {% if report.severity == severity %}selected{% endif %}>{{ severity }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Impact & Urgency -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Impact</label>
+                        <select name="impact" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                            {% for impact in impact_choices %}
+                            <option value="{{ impact }}" {% if report.impact == impact %}selected{% endif %}>{{ impact }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Urgency</label>
+                        <select name="urgency" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                            {% for urgency in urgency_choices %}
+                            <option value="{{ urgency }}" {% if report.urgency == urgency %}selected{% endif %}>{{ urgency }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Summary -->
+                <div>
+                    <label class="block text-sm font-medium text-white mb-2">Summary</label>
+                    <textarea name="summary" rows="2" maxlength="500"
+                              class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 resize-none">{{ report.summary or '' }}</textarea>
+                </div>
+
+                <!-- Visibility -->
+                <div>
+                    <label class="block text-sm font-medium text-white mb-2">Visibility</label>
+                    <div class="flex items-center gap-4">
+                        {% for vis_id, vis_label in visibility_choices %}
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="radio" name="visibility" value="{{ vis_id }}" {% if report.visibility == vis_id %}checked{% endif %} class="text-blue-500 focus:ring-blue-500/50">
+                            <span class="text-sm text-slate-300">{{ vis_label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Description -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden mb-6">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h2 class="text-lg font-semibold text-white">Details</h2>
+            </div>
+            <div class="p-6 space-y-6">
+                <!-- Description -->
+                <div>
+                    <label class="block text-sm font-medium text-white mb-2">Description *</label>
+                    <textarea name="description" rows="5" required
+                              class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 resize-none">{{ report.description or '' }}</textarea>
+                </div>
+
+                <!-- Expected vs Actual -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Expected Behavior</label>
+                        <textarea name="expected_behavior" rows="3"
+                                  class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 resize-none">{{ report.expected_behavior or '' }}</textarea>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Actual Behavior</label>
+                        <textarea name="actual_behavior" rows="3"
+                                  class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 resize-none">{{ report.actual_behavior or '' }}</textarea>
+                    </div>
+                </div>
+
+                <!-- Steps to Reproduce -->
+                <div>
+                    <label class="block text-sm font-medium text-white mb-2">Steps to Reproduce</label>
+                    <textarea name="steps_to_reproduce" rows="4"
+                              class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 resize-none font-mono text-sm">{{ report.steps_to_reproduce or '' }}</textarea>
+                </div>
+
+                <!-- Location Info -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Page URL</label>
+                        <input type="url" name="page_url" value="{{ report.page_url or '' }}"
+                               class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Affected Module</label>
+                        <input type="text" name="affected_module" value="{{ report.affected_module or '' }}"
+                               class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                    </div>
+                </div>
+
+                <!-- Occurrence Info -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Date of Occurrence</label>
+                        <input type="date" name="occurrence_date" value="{{ report.occurrence_date or '' }}"
+                               class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Frequency</label>
+                        <select name="frequency" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                            {% for freq_id, freq_label in frequency_choices %}
+                            <option value="{{ freq_id }}" {% if report.frequency == freq_id %}selected{% endif %}>{{ freq_label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="flex items-center justify-end gap-3">
+            <a href="{{ url_for('feedback.report_detail', report_id=report.id) }}" 
+               class="px-6 py-3 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors">
+                Cancel
+            </a>
+            <button type="submit" 
+                    class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-medium transition-all">
+                <i class="fas fa-save mr-2"></i>
+                Save Changes
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

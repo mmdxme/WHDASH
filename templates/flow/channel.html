@@ -6,7 +6,7 @@
 
 {% block main_content %}
 <main class="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-900">
-    <!-- Channel Header -->
+    <!-- Stream Header -->
     <header class="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-4 flex-shrink-0">
         <div class="flex items-center gap-3">
             <a href="/flow/channels" class="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
@@ -14,7 +14,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                 </svg>
             </a>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2" id="channel-header-clickable" style="cursor: pointer;">
                 {% if channel.avatar_url %}
                 <img id="channel-avatar-img" src="{{ channel.avatar_url }}" alt="{{ channel.name }}" class="w-8 h-8 rounded-lg object-cover">
                 {% else %}
@@ -123,12 +123,45 @@
 
                     <div class="message-bubble {% if message.sender_id == user.id %}sent{% else %}received{% endif %}"
                          id="bubble-{{ message.id }}"
-                         oncontextmenu="handleMessageRightClick(event, '{{ message.id }}'); return false;">
+                         data-message-id="{{ message.id }}"
+                         oncontextmenu="handleBubbleRightClick(event, '{{ message.id }}'); return false;">
                         <div class="message-content bidi-text">
                             {{ escape_html(message.content) if message.content else '' }}
                         </div>
+
+                        {% if message.reactions %}
+                        <div class="flex flex-wrap gap-1 mt-2">
+                            {% for reaction in message.reactions.split(',') %}
+                                {% if reaction %}
+                                <button class="reaction-badge {% if user.id|string in reaction %}active{% endif %}"
+                                        onclick="toggleMessageReaction('{{ message.id }}', '{{ reaction.split(':')[0] }}')"
+                                        title="{{ t('flow_reaction_add', 'Toggle reaction') }}">
+                                    {{ reaction.split(':')[0] }}
+                                    {% if reaction.split(':')[1] %}
+                                    <span class="ml-1">{{ reaction.split(':')[1] }}</span>
+                                    {% endif %}
+                                </button>
+                                {% endif %}
+                            {% endfor %}
+                            <button class="reaction-badge-add" onclick="showReactionPicker('{{ message.id }}', event)"
+                                    title="{{ t('flow_reaction_add', 'Add reaction') }}">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                            </button>
+                        </div>
+                        {% else %}
+                        <div class="flex items-center gap-1 mt-2">
+                            <button class="reaction-badge-add" onclick="showReactionPicker('{{ message.id }}', event)"
+                                    title="{{ t('flow_reaction_add', 'Add reaction') }}">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                            </button>
+                        </div>
+                        {% endif %}
                     </div>
-                    
+
                     <div class="flex items-center gap-2 text-xs text-slate-400">
                         <span>{{ format_time(message.created_at) }}</span>
                         {% if message.is_edited %}
@@ -154,7 +187,7 @@
                         </svg>
                     </div>
                     <h3 class="font-semibold text-slate-700 dark:text-slate-300 mb-1">No messages yet</h3>
-                    <p class="text-sm text-slate-500 dark:text-slate-400">Be the first to post in this channel</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Be the first to post in this stream</p>
                 </div>
             </div>
         {% endif %}
@@ -201,7 +234,7 @@
     </div>
     {% else %}
     <div class="p-4 bg-slate-100 dark:bg-slate-800 text-center">
-        <p class="text-slate-500">Join this channel to send messages</p>
+        <p class="text-slate-500">Join this stream to send messages</p>
     </div>
     {% endif %}
 </main>
@@ -289,15 +322,15 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/>
                     </svg>
                 </div>
-                <h3 class="font-semibold text-slate-800 dark:text-white text-lg mb-2">Join Private Channel</h3>
-                <p class="text-sm text-slate-500 dark:text-slate-400">Enter the invite code to join this private channel</p>
+                <h3 class="font-semibold text-slate-800 dark:text-white text-lg mb-2">Join Private Stream</h3>
+                <p class="text-sm text-slate-500 dark:text-slate-400">Enter the invite code to join this private stream</p>
             </div>
             <div class="space-y-4">
                 <input type="text" id="join-code-input" placeholder="Enter 8-character code"
                        class="w-full px-4 py-3 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-center text-lg font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-amber-500 uppercase"
                        maxlength="8">
                 <button onclick="joinByCode()" class="w-full px-4 py-3 bg-amber-500 text-white rounded-xl font-medium hover:bg-amber-600 transition-colors">
-                    Join Channel
+                    Join Stream
                 </button>
                 <button onclick="closeJoinByCodeModal()" class="w-full px-4 py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
                     Cancel
@@ -307,12 +340,101 @@
     </div>
 </div>
 
+<!-- Channel Info Modal -->
+<div id="channel-info-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeChannelInfo()"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h3 class="font-semibold text-slate-800 dark:text-white">Channel Info</h3>
+            <button onclick="closeChannelInfo()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="p-4">
+            <div class="flex items-center gap-4 mb-6">
+                {% if channel.avatar_url %}
+                <img src="{{ channel.avatar_url }}" alt="{{ channel.name }}" class="w-16 h-16 rounded-full object-cover">
+                {% else %}
+                <img src="{{ url_for('static', filename='uploads/avatars/avatar_channel_green.png') }}" alt="{{ channel.name }}" class="w-16 h-16 rounded-full object-cover">
+                {% endif %}
+                <div>
+                    <h4 class="font-semibold text-slate-800 dark:text-white text-lg">{{ channel.name }}</h4>
+                    {% if channel.description %}
+                    <p class="text-sm text-slate-500 dark:text-slate-400">{{ channel.description }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="space-y-3">
+                <button onclick="showChannelMembers(); closeChannelInfo();" class="w-full flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-colors">
+                    <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </div>
+                    <div class="text-left">
+                        <p class="font-medium text-slate-800 dark:text-white">View Members</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">{{ members|length if members else 0 }} members</p>
+                    </div>
+                </button>
+                {% if membership and membership.role == 'admin' %}
+                <button onclick="showChannelSettings(); closeChannelInfo();" class="w-full flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-colors">
+                    <div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                    </div>
+                    <div class="text-left">
+                        <p class="font-medium text-slate-800 dark:text-white">Channel Settings</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Edit name, description, avatar</p>
+                    </div>
+                </button>
+                {% endif %}
+                <button onclick="showChannelAddMembers(); closeChannelInfo();" class="w-full flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition-colors">
+                    <div class="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                        <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/>
+                        </svg>
+                    </div>
+                    <div class="text-left">
+                        <p class="font-medium text-slate-800 dark:text-white">Add Members</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Invite people to this channel</p>
+                    </div>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Channel Members Modal -->
+<div id="add-channel-members-modal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/50" onclick="closeChannelAddMembers()"></div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+            <h3 class="font-semibold text-slate-800 dark:text-white">Add Members</h3>
+            <button onclick="closeChannelAddMembers()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
+                <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            </button>
+        </div>
+        <div class="p-4">
+            <input type="text" id="channel-member-search" placeholder="Search by name or username..."
+                   class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                   oninput="searchChannelUsers(this.value)">
+            <div id="channel-user-search-results" class="max-h-64 overflow-y-auto space-y-2"></div>
+        </div>
+    </div>
+</div>
+
 <!-- Channel Members Modal -->
 <div id="channel-members-modal" class="fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-black/50" onclick="closeChannelMembers()"></div>
     <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in">
         <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            <h3 class="font-semibold text-slate-800 dark:text-white">Channel Members</h3>
+            <h3 class="font-semibold text-slate-800 dark:text-white">Stream Members</h3>
             <button onclick="closeChannelMembers()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
                 <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -357,11 +479,11 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                 </svg>
             </div>
-            <h3 class="font-semibold text-slate-800 dark:text-white text-lg mb-2">Leave Channel?</h3>
-            <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Are you sure you want to leave this channel? You will lose access to all messages and files shared in this channel.</p>
+            <h3 class="font-semibold text-slate-800 dark:text-white text-lg mb-2">Leave Stream?</h3>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">Are you sure you want to leave this stream? You will lose access to all messages and files shared in this stream.</p>
             <div class="space-y-2">
                 <button onclick="confirmLeaveChannel()" class="w-full px-4 py-2.5 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition-colors">
-                    Leave Channel
+                    Leave Stream
                 </button>
                 <button onclick="closeLeaveChannelModal()" class="w-full px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
                     Cancel
@@ -418,7 +540,7 @@
     <div class="absolute inset-0 bg-black/50" onclick="closeChannelSettings()"></div>
     <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-slide-in max-h-[90vh] overflow-y-auto">
         <div class="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between sticky top-0 bg-white dark:bg-slate-800">
-            <h3 class="font-semibold text-slate-800 dark:text-white">Channel Settings</h3>
+            <h3 class="font-semibold text-slate-800 dark:text-white">Stream Settings</h3>
             <button onclick="closeChannelSettings()" class="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded">
                 <svg class="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -443,14 +565,14 @@
                     <input type="file" id="channel-avatar-input" accept="image/png,image/jpeg,image/gif,image/webp" class="hidden" onchange="uploadChannelAvatar(this)">
                 </div>
                 <div>
-                    <p class="font-medium text-slate-800 dark:text-white">Channel Photo</p>
+                    <p class="font-medium text-slate-800 dark:text-white">Stream Photo</p>
                     <p class="text-xs text-slate-500 dark:text-slate-400">PNG, JPG or WebP (max 5MB)</p>
                 </div>
             </div>
 
             <!-- Name -->
             <div>
-                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Channel Name</label>
+                <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Stream Name</label>
                 <input type="text" id="settings-channel-name" value="{{ channel.name }}"
                        class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
@@ -506,14 +628,31 @@
 {{ super() }}
 <script>
     let channelId = {{ channel.id | tojson }};
-    let conversationId = {{ conversation.id if conversation else 'null' }};
+    let conversationId = {{ (conversation.id if conversation else null) | tojson }};
     let currentUser = {{ user.id | tojson }};
     let selectedMessageId = null;
     let selectedMessageData = null;
     let forwardConversations = [];
     let channelAvatarUploaded = false;
+    let replyToId = null;
 
     console.log('Channel page loaded. channelId:', channelId, 'conversationId:', conversationId);
+
+    // Click handler for channel header (avatar + name to open info modal)
+    document.addEventListener('DOMContentLoaded', function() {
+        var headerClickable = document.getElementById('channel-header-clickable');
+        console.log('Channel header element:', headerClickable);
+        if (headerClickable) {
+            headerClickable.addEventListener('click', function(e) {
+                console.log('Channel header clicked!');
+                e.preventDefault();
+                e.stopPropagation();
+                var modal = document.getElementById('channel-info-modal');
+                console.log('Modal element:', modal);
+                if (modal) modal.classList.remove('hidden');
+            });
+        }
+    });
 
     function sendChannelMessage(event) {
         event.preventDefault();
@@ -588,7 +727,7 @@
                 ` : ''}
                 <div class="flex flex-col ${isSent ? 'items-end' : 'items-start'} gap-1 ${isSent ? 'max-w-full' : ''}">
                     ${!isSent ? `<span class="text-xs text-slate-500 dark:text-slate-400 font-medium">${message.sender_name || 'Unknown'}</span>` : ''}
-                    <div class="message-bubble ${isSent ? 'sent' : 'received'}" id="${bubbleId}">
+                    <div class="message-bubble ${isSent ? 'sent' : 'received'}" id="${bubbleId}" data-message-id="${message.id}">
                         <div class="message-content bidi-text">${escapeHtml(message.content || '')}</div>
                     </div>
                     <div class="flex items-center gap-2 text-xs text-slate-400">
@@ -600,6 +739,7 @@
         `;
 
         container.insertAdjacentHTML('beforeend', html);
+        setTimeout(initMessageHandlers, 0);
         scrollToBottom();
     }
 
@@ -679,18 +819,18 @@
         .then(r => r.json())
         .then(data => {
             if (data.success) {
-                showNotification('Left Channel', 'You have left the channel');
+                showNotification('Left Stream', 'You have left the stream');
                 // Redirect to channels list after a short delay
                 setTimeout(() => {
                     window.location.href = data.redirect_url || '/flow/channels';
                 }, 1000);
             } else {
-                showNotification('Error', data.error || 'Failed to leave channel');
+                showNotification('Error', data.error || 'Failed to leave stream');
             }
         })
         .catch(err => {
-            console.error('Leave channel error:', err);
-            showNotification('Error', 'Failed to leave channel');
+            console.error('Leave stream error:', err);
+            showNotification('Error', 'Failed to leave stream');
         });
     }
 
@@ -751,6 +891,68 @@
 
     function closeChannelMembers() {
         document.getElementById('channel-members-modal').classList.add('hidden');
+    }
+
+    function showChannelHeaderMenu() {
+        document.getElementById('channel-info-modal').classList.remove('hidden');
+    }
+
+    function closeChannelInfo() {
+        document.getElementById('channel-info-modal').classList.add('hidden');
+    }
+
+    function showChannelAddMembers() {
+        document.getElementById('add-channel-members-modal').classList.remove('hidden');
+    }
+
+    function closeChannelAddMembers() {
+        document.getElementById('add-channel-members-modal').classList.add('hidden');
+        document.getElementById('channel-member-search').value = '';
+        document.getElementById('channel-user-search-results').innerHTML = '';
+    }
+
+    function searchChannelUsers(query) {
+        if (!query || query.length < 1) {
+            document.getElementById('channel-user-search-results').innerHTML = '';
+            return;
+        }
+        fetch(`/flow/api/users?q=${encodeURIComponent(query)}`)
+            .then(r => r.json())
+            .then(data => {
+                const results = document.getElementById('channel-user-search-results');
+                if (data.users && data.users.length > 0) {
+                    results.innerHTML = data.users.slice(0, 10).map(user => `
+                        <div class="flex items-center gap-3 p-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl cursor-pointer"
+                             onclick="addChannelMember(${user.user_id}, '${escapeHtml(user.display_name || user.username)}')">
+                            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-semibold">
+                                ${(user.display_name || user.username || 'U')[0].toUpperCase()}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="font-medium text-slate-800 dark:text-white truncate">${user.display_name || user.username}</p>
+                                <p class="text-xs text-slate-500 dark:text-slate-400">@${user.username}</p>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    results.innerHTML = '<p class="text-center text-slate-400 py-4">No users found</p>';
+                }
+            });
+    }
+
+    function addChannelMember(userId, userName) {
+        if (!confirm(`Add ${userName} to this channel?`)) return;
+        fetch(`/flow/api/channels/${channelId}/add-member`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: parseInt(userId) })
+        }).then(r => r.json()).then(result => {
+            if (result.success) {
+                showNotification('Added', `${userName} added to channel`);
+                closeChannelAddMembers();
+            } else {
+                showNotification('Error', result.error || 'Failed to add member');
+            }
+        });
     }
 
     function showChannelSettings() {
@@ -944,87 +1146,173 @@
     // RIGHT-CLICK CONTEXT MENU FOR MESSAGES
     // ============================================
 
-    function handleMessagesClick(event) {
-        const menu = document.getElementById('message-context-menu');
-        if (menu) menu.remove();
+    let selectedMessageId = null;
+    let selectedMessageData = null;
+
+    // Initialize event handlers for messages
+    document.addEventListener('DOMContentLoaded', function() {
+        initMessageHandlers();
+        setTimeout(initMessageHandlers, 500);
+    });
+
+    function initMessageHandlers() {
+        const bubbles = document.querySelectorAll('.message-bubble');
+        bubbles.forEach(bubble => {
+            if (bubble.dataset.handlerAttached) return;
+            bubble.dataset.handlerAttached = 'true';
+
+            // Add right-click handler
+            bubble.addEventListener('contextmenu', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                const messageId = this.id.replace('bubble-', '');
+                showMessageMenu(e.clientX, e.clientY, messageId);
+            });
+
+            // Add touch handlers for mobile
+            let touchTimer = null;
+            bubble.addEventListener('touchstart', function(e) {
+                const messageId = this.id.replace('bubble-', '');
+                touchTimer = setTimeout(function() {
+                    const touch = e.touches[0];
+                    if (navigator.vibrate) navigator.vibrate(50);
+                    showMessageMenu(touch.clientX, touch.clientY, messageId);
+                }, 1000);
+            }, { passive: true });
+
+            bubble.addEventListener('touchmove', function(e) {
+                if (touchTimer) {
+                    clearTimeout(touchTimer);
+                    touchTimer = null;
+                }
+            }, { passive: true });
+
+            bubble.addEventListener('touchend', function(e) {
+                if (touchTimer) {
+                    clearTimeout(touchTimer);
+                    touchTimer = null;
+                }
+            }, { passive: true });
+        });
     }
 
-    function handleMessageRightClick(event, messageId) {
-        try {
-            event.preventDefault();
-            event.stopPropagation();
-
-            const messageWrapper = document.querySelector(`[data-message-id="${messageId}"]`);
-            if (!messageWrapper) return;
-
-            selectedMessageId = messageId;
-            selectedMessageData = {
-                senderId: messageWrapper.dataset.senderId,
-                messageType: messageWrapper.dataset.messageType,
-                isPinned: messageWrapper.dataset.isPinned === '1' || messageWrapper.dataset.isPinned === 'true',
-                hasAttachment: messageWrapper.dataset.hasAttachment === 'true'
-            };
-
-            showMessageContextMenu(event.clientX, event.clientY);
-        } catch(e) {
-            console.error('Error in handleMessageRightClick:', e);
-        }
+    // Inline handler for right-click (backup for JS handlers)
+    function handleBubbleRightClick(event, messageId) {
+        event.preventDefault();
+        event.stopPropagation();
+        showMessageMenu(event.clientX, event.clientY, messageId);
     }
 
-    function showMessageContextMenu(x, y) {
+    function showMessageMenu(x, y, messageId) {
+        const messageWrapper = document.querySelector(`[data-message-id="${messageId}"]`);
+        if (!messageWrapper) return;
+
+        selectedMessageId = messageId;
+        selectedMessageData = {
+            senderId: messageWrapper.dataset.senderId,
+            messageType: messageWrapper.dataset.messageType,
+            isPinned: messageWrapper.dataset.isPinned === '1' || messageWrapper.dataset.isPinned === 'true',
+            hasAttachment: messageWrapper.dataset.hasAttachment === 'true'
+        };
+
         const isMyMessage = selectedMessageData.senderId == currentUser;
         const isPinned = selectedMessageData.isPinned;
 
+        // Build context menu items
         const menuItems = [
-            { icon: '↩️', label: 'Reply', action: 'reply', show: true },
-            { icon: '🔁', label: 'Forward', action: 'forward', show: true },
-            { icon: '📋', label: 'Copy Text', action: 'copy', show: selectedMessageData.messageType === 'text' || !selectedMessageData.messageType },
-            { icon: '📌', label: isPinned ? 'Unpin' : 'Pin', action: isPinned ? 'unpin' : 'pin', show: true },
-            { divider: true, show: true },
+            { icon: '↩️', label: 'Reply', action: 'reply' },
+            { icon: '🔁', label: 'Forward', action: 'forward' },
+            { icon: '📋', label: 'Copy Text', action: 'copy' },
+            { icon: '📌', label: isPinned ? 'Unpin' : 'Pin', action: isPinned ? 'unpin' : 'pin' },
         ];
 
+        // Add save option for media messages
         if (selectedMessageData.hasAttachment || ['voice', 'video', 'audio', 'file'].includes(selectedMessageData.messageType)) {
-            menuItems.push({ icon: '💾', label: 'Save Media', action: 'save', show: true });
+            menuItems.push({ icon: '💾', label: 'Save Media', action: 'save' });
         }
 
+        // Add "Publish to Flow" option for channel messages
+        menuItems.push({ icon: '📤', label: 'Share to Flow', action: 'publish_to_flow' });
+
+        // Edit and Delete only for own messages
         if (isMyMessage) {
-            menuItems.push({ icon: '✏️', label: 'Edit', action: 'edit', show: true });
-            menuItems.push({ icon: '🗑️', label: 'Delete', action: 'delete', danger: true, show: true });
+            menuItems.push({ divider: true });
+            menuItems.push({ icon: '✏️', label: 'Edit', action: 'edit' });
+            menuItems.push({ icon: '🗑️', label: 'Delete', action: 'delete', danger: true });
         }
 
-        const visibleItems = menuItems.filter(item => item.show !== false);
-
-        const contextMenu = document.createElement('div');
-        contextMenu.id = 'message-context-menu';
-        contextMenu.className = 'context-menu';
-        contextMenu.style.cssText = `position:fixed !important;left:${x}px !important;top:${y}px !important;z-index:99999 !important;display:block !important;`;
-
-        contextMenu.innerHTML = visibleItems.map(item => {
-            if (item.divider) return '<div class="context-menu-divider"></div>';
-            return `<div class="context-menu-item ${item.danger ? 'danger' : ''}" onclick="executeMessageContextAction('${item.action}')"><span class="context-menu-icon">${item.icon}</span><span>${item.label}</span></div>`;
-        }).join('');
-
+        // Remove existing menu
         const existingMenu = document.getElementById('message-context-menu');
         if (existingMenu) existingMenu.remove();
 
+        // Create menu
+        const contextMenu = document.createElement('div');
+        contextMenu.id = 'message-context-menu';
+        contextMenu.className = 'message-context-menu';
+        contextMenu.innerHTML = menuItems.map(item => {
+            if (item.divider) {
+                return '<div class="context-menu-divider"></div>';
+            }
+            return `
+                <div class="context-menu-item ${item.danger ? 'danger' : ''}" data-action="${item.action}">
+                    <span class="context-menu-icon">${item.icon}</span>
+                    <span class="context-menu-label">${item.label}</span>
+                </div>
+            `;
+        }).join('');
+
+        // Position the menu
+        contextMenu.style.position = 'fixed';
+        contextMenu.style.zIndex = '99999';
+
+        // Calculate position to stay within viewport
+        let left = x;
+        let top = y;
+        const menuWidth = 180;
+        const menuHeight = menuItems.length * 44 + 12;
+
+        if (x + menuWidth > window.innerWidth - 10) {
+            left = window.innerWidth - menuWidth - 10;
+        }
+        if (y + menuHeight > window.innerHeight - 10) {
+            top = window.innerHeight - menuHeight - 10;
+        }
+
+        contextMenu.style.left = left + 'px';
+        contextMenu.style.top = top + 'px';
+
         document.body.appendChild(contextMenu);
 
-        // Force reflow
-        contextMenu.offsetHeight;
+        // Add click handlers to menu items
+        contextMenu.querySelectorAll('.context-menu-item[data-action]').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const action = this.dataset.action;
+                executeMessageContextAction(action);
+            });
+        });
 
-        const rect = contextMenu.getBoundingClientRect();
-        if (rect.right > window.innerWidth) contextMenu.style.left = `${x - rect.width}px`;
-        if (rect.bottom > window.innerHeight) contextMenu.style.top = `${y - rect.height}px`;
-
-        setTimeout(() => document.addEventListener('click', closeMessageContextMenu), 0);
+        // Close menu when clicking outside
+        setTimeout(() => {
+            document.addEventListener('click', closeMessageContextMenu);
+            document.addEventListener('touchstart', closeMessageContextMenuOnTouch);
+        }, 10);
     }
 
     function closeMessageContextMenu() {
         const menu = document.getElementById('message-context-menu');
         if (menu) menu.remove();
         document.removeEventListener('click', closeMessageContextMenu);
+        document.removeEventListener('touchstart', closeMessageContextMenuOnTouch);
         selectedMessageId = null;
         selectedMessageData = null;
+    }
+
+    function closeMessageContextMenuOnTouch(e) {
+        const menu = document.getElementById('message-context-menu');
+        if (menu && !menu.contains(e.target)) {
+            closeMessageContextMenu();
+        }
     }
 
     function executeMessageContextAction(action) {
@@ -1040,7 +1328,45 @@
             case 'save': saveMediaMessage(selectedMessageId); break;
             case 'edit': startEditingMessage(selectedMessageId); break;
             case 'delete': showDeleteModal(selectedMessageId); break;
+            case 'publish_to_flow': publishMessageToFlow(selectedMessageId); break;
         }
+    }
+
+    function publishMessageToFlow(messageId) {
+        // Check if channel allows publishing
+        fetch(`/flow/api/flow/streams/${channelId}/publish-allowed`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.allowed) {
+                    // Publish the message
+                    fetch('/flow/api/flow/publish', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message_id: messageId,
+                            stream_id: channelId
+                        })
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.success) {
+                            showNotification('Success', 'Message shared to Flow');
+                        } else {
+                            showNotification('Error', data.error || 'Failed to share to Flow');
+                        }
+                    });
+                } else {
+                    showNotification('Error', data.reason || 'This stream does not allow sharing to Flow');
+                }
+            });
+    }
+
+    function showNotification(title, body) {
+        const toast = document.createElement('div');
+        toast.className = 'fixed top-4 right-4 bg-slate-800 text-white px-4 py-3 rounded-xl shadow-lg z-50 animate-slide-in';
+        toast.innerHTML = `<strong>${title}</strong><p class="text-sm text-slate-300">${body}</p>`;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
     }
 
     function startReply(messageId) {

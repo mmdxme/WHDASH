@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        :root { --primary: #6366f1; --success: #10b981; --danger: #ef4444; --warning: #f59e0b; }
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        .period-header { text-align: center; padding: 1rem; background: #0f172a; border-radius: 0.5rem; }
+        .period-value { font-size: 1.5rem; font-weight: 700; }
+        .positive { color: var(--success); }
+        .negative { color: var(--danger); }
+        .forecast-table th { text-align: center; }
+        .forecast-table td { text-align: center; }
+        .forecast-table td:first-child { text-align: left; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+            <p class="text-gray-400 mt-1">Expected cash inflows and outflows</p>
+        </div>
+        <a href="/finance/treasury/cash-position" class="btn btn-outline">
+            <i class="fas fa-university"></i> Cash Position
+        </a>
+    </div>
+
+    <div class="card mb-6">
+        <h3 class="text-lg font-semibold text-white mb-4">Cash Flow Forecast by Period</h3>
+        <table class="forecast-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>
+                        <div class="period-header">
+                            <div class="text-gray-400 text-xs uppercase">Current</div>
+                            <div class="period-value text-white">0-30 Days</div>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="period-header">
+                            <div class="text-gray-400 text-xs uppercase">Short Term</div>
+                            <div class="period-value text-white">31-60 Days</div>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="period-header">
+                            <div class="text-gray-400 text-xs uppercase">Medium Term</div>
+                            <div class="period-value text-white">61-90 Days</div>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="period-header">
+                            <div class="text-gray-400 text-xs uppercase">Long Term</div>
+                            <div class="period-value text-white">90+ Days</div>
+                        </div>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="font-semibold text-white">
+                        <i class="fas fa-arrow-down text-success mr-2"></i> Expected Inflows
+                    </td>
+                    <td class="amount positive">{{ "{:,.2f}".format(forecast_data.incoming['0_30']) }}</td>
+                    <td class="amount positive">{{ "{:,.2f}".format(forecast_data.incoming['31_60']) }}</td>
+                    <td class="amount positive">{{ "{:,.2f}".format(forecast_data.incoming['61_90']) }}</td>
+                    <td class="amount positive">{{ "{:,.2f}".format(forecast_data.incoming['over_90']) }}</td>
+                </tr>
+                <tr>
+                    <td class="font-semibold text-white">
+                        <i class="fas fa-arrow-up text-danger mr-2"></i> Expected Outflows
+                    </td>
+                    <td class="amount negative">{{ "{:,.2f}".format(forecast_data.outgoing['0_30']) }}</td>
+                    <td class="amount negative">{{ "{:,.2f}".format(forecast_data.outgoing['31_60']) }}</td>
+                    <td class="amount negative">{{ "{:,.2f}".format(forecast_data.outgoing['61_90']) }}</td>
+                    <td class="amount negative">{{ "{:,.2f}".format(forecast_data.outgoing['over_90']) }}</td>
+                </tr>
+                <tr style="border-top: 2px solid #334155;">
+                    <td class="font-bold text-white">
+                        <i class="fas fa-equals text-primary mr-2"></i> Net Position
+                    </td>
+                    <td class="amount font-bold {% if forecast_data.net['0_30'] >= 0 %}positive{% else %}negative{% endif %}">
+                        {{ "{:,.2f}".format(forecast_data.net['0_30']) }}
+                    </td>
+                    <td class="amount font-bold {% if forecast_data.net['31_60'] >= 0 %}positive{% else %}negative{% endif %}">
+                        {{ "{:,.2f}".format(forecast_data.net['31_60']) }}
+                    </td>
+                    <td class="amount font-bold {% if forecast_data.net['61_90'] >= 0 %}positive{% else %}negative{% endif %}">
+                        {{ "{:,.2f}".format(forecast_data.net['61_90']) }}
+                    </td>
+                    <td class="amount font-bold {% if forecast_data.net['over_90'] >= 0 %}positive{% else %}negative{% endif %}">
+                        {{ "{:,.2f}".format(forecast_data.net['over_90']) }}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="grid grid-cols-2 gap-6">
+        <div class="card">
+            <h3 class="text-lg font-semibold text-white mb-4">Top Expected Receipts (AR Aging)</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th class="text-right">Amount</th>
+                        <th class="text-center">Days</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in ar_aging %}
+                    <tr>
+                        <td>{{ item.customer_name or 'Customer #' ~ item.customer_id }}</td>
+                        <td class="text-right amount">{{ "{:,.2f}".format(item.current or 0) }}</td>
+                        <td class="text-center">
+                            {% if item.days_over_90 > 0 %}
+                            <span class="badge bg-danger">90+</span>
+                            {% elif item.days_61_90 > 0 %}
+                            <span class="badge bg-warning">61-90</span>
+                            {% elif item.days_31_60 > 0 %}
+                            <span class="badge bg-primary">31-60</span>
+                            {% else %}
+                            <span class="badge bg-success">Current</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" class="text-center text-gray-500 py-4">No outstanding receivables</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h3 class="text-lg font-semibold text-white mb-4">Top Expected Payments (AP Aging)</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Supplier</th>
+                        <th class="text-right">Amount</th>
+                        <th class="text-center">Days</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in ap_aging %}
+                    <tr>
+                        <td>{{ item.supplier_name or 'Supplier #' ~ item.supplier_id }}</td>
+                        <td class="text-right amount">{{ "{:,.2f}".format(item.current or 0) }}</td>
+                        <td class="text-center">
+                            {% if item.days_over_90 > 0 %}
+                            <span class="badge bg-danger">90+</span>
+                            {% elif item.days_61_90 > 0 %}
+                            <span class="badge bg-warning">61-90</span>
+                            {% elif item.days_31_60 > 0 %}
+                            <span class="badge bg-primary">31-60</span>
+                            {% else %}
+                            <span class="badge bg-success">Current</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="3" class="text-center text-gray-500 py-4">No outstanding payables</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

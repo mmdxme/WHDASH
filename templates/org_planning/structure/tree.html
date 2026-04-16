@@ -1,0 +1,156 @@
+{% extends "org_planning/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('org_structure', lang) }}</h1>
+            <p class="text-gray-400 mt-1">{{ t('org_structure_desc', lang) }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2 bg-slate-800 rounded-lg p-1">
+                <a href="{{ url_for('org_planning.structure', view='tree') }}" class="px-4 py-2 rounded-md text-sm font-medium transition-colors {{ 'bg-blue-600 text-white' if view_mode == 'tree' else 'text-gray-400 hover:text-white' }}">
+                    <i class="fas fa-sitemap mr-2"></i>{{ t('tree', lang) }}
+                </a>
+                <a href="{{ url_for('org_planning.structure', view='list') }}" class="px-4 py-2 rounded-md text-sm font-medium transition-colors {{ 'bg-blue-600 text-white' if view_mode == 'list' else 'text-gray-400 hover:text-white' }}">
+                    <i class="fas fa-list mr-2"></i>{{ t('list', lang) }}
+                </a>
+                <a href="{{ url_for('org_planning.structure', view='table') }}" class="px-4 py-2 rounded-md text-sm font-medium transition-colors {{ 'bg-blue-600 text-white' if view_mode == 'table' else 'text-gray-400 hover:text-white' }}">
+                    <i class="fas fa-table mr-2"></i>{{ t('table', lang) }}
+                </a>
+            </div>
+            <a href="{{ url_for('org_planning.structure_create_unit') }}" class="btn-primary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-plus"></i>
+                {{ t('create_unit', lang) }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Company Selector -->
+    {% if companies|length > 1 %}
+    <div class="glass-panel p-4 rounded-xl">
+        <div class="flex items-center gap-4">
+            <label class="text-gray-400 text-sm">{{ t('select_company', lang) }}:</label>
+            <div class="flex items-center gap-2">
+                {% for company in companies %}
+                <a href="{{ url_for('org_planning.structure', view=view_mode, company=company.id) }}" 
+                   class="px-4 py-2 rounded-lg text-sm font-medium transition-colors {{ 'bg-blue-600 text-white' if selected_company == company.id else 'bg-slate-800 text-gray-300 hover:bg-slate-700' }}">
+                    {{ company.name }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Org Tree View -->
+    <div class="glass-panel rounded-xl overflow-hidden">
+        <div class="p-5 border-b border-gray-700/50">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                        <i class="fas fa-sitemap text-blue-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('organization_tree', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('expand_collapse_units', lang) }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 text-sm text-gray-400">
+                    <span class="px-2 py-1 rounded bg-slate-800">{{ org_tree|length }}</span>
+                    {{ t('root_units', lang) }}
+                </div>
+            </div>
+        </div>
+        
+        <div class="p-6">
+            {% if org_tree %}
+            <div class="space-y-2">
+                {% for unit in org_tree recursive %}
+                <div class="tree-item" data-unit-id="{{ unit.id }}">
+                    <div class="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-800/50 transition-colors cursor-pointer group" 
+                         onclick="toggleChildren(this)" style="margin-left: {{ unit.level * 24 }}px">
+                        <button class="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-white transition-colors">
+                            <i class="fas {{ 'fa-chevron-down' if unit.children else 'fa-plus' }} text-xs"></i>
+                        </button>
+                        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-600/20 flex items-center justify-center">
+                            <i class="fas fa-{{ 'fa-building' if unit.unit_type == 'company' else 'fa-layer-group' if unit.unit_type in ['division', 'business_unit'] else 'fa-sitemap' }} text-blue-400 text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-white font-medium">{{ unit.name }}</span>
+                                {% if unit.is_active != 1 %}
+                                <span class="badge badge-secondary">{{ t('inactive', lang) }}</span>
+                                {% endif %}
+                            </div>
+                            <div class="flex items-center gap-3 text-xs text-gray-500 mt-1">
+                                <span class="px-2 py-0.5 rounded bg-slate-800">{{ unit.unit_type|replace('_', ' ')|title }}</span>
+                                {% if unit.code %}
+                                <span>{{ unit.code }}</span>
+                                {% endif %}
+                                {% if unit.employee_count > 0 %}
+                                <span><i class="fas fa-users mr-1"></i>{{ unit.employee_count }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <a href="{{ url_for('org_planning.structure_unit_detail', unit_id=unit.id) }}" class="p-2 text-gray-400 hover:text-blue-400 transition-colors" title="{{ t('view', lang) }}">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                            <a href="{{ url_for('org_planning.structure_edit_unit', unit_id=unit.id) }}" class="p-2 text-gray-400 hover:text-amber-400 transition-colors" title="{{ t('edit', lang) }}">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <a href="{{ url_for('org_planning.structure_create_unit') }}?parent={{ unit.id }}" class="p-2 text-gray-400 hover:text-emerald-400 transition-colors" title="{{ t('add_child', lang) }}">
+                                <i class="fas fa-plus"></i>
+                            </a>
+                        </div>
+                    </div>
+                    {% if unit.children %}
+                    <div class="children hidden ml-4">
+                        {{ loop(unit.children) }}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <div class="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-sitemap text-gray-600 text-2xl"></i>
+                </div>
+                <h3 class="text-white font-medium mb-2">{{ t('no_org_units', lang) }}</h3>
+                <p class="text-gray-400 text-sm mb-4">{{ t('create_first_unit', lang) }}</p>
+                <a href="{{ url_for('org_planning.structure_create_unit') }}" class="btn-primary px-4 py-2 rounded-lg inline-flex items-center gap-2">
+                    <i class="fas fa-plus"></i>
+                    {{ t('create_unit', lang) }}
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleChildren(element) {
+    const item = element.closest('.tree-item');
+    const children = item.querySelector('.children');
+    const icon = element.querySelector('i.fas');
+    
+    if (children) {
+        children.classList.toggle('hidden');
+        if (children.classList.contains('hidden')) {
+            icon.classList.remove('fa-chevron-down');
+            icon.classList.add('fa-plus');
+        } else {
+            icon.classList.remove('fa-plus');
+            icon.classList.add('fa-chevron-down');
+        }
+    }
+}
+</script>
+{% endblock %}

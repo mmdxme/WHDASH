@@ -1,0 +1,208 @@
+{% extends "org_planning/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Back Button -->
+    <a href="{{ url_for('org_planning.positions') }}" class="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+        <i class="fas fa-arrow-left"></i>
+        {{ t('back_to_positions', lang) }}
+    </a>
+
+    <!-- Position Header -->
+    <div class="glass-panel rounded-xl overflow-hidden">
+        <div class="p-6 border-b border-gray-700/50">
+            <div class="flex items-start justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500/20 to-purple-600/20 flex items-center justify-center">
+                        <i class="fas fa-user-tie text-purple-400 text-2xl"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-3 mb-1">
+                            <h1 class="text-2xl font-bold text-white">{{ position.title }}</h1>
+                            {% if position.is_active == 1 %}
+                            <span class="badge badge-success">{{ t('active', lang) }}</span>
+                            {% else %}
+                            <span class="badge badge-secondary">{{ t('inactive', lang) }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex items-center gap-3 text-sm">
+                            <span class="px-2 py-1 rounded bg-slate-700">{{ position_levels.get(position.level, position.level)|title }}</span>
+                            {% if position.grade %}
+                            <span class="text-gray-400">{{ t('grade', lang) }}: {{ position.grade }}</span>
+                            {% endif %}
+                            {% if position.position_code %}
+                            <span class="text-gray-400"><i class="fas fa-tag mr-1"></i>{{ position.position_code }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('employment_type', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ employment_types.get(position.employment_type, position.employment_type) }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('headcount_approved', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ t('yes', lang) if position.headcount_approved else t('no', lang) }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('critical_role', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ t('yes', lang) if position.is_critical else t('no', lang) }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('supervisor_role', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ t('yes', lang) if position.is_supervisor else t('no', lang) }}</div>
+            </div>
+        </div>
+        
+        {% if position.salary_band_min or position.salary_band_max %}
+        <div class="px-6 pb-6">
+            <div class="text-sm text-gray-400 mb-2">{{ t('salary_band', lang) }}</div>
+            <p class="text-gray-300">
+                {{ position.salary_band_min|format_currency if position.salary_band_min else '-' }} - 
+                {{ position.salary_band_max|format_currency if position.salary_band_max else '-' }}
+            </p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Reporting Structure -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Reports To -->
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="p-5 border-b border-gray-700/50">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                            <i class="fas fa-arrow-up text-blue-400"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">{{ t('reports_to', lang) }}</h2>
+                            <p class="text-sm text-gray-400">{{ t('direct_manager', lang) }}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if reporting_lines %}
+                <div class="divide-y divide-gray-700/50">
+                    {% for line in reporting_lines %}
+                    <div class="p-4">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center">
+                                <i class="fas fa-user-tie text-gray-400"></i>
+                            </div>
+                            <div>
+                                <span class="text-white font-medium">{{ line.reports_to_position_id }}</span>
+                                <span class="badge badge-info ml-2">{{ line.reporting_type|title }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-8 text-center">
+                    <p class="text-gray-400">{{ t('no_reporting_lines', lang) }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Direct Reports -->
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="p-5 border-b border-gray-700/50">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                            <i class="fas fa-arrow-down text-emerald-400"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">{{ t('direct_reports', lang) }}</h2>
+                            <p class="text-sm text-gray-400">{{ t('positions_reporting_here', lang) }}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if subordinates %}
+                <div class="divide-y divide-gray-700/50">
+                    {% for sub in subordinates %}
+                    <a href="{{ url_for('org_planning.position_detail', position_id=sub.id) }}" class="block p-4 hover:bg-slate-800/50 transition-colors">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                                    <i class="fas fa-user-tie text-purple-400"></i>
+                                </div>
+                                <div>
+                                    <span class="text-white font-medium">{{ sub.title }}</span>
+                                    <span class="text-xs text-gray-500 block">{{ position_levels.get(sub.level, sub.level)|title }}</span>
+                                </div>
+                            </div>
+                            <i class="fas fa-chevron-right text-gray-500"></i>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-8 text-center">
+                    <p class="text-gray-400">{{ t('no_direct_reports', lang) }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Position Details -->
+            <div class="glass-panel rounded-xl p-5">
+                <h3 class="text-lg font-semibold text-white mb-4">{{ t('position_details', lang) }}</h3>
+                
+                <div class="space-y-4">
+                    {% if position.responsibilities %}
+                    <div>
+                        <div class="text-sm text-gray-400 mb-1">{{ t('responsibilities', lang) }}</div>
+                        <p class="text-gray-300 text-sm">{{ position.responsibilities }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if position.requirements %}
+                    <div>
+                        <div class="text-sm text-gray-400 mb-1">{{ t('requirements', lang) }}</div>
+                        <p class="text-gray-300 text-sm">{{ position.requirements }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if position.skills_required %}
+                    <div>
+                        <div class="text-sm text-gray-400 mb-1">{{ t('skills_required', lang) }}</div>
+                        <p class="text-gray-300 text-sm">{{ position.skills_required }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Authority -->
+            <div class="glass-panel rounded-xl p-5">
+                <h3 class="text-lg font-semibold text-white mb-4">{{ t('authority_level', lang) }}</h3>
+                
+                <div class="flex items-center justify-center py-4">
+                    <div class="text-center">
+                        <div class="text-4xl font-bold text-white">{{ position.approval_authority_level or 1 }}</div>
+                        <div class="text-sm text-gray-400 mt-1">{{ t('authority_level', lang) }}</div>
+                    </div>
+                </div>
+                
+                <div class="mt-4 pt-4 border-t border-gray-700/50">
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-gray-400">{{ t('requires_approval', lang) }}</span>
+                        <span class="{{ 'text-emerald-400' if position.requires_approval else 'text-gray-500' }}">
+                            {{ t('yes', lang) if position.requires_approval else t('no', lang) }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

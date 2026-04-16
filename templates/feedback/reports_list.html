@@ -1,0 +1,215 @@
+{% extends "feedback/base.html" %}
+
+{% block header_actions %}
+{% if can_create %}
+<a href="{{ url_for('feedback.create_report_view') }}" class="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-medium transition-all duration-200 flex items-center gap-2 shadow-lg shadow-blue-500/25">
+    <i class="fas fa-plus"></i>
+    <span>New Report</span>
+</a>
+{% endif %}
+{% endblock %}
+
+{% block feedback_content %}
+<!-- Filters -->
+<div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 mb-6">
+    <form method="GET" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <!-- Search -->
+        <div class="lg:col-span-2">
+            <label class="block text-sm text-slate-400 mb-2">Search</label>
+            <div class="relative">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                <input type="text" name="search" value="{{ filters.search or '' }}" placeholder="Search reports..." 
+                       class="w-full pl-10 pr-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+            </div>
+        </div>
+
+        <!-- Status -->
+        <div>
+            <label class="block text-sm text-slate-400 mb-2">Status</label>
+            <select name="status" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                <option value="">All Statuses</option>
+                {% for status in status_choices %}
+                <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Type -->
+        <div>
+            <label class="block text-sm text-slate-400 mb-2">Type</label>
+            <select name="type" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                <option value="">All Types</option>
+                {% for type_id, type_label in report_types %}
+                <option value="{{ type_id }}" {% if filters.type == type_id %}selected{% endif %}>{{ type_label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Priority -->
+        <div>
+            <label class="block text-sm text-slate-400 mb-2">Priority</label>
+            <select name="priority" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                <option value="">All Priorities</option>
+                {% for priority in priority_choices %}
+                <option value="{{ priority }}" {% if filters.priority == priority %}selected{% endif %}>{{ priority }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Category -->
+        <div>
+            <label class="block text-sm text-slate-400 mb-2">Category</label>
+            <select name="category" class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                <option value="">All Categories</option>
+                {% for cat in categories %}
+                <option value="{{ cat.id }}" {% if filters.category == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Actions -->
+        <div class="lg:col-span-5 flex items-center gap-3 pt-2">
+            <button type="submit" class="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-xl transition-colors flex items-center gap-2">
+                <i class="fas fa-filter"></i>
+                <span>Apply Filters</span>
+            </button>
+            <a href="{{ url_for('feedback.reports_list') }}" class="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-400 rounded-xl transition-colors">
+                Clear
+            </a>
+            {% if can_manage %}
+            <a href="{{ url_for('feedback.export_reports') }}{% if request.query_string %}?{{ request.query_string }}{% endif %}" class="ml-auto px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors flex items-center gap-2">
+                <i class="fas fa-download"></i>
+                <span>Export CSV</span>
+            </a>
+            {% endif %}
+        </div>
+    </form>
+</div>
+
+<!-- Status Tabs -->
+<div class="flex items-center gap-2 mb-6 overflow-x-auto pb-2">
+    <a href="{{ url_for('feedback.reports_list') }}" 
+       class="px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors {% if not filters.status %}bg-blue-500/20 text-blue-400 border border-blue-500/30{% else %}bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-700/50{% endif %}">
+        All <span class="ml-1 text-xs opacity-70">({{ result.total }})</span>
+    </a>
+    {% for status in status_choices[:8] %}
+    <a href="{{ url_for('feedback.reports_list', status=status, search=filters.search, type=filters.type, priority=filters.priority, category=filters.category) }}" 
+       class="px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-colors {% if filters.status == status %}bg-blue-500/20 text-blue-400 border border-blue-500/30{% else %}bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:bg-slate-700/50{% endif %}">
+        {{ status }} <span class="ml-1 text-xs opacity-70">({{ status_counts.get(status, 0) }})</span>
+    </a>
+    {% endfor %}
+</div>
+
+<!-- Results Table -->
+<div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead>
+                <tr class="border-b border-slate-700/50">
+                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Report</th>
+                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Type</th>
+                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
+                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Priority</th>
+                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Assignee</th>
+                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Created</th>
+                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Updated</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-700/50">
+                {% for report in reports %}
+                <tr class="hover:bg-slate-700/30 transition-colors cursor-pointer" onclick="window.location='{{ url_for('feedback.report_detail', report_id=report.id) }}'">
+                    <td class="px-6 py-4">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-xs font-mono text-slate-500">{{ report.reference_number }}</span>
+                                {% if report.is_confidential %}
+                                <span class="px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded border border-amber-500/30">
+                                    <i class="fas fa-lock"></i>
+                                </span>
+                                {% endif %}
+                            </div>
+                            <p class="text-white font-medium truncate max-w-md">{{ report.title }}</p>
+                            <p class="text-sm text-slate-400 truncate max-w-md">{{ report.summary or '' }}</p>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="px-2.5 py-1 text-xs font-medium rounded-lg bg-slate-700/50 text-slate-300 capitalize">
+                            {{ report.report_type.replace('_', ' ') }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="px-2.5 py-1 text-xs font-medium rounded-lg {{ report.status_badge_class }}">
+                            {{ report.status }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="px-2.5 py-1 text-xs font-medium rounded-lg {{ report.priority_badge_class }}">
+                            {{ report.priority }}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        {% if report.assigned_to_name or report.assigned_username %}
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center">
+                                <i class="fas fa-user text-xs text-slate-400"></i>
+                            </div>
+                            <span class="text-sm text-white">{{ report.assigned_to_name or report.assigned_username }}</span>
+                        </div>
+                        {% else %}
+                        <span class="text-slate-500 text-sm">Unassigned</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-slate-400 whitespace-nowrap">
+                        {{ report.created_at_formatted if report.created_at_formatted else report.created_at[:16] }}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-slate-400 whitespace-nowrap">
+                        {{ report.updated_at_formatted if report.updated_at_formatted else report.updated_at[:16] if report.updated_at else '-' }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="px-6 py-16 text-center">
+                        <div class="w-16 h-16 bg-slate-700/50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <i class="fas fa-inbox text-3xl text-slate-500"></i>
+                        </div>
+                        <p class="text-slate-400 mb-2">No reports found</p>
+                        <p class="text-sm text-slate-500">Try adjusting your filters or create a new report.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if result.pages > 1 %}
+    <div class="px-6 py-4 border-t border-slate-700/50 flex items-center justify-between">
+        <p class="text-sm text-slate-400">
+            Showing {{ (result.page - 1) * result.per_page + 1 }} to {{ [result.page * result.per_page, result.total] | min }} of {{ result.total }} results
+        </p>
+        <div class="flex items-center gap-2">
+            {% if result.page > 1 %}
+            <a href="{{ url_for('feedback.reports_list', page=result.page - 1, status=filters.status, type=filters.type, priority=filters.priority, search=filters.search) }}" 
+               class="px-3 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-400 rounded-lg transition-colors">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+            {% endif %}
+            
+            {% for p in range([1, result.page - 2] | max, [result.pages + 1, result.page + 3] | min) %}
+            <a href="{{ url_for('feedback.reports_list', page=p, status=filters.status, type=filters.type, priority=filters.priority, search=filters.search) }}" 
+               class="px-3 py-2 {% if p == result.page %}bg-blue-500/20 text-blue-400 border border-blue-500/30{% else %}bg-slate-700/50 hover:bg-slate-700 text-slate-400{% endif %} rounded-lg transition-colors">
+                {{ p }}
+            </a>
+            {% endfor %}
+            
+            {% if result.page < result.pages %}
+            <a href="{{ url_for('feedback.reports_list', page=result.page + 1, status=filters.status, type=filters.type, priority=filters.priority, search=filters.search) }}" 
+               class="px-3 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-400 rounded-lg transition-colors">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

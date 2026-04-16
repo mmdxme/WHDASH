@@ -1,0 +1,415 @@
+{% extends "org_planning/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('org_planning_dashboard', lang) }}</h1>
+            <p class="text-gray-400 mt-1">{{ t('org_planning_subtitle', lang) }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('org_planning.structure') }}" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-sitemap"></i>
+                {{ t('view_structure', lang) }}
+            </a>
+            <a href="{{ url_for('org_planning.process_start') }}" class="btn-primary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-play"></i>
+                {{ t('start_process', lang) }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Key Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Companies & Units -->
+        <div class="glass-panel stat-card p-5 rounded-xl card-hover">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/20 flex items-center justify-center">
+                    <i class="fas fa-building text-blue-400 text-xl"></i>
+                </div>
+                <span class="badge badge-success">{{ t('active', lang) }}</span>
+            </div>
+            <div class="text-3xl font-bold text-white">{{ stats.companies }}</div>
+            <div class="text-gray-400 text-sm mt-1">{{ t('companies', lang) }}</div>
+            <div class="text-2xl font-bold text-white mt-3">{{ stats.org_units }}</div>
+            <div class="text-gray-400 text-sm">{{ t('org_units', lang) }}</div>
+        </div>
+
+        <!-- Positions & Headcount -->
+        <div class="glass-panel stat-card p-5 rounded-xl card-hover">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-600/20 flex items-center justify-center">
+                    <i class="fas fa-user-tie text-purple-400 text-xl"></i>
+                </div>
+                <span class="badge badge-info">{{ t('positions', lang) }}</span>
+            </div>
+            <div class="text-3xl font-bold text-white">{{ stats.positions }}</div>
+            <div class="text-gray-400 text-sm mt-1">{{ t('defined_positions', lang) }}</div>
+            <div class="mt-4">
+                <div class="flex items-center justify-between text-xs text-gray-400 mb-1">
+                    <span>{{ t('staffed', lang) }}</span>
+                    <span>78%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill bg-purple-500" style="width: 78%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Workflows -->
+        <div class="glass-panel stat-card p-5 rounded-xl card-hover">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-emerald-600/20 flex items-center justify-center">
+                    <i class="fas fa-project-diagram text-emerald-400 text-xl"></i>
+                </div>
+                <span class="badge badge-success">{{ t('published', lang) }}</span>
+            </div>
+            <div class="text-3xl font-bold text-white">{{ stats.active_workflows }}</div>
+            <div class="text-gray-400 text-sm mt-1">{{ t('workflows', lang) }}</div>
+            <div class="text-2xl font-bold text-white mt-3">{{ stats.pending_instances }}</div>
+            <div class="text-gray-400 text-sm">{{ t('pending_instances', lang) }}</div>
+        </div>
+
+        <!-- SLA Compliance -->
+        <div class="glass-panel stat-card p-5 rounded-xl card-hover">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-amber-600/20 flex items-center justify-center">
+                    <i class="fas fa-clock text-amber-400 text-xl"></i>
+                </div>
+                <span class="badge badge-{{ 'success' if stats.sla_compliance >= 90 else 'warning' if stats.sla_compliance >= 70 else 'danger' }}">
+                    {{ stats.sla_compliance }}%
+                </span>
+            </div>
+            <div class="text-3xl font-bold text-white">{{ stats.sla_compliance }}%</div>
+            <div class="text-gray-400 text-sm mt-1">{{ t('sla_compliance', lang) }}</div>
+            <div class="mt-4">
+                <div class="flex items-center justify-between text-xs text-gray-400 mb-1">
+                    <span>{{ t('30_day', lang) }}</span>
+                    <span>{{ stats.completed_30d }}/{{ stats.total_instances_30d }}</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill bg-{{ 'emerald' if stats.sla_compliance >= 90 else 'amber' if stats.sla_compliance >= 70 else 'red' }}-500" style="width: {{ stats.sla_compliance }}%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- My Pending Approvals -->
+        <div class="lg:col-span-2">
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="p-5 border-b border-gray-700/50 flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                            <i class="fas fa-tasks text-blue-400"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">{{ t('my_pending_approvals', lang) }}</h2>
+                            <p class="text-sm text-gray-400">{{ t('items_requiring_your_action', lang) }}</p>
+                        </div>
+                    </div>
+                    <span class="badge badge-info">{{ my_pending|length }}</span>
+                </div>
+                
+                {% if my_pending %}
+                <div class="divide-y divide-gray-700/50">
+                    {% for item in my_pending %}
+                    <a href="{{ url_for('org_planning.process_detail', instance_id=item.id) }}" class="block p-4 hover:bg-white/5 transition-colors">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="badge badge-{{ 'danger' if item.priority == 'critical' else 'warning' if item.priority == 'high' else 'secondary' }}">
+                                        {{ item.priority|title }}
+                                    </span>
+                                    <span class="text-sm text-gray-500">{{ item.workflow_name or 'Process' }}</span>
+                                </div>
+                                <h3 class="text-white font-medium mb-1">{{ item.title }}</h3>
+                                <p class="text-sm text-gray-400">
+                                    {{ t('from', lang) }}: {{ item.requester_name or 'Unknown' }} • 
+                                    {{ t('started', lang) }}: {{ item.started_at[:10] if item.started_at else 'N/A' }}
+                                </p>
+                            </div>
+                            <div class="text-right">
+                                <i class="fas fa-chevron-right text-gray-500"></i>
+                            </div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-12 text-center">
+                    <div class="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-check-circle text-gray-600 text-2xl"></i>
+                    </div>
+                    <h3 class="text-white font-medium mb-2">{{ t('all_caught_up', lang) }}</h3>
+                    <p class="text-gray-400 text-sm">{{ t('no_pending_items', lang) }}</p>
+                </div>
+                {% endif %}
+                
+                <div class="p-4 border-t border-gray-700/50 text-center">
+                    <a href="{{ url_for('org_planning.processes', view='my_work') }}" class="text-blue-400 hover:text-blue-300 text-sm font-medium">
+                        {{ t('view_all_pending', lang) }} <i class="fas fa-arrow-right ml-1"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notifications & Alerts -->
+        <div class="space-y-6">
+            <!-- SLA Breaches -->
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="p-5 border-b border-gray-700/50">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                            <i class="fas fa-exclamation-triangle text-red-400"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">{{ t('sla_breaches', lang) }}</h2>
+                            <p class="text-sm text-gray-400">{{ t('requiring_immediate_attention', lang) }}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if breached_instances %}
+                <div class="divide-y divide-gray-700/50 max-h-64 overflow-y-auto">
+                    {% for item in breached_instances %}
+                    <a href="{{ url_for('org_planning.process_detail', instance_id=item.id) }}" class="block p-4 hover:bg-white/5 transition-colors">
+                        <div class="flex items-start gap-3">
+                            <div class="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-exclamation text-red-400 text-xs"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <h3 class="text-white text-sm font-medium truncate">{{ item.title }}</h3>
+                                <p class="text-xs text-red-400 mt-1">{{ t('breached', lang) }} {{ item.started_at[:10] if item.started_at else '' }}</p>
+                            </div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-6 text-center">
+                    <div class="w-12 h-12 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-3">
+                        <i class="fas fa-check text-emerald-400"></i>
+                    </div>
+                    <p class="text-gray-400 text-sm">{{ t('no_sla_breaches', lang) }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Recent Notifications -->
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="p-5 border-b border-gray-700/50">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                            <i class="fas fa-bell text-purple-400"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">{{ t('recent_notifications', lang) }}</h2>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if notifications %}
+                <div class="divide-y divide-gray-700/50 max-h-64 overflow-y-auto">
+                    {% for notif in notifications[:5] %}
+                    <div class="p-4 hover:bg-white/5 transition-colors">
+                        <div class="flex items-start gap-3">
+                            <div class="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-info text-gray-400 text-xs"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <h3 class="text-white text-sm font-medium">{{ notif.title }}</h3>
+                                <p class="text-xs text-gray-400 mt-1 line-clamp-2">{{ notif.message }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="p-6 text-center">
+                    <p class="text-gray-400 text-sm">{{ t('no_notifications', lang) }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Process Performance & Bottlenecks -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Process Performance Chart -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                            <i class="fas fa-chart-line text-cyan-400"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">{{ t('process_performance', lang) }}</h2>
+                            <p class="text-sm text-gray-400">{{ t('last_30_days', lang) }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5">
+                <canvas id="processChart" height="200"></canvas>
+            </div>
+        </div>
+
+        <!-- Bottleneck Analysis -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                            <i class="fas fa-bolt text-orange-400"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">{{ t('bottleneck_analysis', lang) }}</h2>
+                            <p class="text-sm text-gray-400">{{ t('steps_taking_longest', lang) }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {% if bottlenecks %}
+            <div class="divide-y divide-gray-700/50">
+                {% for bottleneck in bottlenecks[:5] %}
+                <div class="p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <div>
+                            <span class="text-white font-medium">{{ bottleneck.step_name }}</span>
+                            <span class="text-gray-500 text-sm ml-2">({{ bottleneck.workflow_name }})</span>
+                        </div>
+                        <span class="badge badge-warning">{{ bottleneck.avg_hours|round(1) }}h</span>
+                    </div>
+                    <div class="flex items-center gap-4 text-xs text-gray-400">
+                        <span><i class="fas fa-play-circle mr-1"></i>{{ bottleneck.executions }} {{ t('executions', lang) }}</span>
+                        <span><i class="fas fa-clock mr-1"></i>{{ bottleneck.pending_count }} {{ t('pending', lang) }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="p-8 text-center">
+                <p class="text-gray-400">{{ t('no_bottlenecks_detected', lang) }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="glass-panel rounded-xl p-5">
+        <h2 class="text-lg font-semibold text-white mb-4">{{ t('quick_actions', lang) }}</h2>
+        <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            <a href="{{ url_for('org_planning.structure') }}" class="flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                <div class="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                    <i class="fas fa-sitemap text-blue-400 text-xl"></i>
+                </div>
+                <span class="text-sm text-gray-300 text-center">{{ t('org_structure', lang) }}</span>
+            </a>
+            
+            <a href="{{ url_for('org_planning.positions') }}" class="flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                <div class="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                    <i class="fas fa-user-tie text-purple-400 text-xl"></i>
+                </div>
+                <span class="text-sm text-gray-300 text-center">{{ t('positions', lang) }}</span>
+            </a>
+            
+            <a href="{{ url_for('org_planning.headcount') }}" class="flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                    <i class="fas fa-users text-emerald-400 text-xl"></i>
+                </div>
+                <span class="text-sm text-gray-300 text-center">{{ t('headcount', lang) }}</span>
+            </a>
+            
+            <a href="{{ url_for('org_planning.delegations') }}" class="flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                <div class="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                    <i class="fas fa-user-clock text-amber-400 text-xl"></i>
+                </div>
+                <span class="text-sm text-gray-300 text-center">{{ t('delegations', lang) }}</span>
+            </a>
+            
+            <a href="{{ url_for('org_planning.workflows') }}" class="flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                <div class="w-12 h-12 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                    <i class="fas fa-project-diagram text-cyan-400 text-xl"></i>
+                </div>
+                <span class="text-sm text-gray-300 text-center">{{ t('workflows', lang) }}</span>
+            </a>
+            
+            <a href="{{ url_for('org_planning.monitoring') }}" class="flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                <div class="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center">
+                    <i class="fas fa-chart-bar text-red-400 text-xl"></i>
+                </div>
+                <span class="text-sm text-gray-300 text-center">{{ t('monitoring', lang) }}</span>
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Process Performance Chart
+    const processCtx = document.getElementById('processChart');
+    if (processCtx) {
+        new Chart(processCtx, {
+            type: 'bar',
+            data: {
+                labels: ['{{ t("completed", lang) }}', '{{ t("pending", lang) }}', '{{ t("rejected", lang) }}', '{{ t("cancelled", lang) }}'],
+                datasets: [{
+                    label: '{{ t("instances", lang) }}',
+                    data: [
+                        {{ metrics[0].completed if metrics else 0 }},
+                        {{ metrics[0].total_instances - metrics[0].completed - metrics[0].rejected - metrics[0].cancelled if metrics else 0 }},
+                        {{ metrics[0].rejected if metrics else 0 }},
+                        {{ metrics[0].cancelled if metrics else 0 }}
+                    ],
+                    backgroundColor: [
+                        'rgba(16, 185, 129, 0.7)',
+                        'rgba(245, 158, 11, 0.7)',
+                        'rgba(239, 68, 68, 0.7)',
+                        'rgba(99, 102, 241, 0.7)'
+                    ],
+                    borderRadius: 8,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.05)'
+                        },
+                        ticks: {
+                            color: 'rgba(255, 255, 255, 0.5)'
+                        }
+                    },
+                    x: {
+                        grid: {
+                            display: false
+                        },
+                        ticks: {
+                            color: 'rgba(255, 255, 255, 0.5)'
+                        }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,699 @@
+{% extends "feedback/base.html" %}
+
+{% block header_actions %}
+<div class="flex items-center gap-3">
+    {% if can_edit %}
+    <a href="{{ url_for('feedback.edit_report', report_id=report.id) }}" 
+       class="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors flex items-center gap-2">
+        <i class="fas fa-edit"></i>
+        <span>Edit</span>
+    </a>
+    {% endif %}
+    
+    {% if can_manage %}
+    <div class="relative" x-data="{ open: false }">
+        <button @click="open = !open" @click.away="open = false"
+                class="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors flex items-center gap-2">
+            <i class="fas fa-ellipsis-v"></i>
+        </button>
+        <div x-show="open" x-transition class="absolute right-0 mt-2 w-48 bg-slate-800 border border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
+            {% if can_assign %}
+            <button onclick="showAssignModal()" class="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 transition-colors flex items-center gap-2">
+                <i class="fas fa-user-plus text-blue-400"></i>
+                <span>Assign</span>
+            </button>
+            {% endif %}
+            <button onclick="showStatusModal()" class="w-full px-4 py-2 text-left text-sm text-slate-300 hover:bg-slate-700 transition-colors flex items-center gap-2">
+                <i class="fas fa-exchange-alt text-purple-400"></i>
+                <span>Change Status</span>
+            </button>
+            {% if can_delete %}
+            <hr class="border-slate-700 my-1">
+            <button onclick="deleteReport()" class="w-full px-4 py-2 text-left text-sm text-rose-400 hover:bg-slate-700 transition-colors flex items-center gap-2">
+                <i class="fas fa-trash"></i>
+                <span>Delete</span>
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block feedback_content %}
+<!-- Report Header -->
+<div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden mb-6">
+    <div class="p-6">
+        <div class="flex items-start justify-between gap-6 mb-6">
+            <div class="flex-1">
+                <div class="flex items-center gap-3 mb-3">
+                    <span class="text-sm font-mono text-slate-500">{{ report.reference_number }}</span>
+                    <span class="px-3 py-1 text-sm rounded-lg {{ report.status_badge_class }}">{{ report.status }}</span>
+                    <span class="px-3 py-1 text-sm rounded-lg {{ report.priority_badge_class }}">{{ report.priority }}</span>
+                    <span class="px-3 py-1 text-sm rounded-lg {{ report.severity_badge_class }}">{{ report.severity }}</span>
+                    {% if report.is_confidential %}
+                    <span class="px-2 py-1 text-xs bg-amber-500/20 text-amber-400 rounded border border-amber-500/30">
+                        <i class="fas fa-lock mr-1"></i>Confidential
+                    </span>
+                    {% endif %}
+                </div>
+                <h1 class="text-2xl font-bold text-white mb-2">{{ report.title }}</h1>
+                <div class="flex items-center gap-4 text-sm text-slate-400">
+                    <span><i class="fas fa-tag mr-2"></i>{{ report.type_label }}</span>
+                    {% if report.category_name %}
+                    <span><i class="fas fa-folder mr-2"></i>{{ report.category_name }}</span>
+                    {% endif %}
+                    <span><i class="fas fa-calendar mr-2"></i>{{ report.created_at_formatted if report.created_at_formatted else report.created_at[:16] }}</span>
+                </div>
+            </div>
+            <div class="text-right">
+                {% if report.assigned_to_name or report.assigned_username %}
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="w-10 h-10 bg-purple-500/20 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-user text-purple-400"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm text-white">{{ report.assigned_to_name or report.assigned_username }}</p>
+                        <p class="text-xs text-slate-500">Assigned to</p>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-sm text-slate-500">Unassigned</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Meta badges -->
+        <div class="flex flex-wrap items-center gap-3">
+            <span class="px-2.5 py-1 text-xs rounded-lg bg-slate-700/50 text-slate-300 border border-slate-600/50">
+                <i class="fas fa-arrow-up mr-1"></i>{{ report.impact }}
+            </span>
+            <span class="px-2.5 py-1 text-xs rounded-lg bg-slate-700/50 text-slate-300 border border-slate-600/50">
+                <i class="fas fa-bolt mr-1"></i>{{ report.urgency }}
+            </span>
+            {% if report.affected_module %}
+            <span class="px-2.5 py-1 text-xs rounded-lg bg-slate-700/50 text-slate-300 border border-slate-600/50">
+                <i class="fas fa-cube mr-1"></i>{{ report.affected_module }}
+            </span>
+            {% endif %}
+            {% if report.frequency and report.frequency != 'unknown' %}
+            <span class="px-2.5 py-1 text-xs rounded-lg bg-slate-700/50 text-slate-300 border border-slate-600/50 capitalize">
+                <i class="fas fa-redo mr-1"></i>{{ report.frequency }}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Main Content -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Description -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h2 class="text-lg font-semibold text-white">Description</h2>
+            </div>
+            <div class="p-6">
+                <div class="prose prose-invert max-w-none text-slate-300">
+                    <p class="whitespace-pre-wrap">{{ report.description or 'No description provided.' }}</p>
+                </div>
+
+                {% if report.expected_behavior or report.actual_behavior %}
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                    {% if report.expected_behavior %}
+                    <div class="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                        <h4 class="text-sm font-medium text-emerald-400 mb-2">
+                            <i class="fas fa-check-circle mr-2"></i>Expected Behavior
+                        </h4>
+                        <p class="text-sm text-slate-300 whitespace-pre-wrap">{{ report.expected_behavior }}</p>
+                    </div>
+                    {% endif %}
+                    {% if report.actual_behavior %}
+                    <div class="p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl">
+                        <h4 class="text-sm font-medium text-rose-400 mb-2">
+                            <i class="fas fa-times-circle mr-2"></i>Actual Behavior
+                        </h4>
+                        <p class="text-sm text-slate-300 whitespace-pre-wrap">{{ report.actual_behavior }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {% if report.steps_to_reproduce %}
+                <div class="mt-6">
+                    <h4 class="text-sm font-medium text-white mb-3">
+                        <i class="fas fa-list-ol mr-2 text-blue-400"></i>Steps to Reproduce
+                    </h4>
+                    <div class="p-4 bg-slate-700/30 border border-slate-600/30 rounded-xl">
+                        <pre class="text-sm text-slate-300 whitespace-pre-wrap font-mono">{{ report.steps_to_reproduce }}</pre>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Attachments -->
+        {% if attachments %}
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h2 class="text-lg font-semibold text-white">
+                    Attachments <span class="text-sm font-normal text-slate-400">({{ attachments|length }})</span>
+                </h2>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {% for attachment in attachments %}
+                    <div class="group relative">
+                        {% if attachment.file_type == 'image' %}
+                        <a href="{{ url_for('feedback.download_attachment', attachment_id=attachment.id) }}" target="_blank" 
+                           class="block aspect-square bg-slate-700/50 rounded-xl overflow-hidden border border-slate-600/30 hover:border-blue-500/50 transition-colors">
+                            <img src="{{ url_for('static', filename=attachment.file_path) }}" alt="{{ attachment.file_name }}"
+                                 class="w-full h-full object-cover">
+                        </a>
+                        {% elif attachment.file_type == 'video' %}
+                        <a href="{{ url_for('feedback.download_attachment', attachment_id=attachment.id) }}"
+                           class="block aspect-square bg-slate-700/50 rounded-xl overflow-hidden border border-slate-600/30 hover:border-blue-500/50 transition-colors flex items-center justify-center">
+                            <i class="fas fa-video text-3xl text-slate-400"></i>
+                        </a>
+                        {% elif attachment.file_type == 'audio' %}
+                        <div class="block aspect-square bg-slate-700/50 rounded-xl border border-slate-600/30 flex flex-col items-center justify-center p-4">
+                            <i class="fas fa-microphone text-3xl text-cyan-400 mb-2"></i>
+                            <audio controls class="w-full mt-2 h-8">
+                                <source src="{{ url_for('static', filename=attachment.file_path) }}">
+                            </audio>
+                        </div>
+                        {% else %}
+                        <a href="{{ url_for('feedback.download_attachment', attachment_id=attachment.id) }}"
+                           class="block aspect-square bg-slate-700/50 rounded-xl border border-slate-600/30 hover:border-blue-500/50 transition-colors flex flex-col items-center justify-center p-4">
+                            <i class="fas fa-file text-3xl text-slate-400 mb-2"></i>
+                            <span class="text-xs text-slate-400 text-center truncate w-full">{{ attachment.file_name }}</span>
+                        </a>
+                        {% endif %}
+                        <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <a href="{{ url_for('feedback.download_attachment', attachment_id=attachment.id) }}"
+                               class="w-8 h-8 bg-slate-800/90 hover:bg-slate-700 rounded-lg flex items-center justify-center text-slate-400 hover:text-white transition-colors">
+                                <i class="fas fa-download"></i>
+                            </a>
+                        </div>
+                        {% if attachment.file_size %}
+                        <p class="text-xs text-slate-500 mt-1 text-center">{{ (attachment.file_size / 1024 / 1024) | round(2) }} MB</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Comments -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-white">
+                    Comments <span class="text-sm font-normal text-slate-400">({{ comments|length }})</span>
+                </h2>
+                {% if can_view_internal %}
+                <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+                    <input type="checkbox" id="showInternal" class="rounded border-slate-600 text-blue-500 focus:ring-blue-500/50">
+                    <span>Show internal notes</span>
+                </label>
+                {% endif %}
+            </div>
+            <div class="p-6">
+                <!-- Add Comment Form -->
+                <form id="commentForm" class="mb-6">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div class="flex items-start gap-4">
+                        <div class="w-10 h-10 bg-slate-600 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <i class="fas fa-user text-slate-400"></i>
+                        </div>
+                        <div class="flex-1">
+                            <textarea name="content" id="commentContent" rows="3"
+                                      placeholder="Add a comment..."
+                                      class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 resize-none"></textarea>
+                            <div class="flex items-center justify-between mt-3">
+                                {% if can_view_internal %}
+                                <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+                                    <input type="checkbox" name="is_internal" id="commentInternal" class="rounded border-slate-600 text-purple-500 focus:ring-purple-500/50">
+                                    <span><i class="fas fa-lock mr-1"></i>Internal note</span>
+                                </label>
+                                {% else %}
+                                <div></div>
+                                {% endif %}
+                                <button type="submit" class="px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-xl transition-colors flex items-center gap-2">
+                                    <i class="fas fa-paper-plane"></i>
+                                    <span>Post</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- Comments List -->
+                <div id="commentsList" class="space-y-4">
+                    {% for comment in comments %}
+                    <div class="flex items-start gap-4 {% if comment.is_internal %}hidden internal-comment{% endif %}" data-internal="{{ comment.is_internal }}">
+                        <div class="w-10 h-10 {% if comment.is_internal %}bg-purple-500/20{% else %}bg-slate-600{% endif %} rounded-xl flex items-center justify-center flex-shrink-0">
+                            <i class="fas {% if comment.is_internal %}fa-lock text-purple-400{% else %}fa-user text-slate-400{% endif %}"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-sm font-medium text-white">{{ comment.author_name }}</span>
+                                {% if comment.is_internal %}
+                                <span class="px-1.5 py-0.5 text-xs bg-purple-500/20 text-purple-400 rounded border border-purple-500/30">
+                                    Internal
+                                </span>
+                                {% endif %}
+                                <span class="text-xs text-slate-500">{{ comment.created_at_formatted if comment.created_at_formatted else comment.created_at[:16] }}</span>
+                                {% if comment.is_edited %}
+                                <span class="text-xs text-slate-600 italic">edited</span>
+                                {% endif %}
+                            </div>
+                            <div class="p-4 {% if comment.is_internal %}bg-purple-500/10 border border-purple-500/20{% else %}bg-slate-700/30 border border-slate-600/30{% endif %} rounded-xl">
+                                <p class="text-sm text-slate-300 whitespace-pre-wrap">{{ comment.content }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-slate-500 py-8">No comments yet. Be the first to comment.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="space-y-6">
+        <!-- Status & Actions -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h3 class="text-lg font-semibold text-white">Status</h3>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-2">Current Status</p>
+                    <span class="px-3 py-1.5 text-sm rounded-lg {{ report.status_badge_class }}">{{ report.status }}</span>
+                </div>
+                
+                {% if report.status_changed_at %}
+                <div>
+                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Last Updated</p>
+                    <p class="text-sm text-slate-300">{{ report.status_changed_at[:16] if report.status_changed_at else '-' }}</p>
+                </div>
+                {% endif %}
+
+                {% if report.resolved_at %}
+                <div>
+                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Resolved At</p>
+                    <p class="text-sm text-emerald-400">{{ report.resolved_at[:16] if report.resolved_at else '-' }}</p>
+                </div>
+                {% endif %}
+
+                {% if report.closed_at %}
+                <div>
+                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Closed At</p>
+                    <p class="text-sm text-slate-300">{{ report.closed_at[:16] if report.closed_at else '-' }}</p>
+                </div>
+                {% endif %}
+
+                {% if can_manage %}
+                <button onclick="showStatusModal()" class="w-full px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors flex items-center justify-center gap-2">
+                    <i class="fas fa-exchange-alt"></i>
+                    <span>Change Status</span>
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Reporter Info -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h3 class="text-lg font-semibold text-white">Reporter</h3>
+            </div>
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-12 h-12 bg-slate-600 rounded-xl flex items-center justify-center">
+                        <i class="fas fa-user text-slate-400"></i>
+                    </div>
+                    <div>
+                        <p class="text-white font-medium">{{ report.reporter_name or 'Anonymous' }}</p>
+                        <p class="text-sm text-slate-400">{{ report.reporter_email if report.reporter_email else '' }}</p>
+                    </div>
+                </div>
+                {% if report.reporter_department %}
+                <p class="text-sm text-slate-400">
+                    <i class="fas fa-building mr-2 text-slate-500"></i>{{ report.reporter_department }}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Location Info -->
+        {% if report.page_url or report.affected_module or report.occurrence_date %}
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h3 class="text-lg font-semibold text-white">Location & Timing</h3>
+            </div>
+            <div class="p-6 space-y-3">
+                {% if report.page_url %}
+                <div>
+                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Page URL</p>
+                    <a href="{{ report.page_url }}" target="_blank" class="text-sm text-blue-400 hover:text-blue-300 truncate block">
+                        {{ report.page_url }}
+                    </a>
+                </div>
+                {% endif %}
+                {% if report.affected_module %}
+                <div>
+                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Affected Module</p>
+                    <p class="text-sm text-slate-300">{{ report.affected_module }}</p>
+                </div>
+                {% endif %}
+                {% if report.occurrence_date %}
+                <div>
+                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Occurrence Date</p>
+                    <p class="text-sm text-slate-300">{{ report.occurrence_date }}</p>
+                </div>
+                {% endif %}
+                {% if report.frequency and report.frequency != 'unknown' %}
+                <div>
+                    <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Frequency</p>
+                    <p class="text-sm text-slate-300 capitalize">{{ report.frequency }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Tags -->
+        {% if report.tags_list %}
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h3 class="text-lg font-semibold text-white">Tags</h3>
+            </div>
+            <div class="p-6">
+                <div class="flex flex-wrap gap-2">
+                    {% for tag in report.tags_list %}
+                    <span class="px-3 py-1 text-xs bg-blue-500/20 text-blue-400 rounded-lg border border-blue-500/30">
+                        {{ tag }}
+                    </span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Activity Timeline -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h3 class="text-lg font-semibold text-white">Activity</h3>
+            </div>
+            <div class="p-6">
+                <div class="space-y-4 max-h-80 overflow-y-auto">
+                    {% for activity in activity[:15] %}
+                    <div class="flex items-start gap-3">
+                        <div class="w-8 h-8 {% if activity.activity_type == 'created' %}bg-emerald-500/20{% elif activity.activity_type == 'status_changed' %}bg-blue-500/20{% elif activity.activity_type == 'assigned' %}bg-purple-500/20{% elif activity.activity_type == 'comment_added' %}bg-cyan-500/20{% else %}bg-slate-700/50{% endif %} rounded-lg flex items-center justify-center flex-shrink-0">
+                            <i class="fas {% if activity.activity_type == 'created' %}fa-plus{% elif activity.activity_type == 'status_changed' %}fa-exchange-alt{% elif activity.activity_type == 'assigned' %}fa-user{% elif activity.activity_type == 'comment_added' %}fa-comment{% else %}fa-circle{% endif %} text-xs {% if activity.activity_type == 'created' %}text-emerald-400{% elif activity.activity_type == 'status_changed' %}text-blue-400{% elif activity.activity_type == 'assigned' %}text-purple-400{% elif activity.activity_type == 'comment_added' %}text-cyan-400{% else %}text-slate-400{% endif %}"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-xs text-slate-300">{{ activity.actor_name or 'System' }}</p>
+                            <p class="text-xs text-slate-500 truncate">{{ activity.details or activity.activity_type }}</p>
+                            <p class="text-xs text-slate-600 mt-0.5">{{ activity.created_at[:16] if activity.created_at else '' }}</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-sm text-slate-500 text-center py-4">No activity recorded</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h3 class="text-lg font-semibold text-white">Statistics</h3>
+            </div>
+            <div class="p-6 grid grid-cols-3 gap-4 text-center">
+                <div>
+                    <p class="text-2xl font-bold text-white">{{ report.view_count or 0 }}</p>
+                    <p class="text-xs text-slate-500">Views</p>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-white">{{ report.comment_count or 0 }}</p>
+                    <p class="text-xs text-slate-500">Comments</p>
+                </div>
+                <div>
+                    <p class="text-2xl font-bold text-white">{{ report.attachment_count or 0 }}</p>
+                    <p class="text-xs text-slate-500">Files</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Status Change Modal -->
+<div id="statusModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md">
+        <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-white">Change Status</h3>
+            <button onclick="closeStatusModal()" class="text-slate-400 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="statusForm" class="p-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-white mb-2">New Status</label>
+                <select name="status" id="newStatus" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50">
+                    {% for status in status_choices %}
+                    <option value="{{ status }}" {% if status == report.status %}disabled{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-white mb-2">Reason (optional)</label>
+                <textarea name="reason" id="statusReason" rows="2" 
+                          placeholder="Why are you changing the status?"
+                          class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 resize-none"></textarea>
+            </div>
+            <div class="flex items-center gap-3">
+                <button type="button" onclick="closeStatusModal()" class="flex-1 px-4 py-2.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors">
+                    Cancel
+                </button>
+                <button type="submit" class="flex-1 px-4 py-2.5 bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded-xl transition-colors">
+                    Update Status
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Assign Modal -->
+<div id="assignModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl w-full max-w-md">
+        <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+            <h3 class="text-lg font-semibold text-white">Assign Report</h3>
+            <button onclick="closeAssignModal()" class="text-slate-400 hover:text-white">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <form id="assignForm" class="p-6">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-white mb-2">Assign To</label>
+                <input type="text" id="assigneeSearch" placeholder="Search users..."
+                       class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 mb-3">
+                <div id="assigneeList" class="space-y-2 max-h-48 overflow-y-auto">
+                    <!-- Users will be loaded here -->
+                </div>
+                <input type="hidden" name="assignee_id" id="selectedAssigneeId">
+                <input type="hidden" name="assignee_name" id="selectedAssigneeName">
+            </div>
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-white mb-2">Team (optional)</label>
+                <input type="text" name="team" placeholder="e.g., Frontend Team"
+                       class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50">
+            </div>
+            <div class="flex items-center gap-3">
+                <button type="button" onclick="closeAssignModal()" class="flex-1 px-4 py-2.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors">
+                    Cancel
+                </button>
+                <button type="submit" class="flex-1 px-4 py-2.5 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-xl transition-colors">
+                    Assign
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Toggle internal comments visibility
+    const showInternalCheckbox = document.getElementById('showInternal');
+    if (showInternalCheckbox) {
+        showInternalCheckbox.addEventListener('change', function() {
+            document.querySelectorAll('.internal-comment').forEach(el => {
+                el.classList.toggle('hidden', !this.checked);
+            });
+        });
+    }
+
+    // Comment form submission
+    const commentForm = document.getElementById('commentForm');
+    if (commentForm) {
+        commentForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const content = document.getElementById('commentContent').value.trim();
+            const isInternal = document.getElementById('commentInternal')?.checked || false;
+            
+            if (!content) {
+                alert('Please enter a comment');
+                return;
+            }
+
+            try {
+                const response = await fetch("{{ url_for('feedback.api_comments', report_id=report.id) }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': document.querySelector('input[name="csrf_token"]').value
+                    },
+                    body: JSON.stringify({ content, is_internal: isInternal })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.message || 'Failed to add comment');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                alert('Failed to add comment');
+            }
+        });
+    }
+
+    // Status form submission
+    const statusForm = document.getElementById('statusForm');
+    if (statusForm) {
+        statusForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const newStatus = document.getElementById('newStatus').value;
+            const reason = document.getElementById('statusReason').value;
+
+            try {
+                const response = await fetch("{{ url_for('feedback.api_change_status', report_id=report.id) }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': document.querySelector('input[name="csrf_token"]').value
+                    },
+                    body: JSON.stringify({ status: newStatus, reason })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.message || 'Failed to change status');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                alert('Failed to change status');
+            }
+        });
+    }
+
+    // Assign form submission
+    const assignForm = document.getElementById('assignForm');
+    if (assignForm) {
+        assignForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const assigneeId = document.getElementById('selectedAssigneeId').value;
+            const assigneeName = document.getElementById('selectedAssigneeName').value;
+            const team = assignForm.querySelector('input[name="team"]').value;
+
+            if (!assigneeId) {
+                alert('Please select a user to assign');
+                return;
+            }
+
+            try {
+                const response = await fetch("{{ url_for('feedback.api_assign_report', report_id=report.id) }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-Token': document.querySelector('input[name="csrf_token"]').value
+                    },
+                    body: JSON.stringify({ assignee_id: parseInt(assigneeId), assignee_name: assigneeName, team })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.message || 'Failed to assign report');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                alert('Failed to assign report');
+            }
+        });
+    }
+});
+
+// Modal functions
+function showStatusModal() {
+    document.getElementById('statusModal').classList.remove('hidden');
+    document.getElementById('statusModal').classList.add('flex');
+}
+
+function closeStatusModal() {
+    document.getElementById('statusModal').classList.add('hidden');
+    document.getElementById('statusModal').classList.remove('flex');
+}
+
+async function showAssignModal() {
+    document.getElementById('assignModal').classList.remove('hidden');
+    document.getElementById('assignModal').classList.add('flex');
+    
+    // Load users
+    const response = await fetch("{{ url_for('feedback.api_get_users') }}");
+    const data = await response.json();
+    
+    const list = document.getElementById('assigneeList');
+    list.innerHTML = data.users.map(user => `
+        <button type="button" onclick="selectAssignee(${user.id}, '${user.display_name}')"
+                class="w-full px-4 py-2 text-left bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors flex items-center gap-3">
+            <div class="w-8 h-8 bg-slate-600 rounded-lg flex items-center justify-center">
+                <i class="fas fa-user text-slate-400"></i>
+            </div>
+            <div>
+                <p class="text-sm text-white">${user.display_name}</p>
+                <p class="text-xs text-slate-500">${user.email}</p>
+            </div>
+        </button>
+    `).join('');
+}
+
+function selectAssignee(id, name) {
+    document.getElementById('selectedAssigneeId').value = id;
+    document.getElementById('selectedAssigneeName').value = name;
+    document.getElementById('assigneeSearch').value = name;
+}
+
+function closeAssignModal() {
+    document.getElementById('assignModal').classList.add('hidden');
+    document.getElementById('assignModal').classList.remove('flex');
+}
+
+function deleteReport() {
+    if (confirm('Are you sure you want to delete this report? This action cannot be undone.')) {
+        window.location.href = "{{ url_for('feedback.delete_report', report_id=report.id) }}";
+    }
+}
+</script>
+{% endblock %}

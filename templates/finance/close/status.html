@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .bg-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .bg-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .bg-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .bg-info { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        .progress-bar { height: 8px; background: #334155; border-radius: 9999px; overflow: hidden; }
+        .progress-fill { height: 100%; transition: width 0.3s; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+            <a href="{{ url_for('finance.fiscal_years_list') }}" class="btn btn-outline"><i class="fas fa-arrow-left"></i> Back to Fiscal Years</a>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">
+            <div class="card text-center">
+                <div class="text-3xl font-bold text-success">{{ period_summary|selectattr('total_items','gt',0)|list|length }}</div>
+                <div class="text-gray-400">Periods with Tasks</div>
+            </div>
+            <div class="card text-center">
+                <div class="text-3xl font-bold text-warning">{{ period_summary|selectattr('total_items','eq',0)|list|length }}</div>
+                <div class="text-gray-400">Pending Periods</div>
+            </div>
+            <div class="card text-center">
+                {% set completed = namespace(count=0) %}
+                {% for p in period_summary if p.total_items and p.completed_items == p.total_items %}{% set completed.count = completed.count + 1 %}{% endfor %}
+                <div class="text-3xl font-bold text-success">{{ completed.count }}</div>
+                <div class="text-gray-400">Fully Closed</div>
+            </div>
+            <div class="card text-center">
+                {% set in_progress = namespace(count=0) %}
+                {% for p in period_summary if p.total_items and p.completed_items < p.total_items and p.completed_items > 0 %}{% set in_progress.count = in_progress.count + 1 %}{% endfor %}
+                <div class="text-3xl font-bold text-primary">{{ in_progress.count }}</div>
+                <div class="text-gray-400">In Progress</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h2 class="text-xl font-semibold text-white mb-4">Period Close Status</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fiscal Year</th>
+                        <th>Period</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Status</th>
+                        <th>Close Progress</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for period in period_summary %}
+                    <tr>
+                        <td class="text-white font-medium">{{ period.fiscal_year_name }}</td>
+                        <td>{{ period.name }}</td>
+                        <td>{{ period.start_date }}</td>
+                        <td>{{ period.end_date }}</td>
+                        <td>
+                            {% if period.status == 'Open' %}
+                            <span class="badge bg-success">Open</span>
+                            {% elif period.status == 'Closed' %}
+                            <span class="badge bg-danger">Closed</span>
+                            {% else %}
+                            <span class="badge bg-warning">{{ period.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="min-w-48">
+                            {% if period.total_items > 0 %}
+                            <div class="flex items-center gap-3">
+                                <div class="progress-bar flex-1">
+                                    <div class="progress-fill {% if period.completed_items == period.total_items %}bg-success{% else %}bg-primary{% endif %}" style="width: {{ (period.completed_items / period.total_items * 100)|round|int }}%"></div>
+                                </div>
+                                <span class="text-sm text-gray-400">{{ period.completed_items }}/{{ period.total_items }}</span>
+                            </div>
+                            {% else %}
+                            <span class="text-gray-500 text-sm">No checklist</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('finance.close_period_view', period_id=period.id) }}" class="btn btn-primary btn-sm">
+                                <i class="fas fa-tasks"></i> Manage
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7" class="text-center text-gray-500 py-8">No periods found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

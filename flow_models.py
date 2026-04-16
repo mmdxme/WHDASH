@@ -9,10 +9,13 @@ messages, calls, meetings, notifications, and more.
 
 import sqlite3
 import os
+import logging
 from datetime import datetime, timedelta
 from contextlib import contextmanager
 import uuid
 import json
+
+logger = logging.getLogger(__name__)
 
 # Import the database helper from the main app
 try:
@@ -555,6 +558,87 @@ def initialize_flow_tables():
             )
         ''')
         
+        # Flow Posts - Global Feed (published from streams or created natively)
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS flow_posts (
+                id TEXT PRIMARY KEY,
+                author_id INTEGER NOT NULL,
+                author_name TEXT,
+                author_avatar TEXT,
+                content TEXT NOT NULL,
+                content_html TEXT,
+                post_type TEXT DEFAULT 'text',
+                source_type TEXT,
+                source_id TEXT,
+                source_name TEXT,
+                source_url TEXT,
+                media_url TEXT,
+                media_type TEXT,
+                is_pinned INTEGER DEFAULT 0,
+                is_featured INTEGER DEFAULT 0,
+                is_deleted INTEGER DEFAULT 0,
+                published_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                edited_at DATETIME,
+                FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Flow Post Reactions
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS flow_post_reactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                post_id TEXT NOT NULL,
+                user_id INTEGER NOT NULL,
+                emoji TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (post_id) REFERENCES flow_posts(id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE(post_id, user_id, emoji)
+            )
+        ''')
+        
+        # Flow Post Comments
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS flow_post_comments (
+                id TEXT PRIMARY KEY,
+                post_id TEXT NOT NULL,
+                author_id INTEGER NOT NULL,
+                author_name TEXT,
+                author_avatar TEXT,
+                content TEXT NOT NULL,
+                is_deleted INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                edited_at DATETIME,
+                FOREIGN KEY (post_id) REFERENCES flow_posts(id) ON DELETE CASCADE,
+                FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Flow Post Shares (audit trail for publishes from streams)
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS flow_post_shares (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                post_id TEXT NOT NULL,
+                from_stream_id TEXT,
+                from_stream_name TEXT,
+                original_message_id TEXT,
+                shared_by INTEGER NOT NULL,
+                shared_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (post_id) REFERENCES flow_posts(id) ON DELETE CASCADE,
+                FOREIGN KEY (shared_by) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Flow Global Settings (admin settings for Flow governance)
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS flow_global_settings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                setting_key TEXT UNIQUE NOT NULL,
+                setting_value TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
         # Create indexes for performance
         db.execute('CREATE INDEX IF NOT EXISTS idx_messages_conversation ON flow_messages(conversation_id)')
         db.execute('CREATE INDEX IF NOT EXISTS idx_messages_sender ON flow_messages(sender_id)')
@@ -570,6 +654,12 @@ def initialize_flow_tables():
         db.execute('CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON flow_push_subscriptions(user_id)')
         db.execute('CREATE INDEX IF NOT EXISTS idx_push_scheduled_user ON flow_push_scheduled(user_id)')
         db.execute('CREATE INDEX IF NOT EXISTS idx_push_scheduled_due ON flow_push_scheduled(is_sent, scheduled_for)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_flow_posts_author ON flow_posts(author_id)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_flow_posts_published ON flow_posts(published_at DESC)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_flow_posts_source ON flow_posts(source_type, source_id)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_flow_post_reactions_post ON flow_post_reactions(post_id)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_flow_post_comments_post ON flow_post_comments(post_id)')
+        db.execute('CREATE INDEX IF NOT EXISTS idx_flow_post_shares_post ON flow_post_shares(post_id)')
 
         # Migration: Add chat_background columns if they don't exist
         try:
@@ -591,10 +681,24 @@ def initialize_flow_tables():
         except:
             pass
 
+        # Migration: Add settings column to flow_channels if it doesn't exist
+        try:
+            db.execute("ALTER TABLE flow_channels ADD COLUMN settings TEXT")
+        except:
+            pass
+
+        # Migration: Add category column to flow_channels if missing
+        try:
+            db.execute("ALTER TABLE flow_channels ADD COLUMN category TEXT")
+        except:
+            pass
+
         db.commit()
         
-        import sys
-        print("[FLOW] Tables initialized successfully", file=sys.stderr)
+        try:
+            logger.info("[FLOW] Tables initialized successfully")
+        except (OSError, IOError):
+            pass
 
 
 # ============================================================================
@@ -656,7 +760,8 @@ def regenerate_invite_code(channel_id, user_id):
     with get_db_context() as db:
         db.execute('UPDATE flow_channels SET invite_code = ? WHERE id = ?', (new_code, channel_id))
 
-    log_audit(user_id, 'channel_regenerate_invite', {'channel_id': channel_id}, 'flow')
+    import json
+    log_audit(entity_type='flow_channel', entity_id=channel_id, action='regenerate_invite', user_id=user_id, notes=json.dumps({'channel_id': channel_id}))
     return new_code
 
 
@@ -803,11 +908,10 @@ def get_user_saved_messages_conversation(user_id):
 
 def send_message(conversation_id, sender_id, content, message_type='text', reply_to_id=None, metadata=None):
     """Send a message to a conversation."""
-    import sys
     msg_id = generate_id()
     now = datetime.now().isoformat()
     
-    print(f'[FLOW send_message] INSERTING: msg_id={msg_id}, conv={conversation_id}, sender={sender_id}, content={content[:50] if content else "empty"}', file=sys.stderr)
+    logger.debug(f'[FLOW send_message] INSERTING: msg_id={msg_id}, conv={conversation_id}, sender={sender_id}, content={content[:50] if content else "empty"}')
     
     with get_db_context() as db:
         db.execute('''
@@ -833,7 +937,7 @@ def send_message(conversation_id, sender_id, content, message_type='text', reply
         ''', (conversation_id, sender_id))
         db.commit()
     
-    print(f'[FLOW send_message] COMPLETED: msg_id={msg_id}', file=sys.stderr)
+    logger.debug(f'[FLOW send_message] COMPLETED: msg_id={msg_id}')
     
     # Extract and save mentions
     if content:
@@ -1042,6 +1146,287 @@ def search_messages(user_id, query, search_type='all', limit=50):
     return get_all(base_query, params)
 
 
+# ============================================================================
+# FLOW FEED / GLOBAL POSTS
+# ============================================================================
+
+def get_flow_feed_posts(user_id, limit=50, offset=0):
+    """Get Flow feed posts for a user.
+
+    Flow feed contains:
+    1. Native Flow posts (created directly in Flow)
+    2. Posts published from Streams (where allow_publish_to_flow is true)
+
+    Args:
+        user_id: Current user ID
+        limit: Maximum posts to return
+        offset: Offset for pagination
+
+    Returns:
+        List of Flow post dictionaries
+    """
+    posts = get_all('''
+        SELECT fp.*,
+               (SELECT COUNT(*) FROM flow_post_reactions WHERE post_id = fp.id) as reaction_count,
+               (SELECT COUNT(*) FROM flow_post_comments WHERE post_id = fp.id AND is_deleted = 0) as comment_count,
+               (SELECT GROUP_CONCAT(emoji || ':' || user_id) FROM flow_post_reactions WHERE post_id = fp.id) as reactions
+        FROM flow_posts fp
+        WHERE fp.is_deleted = 0
+        ORDER BY
+            CASE WHEN fp.is_pinned = 1 THEN 0 ELSE 1 END,
+            fp.published_at DESC
+        LIMIT ? OFFSET ?
+    ''', (limit, offset))
+
+    # Parse reactions and check user reaction
+    for post in posts:
+        if post.get('reactions'):
+            reaction_dict = {}
+            for r in post['reactions'].split(','):
+                if ':' in r:
+                    emoji, uid = r.split(':')
+                    if emoji not in reaction_dict:
+                        reaction_dict[emoji] = []
+                    reaction_dict[emoji].append(int(uid))
+            post['reactions'] = reaction_dict
+        else:
+            post['reactions'] = {}
+
+        # Check if current user has reacted
+        user_reacted_emoji = None
+        for emoji, user_ids in post['reactions'].items():
+            if user_id in user_ids:
+                user_reacted_emoji = emoji
+                break
+        post['user_reacted'] = user_reacted_emoji
+
+    return posts
+
+
+def create_flow_post(author_id, content, post_type='text', source_type=None, source_id=None,
+                     source_name=None, source_url=None, media_url=None, media_type=None):
+    """Create a new Flow post.
+
+    Args:
+        author_id: User ID of author
+        content: Post content (text)
+        post_type: Type of post (text, image, announcement, etc.)
+        source_type: If published from elsewhere (stream, group)
+        source_id: ID of source
+        source_name: Name of source
+        source_url: URL to view original
+        media_url: Optional media URL
+        media_type: Type of media (image, video)
+
+    Returns:
+        Created post ID
+    """
+    post_id = generate_id()
+    now = datetime.now().isoformat()
+
+    # Get author info
+    author = get_one('''
+        SELECT fup.display_name, fup.avatar_url
+        FROM flow_user_profiles fup
+        WHERE fup.user_id = ?
+    ''', (author_id,))
+
+    author_name = author['display_name'] if author else 'Unknown'
+    author_avatar = author['avatar_url'] if author else None
+
+    with get_db_context() as db:
+        db.execute('''
+            INSERT INTO flow_posts (id, author_id, author_name, author_avatar, content, post_type,
+                                   source_type, source_id, source_name, source_url, media_url, media_type, published_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (post_id, author_id, author_name, author_avatar, content, post_type,
+              source_type, source_id, source_name, source_url, media_url, media_type, now))
+
+    import json
+    log_audit(
+        entity_type='flow_post',
+        entity_id=post_id,
+        action='created',
+        user_id=author_id,
+        notes=json.dumps({
+            'source_type': source_type,
+            'source_id': source_id
+        })
+    )
+
+    logger.info(f'[FLOW] Created Flow post: {post_id}')
+    return post_id
+
+
+def publish_stream_to_flow(stream_id, message_id, shared_by):
+    """Publish a message from a Stream to Flow.
+
+    Args:
+        stream_id: The channel/stream ID
+        message_id: The message ID to publish
+        shared_by: User ID who is publishing
+
+    Returns:
+        Created post ID or None on error
+    """
+    # Get stream settings to check if publishing is allowed
+    stream = get_one('SELECT * FROM flow_channels WHERE id = ?', (stream_id,))
+    if not stream:
+        logger.warning(f'[FLOW] Stream not found: {stream_id}')
+        return None
+
+    # Parse settings
+    settings = {}
+    if stream.get('settings'):
+        try:
+            settings = json.loads(stream['settings']) if isinstance(stream['settings'], str) else stream['settings']
+        except:
+            settings = {}
+
+    if not settings.get('allow_publish_to_flow', False):
+        logger.warning(f'[FLOW] Stream does not allow publishing: {stream_id}')
+        return None
+
+    # Get the message
+    message = get_one('SELECT * FROM flow_messages WHERE id = ?', (message_id,))
+    if not message:
+        logger.warning(f'[FLOW] Message not found: {message_id}')
+        return None
+
+    # Create the Flow post
+    post_id = create_flow_post(
+        author_id=message['sender_id'],
+        content=message['content'],
+        post_type='published',
+        source_type='stream',
+        source_id=stream['id'],
+        source_name=stream['name'],
+        source_url=f'/flow/channel/{stream.get("channel_id") or stream["id"]}',
+        media_url=None,
+        media_type=None
+    )
+
+    # Record the share
+    with get_db_context() as db:
+        db.execute('''
+            INSERT INTO flow_post_shares (post_id, from_stream_id, from_stream_name, original_message_id, shared_by)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (post_id, stream['id'], stream['name'], message_id, shared_by))
+
+    # Notify followers (create notification)
+    create_notification(
+        user_id=message['sender_id'],
+        notification_type='flow_published',
+        title='Post published to Flow',
+        body=f'Your message was shared to Flow by {stream["name"]}',
+        action_url='/flow/',
+        from_user_id=shared_by
+    )
+
+    logger.info(f'[FLOW] Published message {message_id} to Flow as post {post_id}')
+    return post_id
+
+
+def add_flow_post_reaction(post_id, user_id, emoji):
+    """Add a reaction to a Flow post."""
+    with get_db_context() as db:
+        db.execute('''
+            INSERT OR REPLACE INTO flow_post_reactions (post_id, user_id, emoji)
+            VALUES (?, ?, ?)
+        ''', (post_id, user_id, emoji))
+
+    # Notify post author
+    post = get_one('SELECT author_id, content FROM flow_posts WHERE id = ?', (post_id,))
+    if post and post['author_id'] != user_id:
+        reactor = get_one('SELECT display_name FROM flow_user_profiles WHERE user_id = ?', (user_id,))
+        create_notification(
+            post['author_id'],
+            'flow_reaction',
+            f'{reactor["display_name"] if reactor else "Someone"} reacted to your Flow post',
+            post['content'][:50] if post['content'] else '',
+            '/flow/'
+        )
+
+
+def remove_flow_post_reaction(post_id, user_id, emoji):
+    """Remove a reaction from a Flow post."""
+    with get_db_context() as db:
+        db.execute('''
+            DELETE FROM flow_post_reactions
+            WHERE post_id = ? AND user_id = ? AND emoji = ?
+        ''', (post_id, user_id, emoji))
+
+
+def add_flow_post_comment(post_id, author_id, content):
+    """Add a comment to a Flow post."""
+    comment_id = generate_id()
+    now = datetime.now().isoformat()
+
+    author = get_one('SELECT display_name, avatar_url FROM flow_user_profiles WHERE user_id = ?', (author_id,))
+
+    with get_db_context() as db:
+        db.execute('''
+            INSERT INTO flow_post_comments (id, post_id, author_id, author_name, author_avatar, content, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (comment_id, post_id, author_id,
+              author['display_name'] if author else 'Unknown',
+              author['avatar_url'] if author else None,
+              content, now))
+
+    # Notify post author
+    post = get_one('SELECT author_id, content FROM flow_posts WHERE id = ?', (post_id,))
+    if post and post['author_id'] != author_id:
+        commenter = get_one('SELECT display_name FROM flow_user_profiles WHERE user_id = ?', (author_id,))
+        create_notification(
+            post['author_id'],
+            'flow_comment',
+            f'{commenter["display_name"] if commenter else "Someone"} commented on your Flow post',
+            content[:50],
+            '/flow/'
+        )
+
+    return comment_id
+
+
+def delete_flow_post(post_id, user_id):
+    """Delete a Flow post (soft delete)."""
+    post = get_one('SELECT * FROM flow_posts WHERE id = ?', (post_id,))
+    if not post:
+        return False
+
+    # Only author or admin can delete
+    if post['author_id'] != user_id:
+        return False
+
+    with get_db_context() as db:
+        db.execute('UPDATE flow_posts SET is_deleted = 1 WHERE id = ?', (post_id,))
+    return True
+
+
+def pin_flow_post(post_id, is_pinned=True):
+    """Pin or unpin a Flow post."""
+    with get_db_context() as db:
+        db.execute('UPDATE flow_posts SET is_pinned = ? WHERE id = ?', (1 if is_pinned else 0, post_id))
+
+
+def get_flow_global_settings():
+    """Get Flow global settings."""
+    settings = {}
+    rows = get_all('SELECT setting_key, setting_value FROM flow_global_settings')
+    for row in rows:
+        settings[row['setting_key']] = row['setting_value']
+    return settings
+
+
+def update_flow_global_setting(key, value):
+    """Update a Flow global setting."""
+    with get_db_context() as db:
+        db.execute('''
+            INSERT OR REPLACE INTO flow_global_settings (setting_key, setting_value, updated_at)
+            VALUES (?, ?, ?)
+        ''', (key, value, datetime.now().isoformat()))
+
+
 def get_unread_notification_count(user_id):
     """Get count of unread notifications."""
     result = get_one('''
@@ -1084,7 +1469,8 @@ def set_user_status(user_id, status_type, status_text=None, expires_in_hours=Non
             VALUES (?, ?, ?, ?, ?)
         ''', (user_id, status_type, status_text, expires_at, 1 if status_text else 0))
     
-    log_audit(user_id, 'status_change', {'status_type': status_type, 'status_text': status_text}, 'flow')
+    import json
+    log_audit(entity_type='flow_user_status', entity_id=str(user_id), action='status_change', user_id=user_id, notes=json.dumps({'status_type': status_type, 'status_text': status_text}))
 
 
 def update_presence(user_id, status_type='online'):
@@ -1157,7 +1543,8 @@ def create_channel(name, description, created_by, channel_type='public', categor
             VALUES (?, ?, 'admin')
         ''', (conv_id, created_by))
 
-    log_audit(created_by, 'channel_create', {'channel_id': db_channel_id, 'name': name, 'channel_id_value': final_channel_id}, 'flow')
+    import json
+    log_audit(entity_type='flow_channel', entity_id=db_channel_id, action='created', user_id=created_by, notes=json.dumps({'name': name, 'channel_id_value': final_channel_id}))
     return db_channel_id
 
 
@@ -1203,7 +1590,8 @@ def create_group(name, description, created_by, group_type='private', member_ids
                         VALUES (?, ?, 'member')
                     ''', (conv_id, mid))
     
-    log_audit(created_by, 'group_create', {'group_id': group_id, 'name': name, 'members': len(member_ids) if member_ids else 0}, 'flow')
+    import json
+    log_audit(entity_type='flow_group', entity_id=group_id, action='created', user_id=created_by, notes=json.dumps({'name': name, 'members': len(member_ids) if member_ids else 0}))
     return group_id
 
 
@@ -1265,7 +1653,8 @@ def start_meeting(title, description, host_id, start_time=None, meeting_type='in
             VALUES (?, ?, 'host', ?)
         ''', (meeting_id, host_id, now))
     
-    log_audit(host_id, 'meeting_start', {'meeting_id': meeting_id, 'title': title}, 'flow')
+    import json
+    log_audit(entity_type='flow_meeting', entity_id=meeting_id, action='started', user_id=host_id, notes=json.dumps({'title': title}))
     return meeting_id
 
 
@@ -1498,7 +1887,8 @@ def save_push_subscription(user_id, endpoint, p256dh, auth, device_info=None, br
             VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
         ''', (user_id, endpoint, p256dh, auth, json.dumps(device_info) if device_info else None, browser, datetime.now().isoformat(), datetime.now().isoformat()))
     
-    log_audit(user_id, 'push_subscribe', {'browser': browser}, 'flow')
+    import json
+    log_audit(entity_type='flow_push_subscription', entity_id=str(user_id), action='subscribed', user_id=user_id, notes=json.dumps({'browser': browser}))
 
 
 def remove_push_subscription(user_id, endpoint=None):
@@ -1517,7 +1907,8 @@ def remove_push_subscription(user_id, endpoint=None):
                 WHERE user_id = ?
             ''', (datetime.now().isoformat(), user_id))
     
-    log_audit(user_id, 'push_unsubscribe', {'endpoint': endpoint}, 'flow')
+    import json
+    log_audit(entity_type='flow_push_subscription', entity_id=str(user_id), action='unsubscribed', user_id=user_id, notes=json.dumps({'endpoint': endpoint}))
 
 
 def get_active_push_subscription(user_id):
@@ -1719,15 +2110,20 @@ def mark_scheduled_notification_sent(scheduled_id):
 FLOW_PERMISSIONS = {
     'flow': {
         'resources': {
-            'channels': ['view', 'create', 'join', 'leave', 'manage', 'admin'],
-            'groups': ['view', 'create', 'join', 'leave', 'manage', 'admin'],
+            'channels': ['view', 'create', 'join', 'leave', 'manage', 'admin', 'publish'],
+            'groups': ['view', 'create', 'join', 'leave', 'manage', 'admin', 'publish'],
             'messages': ['view', 'send', 'edit', 'delete', 'pin'],
             'files': ['upload', 'download', 'delete'],
             'calls': ['initiate', 'join', 'manage'],
             'meetings': ['create', 'join', 'host', 'manage'],
             'notifications': ['view', 'manage'],
             'settings': ['view', 'edit'],
-            'users': ['view', 'block']
+            'users': ['view', 'block'],
+            # Flow Feed / Posts
+            'flow_posts': ['view', 'create', 'edit', 'delete', 'pin', 'moderate'],
+            'flow_feed': ['view', 'publish', 'moderate'],
+            # Streams
+            'streams': ['view', 'create', 'join', 'leave', 'manage', 'admin', 'publish']
         }
     }
 }
@@ -1742,13 +2138,12 @@ def seed_flow_data():
     import random
     from datetime import timedelta
     
-    import sys
-    print("[FLOW] Seeding demo data...", file=sys.stderr)
+    logger.info("[FLOW] Seeding demo data...")
     
     # Get existing users
     users = get_all('SELECT id, username FROM users LIMIT 20')
     if not users:
-        print("[FLOW] No users found. Please create users first.", file=sys.stderr)
+        logger.warning("[FLOW] No users found. Please create users first.")
         return
     
     user_ids = [u['id'] for u in users]
@@ -1950,9 +2345,112 @@ def seed_flow_data():
             "The client meeting went really well.",
             "Don't forget to submit your timesheets.",
         ]
-        
+
         all_conv_ids = private_conv_ids.copy()
-        
+
+        # Create Flow Posts (Global Feed) - Sample announcements and updates
+        flow_posts = [
+            {
+                'content': "🎉 Welcome to Flow! This is your company-wide communication platform. Share updates, announcements, and highlights with the entire organization.",
+                'post_type': 'announcement',
+                'source_type': None,
+                'is_pinned': True
+            },
+            {
+                'content': "📊 Q1 2026 Performance Report is now available. Key highlights: 23% increase in operational efficiency, 15% reduction in delivery times. Full report on the dashboard.",
+                'post_type': 'update',
+                'source_type': None,
+                'is_pinned': False
+            },
+            {
+                'content': "🏆 Congratulations to the Sales Team for achieving 120% of quarterly targets! Special recognition to @sarah and @michael for exceptional performance.",
+                'post_type': 'text',
+                'source_type': None,
+                'is_pinned': False
+            },
+            {
+                'content': "📢 New HR Policy Update: Flexible working hours policy is now in effect. Please review the updated guidelines in the HR section.",
+                'post_type': 'announcement',
+                'source_type': None,
+                'is_pinned': False
+            },
+            {
+                'content': "🚀 Engineering Team: The new warehouse management system upgrade is complete. Report any issues to #engineering.",
+                'post_type': 'update',
+                'source_type': 'stream',
+                'source_name': 'engineering',
+                'is_pinned': False
+            },
+            {
+                'content': "🎄 Office Holiday Schedule: The office will be closed December 24-26. Emergency contacts have been shared via email.",
+                'post_type': 'announcement',
+                'source_type': None,
+                'is_pinned': False
+            },
+            {
+                'content': "💡 Idea of the Week: Implementing AI-based demand forecasting. Check out the proposal in the BI section and share your feedback!",
+                'post_type': 'discussion',
+                'source_type': None,
+                'is_pinned': False
+            },
+            {
+                'content': "🔒 Security Reminder: Please ensure two-factor authentication is enabled on all accounts. IT will be conducting audits this month.",
+                'post_type': 'announcement',
+                'source_type': None,
+                'is_pinned': False
+            },
+        ]
+
+        for idx, post_data in enumerate(flow_posts):
+            post_id = generate_id()
+            author_idx = idx % len(user_ids)
+            author = get_one('SELECT display_name, avatar_url FROM flow_user_profiles WHERE user_id = ?', (user_ids[author_idx],))
+            author_name = author['display_name'] if author else f"User {author_idx + 1}"
+            author_avatar = author['avatar_url'] if author else None
+
+            minutes_ago = random.randint(30, 10080)  # Within past week
+            post_time = (datetime.now() - timedelta(minutes=minutes_ago)).isoformat()
+
+            db.execute('''
+                INSERT INTO flow_posts (id, author_id, author_name, author_avatar, content, post_type,
+                                      source_type, source_name, is_pinned, published_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (post_id, user_ids[author_idx], author_name, author_avatar,
+                  post_data['content'], post_data['post_type'],
+                  post_data.get('source_type'), post_data.get('source_name'),
+                  1 if post_data.get('is_pinned') else 0, post_time))
+
+            # Add some reactions to posts
+            for reaction_emoji in ['👍', '❤️', '🎉', '🚀']:
+                if random.random() > 0.5:  # 50% chance
+                    reactor_id = random.choice(user_ids)
+                    db.execute('''
+                        INSERT OR IGNORE INTO flow_post_reactions (post_id, user_id, emoji)
+                        VALUES (?, ?, ?)
+                    ''', (post_id, reactor_id, reaction_emoji))
+
+            # Add some comments
+            if random.random() > 0.6:  # 40% chance of comments
+                for _ in range(random.randint(1, 3)):
+                    commenter_id = random.choice(user_ids)
+                    commenter = get_one('SELECT display_name, avatar_url FROM flow_user_profiles WHERE user_id = ?', (commenter_id,))
+                    comment_content = random.choice([
+                        "Thanks for sharing!",
+                        "Great news!",
+                        "Looking forward to this!",
+                        "Will this affect the timeline?",
+                        "Let me know if you need help.",
+                    ])
+                    comment_id = generate_id()
+                    comment_time = (datetime.now() - timedelta(minutes=random.randint(10, minutes_ago - 10))).isoformat()
+                    db.execute('''
+                        INSERT INTO flow_post_comments (id, post_id, author_id, author_name, author_avatar, content, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ''', (comment_id, post_id, commenter_id,
+                          commenter['display_name'] if commenter else f"User {commenter_id}",
+                          commenter['avatar_url'] if commenter else None,
+                          comment_content, comment_time))
+
         # Add messages to channels
         for ch_idx, channel_id in enumerate(channel_ids[:5]):
             conv = get_one('''
@@ -2103,8 +2601,7 @@ def seed_flow_data():
         
         db.commit()
     
-    import sys
-    print("[FLOW] Demo data seeded successfully", file=sys.stderr)
+    logger.info("[FLOW] Demo data seeded successfully")
     return True
 
 
@@ -2119,14 +2616,13 @@ def seed_sample_channels():
     """
     import random
     from datetime import timedelta
-    import sys
 
-    print("[FLOW] Creating sample channels with IDs and demo data...", file=sys.stderr)
+    logger.info("[FLOW] Creating sample channels with IDs and demo data...")
 
     # Get existing users
     users = get_all('SELECT id, username FROM users LIMIT 20')
     if not users:
-        print("[FLOW] No users found. Please create users first.", file=sys.stderr)
+        logger.warning("[FLOW] No users found. Please create users first.")
         return False
 
     user_ids = [u['id'] for u in users]
@@ -2392,7 +2888,7 @@ def seed_sample_channels():
         # Check if channel already exists
         existing = get_one('SELECT 1 FROM flow_channels WHERE channel_id = ?', (channel_id_val,))
         if existing:
-            print(f"[FLOW] Channel {channel_id_val} already exists, skipping...", file=sys.stderr)
+            logger.debug(f"[FLOW] Channel {channel_id_val} already exists, skipping...")
             continue
 
         # Create the channel
@@ -2519,9 +3015,9 @@ def seed_sample_channels():
                         WHERE id = ?
                     ''', (msg_time, content[:80], conv_id))
 
-        print(f"[FLOW] Created channel: {name} (ID: {channel_id_val}, Type: {ch_type})", file=sys.stderr)
+        logger.info(f"[FLOW] Created channel: {name} (ID: {channel_id_val}, Type: {ch_type})")
 
-    print("[FLOW] Sample channels created successfully!", file=sys.stderr)
+    logger.info("[FLOW] Sample channels created successfully!")
     return True
 
 
@@ -2536,9 +3032,8 @@ def seed_test_messages():
     """
     import random
     from datetime import timedelta
-    import sys
 
-    print("[FLOW] Adding test messages to conversations...", file=sys.stderr)
+    logger.info("[FLOW] Adding test messages to conversations...")
 
     # Get all conversations with members
     conversations = get_all('''
@@ -2549,13 +3044,13 @@ def seed_test_messages():
     ''')
 
     if not conversations:
-        print("[FLOW] No conversations found to add messages to", file=sys.stderr)
+        logger.warning("[FLOW] No conversations found to add messages to")
         return False
 
     # Get users for message sending
     users = get_all('SELECT id, username FROM users LIMIT 20')
     if not users:
-        print("[FLOW] No users found", file=sys.stderr)
+        logger.warning("[FLOW] No users found")
         return False
 
     user_ids = [u['id'] for u in users]
@@ -2700,7 +3195,7 @@ def seed_test_messages():
 
         db.commit()
 
-    print(f"[FLOW] Added {message_count} test messages", file=sys.stderr)
+    logger.info(f"[FLOW] Added {message_count} test messages")
     return True
 
 
@@ -2722,8 +3217,10 @@ def initialize_flow():
         
         return True
     except Exception as e:
-        import sys
-        print(f"[FLOW] Initialization error: {e}", file=sys.stderr)
+        try:
+            logger.error(f"[FLOW] Initialization error: {e}")
+        except (OSError, IOError):
+            pass
         return False
 
 

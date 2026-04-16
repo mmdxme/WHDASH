@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        :root { --primary: #6366f1; --success: #10b981; --danger: #ef4444; --warning: #f59e0b; }
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .card-header { padding-bottom: 1rem; border-bottom: 1px solid #334155; margin-bottom: 1rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        .btn-sm { padding: 0.375rem 0.75rem; font-size: 0.75rem; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .bg-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .bg-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .bg-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        .difference-zero { color: var(--success); }
+        .difference-nonzero { color: var(--danger); }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+        <p class="text-gray-400 mt-1">Match GL transactions with bank statement items</p>
+    </div>
+
+    <div class="card mb-6">
+        <form method="get" class="flex flex-wrap gap-4 items-end">
+            <div>
+                <label class="block text-gray-400 text-sm mb-1">Bank Account</label>
+                <select name="bank_account_id" class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" required>
+                    <option value="">-- Select Bank Account --</option>
+                    {% for bank in bank_accounts %}
+                    <option value="{{ bank.id }}" {% if bank_account_id == bank.id %}selected{% endif %}>{{ bank.bank_name }} - {{ bank.account_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-gray-400 text-sm mb-1">Statement Date</label>
+                <input type="date" name="statement_date" class="bg-gray-700 border border-gray-600 rounded px-3 py-2 text-white" value="{{ statement_date or '' }}">
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-search"></i> Load Reconciliation
+            </button>
+        </form>
+    </div>
+
+    {% if selected_bank %}
+    <div class="grid grid-cols-3 gap-6 mb-6">
+        <div class="card">
+            <div class="text-gray-400 text-sm uppercase mb-2">Bank Balance (GL)</div>
+            <div class="text-2xl font-bold text-white amount">{{ "{:,.2f}".format(selected_bank.current_balance or 0) }}</div>
+            <div class="text-gray-400 text-sm">{{ selected_bank.currency }}</div>
+        </div>
+        <div class="card">
+            <div class="text-gray-400 text-sm uppercase mb-2">Statement Balance</div>
+            <div class="text-2xl font-bold text-white amount">0.00</div>
+            <div class="text-gray-400 text-sm">Not imported</div>
+        </div>
+        <div class="card">
+            <div class="text-gray-400 text-sm uppercase mb-2">Difference</div>
+            <div class="text-2xl font-bold text-white amount difference-nonzero">{{ "{:,.2f}".format(selected_bank.current_balance or 0) }}</div>
+            <div class="text-gray-400 text-sm">Awaiting statement</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-lg font-semibold text-white">GL Transactions</h3>
+                <p class="text-gray-400 text-sm">Journal entries posted to this bank account</p>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Reference</th>
+                        <th>Description</th>
+                        <th class="text-right">Debit</th>
+                        <th class="text-right">Credit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in gl_items %}
+                    <tr>
+                        <td>{{ item.journal_date }}</td>
+                        <td class="font-mono text-sm">{{ item.journal_number }}</td>
+                        <td class="text-sm">{{ item.description or '-' }}</td>
+                        <td class="text-right amount">{% if item.debit > 0 %}{{ "{:,.2f}".format(item.debit) }}{% endif %}</td>
+                        <td class="text-right amount">{% if item.credit > 0 %}{{ "{:,.2f}".format(item.credit) }}{% endif %}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center text-gray-500 py-4">No GL transactions found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-lg font-semibold text-white">Statement Items</h3>
+                <p class="text-gray-400 text-sm">Items from bank statement</p>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Reference</th>
+                        <th>Description</th>
+                        <th class="text-right">Debit</th>
+                        <th class="text-right">Credit</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in statement_items %}
+                    <tr>
+                        <td>{{ item.line_date or '-' }}</td>
+                        <td class="font-mono text-sm">{{ item.line_reference or '-' }}</td>
+                        <td class="text-sm">{{ item.description or '-' }}</td>
+                        <td class="text-right amount">{% if item.debit > 0 %}{{ "{:,.2f}".format(item.debit) }}{% endif %}</td>
+                        <td class="text-right amount">{% if item.credit > 0 %}{{ "{:,.2f}".format(item.credit) }}{% endif %}</td>
+                        <td class="text-center">
+                            {% if item.is_matched %}
+                            <span class="badge bg-success">Matched</span>
+                            {% else %}
+                            <span class="badge bg-warning">Unmatched</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-gray-500 py-4">No statement items found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-2 gap-6 mt-6">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-lg font-semibold text-white">Matched Items</h3>
+            </div>
+            {% if matched_items %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Statement</th>
+                        <th>GL Entry</th>
+                        <th class="text-right">Amount</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in matched_items %}
+                    <tr>
+                        <td>{{ item.line_reference or '-' }}</td>
+                        <td class="font-mono text-sm">#{{ item.matched_journal_line_id }}</td>
+                        <td class="text-right amount">{{ "{:,.2f}".format(item.amount or item.credit or item.debit) }}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline unmatch-btn" data-item-id="{{ item.id }}">
+                                <i class="fas fa-unlink"></i> Unmatch
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-gray-500">No matched items yet.</p>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-lg font-semibold text-white">Unmatched Items</h3>
+            </div>
+            {% if unmatched_items %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th class="text-right">Amount</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in unmatched_items %}
+                    <tr>
+                        <td>{{ item.line_date or '-' }}</td>
+                        <td class="text-sm">{{ item.description or '-' }}</td>
+                        <td class="text-right amount">{{ "{:,.2f}".format(item.amount or item.credit or item.debit) }}</td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-primary match-btn" data-item-id="{{ item.id }}">
+                                <i class="fas fa-link"></i> Match
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-gray-500">All items are matched!</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    {% endblock %}
+</body>
+</html>

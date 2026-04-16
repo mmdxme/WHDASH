@@ -1,0 +1,521 @@
+{% extends "feedback/base.html" %}
+
+{% block header_actions %}
+<a href="{{ url_for('feedback.reports_list') }}" class="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors flex items-center gap-2">
+    <i class="fas fa-arrow-left"></i>
+    <span>Back</span>
+</a>
+{% endblock %}
+
+{% block feedback_content %}
+<div class="max-w-5xl mx-auto">
+    <form method="POST" enctype="multipart/form-data" id="createReportForm" class="space-y-6">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <!-- Progress Steps -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="step-indicator active w-10 h-10 bg-blue-500/20 text-blue-400 rounded-xl flex items-center justify-center font-bold" data-step="1">1</div>
+                    <div>
+                        <p class="text-sm font-medium text-white">Basic Info</p>
+                        <p class="text-xs text-slate-400">Type & Category</p>
+                    </div>
+                </div>
+                <div class="hidden sm:block flex-1 mx-4 h-0.5 bg-slate-700 rounded"></div>
+                <div class="flex items-center gap-3">
+                    <div class="step-indicator w-10 h-10 bg-slate-700/50 text-slate-400 rounded-xl flex items-center justify-center font-bold" data-step="2">2</div>
+                    <div>
+                        <p class="text-sm font-medium text-white">Details</p>
+                        <p class="text-xs text-slate-400">Description</p>
+                    </div>
+                </div>
+                <div class="hidden sm:block flex-1 mx-4 h-0.5 bg-slate-700 rounded"></div>
+                <div class="flex items-center gap-3">
+                    <div class="step-indicator w-10 h-10 bg-slate-700/50 text-slate-400 rounded-xl flex items-center justify-center font-bold" data-step="3">3</div>
+                    <div>
+                        <p class="text-sm font-medium text-white">Evidence</p>
+                        <p class="text-xs text-slate-400">Attachments</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 1: Basic Information -->
+        <div class="step-content" data-step="1">
+            <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-700/50">
+                    <h2 class="text-lg font-semibold text-white">Basic Information</h2>
+                    <p class="text-sm text-slate-400 mt-1">Tell us about the issue type and category</p>
+                </div>
+                <div class="p-6 space-y-6">
+                    <!-- Report Type -->
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-3">Report Type *</label>
+                        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {% for type_id, type_label in report_types %}
+                            <label class="report-type-option cursor-pointer">
+                                <input type="radio" name="report_type" value="{{ type_id }}" {% if form_data.report_type == type_id %}checked{% endif %} class="sr-only peer">
+                                <div class="px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-center hover:bg-slate-700 hover:border-slate-500/50 transition-all peer-checked:bg-blue-500/20 peer-checked:border-blue-500/50 peer-checked:text-blue-400">
+                                    <span class="text-sm font-medium">{{ type_label }}</span>
+                                </div>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Category -->
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Category</label>
+                        <select name="category_id" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                            <option value="">Select a category</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Title -->
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Title *</label>
+                        <input type="text" name="title" required maxlength="200" 
+                               placeholder="Brief descriptive title of the issue"
+                               class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                        <p class="text-xs text-slate-500 mt-2">Be specific and concise (max 200 characters)</p>
+                    </div>
+
+                    <!-- Summary -->
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Summary</label>
+                        <textarea name="summary" rows="2" maxlength="500"
+                                  placeholder="A brief summary of the issue"
+                                  class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 resize-none"></textarea>
+                    </div>
+
+                    <!-- Priority & Severity -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Priority</label>
+                            <select name="priority" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                                {% for priority in priority_choices %}
+                                <option value="{{ priority }}" {% if form_data.priority == priority %}selected{% endif %}>{{ priority }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Severity</label>
+                            <select name="severity" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                                {% for severity in severity_choices %}
+                                <option value="{{ severity }}">{{ severity }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Impact & Urgency -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Impact</label>
+                            <select name="impact" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                                {% for impact in impact_choices %}
+                                <option value="{{ impact }}">{{ impact }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Urgency</label>
+                            <select name="urgency" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                                {% for urgency in urgency_choices %}
+                                <option value="{{ urgency }}">{{ urgency }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Visibility -->
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Visibility</label>
+                        <div class="flex items-center gap-4">
+                            {% for vis_id, vis_label in visibility_choices %}
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="visibility" value="{{ vis_id }}" {% if vis_id == 'public' %}checked{% endif %} class="text-blue-500 focus:ring-blue-500/50">
+                                <span class="text-sm text-slate-300">{{ vis_label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <p class="text-xs text-slate-500 mt-2">Choose who can see this report</p>
+                    </div>
+
+                    <!-- Confidential -->
+                    <div class="flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                        <input type="checkbox" name="is_confidential" id="is_confidential" value="1" class="w-5 h-5 text-amber-500 bg-slate-700 border-slate-600 rounded focus:ring-amber-500/50">
+                        <label for="is_confidential" class="flex-1 cursor-pointer">
+                            <span class="text-sm font-medium text-amber-200">Mark as Confidential</span>
+                            <p class="text-xs text-amber-300/70 mt-1">Only managers and admins will be able to view this report</p>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 2: Details -->
+        <div class="step-content hidden" data-step="2">
+            <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-700/50">
+                    <h2 class="text-lg font-semibold text-white">Detailed Information</h2>
+                    <p class="text-sm text-slate-400 mt-1">Provide as much detail as possible</p>
+                </div>
+                <div class="p-6 space-y-6">
+                    <!-- Full Description -->
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Description *</label>
+                        <textarea name="description" rows="6" required
+                                  placeholder="Describe the issue in detail. Include what you were trying to do, what happened, and why it was unexpected."
+                                  class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 resize-none"></textarea>
+                    </div>
+
+                    <!-- Expected vs Actual -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Expected Behavior</label>
+                            <textarea name="expected_behavior" rows="3"
+                                      placeholder="What should happen?"
+                                      class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 resize-none"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Actual Behavior</label>
+                            <textarea name="actual_behavior" rows="3"
+                                      placeholder="What actually happened?"
+                                      class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 resize-none"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Steps to Reproduce -->
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Steps to Reproduce</label>
+                        <textarea name="steps_to_reproduce" rows="4"
+                                  placeholder="1. First step&#10;2. Second step&#10;3. Third step"
+                                  class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 resize-none font-mono text-sm"></textarea>
+                        <p class="text-xs text-slate-500 mt-2">Number each step clearly</p>
+                    </div>
+
+                    <!-- Location Info -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Page URL</label>
+                            <input type="url" name="page_url"
+                                   placeholder="https://example.com/page"
+                                   class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Affected Module</label>
+                            <input type="text" name="affected_module"
+                                   placeholder="e.g., Inventory, Sales, HR"
+                                   class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                        </div>
+                    </div>
+
+                    <!-- Occurrence Info -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Date of Occurrence</label>
+                            <input type="date" name="occurrence_date"
+                                   class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Frequency</label>
+                            <select name="frequency" class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                                {% for freq_id, freq_label in frequency_choices %}
+                                <option value="{{ freq_id }}">{{ freq_label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Environment Info -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Browser</label>
+                            <input type="text" name="browser_info"
+                                   placeholder="e.g., Chrome 120"
+                                   class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Device</label>
+                            <input type="text" name="device_info"
+                                   placeholder="e.g., Windows PC"
+                                   class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-white mb-2">Operating System</label>
+                            <input type="text" name="operating_system"
+                                   placeholder="e.g., Windows 11"
+                                   class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                        </div>
+                    </div>
+
+                    <!-- Affected Department -->
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-2">Affected Department</label>
+                        <input type="text" name="affected_department"
+                               placeholder="Which department is impacted?"
+                               class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Step 3: Evidence -->
+        <div class="step-content hidden" data-step="3">
+            <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-700/50">
+                    <h2 class="text-lg font-semibold text-white">Evidence & Attachments</h2>
+                    <p class="text-sm text-slate-400 mt-1">Upload screenshots, files, or record a voice note</p>
+                </div>
+                <div class="p-6 space-y-6">
+                    <!-- File Upload -->
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-4">File Attachments</label>
+                        
+                        <!-- Drop Zone -->
+                        <div id="dropZone" class="border-2 border-dashed border-slate-600/50 rounded-2xl p-8 text-center hover:border-blue-500/50 transition-colors cursor-pointer">
+                            <input type="file" name="attachments" id="fileInput" multiple class="hidden" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip,.rar,.mp4,.mov,.webm,.mp3,.wav,.ogg,.m4a">
+                            <div class="flex flex-col items-center">
+                                <div class="w-16 h-16 bg-slate-700/50 rounded-2xl flex items-center justify-center mb-4">
+                                    <i class="fas fa-cloud-upload-alt text-3xl text-slate-500"></i>
+                                </div>
+                                <p class="text-white font-medium mb-2">Drop files here or click to browse</p>
+                                <p class="text-sm text-slate-500">PNG, JPG, GIF, PDF, DOC, XLS, MP4, MP3, etc. (Max 50MB each)</p>
+                            </div>
+                        </div>
+
+                        <!-- File List -->
+                        <div id="fileList" class="mt-4 space-y-2"></div>
+                    </div>
+
+                    <!-- Voice Recording -->
+                    <div>
+                        <label class="block text-sm font-medium text-white mb-4">Voice Note</label>
+                        
+                        <div class="bg-slate-700/50 border border-slate-600/50 rounded-2xl p-6">
+                            <div id="voiceRecorder" class="flex flex-col items-center">
+                                <button type="button" id="recordButton" class="w-20 h-20 bg-rose-500/20 hover:bg-rose-500/30 border-2 border-rose-500/50 rounded-full flex items-center justify-center transition-colors mb-4">
+                                    <i class="fas fa-microphone text-2xl text-rose-400"></i>
+                                </button>
+                                <p id="recordStatus" class="text-sm text-slate-400">Click to start recording</p>
+                                
+                                <audio id="voicePreview" controls class="mt-4 w-full hidden"></audio>
+                                
+                                <input type="file" name="voice_recordings" id="voiceFile" class="hidden" accept="audio/*">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Reporter Info -->
+                    <div class="bg-slate-700/30 border border-slate-600/30 rounded-2xl p-6">
+                        <h3 class="text-sm font-medium text-white mb-4">Reporter Information</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm text-slate-400 mb-2">Your Name</label>
+                                <p class="text-white">{{ form_data.reporter_name }}</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-white mb-2">Your Department</label>
+                                <input type="text" name="reporter_department" placeholder="Optional"
+                                       class="w-full px-4 py-2.5 bg-slate-700/50 border border-slate-600/50 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div class="flex items-center justify-between pt-4">
+            <button type="button" id="prevStep" class="px-6 py-3 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors hidden">
+                <i class="fas fa-arrow-left mr-2"></i>
+                Previous
+            </button>
+            <div class="flex items-center gap-3 ml-auto">
+                <button type="button" id="saveDraft" class="px-6 py-3 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors">
+                    <i class="fas fa-save mr-2"></i>
+                    Save Draft
+                </button>
+                <button type="button" id="nextStep" class="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white rounded-xl font-medium transition-all">
+                    Next <i class="fas fa-arrow-right ml-2"></i>
+                </button>
+                <button type="submit" name="submit" value="true" id="submitReport" class="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl font-medium transition-all hidden">
+                    <i class="fas fa-paper-plane mr-2"></i>
+                    Submit Report
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+// Step Navigation
+let currentStep = 1;
+const totalSteps = 3;
+
+function showStep(step) {
+    document.querySelectorAll('.step-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.step-indicator').forEach(el => {
+        el.classList.remove('active', 'bg-blue-500/20', 'text-blue-400');
+        el.classList.add('bg-slate-700/50', 'text-slate-400');
+    });
+    
+    document.querySelector(`.step-content[data-step="${step}"]`).classList.remove('hidden');
+    
+    const indicators = document.querySelectorAll('.step-indicator');
+    indicators.forEach((el, idx) => {
+        if (idx + 1 <= step) {
+            el.classList.add('active', 'bg-blue-500/20', 'text-blue-400');
+            el.classList.remove('bg-slate-700/50', 'text-slate-400');
+        }
+    });
+    
+    document.getElementById('prevStep').classList.toggle('hidden', step === 1);
+    document.getElementById('nextStep').classList.toggle('hidden', step === totalSteps);
+    document.getElementById('submitReport').classList.toggle('hidden', step !== totalSteps);
+    
+    currentStep = step;
+}
+
+document.getElementById('nextStep').addEventListener('click', () => {
+    if (currentStep < totalSteps) showStep(currentStep + 1);
+});
+
+document.getElementById('prevStep').addEventListener('click', () => {
+    if (currentStep > 1) showStep(currentStep - 1);
+});
+
+// File Upload
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const fileList = document.getElementById('fileList');
+let uploadedFiles = [];
+
+dropZone.addEventListener('click', () => fileInput.click());
+
+dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('border-blue-500/50', 'bg-blue-500/5');
+});
+
+dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('border-blue-500/50', 'bg-blue-500/5');
+});
+
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('border-blue-500/50', 'bg-blue-500/5');
+    handleFiles(e.dataTransfer.files);
+});
+
+fileInput.addEventListener('change', () => {
+    handleFiles(fileInput.files);
+});
+
+function handleFiles(files) {
+    Array.from(files).forEach(file => {
+        if (uploadedFiles.length >= 10) {
+            alert('Maximum 10 files allowed');
+            return;
+        }
+        uploadedFiles.push(file);
+        addFileToList(file);
+    });
+    fileInput.value = '';
+}
+
+function addFileToList(file) {
+    const div = document.createElement('div');
+    div.className = 'flex items-center justify-between p-3 bg-slate-700/30 rounded-xl';
+    div.innerHTML = `
+        <div class="flex items-center gap-3">
+            <i class="fas fa-file text-slate-400"></i>
+            <div>
+                <p class="text-sm text-white truncate max-w-xs">${file.name}</p>
+                <p class="text-xs text-slate-500">${formatFileSize(file.size)}</p>
+            </div>
+        </div>
+        <button type="button" class="text-slate-400 hover:text-rose-400 transition-colors" onclick="removeFile(this, '${file.name}')">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    fileList.appendChild(div);
+}
+
+function removeFile(btn, filename) {
+    uploadedFiles = uploadedFiles.filter(f => f.name !== filename);
+    btn.closest('div').remove();
+}
+
+// Voice Recording
+let mediaRecorder;
+let audioChunks = [];
+
+document.getElementById('recordButton').addEventListener('click', async () => {
+    const button = document.getElementById('recordButton');
+    const status = document.getElementById('recordStatus');
+    const preview = document.getElementById('voicePreview');
+    const voiceFile = document.getElementById('voiceFile');
+    
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks = [];
+            
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const url = URL.createObjectURL(audioBlob);
+                preview.src = url;
+                preview.classList.remove('hidden');
+                
+                // Convert to file for upload
+                const file = new File(audioChunks, 'voice_recording.wav', { type: 'audio/wav' });
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                voiceFile.files = dt.files;
+                
+                button.innerHTML = '<i class="fas fa-microphone text-2xl text-rose-400"></i>';
+                button.classList.add('bg-rose-500/20', 'border-rose-500/50');
+                button.classList.remove('bg-emerald-500/20', 'border-emerald-500/50');
+                status.textContent = 'Recording saved';
+                stream.getTracks().forEach(track => track.stop());
+            };
+            
+            mediaRecorder.start();
+            button.innerHTML = '<i class="fas fa-stop text-2xl text-white"></i>';
+            button.classList.remove('bg-rose-500/20', 'border-rose-500/50');
+            button.classList.add('bg-emerald-500/20', 'border-emerald-500/50');
+            status.textContent = 'Recording... Click to stop';
+            
+        } catch (err) {
+            console.error('Microphone access denied:', err);
+            status.textContent = 'Microphone access denied';
+            status.classList.add('text-rose-400');
+        }
+    } else if (mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    }
+});
+
+// Form submission
+document.getElementById('saveDraft').addEventListener('click', () => {
+    const form = document.getElementById('createReportForm');
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'submit';
+    input.value = 'false';
+    form.appendChild(input);
+    form.submit();
+});
+
+// Initialize
+showStep(1);
+</script>
+{% endblock %}

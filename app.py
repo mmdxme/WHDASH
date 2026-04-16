@@ -60,6 +60,9 @@ from workflow_routes import register_workflow_routes
 from task_center_routes import register_task_center_routes
 from flow_routes import register_flow_routes
 from quick_tools_routes import register_quick_tools_routes
+from feedback_routes import register_feedback_routes
+from org_planning_routes import register_org_planning_routes
+from org_planning_models import run_org_planning_migrations
 
 # =============================================================================
 # UNIFIED PLATFORM MODULES (Enterprise Integration)
@@ -473,6 +476,10 @@ register_advanced_bi_routes(app)
 from finance_models import initialize_finance_schema
 initialize_finance_schema()
 
+# Initialize Finance Enhancement tables (close tasks, templates, profit centers, etc.)
+from finance_enhancement_models import initialize_finance_enhancement_tables
+initialize_finance_enhancement_tables()
+
 # Initialize Quality Management tables
 from quality_models import initialize_quality_tables
 initialize_quality_tables()
@@ -496,6 +503,10 @@ initialize_workflow_schema()
 from api_gateway_routes import register_api_gateway_routes
 register_api_gateway_routes(app, require_login, user_has_permission, get_db)
 
+# Register Finance Enhancement routes
+from finance_enhancements import register_finance_enhancements
+register_finance_enhancements(app)
+
 # Register REST API
 from rest_api import register_rest_api
 register_rest_api(app)
@@ -514,6 +525,17 @@ register_form_helpers(app)
 # INITIALIZE FLOW COMMUNICATION MODULE
 # =============================================================================
 register_flow_routes(app)
+
+# =============================================================================
+# INITIALIZE FEEDBACK REPORTING MODULE
+# =============================================================================
+register_feedback_routes(app)
+
+# =============================================================================
+# INITIALIZE ORGANIZATIONAL PLANNING & BPM MODULE
+# =============================================================================
+register_org_planning_routes(app)
+run_org_planning_migrations()
 
 def init_db():
     db = get_db()

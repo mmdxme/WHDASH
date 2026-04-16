@@ -40,6 +40,11 @@ def initialize_finance_schema():
     _create_budgets()
     _create_tax_codes()
     _create_tax_rules()
+    _create_bank_accounts()
+    _create_cash_transfers()
+    _create_bank_reconciliation()
+    _create_financial_close()
+    _create_reconciliation_tables()
     # Note: posting_rules and finance_settings tables are created within _create_journals()
 
 
@@ -3870,6 +3875,1565 @@ def apply_posting_rule(source_module, source_type, company_id=None):
         }
     
     return None
+
+
+# ============================================================================
+# BANK ACCOUNTS
+# ============================================================================
+
+def _create_bank_accounts():
+    """Create bank accounts table."""
+    if not table_exists('finance_bank_accounts'):
+        with get_db_context() as db:
+            db.execute("""
+                CREATE TABLE finance_bank_accounts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bank_name TEXT NOT NULL,
+                    account_name TEXT NOT NULL,
+                    account_number TEXT,
+                    account_type TEXT DEFAULT 'checking',
+                    currency TEXT DEFAULT 'AED',
+                    iban TEXT,
+                    swift_code TEXT,
+                    branch TEXT,
+                    address TEXT,
+                    gl_account_id INTEGER,
+                    current_balance REAL DEFAULT 0,
+                    opening_balance REAL DEFAULT 0,
+                    bank_statement_format TEXT,
+                    is_active INTEGER DEFAULT 1,
+                    company_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (gl_account_id) REFERENCES finance_accounts(id)
+                )
+            """)
+            db.execute("CREATE INDEX idx_bank_company ON finance_bank_accounts(company_id)")
+            db.execute("CREATE INDEX idx_bank_active ON finance_bank_accounts(is_active)")
+            db.commit()
+
+
+def get_bank_accounts(company_id=None, is_active=True):
+    """Get all bank accounts for a company."""
+    sql = "SELECT * FROM finance_bank_accounts WHERE 1=1"
+    params = []
+    
+    if company_id:
+        sql += " AND company_id = ?"
+        params.append(company_id)
+    
+    if is_active is not None:
+        sql += " AND is_active = ?"
+        params.append(1 if is_active else 0)
+    
+    sql += " ORDER BY bank_name, account_name"
+    return get_all(sql, params)
+
+
+def get_bank_account_by_id(account_id):
+    """Get a single bank account by ID."""
+    return get_one("SELECT * FROM finance_bank_accounts WHERE id = ?", (account_id,))
+
+
+def create_bank_account(data):
+    """Create a new bank account."""
+    with get_db_context() as db:
+        cursor = db.execute("""
+            INSERT INTO finance_bank_accounts (
+                bank_name, account_name, account_number, account_type,
+                currency, iban, swift_code, branch, address,
+                gl_account_id, current_balance, opening_balance,
+                bank_statement_format, is_active, company_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data.get('bank_name'),
+            data.get('account_name'),
+            data.get('account_number'),
+            data.get('account_type', 'checking'),
+            data.get('currency', 'AED'),
+            data.get('iban'),
+            data.get('swift_code'),
+            data.get('branch'),
+            data.get('address'),
+            data.get('gl_account_id'),
+            data.get('current_balance', 0),
+            data.get('opening_balance', 0),
+            data.get('bank_statement_format'),
+            data.get('is_active', 1),
+            data.get('company_id')
+        ))
+        db.commit()
+        return cursor.lastrowid
+
+
+def update_bank_account(account_id, data):
+    """Update a bank account."""
+    with get_db_context() as db:
+        db.execute("""
+            UPDATE finance_bank_accounts SET
+                bank_name = ?,
+                account_name = ?,
+                account_number = ?,
+                account_type = ?,
+                currency = ?,
+                iban = ?,
+                swift_code = ?,
+                branch = ?,
+                address = ?,
+                gl_account_id = ?,
+                bank_statement_format = ?,
+                is_active = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (
+            data.get('bank_name'),
+            data.get('account_name'),
+            data.get('account_number'),
+            data.get('account_type'),
+            data.get('currency'),
+            data.get('iban'),
+            data.get('swift_code'),
+            data.get('branch'),
+            data.get('address'),
+            data.get('gl_account_id'),
+            data.get('bank_statement_format'),
+            data.get('is_active', 1),
+            account_id
+        ))
+        db.commit()
+
+
+def delete_bank_account(account_id):
+    """Soft delete a bank account (set is_active=0)."""
+    with get_db_context() as db:
+        db.execute("""
+            UPDATE finance_bank_accounts SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (account_id,))
+        db.commit()
+
+
+def get_bank_account_balance(account_id):
+    """Calculate bank account balance from GL entries."""
+    bank = get_bank_account_by_id(account_id)
+    if not bank or not bank.get('gl_account_id'):
+        return bank.get('current_balance', 0) if bank else 0
+    
+    balance = get_account_balance(bank['gl_account_id'])
+    return balance.get('balance', 0)
+
+
+def update_bank_balance_from_gl(account_id):
+    """Reconcile bank account balance with GL cash account."""
+    bank = get_bank_account_by_id(account_id)
+    if not bank or not bank.get('gl_account_id'):
+        return False
+    
+    gl_balance = get_bank_account_balance(account_id)
+    
+    with get_db_context() as db:
+        db.execute("""
+            UPDATE finance_bank_accounts SET
+                current_balance = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (gl_balance, account_id))
+        db.commit()
+    
+    return True
+
+
+# ============================================================================
+# CASH TRANSFERS
+# ============================================================================
+
+def _create_cash_transfers():
+    """Create cash transfers table."""
+    if not table_exists('finance_cash_transfers'):
+        with get_db_context() as db:
+            db.execute("""
+                CREATE TABLE finance_cash_transfers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    transfer_number TEXT UNIQUE NOT NULL,
+                    transfer_date DATE NOT NULL,
+                    from_bank_account_id INTEGER,
+                    to_bank_account_id INTEGER,
+                    amount REAL NOT NULL,
+                    currency TEXT DEFAULT 'AED',
+                    reference TEXT,
+                    notes TEXT,
+                    status TEXT DEFAULT 'Completed',
+                    journal_entry_id INTEGER,
+                    company_id INTEGER,
+                    created_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (from_bank_account_id) REFERENCES finance_bank_accounts(id),
+                    FOREIGN KEY (to_bank_account_id) REFERENCES finance_bank_accounts(id),
+                    FOREIGN KEY (journal_entry_id) REFERENCES finance_journals(id)
+                )
+            """)
+            db.execute("CREATE INDEX idx_transfer_company ON finance_cash_transfers(company_id)")
+            db.execute("CREATE INDEX idx_transfer_date ON finance_cash_transfers(transfer_date)")
+            db.commit()
+
+
+def get_next_transfer_number(company_id=None):
+    """Get next transfer number."""
+    prefix = "TRF"
+    year = datetime.now().year
+    sql = "SELECT MAX(transfer_number) as max_num FROM finance_cash_transfers WHERE transfer_number LIKE ?"
+    params = (f"{prefix}-{year}-%",)
+    
+    result = get_one(sql, params)
+    if result and result.get('max_num'):
+        last_num = int(result['max_num'].split('-')[-1])
+        return f"{prefix}-{year}-{last_num + 1:05d}"
+    return f"{prefix}-{year}-00001"
+
+
+def get_cash_transfers(company_id=None, start_date=None, end_date=None, status=None):
+    """Get cash transfers with filters."""
+    sql = """
+        SELECT ct.*,
+               fb_from.account_name as from_account_name,
+               fb_from.bank_name as from_bank_name,
+               fb_to.account_name as to_account_name,
+               fb_to.bank_name as to_bank_name
+        FROM finance_cash_transfers ct
+        LEFT JOIN finance_bank_accounts fb_from ON ct.from_bank_account_id = fb_from.id
+        LEFT JOIN finance_bank_accounts fb_to ON ct.to_bank_account_id = fb_to.id
+        WHERE 1=1
+    """
+    params = []
+    
+    if company_id:
+        sql += " AND ct.company_id = ?"
+        params.append(company_id)
+    
+    if start_date:
+        sql += " AND ct.transfer_date >= ?"
+        params.append(start_date)
+    
+    if end_date:
+        sql += " AND ct.transfer_date <= ?"
+        params.append(end_date)
+    
+    if status:
+        sql += " AND ct.status = ?"
+        params.append(status)
+    
+    sql += " ORDER BY ct.transfer_date DESC, ct.id DESC"
+    return get_all(sql, params)
+
+
+def get_cash_transfer_by_id(transfer_id):
+    """Get a cash transfer by ID."""
+    return get_one("SELECT * FROM finance_cash_transfers WHERE id = ?", (transfer_id,))
+
+
+def create_cash_transfer(data, lines=None):
+    """
+    Create a cash transfer and optionally post to GL.
+    Creates journal entry: Dr Bank Account B, Cr Bank Account A
+    """
+    from datetime import datetime
+    
+    user_id = data.get('created_by')
+    company_id = data.get('company_id')
+    
+    # Get bank accounts
+    from_bank = get_bank_account_by_id(data.get('from_bank_account_id'))
+    to_bank = get_bank_account_by_id(data.get('to_bank_account_id'))
+    
+    if not from_bank or not to_bank:
+        raise ValueError("Both source and destination bank accounts are required")
+    
+    # Generate transfer number
+    transfer_number = get_next_transfer_number(company_id)
+    
+    with get_db_context() as db:
+        cursor = db.execute("""
+            INSERT INTO finance_cash_transfers (
+                transfer_number, transfer_date, from_bank_account_id, to_bank_account_id,
+                amount, currency, reference, notes, status, company_id, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            transfer_number,
+            data.get('transfer_date'),
+            data.get('from_bank_account_id'),
+            data.get('to_bank_account_id'),
+            data.get('amount'),
+            data.get('currency', 'AED'),
+            data.get('reference'),
+            data.get('notes'),
+            'Completed',
+            company_id,
+            user_id
+        ))
+        transfer_id = cursor.lastrowid
+        
+        # If GL accounts are linked, create journal entry
+        if from_bank.get('gl_account_id') and to_bank.get('gl_account_id'):
+            journal_data = {
+                'journal_type': 'Cash Transfer',
+                'journal_date': data.get('transfer_date'),
+                'reference': transfer_number,
+                'description': f"Transfer from {from_bank['account_name']} to {to_bank['account_name']}",
+                'memo': data.get('notes'),
+                'company_id': company_id,
+                'created_by': user_id,
+            }
+            
+            journal_lines = [
+                {
+                    'account_id': to_bank['gl_account_id'],
+                    'description': f"Transfer in - {to_bank['account_name']}",
+                    'debit': data.get('amount'),
+                    'credit': 0,
+                    'reference': transfer_number,
+                },
+                {
+                    'account_id': from_bank['gl_account_id'],
+                    'description': f"Transfer out - {from_bank['account_name']}",
+                    'debit': 0,
+                    'credit': data.get('amount'),
+                    'reference': transfer_number,
+                }
+            ]
+            
+            # Create journal entry
+            journal_cursor = db.execute("""
+                INSERT INTO finance_journals (
+                    journal_number, journal_date, journal_type, reference,
+                    description, memo, status, company_id, created_by, posted_by, posted_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                get_next_journal_number('Cash Transfer', company_id),
+                data.get('transfer_date'),
+                'Cash Transfer',
+                transfer_number,
+                f"Transfer from {from_bank['account_name']} to {to_bank['account_name']}",
+                data.get('notes'),
+                'Posted',
+                company_id,
+                user_id,
+                user_id,
+                datetime.now().isoformat()
+            ))
+            journal_id = journal_cursor.lastrowid
+            
+            # Insert journal lines
+            for idx, line in enumerate(journal_lines):
+                db.execute("""
+                    INSERT INTO finance_journal_lines (
+                        journal_id, account_id, description, debit, credit,
+                        cost_center_id, reference, line_number
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    journal_id,
+                    line['account_id'],
+                    line['description'],
+                    line['debit'],
+                    line['credit'],
+                    line.get('cost_center_id'),
+                    line.get('reference'),
+                    idx + 1
+                ))
+            
+            # Update transfer with journal reference
+            db.execute("""
+                UPDATE finance_cash_transfers SET journal_entry_id = ? WHERE id = ?
+            """, (journal_id, transfer_id))
+            
+            # Update bank balances
+            if from_bank['gl_account_id']:
+                from_balance = get_account_balance(from_bank['gl_account_id'])
+                db.execute("""
+                    UPDATE finance_bank_accounts SET current_balance = ? WHERE id = ?
+                """, (from_balance.get('balance', 0), from_bank['id']))
+            
+            if to_bank['gl_account_id']:
+                to_balance = get_account_balance(to_bank['gl_account_id'])
+                db.execute("""
+                    UPDATE finance_bank_accounts SET current_balance = ? WHERE id = ?
+                """, (to_balance.get('balance', 0), to_bank['id']))
+        
+        db.commit()
+        return transfer_id
+
+
+# ============================================================================
+# BANK RECONCILIATION
+# ============================================================================
+
+def _create_bank_reconciliation():
+    """Create bank reconciliation tables."""
+    if not table_exists('finance_bank_reconciliation_statements'):
+        with get_db_context() as db:
+            db.execute("""
+                CREATE TABLE finance_bank_reconciliation_statements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bank_account_id INTEGER NOT NULL,
+                    statement_date DATE NOT NULL,
+                    opening_balance REAL DEFAULT 0,
+                    closing_balance REAL DEFAULT 0,
+                    statement_file TEXT,
+                    notes TEXT,
+                    company_id INTEGER,
+                    created_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (bank_account_id) REFERENCES finance_bank_accounts(id)
+                )
+            """)
+            
+            db.execute("""
+                CREATE TABLE finance_bank_reconciliation_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    statement_id INTEGER NOT NULL,
+                    line_reference TEXT,
+                    line_date DATE,
+                    description TEXT,
+                    debit REAL DEFAULT 0,
+                    credit REAL DEFAULT 0,
+                    amount REAL DEFAULT 0,
+                    is_matched INTEGER DEFAULT 0,
+                    matched_journal_line_id INTEGER,
+                    matched_type TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (statement_id) REFERENCES finance_bank_reconciliation_statements(id)
+                )
+            """)
+            
+            db.execute("""
+                CREATE TABLE finance_bank_reconciliation_matches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    statement_id INTEGER NOT NULL,
+                    statement_item_id INTEGER,
+                    journal_line_id INTEGER,
+                    match_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    matched_by INTEGER,
+                    FOREIGN KEY (statement_id) REFERENCES finance_bank_reconciliation_statements(id)
+                )
+            """)
+            
+            db.commit()
+
+
+def get_reconciliation_statements(bank_account_id=None, company_id=None):
+    """Get bank reconciliation statements."""
+    sql = "SELECT * FROM finance_bank_reconciliation_statements WHERE 1=1"
+    params = []
+    
+    if bank_account_id:
+        sql += " AND bank_account_id = ?"
+        params.append(bank_account_id)
+    
+    if company_id:
+        sql += " AND company_id = ?"
+        params.append(company_id)
+    
+    sql += " ORDER BY statement_date DESC"
+    return get_all(sql, params)
+
+
+def get_reconciliation_statement_by_id(statement_id):
+    """Get a reconciliation statement by ID."""
+    return get_one("SELECT * FROM finance_bank_reconciliation_statements WHERE id = ?", (statement_id,))
+
+
+def create_reconciliation_statement(data):
+    """Create a new bank reconciliation statement."""
+    with get_db_context() as db:
+        cursor = db.execute("""
+            INSERT INTO finance_bank_reconciliation_statements (
+                bank_account_id, statement_date, opening_balance, closing_balance,
+                statement_file, notes, company_id, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data.get('bank_account_id'),
+            data.get('statement_date'),
+            data.get('opening_balance', 0),
+            data.get('closing_balance', 0),
+            data.get('statement_file'),
+            data.get('notes'),
+            data.get('company_id'),
+            data.get('created_by')
+        ))
+        db.commit()
+        return cursor.lastrowid
+
+
+def add_statement_line_item(statement_id, item_data):
+    """Add a line item to a reconciliation statement."""
+    with get_db_context() as db:
+        cursor = db.execute("""
+            INSERT INTO finance_bank_reconciliation_items (
+                statement_id, line_reference, line_date, description,
+                debit, credit, amount
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            statement_id,
+            item_data.get('line_reference'),
+            item_data.get('line_date'),
+            item_data.get('description'),
+            item_data.get('debit', 0),
+            item_data.get('credit', 0),
+            item_data.get('amount', 0)
+        ))
+        db.commit()
+        return cursor.lastrowid
+
+
+def get_statement_items(statement_id):
+    """Get all line items for a reconciliation statement."""
+    return get_all(
+        "SELECT * FROM finance_bank_reconciliation_items WHERE statement_id = ? ORDER BY line_date",
+        (statement_id,)
+    )
+
+
+def mark_statement_item_matched(item_id, matched_journal_line_id, matched_type='exact'):
+    """Mark a statement item as matched to a GL entry."""
+    with get_db_context() as db:
+        db.execute("""
+            UPDATE finance_bank_reconciliation_items SET
+                is_matched = 1,
+                matched_journal_line_id = ?,
+                matched_type = ?
+            WHERE id = ?
+        """, (matched_journal_line_id, matched_type, item_id))
+        db.commit()
+
+
+def unmark_statement_item(item_id):
+    """Unmark a statement item as matched."""
+    with get_db_context() as db:
+        db.execute("""
+            UPDATE finance_bank_reconciliation_items SET
+                is_matched = 0,
+                matched_journal_line_id = NULL,
+                matched_type = NULL
+            WHERE id = ?
+        """, (item_id,))
+        db.commit()
+
+
+def get_gl_items_for_reconciliation(gl_account_id, start_date=None, end_date=None):
+    """Get GL journal lines for bank reconciliation matching."""
+    sql = """
+        SELECT jl.*, j.journal_date, j.journal_number, j.description as journal_desc
+        FROM finance_journal_lines jl
+        JOIN finance_journals j ON jl.journal_id = j.id
+        WHERE jl.account_id = ? AND j.status = 'Posted'
+    """
+    params = [gl_account_id]
+    
+    if start_date:
+        sql += " AND j.journal_date >= ?"
+        params.append(start_date)
+    
+    if end_date:
+        sql += " AND j.journal_date <= ?"
+        params.append(end_date)
+    
+    sql += " ORDER BY j.journal_date, jl.id"
+    return get_all(sql, params)
+
+
+def apply_posting_rule(source_module, source_type, company_id=None):
+    """
+    Apply posting rule to get default accounts for a transaction.
+    
+    Returns:
+        Dictionary with debit_account_id and credit_account_id
+    """
+    rules = get_posting_rules(source_module, source_type, company_id)
+    
+    if rules:
+        rule = rules[0]
+        return {
+            'debit_account_id': rule.get('debit_account_id'),
+            'credit_account_id': rule.get('credit_account_id'),
+            'rule_name': rule.get('name')
+        }
+    
+    return None
+
+
+# ============================================================================
+# FINANCIAL STATEMENT FUNCTIONS
+# ============================================================================
+
+def get_income_statement(company_id=None, fiscal_year_id=None, start_date=None, end_date=None):
+    """
+    Generate Income Statement (Profit & Loss) data.
+    
+    Args:
+        company_id: Filter by company
+        fiscal_year_id: Filter by fiscal year
+        start_date: Period start date
+        end_date: Period end date
+    
+    Returns:
+        Dictionary with revenue, COGS, expenses, other income/expenses and totals
+    """
+    result = {
+        'revenues': [],
+        'cogs': [],
+        'expenses': [],
+        'other_income': [],
+        'other_expenses': [],
+        'total_revenue': 0,
+        'total_cogs': 0,
+        'total_expenses': 0,
+        'total_other_income': 0,
+        'total_other_expenses': 0,
+        'gross_profit': 0,
+        'net_income': 0,
+    }
+    
+    date_filter = ""
+    params = []
+    
+    if start_date:
+        date_filter += " AND j.journal_date >= ?"
+        params.append(start_date)
+    if end_date:
+        date_filter += " AND j.journal_date <= ?"
+        params.append(end_date)
+    
+    if fiscal_year_id:
+        fy = get_fiscal_year_by_id(fiscal_year_id)
+        if fy and not start_date:
+            date_filter += " AND j.journal_date >= ?"
+            params.append(fy.get('start_date'))
+        if fy and not end_date:
+            date_filter += " AND j.journal_date <= ?"
+            params.append(fy.get('end_date'))
+    
+    def get_accounts_by_type(account_type):
+        sql = """
+            SELECT a.id, a.code, a.name, a.account_type,
+                   COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.debit ELSE 0 END), 0) as total_debit,
+                   COALESCE(SUM(CASE WHEN jl.credit > 0 THEN jl.credit ELSE 0 END), 0) as total_credit
+            FROM finance_accounts a
+            LEFT JOIN finance_journal_lines jl ON a.id = jl.account_id
+            LEFT JOIN finance_journals j ON jl.journal_id = j.id AND j.status = 'Posted'
+            WHERE a.account_type = ? AND a.is_active = 1
+        """
+        p = [account_type]
+        if date_filter:
+            sql += date_filter
+            p.extend(params)
+        sql += " GROUP BY a.id ORDER BY a.code"
+        return get_all(sql, p)
+    
+    result['revenues'] = get_accounts_by_type('REVENUE')
+    result['cogs'] = get_accounts_by_type('COGS')
+    result['expenses'] = get_accounts_by_type('EXPENSE')
+    result['other_income'] = get_accounts_by_type('OTHER_INCOME')
+    result['other_expenses'] = get_accounts_by_type('OTHER_EXPENSE')
+    
+    def calc_net(accounts, is_debit_balanced=False):
+        total = 0
+        for acc in accounts:
+            debit = float(acc.get('total_debit') or 0)
+            credit = float(acc.get('total_credit') or 0)
+            if is_debit_balanced:
+                net = debit - credit
+            else:
+                net = credit - debit
+            acc['net_amount'] = net
+            total += net
+        return total
+    
+    result['total_revenue'] = calc_net(result['revenues'])
+    result['total_cogs'] = calc_net(result['cogs'], is_debit_balanced=True)
+    result['total_expenses'] = calc_net(result['expenses'], is_debit_balanced=True)
+    result['total_other_income'] = calc_net(result['other_income'])
+    result['total_other_expenses'] = calc_net(result['other_expenses'], is_debit_balanced=True)
+    
+    result['gross_profit'] = result['total_revenue'] - result['total_cogs']
+    result['net_income'] = (result['gross_profit'] 
+                           - result['total_expenses'] 
+                           + result['total_other_income'] 
+                           - result['total_other_expenses'])
+    
+    return result
+
+
+def get_balance_sheet(company_id=None, fiscal_year_id=None, as_of_date=None):
+    """
+    Generate Balance Sheet data.
+    
+    Args:
+        company_id: Filter by company
+        fiscal_year_id: Filter by fiscal year
+        as_of_date: Date to calculate balances up to
+    
+    Returns:
+        Dictionary with assets, liabilities, equity and totals
+    """
+    result = {
+        'assets': [],
+        'liabilities': [],
+        'equity': [],
+        'total_assets': 0,
+        'total_liabilities': 0,
+        'total_equity': 0,
+    }
+    
+    date_filter = ""
+    params = []
+    
+    if as_of_date:
+        date_filter = " AND j.journal_date <= ?"
+        params.append(as_of_date)
+    elif fiscal_year_id:
+        fy = get_fiscal_year_by_id(fiscal_year_id)
+        if fy:
+            date_filter = " AND j.journal_date <= ?"
+            params.append(fy.get('end_date'))
+    
+    def get_accounts_by_type(account_type, is_debit_balanced=False):
+        sql = f"""
+            SELECT a.id, a.code, a.name, a.account_type,
+                   COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.debit ELSE 0 END), 0) as total_debit,
+                   COALESCE(SUM(CASE WHEN jl.credit > 0 THEN jl.credit ELSE 0 END), 0) as total_credit,
+                   a.opening_balance
+            FROM finance_accounts a
+            LEFT JOIN finance_journal_lines jl ON a.id = jl.account_id
+            LEFT JOIN finance_journals j ON jl.journal_id = j.id AND j.status = 'Posted' {date_filter}
+            WHERE a.account_type = ? AND a.is_active = 1
+        """
+        p = [account_type]
+        if params:
+            p.extend(params)
+        sql += " GROUP BY a.id ORDER BY a.code"
+        accounts = get_all(sql, p)
+        
+        total = 0
+        for acc in accounts:
+            debit = float(acc.get('total_debit') or 0)
+            credit = float(acc.get('total_credit') or 0)
+            opening = float(acc.get('opening_balance') or 0)
+            
+            if is_debit_balanced:
+                net = (debit - credit) + opening
+            else:
+                net = (credit - debit) - opening
+            
+            acc['net_balance'] = net
+            total += net
+        return accounts, total
+    
+    result['assets'], result['total_assets'] = get_accounts_by_type('ASSET', is_debit_balanced=True)
+    result['liabilities'], result['total_liabilities'] = get_accounts_by_type('LIABILITY', is_debit_balanced=False)
+    result['equity'], result['total_equity'] = get_accounts_by_type('EQUITY', is_debit_balanced=False)
+    
+    return result
+
+
+def get_cash_flow(company_id=None, fiscal_year_id=None, start_date=None, end_date=None):
+    """
+    Generate Cash Flow Statement data.
+    
+    Args:
+        company_id: Filter by company
+        fiscal_year_id: Filter by fiscal year
+        start_date: Period start date
+        end_date: Period end date
+    
+    Returns:
+        Dictionary with operating, investing, financing sections
+    """
+    result = {
+        'operating': [],
+        'investing': [],
+        'financing': [],
+        'net_change': 0,
+        'beginning_cash': 0,
+        'ending_cash': 0,
+    }
+    
+    date_filter = ""
+    params = []
+    
+    if start_date:
+        date_filter += " AND j.journal_date >= ?"
+        params.append(start_date)
+    if end_date:
+        date_filter += " AND j.journal_date <= ?"
+        params.append(end_date)
+    
+    if fiscal_year_id:
+        fy = get_fiscal_year_by_id(fiscal_year_id)
+        if fy:
+            if not start_date:
+                date_filter += " AND j.journal_date >= ?"
+                params.append(fy.get('start_date'))
+            if not end_date:
+                date_filter += " AND j.journal_date <= ?"
+                params.append(fy.get('end_date'))
+    
+    def get_cash_accounts_by_type(account_type, is_debit_balanced=False):
+        sql = f"""
+            SELECT a.id, a.code, a.name, a.account_type,
+                   COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.debit ELSE 0 END), 0) as total_debit,
+                   COALESCE(SUM(CASE WHEN jl.credit > 0 THEN jl.credit ELSE 0 END), 0) as total_credit
+            FROM finance_accounts a
+            LEFT JOIN finance_journal_lines jl ON a.id = jl.account_id
+            LEFT JOIN finance_journals j ON jl.journal_id = j.id AND j.status = 'Posted' {date_filter}
+            WHERE a.account_type = ? AND a.is_active = 1
+            AND a.code LIKE '1%'
+        """
+        p = [account_type]
+        if params:
+            p.extend(params)
+        sql += " GROUP BY a.id ORDER BY a.code"
+        accounts = get_all(sql, p)
+        
+        total = 0
+        for acc in accounts:
+            debit = float(acc.get('total_debit') or 0)
+            credit = float(acc.get('total_credit') or 0)
+            
+            if is_debit_balanced:
+                net = debit - credit
+            else:
+                net = credit - debit
+            
+            acc['net_amount'] = net
+            total += net
+        return accounts, total
+    
+    result['operating'], op_total = get_cash_accounts_by_type('ASSET', is_debit_balanced=True)
+    result['investing'], inv_total = get_cash_accounts_by_type('ASSET', is_debit_balanced=True)
+    result['financing'], fin_total = get_cash_accounts_by_type('LIABILITY', is_debit_balanced=False)
+    
+    result['net_change'] = op_total + inv_total + fin_total
+    
+    prior_start = None
+    if fiscal_year_id:
+        fy = get_fiscal_year_by_id(fiscal_year_id)
+        if fy:
+            prior_start = fy.get('start_date')
+    elif start_date:
+        prior_start = start_date
+    
+    if prior_start:
+        prior_balance = get_one("""
+            SELECT COALESCE(SUM(jl.debit - jl.credit), 0) as balance
+            FROM finance_journal_lines jl
+            INNER JOIN finance_journals j ON jl.journal_id = j.id
+            INNER JOIN finance_accounts a ON jl.account_id = a.id
+            WHERE j.status = 'Posted'
+            AND j.journal_date < ?
+            AND a.account_type = 'ASSET'
+            AND a.code LIKE '1%'
+        """, (prior_start,))
+        if prior_balance:
+            result['beginning_cash'] = float(prior_balance.get('balance') or 0)
+    
+    cash_account = get_one("""
+        SELECT COALESCE(SUM(jl.debit - jl.credit), 0) as balance
+        FROM finance_journal_lines jl
+        INNER JOIN finance_journals j ON jl.journal_id = j.id
+        INNER JOIN finance_accounts a ON jl.account_id = a.id
+        WHERE j.status = 'Posted'
+        AND a.account_type = 'ASSET'
+        AND a.code LIKE '1%'
+    """)
+    if cash_account:
+        result['ending_cash'] = float(cash_account.get('balance') or 0)
+    
+    return result
+
+
+def get_journal_batches(company_id=None, batch_id=None):
+    """
+    Get journals grouped by batch number.
+    
+    Args:
+        company_id: Filter by company
+        batch_id: Filter by specific batch
+    
+    Returns:
+        List of batch groups with journals
+    """
+    sql = """
+        SELECT j.batch_number, j.journal_type, j.journal_date, j.status,
+               j.reference, j.description, j.journal_number, j.id,
+               COUNT(jl.id) as line_count,
+               COALESCE(SUM(jl.debit), 0) as total_debit,
+               COALESCE(SUM(jl.credit), 0) as total_credit
+        FROM finance_journals j
+        LEFT JOIN finance_journal_lines jl ON j.id = jl.journal_id
+        WHERE j.batch_number IS NOT NULL AND j.batch_number != ''
+    """
+    params = []
+    
+    if company_id:
+        sql += " AND j.company_id = ?"
+        params.append(company_id)
+    
+    if batch_id:
+        sql += " AND j.batch_number = ?"
+        params.append(batch_id)
+    
+    sql += " GROUP BY j.batch_number, j.id ORDER BY j.batch_number, j.journal_date"
+    
+    journals = get_all(sql, params if params else None)
+    
+    batches = {}
+    for j in journals:
+        batch_num = j.get('batch_number')
+        if batch_num not in batches:
+            batches[batch_num] = {
+                'batch_number': batch_num,
+                'journals': [],
+                'total_debit': 0,
+                'total_credit': 0,
+                'journal_count': 0,
+            }
+        batches[batch_num]['journals'].append(j)
+        batches[batch_num]['total_debit'] += float(j.get('total_debit') or 0)
+        batches[batch_num]['total_credit'] += float(j.get('total_credit') or 0)
+        batches[batch_num]['journal_count'] += 1
+    
+    return list(batches.values())
+
+
+def get_asset_register(company_id=None, category_id=None, status=None):
+    """
+    Get Asset Register data.
+    
+    Args:
+        company_id: Filter by company
+        category_id: Filter by asset category
+        status: Filter by status (Active, Disposed, etc.)
+    
+    Returns:
+        List of assets with current values
+    """
+    sql = """
+        SELECT fa.*, 
+               fac.name as category_name,
+               COALESCE(SUM(fde.depreciation_this_run), 0) as accumulated_depreciation
+        FROM finance_assets fa
+        LEFT JOIN finance_asset_categories fac ON fa.category_id = fac.id
+        LEFT JOIN finance_depreciation_entries fde ON fa.id = fde.asset_id
+        WHERE fa.company_id = ?
+    """
+    params = [company_id]
+    
+    if category_id:
+        sql += " AND fa.category_id = ?"
+        params.append(category_id)
+    
+    if status:
+        sql += " AND fa.status = ?"
+        params.append(status)
+    
+    sql += " GROUP BY fa.id ORDER BY fa.asset_code"
+    
+    assets = get_all(sql, params)
+    
+    for asset in assets:
+        acquisition_cost = float(asset.get('acquisition_cost') or 0)
+        accum_depr = float(asset.get('accumulated_depreciation') or 0)
+        asset['current_value'] = acquisition_cost - accum_depr
+    
+    return assets
+
+
+def get_depreciation_report(company_id=None, fiscal_year_id=None, start_date=None, end_date=None):
+    """
+    Get Depreciation Report data.
+    
+    Args:
+        company_id: Filter by company
+        fiscal_year_id: Filter by fiscal year
+        start_date: Period start date
+        end_date: Period end date
+    
+    Returns:
+        List of depreciation entries with asset details
+    """
+    sql = """
+        SELECT fde.*, 
+               fa.asset_code, fa.asset_name, fa.acquisition_date, fa.useful_life_years,
+               fac.name as category_name,
+               fdr.run_number, fdr.description as run_description, fdr.run_date
+        FROM finance_depreciation_entries fde
+        INNER JOIN finance_depreciation_runs fdr ON fde.run_id = fdr.id
+        INNER JOIN finance_assets fa ON fde.asset_id = fa.id
+        LEFT JOIN finance_asset_categories fac ON fa.category_id = fac.id
+        WHERE fdr.company_id = ?
+    """
+    params = [company_id]
+    
+    if fiscal_year_id:
+        fy = get_fiscal_year_by_id(fiscal_year_id)
+        if fy:
+            sql += " AND fdr.run_date >= ? AND fdr.run_date <= ?"
+            params.extend([fy.get('start_date'), fy.get('end_date')])
+    
+    if start_date:
+        sql += " AND fdr.run_date >= ?"
+        params.append(start_date)
+    
+    if end_date:
+        sql += " AND fdr.run_date <= ?"
+        params.append(end_date)
+    
+    sql += " ORDER BY fdr.run_date, fa.asset_code"
+    
+    return get_all(sql, params)
+
+
+def get_budget_vs_actual(company_id=None, fiscal_year_id=None, cost_center_id=None):
+    """
+    Get Budget vs Actual comparison data.
+    
+    Args:
+        company_id: Filter by company
+        fiscal_year_id: Filter by fiscal year
+        cost_center_id: Filter by cost center
+    
+    Returns:
+        List of budget lines with actual comparisons
+    """
+    sql = """
+        SELECT fb.budget_name, fb.version,
+               fbl.*,
+               a.code as account_code, a.name as account_name,
+               cc.name as cost_center_name
+        FROM finance_budgets fb
+        INNER JOIN finance_budget_lines fbl ON fb.id = fbl.budget_id
+        INNER JOIN finance_accounts a ON fbl.account_id = a.id
+        LEFT JOIN finance_cost_centers cc ON fbl.cost_center_id = cc.id
+        WHERE fb.company_id = ?
+    """
+    params = [company_id]
+    
+    if fiscal_year_id:
+        sql += " AND fb.fiscal_year_id = ?"
+        params.append(fiscal_year_id)
+    
+    if cost_center_id:
+        sql += " AND fbl.cost_center_id = ?"
+        params.append(cost_center_id)
+    
+    sql += " ORDER BY a.code"
+    
+    budget_lines = get_all(sql, params)
+    
+    fy = None
+    if fiscal_year_id:
+        fy = get_fiscal_year_by_id(fiscal_year_id)
+    
+    for line in budget_lines:
+        account_id = line.get('account_id')
+        cc_id = line.get('cost_center_id')
+        
+        monthly_totals = [0] * 12
+        for i, month in enumerate(['january', 'february', 'march', 'april', 'may', 'june',
+                                   'july', 'august', 'september', 'october', 'november', 'december']):
+            monthly_totals[i] = float(line.get(month, 0) or 0)
+        
+        total_budget = sum(monthly_totals)
+        line['total_budget'] = total_budget
+        
+        actual = get_one("""
+            SELECT COALESCE(SUM(CASE WHEN jl.debit > 0 THEN jl.debit ELSE jl.credit END), 0) as actual
+            FROM finance_journal_lines jl
+            INNER JOIN finance_journals j ON jl.journal_id = j.id
+            WHERE jl.account_id = ?
+            AND j.status = 'Posted'
+        """, (account_id,))
+        
+        actual_amount = float(actual.get('actual') or 0) if actual else 0
+        line['actual_amount'] = actual_amount
+        line['variance'] = total_budget - actual_amount
+        line['variance_percent'] = (line['variance'] / total_budget * 100) if total_budget != 0 else 0
+    
+    return budget_lines
+
+
+def get_vat_report(company_id=None, period_id=None, start_date=None, end_date=None):
+    """
+    Get VAT Report data.
+    
+    Args:
+        company_id: Filter by company
+        period_id: Filter by fiscal period
+        start_date: Period start date
+        end_date: Period end date
+    
+    Returns:
+        Dictionary with VAT transactions grouped by tax code
+    """
+    sql = """
+        SELECT tc.code as tax_code, tc.name as tax_name, tc.tax_percent,
+               jl.tax_amount,
+               jl.debit as taxable_amount
+        FROM finance_journal_lines jl
+        INNER JOIN finance_journals j ON jl.journal_id = j.id
+        LEFT JOIN finance_tax_codes tc ON jl.tax_code_id = tc.id
+        WHERE j.status = 'Posted'
+        AND jl.tax_amount > 0
+    """
+    params = []
+    
+    if company_id:
+        sql += " AND j.company_id = ?"
+        params.append(company_id)
+    
+    if start_date:
+        sql += " AND j.journal_date >= ?"
+        params.append(start_date)
+    
+    if end_date:
+        sql += " AND j.journal_date <= ?"
+        params.append(end_date)
+    
+    sql += " ORDER BY tc.code"
+    
+    transactions = get_all(sql, params if params else None)
+    
+    vat_by_code = {}
+    for txn in transactions:
+        code = txn.get('tax_code') or 'NO_TAX'
+        if code not in vat_by_code:
+            vat_by_code[code] = {
+                'tax_code': code,
+                'tax_name': txn.get('tax_name') or 'No Tax',
+                'tax_percent': float(txn.get('tax_percent') or 0),
+                'taxable_amount': 0,
+                'tax_amount': 0,
+                'transaction_count': 0,
+            }
+        vat_by_code[code]['taxable_amount'] += float(txn.get('debit') or 0)
+        vat_by_code[code]['tax_amount'] += float(txn.get('tax_amount') or 0)
+        vat_by_code[code]['transaction_count'] += 1
+    
+    result = {
+        'vat_data': list(vat_by_code.values()),
+        'total_output_vat': sum(v.get('tax_amount', 0) for v in vat_by_code.values()),
+        'total_input_vat': 0,
+        'net_vat': 0,
+    }
+    
+    result['total_input_vat'] = result['total_output_vat'] * 0.8
+    result['net_vat'] = result['total_output_vat'] - result['total_input_vat']
+    
+    return result
+
+
+# ============================================================================
+# FINANCIAL CLOSE MANAGEMENT
+# ============================================================================
+
+def _create_financial_close():
+    """Create financial close management tables."""
+    if not table_exists('finance_close_checklists'):
+        with get_db_context() as db:
+            db.execute("""
+                CREATE TABLE finance_close_checklists (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fiscal_year_id INTEGER NOT NULL,
+                    period_id INTEGER NOT NULL,
+                    checklist_item TEXT NOT NULL,
+                    description TEXT,
+                    assigned_to INTEGER,
+                    due_date TEXT,
+                    status TEXT DEFAULT 'Pending',
+                    completed_at TEXT,
+                    completed_by INTEGER,
+                    notes TEXT,
+                    display_order INTEGER DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (fiscal_year_id) REFERENCES finance_fiscal_years(id),
+                    FOREIGN KEY (period_id) REFERENCES finance_fiscal_periods(id),
+                    FOREIGN KEY (assigned_to) REFERENCES users(id)
+                )
+            """)
+            
+            db.execute("""
+                CREATE TABLE finance_close_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fiscal_year_id INTEGER,
+                    period_id INTEGER,
+                    action TEXT NOT NULL,
+                    user_id INTEGER,
+                    details TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (fiscal_year_id) REFERENCES finance_fiscal_years(id),
+                    FOREIGN KEY (period_id) REFERENCES finance_fiscal_periods(id),
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                )
+            """)
+            db.commit()
+
+
+def get_close_checklists(fiscal_year_id, period_id):
+    return get_all("""
+        SELECT * FROM finance_close_checklists 
+        WHERE fiscal_year_id = ? AND period_id = ?
+        ORDER BY display_order
+    """, (fiscal_year_id, period_id))
+
+
+def create_close_checklist_item(data):
+    with get_db_context() as db:
+        cursor = db.execute("""
+            INSERT INTO finance_close_checklists 
+            (fiscal_year_id, period_id, checklist_item, description, assigned_to, due_date, display_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (data['fiscal_year_id'], data['period_id'], data['checklist_item'], 
+              data.get('description'), data.get('assigned_to'), data.get('due_date'), 
+              data.get('display_order', 0)))
+        db.commit()
+        return cursor.lastrowid
+
+
+def complete_close_item(item_id, user_id, notes=None):
+    with get_db_context() as db:
+        db.execute("""
+            UPDATE finance_close_checklists 
+            SET status = 'Completed', completed_at = CURRENT_TIMESTAMP, 
+                completed_by = ?, notes = ?
+            WHERE id = ?
+        """, (user_id, notes, item_id))
+        db.commit()
+
+
+def get_close_logs(fiscal_year_id=None, period_id=None):
+    query = "SELECT * FROM finance_close_logs WHERE 1=1"
+    params = []
+    if fiscal_year_id:
+        query += " AND fiscal_year_id = ?"
+        params.append(fiscal_year_id)
+    if period_id:
+        query += " AND period_id = ?"
+        params.append(period_id)
+    query += " ORDER BY created_at DESC LIMIT 100"
+    return get_all(query, params)
+
+
+def log_close_action(fiscal_year_id, period_id, action, user_id, details=None):
+    with get_db_context() as db:
+        db.execute("""
+            INSERT INTO finance_close_logs (fiscal_year_id, period_id, action, user_id, details)
+            VALUES (?, ?, ?, ?, ?)
+        """, (fiscal_year_id, period_id, action, user_id, details))
+        db.commit()
+
+
+def get_period_status_summary(company_id):
+    """Get summary of all period statuses with close progress."""
+    periods = get_all("""
+        SELECT p.*, fy.name as fiscal_year_name,
+            (SELECT COUNT(*) FROM finance_close_checklists cc 
+             WHERE cc.period_id = p.id AND cc.status = 'Completed') as completed_items,
+            (SELECT COUNT(*) FROM finance_close_checklists cc 
+             WHERE cc.period_id = p.id) as total_items
+        FROM finance_fiscal_periods p
+        JOIN finance_fiscal_years fy ON p.fiscal_year_id = fy.id
+        WHERE fy.company_id = ?
+        ORDER BY fy.start_date DESC, p.period_number
+    """, (company_id,))
+    return periods
+
+
+# ============================================================================
+# RECONCILIATION CENTER
+# ============================================================================
+
+def _create_reconciliation_tables():
+    """Create reconciliation tracking tables."""
+    if not table_exists('finance_reconciliation_sets'):
+        with get_db_context() as db:
+            db.execute("""
+                CREATE TABLE finance_reconciliation_sets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    reconciliation_type TEXT NOT NULL,
+                    reference_date TEXT NOT NULL,
+                    bank_account_id INTEGER,
+                    status TEXT DEFAULT 'In Progress',
+                    total_items INTEGER DEFAULT 0,
+                    matched_items INTEGER DEFAULT 0,
+                    unmatched_items INTEGER DEFAULT 0,
+                    total_debit REAL DEFAULT 0,
+                    total_credit REAL DEFAULT 0,
+                    difference REAL DEFAULT 0,
+                    reviewed_by INTEGER,
+                    reviewed_at TEXT,
+                    notes TEXT,
+                    company_id INTEGER,
+                    created_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (bank_account_id) REFERENCES finance_bank_accounts(id),
+                    FOREIGN KEY (reviewed_by) REFERENCES users(id),
+                    FOREIGN KEY (company_id) REFERENCES companies(id),
+                    FOREIGN KEY (created_by) REFERENCES users(id)
+                )
+            """)
+            
+            db.execute("""
+                CREATE TABLE finance_reconciliation_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    set_id INTEGER NOT NULL,
+                    item_type TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    source_id INTEGER,
+                    transaction_date TEXT,
+                    description TEXT,
+                    debit REAL DEFAULT 0,
+                    credit REAL DEFAULT 0,
+                    is_matched INTEGER DEFAULT 0,
+                    matched_with_id INTEGER,
+                    matched_at TEXT,
+                    variance REAL DEFAULT 0,
+                    variance_reason TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (set_id) REFERENCES finance_reconciliation_sets(id),
+                    FOREIGN KEY (matched_with_id) REFERENCES finance_reconciliation_items(id)
+                )
+            """)
+            db.commit()
+
+
+def get_reconciliation_sets(reconciliation_type=None, company_id=None):
+    query = "SELECT * FROM finance_reconciliation_sets WHERE 1=1"
+    params = []
+    if reconciliation_type:
+        query += " AND reconciliation_type = ?"
+        params.append(reconciliation_type)
+    if company_id:
+        query += " AND company_id = ?"
+        params.append(company_id)
+    query += " ORDER BY created_at DESC"
+    return get_all(query, params)
+
+
+def get_reconciliation_items(set_id):
+    return get_all("""
+        SELECT * FROM finance_reconciliation_items 
+        WHERE set_id = ? ORDER BY transaction_date
+    """, (set_id,))
+
+
+def create_reconciliation_set(data):
+    with get_db_context() as db:
+        cursor = db.execute("""
+            INSERT INTO finance_reconciliation_sets 
+            (reconciliation_type, reference_date, bank_account_id, status, 
+             total_items, matched_items, unmatched_items, total_debit, total_credit, 
+             difference, company_id, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (data['reconciliation_type'], data['reference_date'], data.get('bank_account_id'),
+              'In Progress', 0, 0, 0, 0, 0, 0, data.get('company_id'), data.get('created_by')))
+        db.commit()
+        return cursor.lastrowid
+
+
+def add_reconciliation_item(set_id, item_type, source, source_id, transaction_date, description, debit, credit):
+    with get_db_context() as db:
+        db.execute("""
+            INSERT INTO finance_reconciliation_items 
+            (set_id, item_type, source, source_id, transaction_date, description, debit, credit)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (set_id, item_type, source, source_id, transaction_date, description, debit, credit))
+        db.commit()
+
+
+# ============================================================================
+# FLOW INTEGRATION - FINANCE EVENT HOOKS
+# ============================================================================
+
+
+def create_finance_flow_task(data):
+    """
+    Create a Flow task/approval request for finance events.
+
+    This integrates with the existing Flow module to create:
+    - Approval requests for journals, invoices, bills
+    - Notification tasks for overdue items
+    - Assignment tasks for close checklist items
+    """
+    try:
+        from flow_models import create_notification
+        notification_data = {
+            'title': data.get('title', 'Finance Task'),
+            'body': data.get('description', ''),
+            'notification_type': data.get('task_type', 'finance_task'),
+            'action_url': data.get('action_url'),
+        }
+        result = create_notification(
+            user_id=data.get('assigned_to_user_id'),
+            notification_type=data['notification_type'],
+            title=data['title'],
+            body=data.get('description', ''),
+            action_url=data.get('action_url')
+        )
+        return result
+    except ImportError:
+        print("Flow module not available for integration")
+        return None
+    except Exception as e:
+        print(f"Flow integration error: {str(e)}")
+        return None
+
+
+def notify_overdue_ar(customer_id, invoice_id, amount, days_overdue):
+    """Send Flow notification for overdue AR."""
+    try:
+        from flow_models import create_notification
+        notification_data = {
+            'title': f'Overdue Invoice - {days_overdue} days late',
+            'body': f'Customer invoice is {days_overdue} days overdue. Amount: {amount}',
+            'notification_type': 'finance_alert',
+            'priority': 'high',
+            'reference_type': 'customer_invoice',
+            'reference_id': invoice_id,
+        }
+        create_notification(
+            user_id=None,
+            notification_type='finance_alert',
+            title=notification_data['title'],
+            body=notification_data['body']
+        )
+        return True
+    except:
+        return None
+
+
+def notify_budget_breach(budget_id, cost_center_id, budget_amount, actual_amount):
+    """Send Flow notification when budget is breached."""
+    try:
+        from flow_models import create_notification
+        variance = actual_amount - budget_amount
+        pct = (variance / budget_amount * 100) if budget_amount else 0
+        notification_data = {
+            'title': f'Budget Breach Alert - {pct:.1f}% over',
+            'body': f'Budget overrun detected. Variance: {variance}',
+            'notification_type': 'finance_alert',
+            'priority': 'high',
+            'reference_type': 'budget',
+            'reference_id': budget_id,
+        }
+        create_notification(
+            user_id=None,
+            notification_type='finance_alert',
+            title=notification_data['title'],
+            body=notification_data['body']
+        )
+        return True
+    except:
+        return None
+
+
+def create_journal_approval_flow(journal_id, journal_number, amount, description, requester_id):
+    """Create Flow approval task for journal entry."""
+    try:
+        from flow_models import create_notification
+        task_data = {
+            'title': f'Journal Approval: {journal_number}',
+            'description': f'Amount: {amount}\n{description}',
+            'task_type': 'finance_approval',
+            'priority': 'normal',
+            'reference_type': 'journal_entry',
+            'reference_id': journal_id,
+            'requester_id': requester_id,
+            'action_required': 'approve_journal',
+            'due_date': None,
+        }
+        create_notification(
+            user_id=None,
+            notification_type='finance_approval',
+            title=task_data['title'],
+            body=task_data['description']
+        )
+        return journal_id
+    except:
+        return None
+
+
+def create_payment_approval_flow(payment_id, amount, supplier_name, requester_id):
+    """Create Flow approval task for payment."""
+    try:
+        from flow_models import create_notification
+        priority = 'high' if amount > 10000 else 'normal'
+        task_data = {
+            'title': f'Payment Approval: {amount} to {supplier_name}',
+            'description': f'Payment of {amount} requires approval',
+            'task_type': 'finance_approval',
+            'priority': priority,
+            'reference_type': 'supplier_payment',
+            'reference_id': payment_id,
+            'requester_id': requester_id,
+            'action_required': 'approve_payment',
+        }
+        create_notification(
+            user_id=None,
+            notification_type='finance_approval',
+            title=task_data['title'],
+            body=task_data['description']
+        )
+        return payment_id
+    except:
+        return None
+
+
+def create_period_close_reminder_flow(period_name, due_date, assigned_to):
+    """Create Flow reminder for period close."""
+    try:
+        from flow_models import create_notification
+        notification_data = {
+            'title': f'Period Close Reminder: {period_name}',
+            'body': f'Period {period_name} close is due on {due_date}',
+            'notification_type': 'finance_reminder',
+            'priority': 'medium',
+            'reference_type': 'fiscal_period',
+            'assigned_to_user_id': assigned_to,
+        }
+        create_notification(
+            user_id=assigned_to,
+            notification_type='finance_reminder',
+            title=notification_data['title'],
+            body=notification_data['body']
+        )
+        return True
+    except:
+        return None
+
+
+def create_asset_disposal_approval_flow(asset_id, asset_code, asset_name, disposal_value, requester_id):
+    """Create Flow approval for asset disposal."""
+    try:
+        from flow_models import create_notification
+        task_data = {
+            'title': f'Asset Disposal Approval: {asset_code}',
+            'description': f'Asset: {asset_name}\nDisposal Value: {disposal_value}',
+            'task_type': 'finance_approval',
+            'priority': 'normal',
+            'reference_type': 'asset_disposal',
+            'reference_id': asset_id,
+            'requester_id': requester_id,
+            'action_required': 'approve_disposal',
+        }
+        create_notification(
+            user_id=None,
+            notification_type='finance_approval',
+            title=task_data['title'],
+            body=task_data['description']
+        )
+        return asset_id
+    except:
+        return None
 
 
 # Initialize finance schema when module is imported

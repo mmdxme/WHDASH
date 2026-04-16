@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .bg-success { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .bg-warning { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .bg-danger { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+        .bg-info { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        .progress-bar { height: 8px; background: #334155; border-radius: 9999px; overflow: hidden; }
+        .progress-fill { height: 100%; background: #6366f1; transition: width 0.3s; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">{{ fiscal_year.name }} - {{ period.name }}</p>
+            </div>
+            <a href="{{ url_for('finance.close_status') }}" class="btn btn-outline"><i class="fas fa-arrow-left"></i> Back to Status</a>
+        </div>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <div class="card text-center">
+                <div class="text-3xl font-bold text-white">{{ checklists|selectattr('status','equalto','Completed')|list|length }}</div>
+                <div class="text-gray-400">Completed</div>
+            </div>
+            <div class="card text-center">
+                <div class="text-3xl font-bold text-warning">{{ checklists|selectattr('status','equalto','Pending')|list|length }}</div>
+                <div class="text-gray-400">Pending</div>
+            </div>
+            <div class="card text-center">
+                <div class="text-3xl font-bold text-white">{{ checklists|length }}</div>
+                <div class="text-gray-400">Total Items</div>
+            </div>
+        </div>
+        
+        {% if checklists %}
+        <div class="card mb-8">
+            <div class="mb-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm text-gray-400">Progress</span>
+                    <span class="text-sm text-white">{{ ((checklists|selectattr('status','equalto','Completed')|list|length) / checklists|length * 100)|round|int }}%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{ ((checklists|selectattr('status','equalto','Completed')|list|length) / checklists|length * 100)|round|int }}%"></div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="card">
+                <h2 class="text-xl font-semibold text-white mb-4">Close Checklist</h2>
+                <form method="POST" action="{{ url_for('finance.close_item_complete', period_id=period.id, item_id=0) }}".replace('0', '') id="checklistForm">
+                    <input type="hidden" name="item_id" id="selectedItemId" value="">
+                    <table>
+                        <thead>
+                            <tr><th>Item</th><th>Status</th><th>Action</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for item in checklists %}
+                            <tr class="{% if item.status == 'Completed' %}bg-success/5{% endif %}">
+                                <td>
+                                    <div class="font-medium">{{ item.checklist_item }}</div>
+                                    {% if item.description %}
+                                    <div class="text-sm text-gray-400">{{ item.description }}</div>
+                                    {% endif %}
+                                    {% if item.due_date %}
+                                    <div class="text-xs text-gray-500 mt-1">Due: {{ item.due_date }}</div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.status == 'Completed' %}
+                                    <span class="badge bg-success">Completed</span>
+                                    {% if item.completed_at %}
+                                    <div class="text-xs text-gray-400 mt-1">{{ item.completed_at }}</div>
+                                    {% endif %}
+                                    {% else %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.status != 'Completed' %}
+                                    <button type="button" onclick="completeItem({{ item.id }})" class="btn btn-success btn-sm"><i class="fas fa-check"></i> Complete</button>
+                                    {% else %}
+                                    <form method="POST" action="{{ url_for('finance.close_item_undo', period_id=period.id, item_id=item.id) }}" style="display:inline;">
+                                        <button type="submit" class="btn btn-outline btn-sm"><i class="fas fa-undo"></i> Undo</button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="3" class="text-center text-gray-500 py-8">No checklist items</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </form>
+                
+                <div id="completeModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div class="card max-w-md mx-4">
+                        <h3 class="text-lg font-semibold text-white mb-4">Complete Item</h3>
+                        <textarea id="completionNotes" name="notes" class="w-full p-3 bg-slate-700 border border-slate-600 rounded text-white mb-4" rows="3" placeholder="Add notes (optional)..."></textarea>
+                        <div class="flex justify-end gap-3">
+                            <button type="button" onclick="closeModal()" class="btn btn-outline">Cancel</button>
+                            <button type="button" onclick="submitCompletion()" class="btn btn-success">Confirm Complete</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2 class="text-xl font-semibold text-white mb-4">Activity Log</h2>
+                <div class="space-y-3 max-h-96 overflow-y-auto">
+                    {% for log in logs %}
+                    <div class="border-l-2 border-slate-600 pl-4 py-2">
+                        <div class="text-sm text-white">{{ log.action }}</div>
+                        <div class="text-xs text-gray-400">{{ log.created_at }}</div>
+                        {% if log.details %}
+                        <div class="text-sm text-gray-300 mt-1">{{ log.details }}</div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <p class="text-gray-500 text-center py-4">No activity logged yet</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+    let pendingItemId = 0;
+    
+    function completeItem(itemId) {
+        pendingItemId = itemId;
+        document.getElementById('selectedItemId').value = itemId;
+        document.getElementById('completeModal').classList.remove('hidden');
+    }
+    
+    function closeModal() {
+        document.getElementById('completeModal').classList.add('hidden');
+        pendingItemId = 0;
+    }
+    
+    function submitCompletion() {
+        if (pendingItemId > 0) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/finance/close/period/{{ period.id }}/item/' + pendingItemId + '/complete';
+            
+            const notesInput = document.createElement('input');
+            notesInput.type = 'hidden';
+            notesInput.name = 'notes';
+            notesInput.value = document.getElementById('completionNotes').value;
+            form.appendChild(notesInput);
+            
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+    </script>
+    {% endblock %}
+</body>
+</html>

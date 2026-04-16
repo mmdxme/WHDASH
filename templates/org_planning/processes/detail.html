@@ -1,0 +1,196 @@
+{% extends "org_planning/base.html" %}
+
+{% block title %}{{ page_title }}{% endblock %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Back Button -->
+    <a href="{{ url_for('org_planning.processes') }}" class="inline-flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+        <i class="fas fa-arrow-left"></i>
+        {{ t('back_to_processes', lang) }}
+    </a>
+
+    <!-- Process Header -->
+    <div class="glass-panel rounded-xl overflow-hidden">
+        <div class="p-6 border-b border-gray-700/50">
+            <div class="flex items-start justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 flex items-center justify-center">
+                        <i class="fas fa-file-alt text-cyan-400 text-2xl"></i>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-3 mb-1">
+                            <h1 class="text-2xl font-bold text-white">{{ instance.title }}</h1>
+                            <span class="badge badge-{{ 'success' if instance.status == 'completed' else 'warning' if instance.status in ['in_progress', 'pending'] else 'danger' if instance.status == 'rejected' else 'secondary' }}">
+                                {{ process_states.get(instance.status, instance.status)|Title }}
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-3 text-sm text-gray-400">
+                            <span>{{ instance.workflow_name or 'Process' }}</span>
+                            <span>|</span>
+                            <span class="badge badge-{{ 'danger' if instance.priority == 'critical' else 'warning' if instance.priority == 'high' else 'secondary' }}">
+                                {{ instance.priority|Title }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if instance.status in ['in_progress', 'pending'] %}
+                <div class="flex items-center gap-2">
+                    <form action="{{ url_for('org_planning.process_action', instance_id=instance.id) }}" method="POST" class="inline">
+                        <input type="hidden" name="action" value="approve">
+                        <button type="submit" class="btn-primary px-4 py-2 rounded-lg">
+                            <i class="fas fa-check mr-2"></i>{{ t('approve', lang) }}
+                        </button>
+                    </form>
+                    <form action="{{ url_for('org_planning.process_action', instance_id=instance.id) }}" method="POST" class="inline">
+                        <input type="hidden" name="action" value="reject">
+                        <button type="submit" class="btn-secondary px-4 py-2 rounded-lg text-red-400">
+                            <i class="fas fa-times mr-2"></i>{{ t('reject', lang) }}
+                        </button>
+                    </form>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="p-6 grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('requester', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ instance.requester_name or '-' }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('assigned_to', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ instance.assigned_to_name or '-' }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('started', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ instance.started_at[:16] if instance.started_at else '-' }}</div>
+            </div>
+            <div>
+                <div class="text-sm text-gray-400 mb-1">{{ t('due_date', lang) }}</div>
+                <div class="text-lg font-semibold text-white">{{ instance.due_date[:16] if instance.due_date else '-' }}</div>
+            </div>
+        </div>
+        
+        {% if instance.description %}
+        <div class="px-6 pb-6">
+            <div class="text-sm text-gray-400 mb-2">{{ t('description', lang) }}</div>
+            <p class="text-gray-300">{{ instance.description }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Activity Timeline -->
+        <div class="lg:col-span-2">
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="p-5 border-b border-gray-700/50">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                            <i class="fas fa-history text-blue-400"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">{{ t('activity_timeline', lang) }}</h2>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="p-6">
+                    <div class="relative">
+                        <div class="absolute left-6 top-0 bottom-0 w-0.5 bg-gray-700"></div>
+                        
+                        <div class="space-y-6">
+                            {% for action in actions %}
+                            <div class="relative flex items-start gap-6 pl-16">
+                                <div class="absolute left-4 w-5 h-5 rounded-full bg-{{ 'emerald' if action.action_type in ['approve', 'complete'] else 'red' if action.action_type in ['reject', 'cancel'] else 'blue' }}-500 flex items-center justify-center z-10">
+                                    <i class="fas fa-{{ 'check' if action.action_type in ['approve', 'complete'] else 'times' if action.action_type in ['reject', 'cancel'] else 'arrow-right' }} text-white text-xs"></i>
+                                </div>
+                                
+                                <div class="flex-1 glass-panel rounded-xl p-4">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <span class="text-white font-medium">{{ action.action_type|Title }}</span>
+                                        <span class="text-xs text-gray-500">{{ action.created_at[:16] if action.created_at else '' }}</span>
+                                    </div>
+                                    <p class="text-gray-400 text-sm">{{ action.performed_by_name or 'System' }}</p>
+                                    {% if action.comments %}
+                                    <p class="text-gray-300 text-sm mt-2 italic">"{{ action.comments }}"</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% else %}
+                            <p class="text-gray-400 text-center py-8">{{ t('no_activity_yet', lang) }}</p>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comments -->
+        <div class="space-y-6">
+            <div class="glass-panel rounded-xl overflow-hidden">
+                <div class="p-5 border-b border-gray-700/50">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                            <i class="fas fa-comments text-purple-400"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-lg font-semibold text-white">{{ t('comments', lang) }}</h2>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="max-h-64 overflow-y-auto">
+                    {% for comment in comments %}
+                    <div class="p-4 border-b border-gray-700/50">
+                        <div class="flex items-start gap-3">
+                            <div class="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                                <i class="fas fa-user text-purple-400 text-xs"></i>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-white font-medium text-sm">{{ comment.user_name or 'User' }}</span>
+                                    <span class="text-xs text-gray-500">{{ comment.created_at[:10] if comment.created_at else '' }}</span>
+                                </div>
+                                <p class="text-gray-400 text-sm">{{ comment.comment }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="p-6 text-center">
+                        <p class="text-gray-400 text-sm">{{ t('no_comments', lang) }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- SLA Info -->
+            {% if instance.sla_status %}
+            <div class="glass-panel rounded-xl p-5">
+                <h3 class="text-lg font-semibold text-white mb-4">{{ t('sla_status', lang) }}</h3>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-400">{{ t('status', lang) }}</span>
+                        <span class="badge badge-{{ 'success' if instance.sla_status == 'active' else 'danger' }}">
+                            {{ instance.sla_status|Title }}
+                        </span>
+                    </div>
+                    {% if instance.sla_due_at %}
+                    <div class="flex items-center justify-between">
+                        <span class="text-gray-400">{{ t('due_at', lang) }}</span>
+                        <span class="text-white">{{ instance.sla_due_at[:16] }}</span>
+                    </div>
+                    {% endif %}
+                    {% if instance.sla_breached %}
+                    <div class="mt-2 p-2 rounded bg-red-500/20 text-red-400 text-sm text-center">
+                        <i class="fas fa-exclamation-triangle mr-1"></i>{{ t('sla_breached', lang) }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

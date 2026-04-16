@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .stat-card { transition: all 0.3s ease; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 30px -5px rgba(0,0,0,0.4); }
+        .amount { font-family: 'Courier New', monospace; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Cash and liquidity management overview</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="/finance/dashboard" class="btn btn-outline">
+                    <i class="fas fa-th-large"></i> Main Dashboard
+                </a>
+                <a href="/finance/dashboard/cfo" class="btn btn-outline">
+                    <i class="fas fa-chart-pie"></i> CFO View
+                </a>
+            </div>
+        </div>
+
+        <!-- Cash Position by Currency -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {% for cash in cash_by_currency %}
+            <div class="glass-card stat-card p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-2xl font-bold text-white">{{ cash.currency }}</span>
+                    <span class="w-3 h-3 rounded-full {% if cash.trend == 'up' %}bg-success animate-pulse{% else %}bg-gray-500{% endif %}"></span>
+                </div>
+                <p class="text-3xl font-bold text-white amount mb-1">{{ "%.2f"|format(cash.balance) }}</p>
+                <p class="text-xs text-gray-400">{{ cash.account_count }} accounts</p>
+            </div>
+            {% else %}
+            <div class="glass-card stat-card p-5">
+                <p class="text-xl font-bold text-white">AED</p>
+                <p class="text-3xl font-bold text-white amount mb-1">0.00</p>
+                <p class="text-xs text-gray-400">No cash data</p>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Bank Account Balances -->
+        <div class="glass-card p-6 mb-8">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-semibold text-white">Bank Account Balances</h3>
+                <a href="/finance/accounts?type=CASH" class="text-primary hover:text-primary-dark text-sm">View All Cash Accounts</a>
+            </div>
+            <div class="overflow-x-auto">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Bank</th>
+                            <th>Account Number</th>
+                            <th>Currency</th>
+                            <th class="text-right">Balance</th>
+                            <th class="text-right">Available</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for account in bank_accounts %}
+                        <tr>
+                            <td>
+                                <div class="flex items-center gap-3">
+                                    <div class="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center">
+                                        <i class="fas fa-university text-primary text-sm"></i>
+                                    </div>
+                                    <span class="text-white">{{ account.bank_name }}</span>
+                                </div>
+                            </td>
+                            <td class="text-gray-400 font-mono">{{ account.account_number }}</td>
+                            <td><span class="px-2 py-1 bg-gray-700 rounded text-sm">{{ account.currency }}</span></td>
+                            <td class="text-right amount text-white">{{ "%.2f"|format(account.balance) }}</td>
+                            <td class="text-right amount text-gray-400">{{ "%.2f"|format(account.available or account.balance) }}</td>
+                            <td>
+                                <span class="px-2 py-1 rounded text-xs font-bold {% if account.status == 'Active' %}bg-success/20 text-success{% else %}bg-warning/20 text-warning{% endif %}">
+                                    {{ account.status or 'Active' }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-gray-500 py-8">No bank account data</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Cash Flow Forecast + Liquidity Ratios -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Cash Flow Forecast -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Cash Flow Forecast (Next 6 Months)</h3>
+                <div style="min-height: 300px;">
+                    <canvas id="cashFlowChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Liquidity Risk Indicators -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Liquidity Risk Indicators</h3>
+                <div class="space-y-6">
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-gray-400">Current Ratio</span>
+                            <span class="text-2xl font-bold {% if liquidity.current_ratio >= 1.5 %}text-success{% elif liquidity.current_ratio >= 1 %}text-warning{% else %}text-danger{% endif %}">
+                                {{ "%.2f"|format(liquidity.current_ratio) }}
+                            </span>
+                        </div>
+                        <div class="w-full bg-gray-700 rounded-full h-3">
+                            <div class="h-3 rounded-full {% if liquidity.current_ratio >= 1.5 %}bg-success{% elif liquidity.current_ratio >= 1 %}bg-warning{% else %}bg-danger{% endif %}" style="width: {{ [liquidity.current_ratio * 50, 100] | min }}%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Target: 1.5+</p>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-gray-400">Quick Ratio</span>
+                            <span class="text-2xl font-bold {% if liquidity.quick_ratio >= 1 %}text-success{% elif liquidity.quick_ratio >= 0.5 %}text-warning{% else %}text-danger{% endif %}">
+                                {{ "%.2f"|format(liquidity.quick_ratio) }}
+                            </span>
+                        </div>
+                        <div class="w-full bg-gray-700 rounded-full h-3">
+                            <div class="h-3 rounded-full {% if liquidity.quick_ratio >= 1 %}bg-success{% elif liquidity.quick_ratio >= 0.5 %}bg-warning{% else %}bg-danger{% endif %}" style="width: {{ [liquidity.quick_ratio * 50, 100] | min }}%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Target: 1.0+</p>
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-gray-400">Cash Ratio</span>
+                            <span class="text-2xl font-bold {% if liquidity.cash_ratio >= 0.2 %}text-success{% elif liquidity.cash_ratio >= 0.1 %}text-warning{% else %}text-danger{% endif %}">
+                                {{ "%.2f"|format(liquidity.cash_ratio) }}
+                            </span>
+                        </div>
+                        <div class="w-full bg-gray-700 rounded-full h-3">
+                            <div class="h-3 rounded-full {% if liquidity.cash_ratio >= 0.2 %}bg-success{% elif liquidity.cash_ratio >= 0.1 %}bg-warning{% else %}bg-danger{% endif %}" style="width: {{ [liquidity.cash_ratio * 200, 100] | min }}%"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Target: 0.2+</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Currency Exposure + Upcoming Large Payments + Expected Receipts -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Currency Exposure -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">Currency Exposure</h3>
+                <div style="min-height: 220px;">
+                    <canvas id="currencyChart"></canvas>
+                </div>
+                <div class="mt-4 space-y-2">
+                    {% for curr in currency_exposure %}
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-gray-400">{{ curr.currency }}</span>
+                        <span class="text-white amount">{{ "%.1f"|format(curr.percentage) }}%</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Upcoming Large Payments -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">
+                    <i class="fas fa-arrow-right text-danger mr-2"></i>Upcoming Large Payments
+                </h3>
+                <div class="space-y-3">
+                    {% for payment in upcoming_payments %}
+                    <div class="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg">
+                        <div>
+                            <p class="text-white font-medium">{{ payment.supplier }}</p>
+                            <p class="text-gray-400 text-xs">{{ payment.due_date }}</p>
+                        </div>
+                        <span class="text-danger font-semibold amount">{{ "%.2f"|format(payment.amount) }}</span>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-gray-500 py-4">No upcoming large payments</p>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Expected Receipts -->
+            <div class="glass-card p-6">
+                <h3 class="text-xl font-semibold text-white mb-6">
+                    <i class="fas fa-arrow-left text-success mr-2"></i>Expected Receipts
+                </h3>
+                <div class="space-y-3">
+                    {% for receipt in expected_receipts %}
+                    <div class="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg">
+                        <div>
+                            <p class="text-white font-medium">{{ receipt.customer }}</p>
+                            <p class="text-gray-400 text-xs">{{ receipt.expected_date }}</p>
+                        </div>
+                        <span class="text-success font-semibold amount">{{ "%.2f"|format(receipt.amount) }}</span>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-gray-500 py-4">No expected receipts</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Bank Fees Summary -->
+        <div class="glass-card p-6">
+            <h3 class="text-xl font-semibold text-white mb-6">Monthly Bank Fees by Account</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {% for fee in bank_fees %}
+                <div class="bg-gray-800/50 rounded-lg p-4">
+                    <p class="text-gray-400 text-sm mb-1">{{ fee.bank_name }}</p>
+                    <p class="text-xl font-bold text-white amount">{{ "%.2f"|format(fee.monthly_fees) }}</p>
+                    <p class="text-xs text-gray-500">{{ fee.account_number }}</p>
+                </div>
+                {% else %}
+                <div class="col-span-5 text-center text-gray-500 py-4">No bank fee data</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Cash Flow Forecast Chart
+        const cashFlowCtx = document.getElementById('cashFlowChart').getContext('2d');
+        new Chart(cashFlowCtx, {
+            type: 'bar',
+            data: {
+                labels: {{ forecast_labels | tojson }},
+                datasets: [
+                    {
+                        label: 'Incoming',
+                        data: {{ incoming_data | tojson }},
+                        backgroundColor: 'rgba(16, 185, 129, 0.8)',
+                        borderRadius: 4,
+                    },
+                    {
+                        label: 'Outgoing',
+                        data: {{ outgoing_data | tojson }},
+                        backgroundColor: 'rgba(239, 68, 68, 0.8)',
+                        borderRadius: 4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: { color: '#94a3b8' }
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+                    y: { 
+                        grid: { color: '#334155' }, 
+                        ticks: { 
+                            color: '#94a3b8', 
+                            callback: function(v) { return v.toLocaleString(); }
+                        } 
+                    }
+                }
+            }
+        });
+
+        // Currency Exposure Pie Chart
+        const currencyCtx = document.getElementById('currencyChart').getContext('2d');
+        new Chart(currencyCtx, {
+            type: 'pie',
+            data: {
+                labels: {{ currency_labels | tojson }},
+                datasets: [{
+                    data: {{ currency_data | tojson }},
+                    backgroundColor: ['#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899'],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: { color: '#94a3b8', boxWidth: 12, padding: 10 }
+                    }
+                }
+            }
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>
