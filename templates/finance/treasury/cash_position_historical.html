@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Historical cash position snapshots</p>
+            </div>
+            <a href="{{ url_for('treasury.cash_position') }}" class="text-primary hover:text-primary-light">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Cash Position
+            </a>
+        </div>
+
+        <!-- Filters -->
+        <div class="glass-card p-4 mb-6">
+            <form method="get" class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Start Date</label>
+                    <input type="date" name="start_date" value="{{ filters.start_date }}" class="bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">End Date</label>
+                    <input type="date" name="end_date" value="{{ filters.end_date }}" class="bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Currency</label>
+                    <select name="currency" class="bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                        <option value="">All</option>
+                        <option value="AED" {% if filters.currency == 'AED' %}selected{% endif %}>AED</option>
+                        <option value="USD" {% if filters.currency == 'USD' %}selected{% endif %}>USD</option>
+                        <option value="EUR" {% if filters.currency == 'EUR' %}selected{% endif %}>EUR</option>
+                        <option value="GBP" {% if filters.currency == 'GBP' %}selected{% endif %}>GBP</option>
+                    </select>
+                </div>
+                <div>
+                    <button type="submit" class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded">
+                        <i class="fas fa-filter mr-2"></i>Apply Filters
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Snapshots Table -->
+        <div class="glass-card p-6">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Bank Account</th>
+                        <th>Currency</th>
+                        <th class="text-right">Opening</th>
+                        <th class="text-right">Inflow</th>
+                        <th class="text-right">Outflow</th>
+                        <th class="text-right">Closing</th>
+                        <th class="text-right">Blocked</th>
+                        <th class="text-right">Available</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for snapshot in snapshots %}
+                    <tr>
+                        <td class="font-semibold">{{ snapshot.snapshot_date }}</td>
+                        <td>{{ snapshot.bank_account_id or 'All Accounts' }}</td>
+                        <td>{{ snapshot.currency }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(snapshot.opening_balance or 0) }}</td>
+                        <td class="text-right amount text-success">{{ "%.2f"|format(snapshot.total_inflow or 0) }}</td>
+                        <td class="text-right amount text-danger">{{ "%.2f"|format(snapshot.total_outflow or 0) }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(snapshot.closing_balance or 0) }}</td>
+                        <td class="text-right amount text-warning">{{ "%.2f"|format(snapshot.blocked_amount or 0) }}</td>
+                        <td class="text-right amount text-success">{{ "%.2f"|format(snapshot.available_balance or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center py-8">
+                            <p class="text-gray-400">No historical snapshots found</p>
+                            <p class="text-gray-500 text-sm mt-2">Cash position snapshots are created daily</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

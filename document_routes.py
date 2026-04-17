@@ -220,14 +220,25 @@ def initialize_document_tables():
     """Initialize document management tables."""
     from document_models import initialize_document_tables as init_doc_tables
     init_doc_tables()
-    
+
     # Ensure metadata columns exist in documents table
     add_column_if_not_exists('documents', 'signature_status', 'TEXT DEFAULT "Not Applicable"')
     add_column_if_not_exists('documents', 'signed_at', 'DATETIME')
     add_column_if_not_exists('documents', 'signed_by_user_id', 'INTEGER')
-    
+
     # Ensure signature type column exists
     add_column_if_not_exists('documents', 'signature_type', 'TEXT')
+
+    # Ensure folder_id column exists for documents
+    add_column_if_not_exists('documents', 'folder_id', 'INTEGER')
+
+    # Create folder index if needed
+    try:
+        with get_db_context() as db:
+            db.execute("CREATE INDEX IF NOT EXISTS idx_documents_folder ON documents(folder_id)")
+            db.commit()
+    except:
+        pass
 
 
 # =============================================================================
@@ -236,10 +247,20 @@ def initialize_document_tables():
 
 def register_document_routes(app):
     """Register all document management routes."""
-    
+
     # Initialize tables
     initialize_document_tables()
-    
+
+    # Import folder helper functions from document_models
+    from document_models import (
+        get_folder_by_id, get_folder_tree, get_folder_path, get_folder_children,
+        get_folder_documents, get_folder_stats, get_user_root_folders, check_folder_access,
+        log_folder_activity, get_user_favorites, get_user_quick_access, update_quick_access,
+        add_document_favorite, remove_document_favorite, is_document_favorited,
+        get_document_lock, lock_document, unlock_document, get_user_locks, get_overdue_locks,
+        search_documents_advanced, get_file_management_stats, generate_folder_code
+    )
+
     # Create blueprint
     documents_bp = app.route
     
@@ -2859,6 +2880,468 @@ def handle_signature_request_create(document_id, user_id):
             'message': 'Signature request created successfully',
             'request_id': request_id
         })
-    
+
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)})
+
+
+    # =============================================================================
+    # FILE MANAGEMENT - FOLDER SYSTEM ROUTES
+    # =============================================================================
+
+    @app.route('/documents/file-manager')
+    @require_login
+    @document_permission_required('view')
+    def documents_file_manager():
+        """Main file manager with folder tree view."""
+        user_id = get_current_user_id()
+        root_folders = get_user_root_folders(user_id)
+        quick_access = get_user_quick_access(user_id, limit=10)
+        favorites = get_user_favorites(user_id, limit=10)
+        stats = get_file_management_stats(user_id)
+        return render_template('documents/file_manager.html',
+            root_folders=root_folders,
+            quick_access=quick_access,
+            favorites=favorites,
+            stats=stats,
+            page_title='File Manager')
+
+    @app.route('/documents/folders')
+    @require_login
+    @document_permission_required('view')
+    def documents_folders():
+        """Folder tree view."""
+        user_id = get_current_user_id()
+        folders = get_folder_tree(user_id=user_id)
+        return render_template('documents/folders.html',
+            folders=folders,
+            page_title='Folders')
+
+    @app.route('/documents/folder/<int:folder_id>')
+    @require_login
+    @document_permission_required('view')
+    def documents_folder_detail(folder_id):
+        """Folder detail page."""
+        user_id = get_current_user_id()
+        folder = get_folder_by_id(folder_id)
+        if not folder:
+            flash("Folder not found.", "error")
+            return redirect(url_for('documents_folders'))
+        if not check_folder_access(user_id, folder_id, 'read'):
+            flash("You don't have permission to access this folder.", "error")
+            return redirect(url_for('documents_folders'))
+        subfolders = get_folder_children(folder_id)
+        documents = get_folder_documents(folder_id, user_id)
+        stats = get_folder_stats(folder_id)
+        path = get_folder_path(folder_id)
+        log_folder_activity(folder_id, user_id, 'view')
+        return render_template('documents/folder_detail.html',
+            folder=folder,
+            subfolders=subfolders,
+            documents=documents,
+            stats=stats,
+            path=path,
+            page_title=folder['name'])
+
+    @app.route('/documents/folder/create', methods=['POST'])
+    @require_login
+    @document_permission_required('write')
+    def documents_folder_create():
+        """Create a new folder."""
+        user_id = get_current_user_id()
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        parent_id = request.form.get('parent_id')
+        folder_type = request.form.get('folder_type', 'general')
+        if not name:
+            return jsonify({'success': False, 'message': 'Folder name is required'})
+        if parent_id:
+            parent_id = int(parent_id)
+            if not check_folder_access(user_id, parent_id, 'write'):
+                return jsonify({'success': False, 'message': 'Permission denied'})
+        try:
+            with get_db_context() as db:
+                folder_code = generate_folder_code(db)
+                cursor = db.execute("""
+                    INSERT INTO document_folders (folder_code, name, description, folder_type, parent_id, owner_user_id, created_by_user_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (folder_code, name, description, folder_type, parent_id, user_id, user_id))
+                folder_id = cursor.lastrowid
+                db.commit()
+            log_folder_activity(folder_id, user_id, 'create', f"Created folder: {name}")
+            return jsonify({'success': True, 'message': 'Folder created', 'folder_id': folder_id})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)})
+
+    @app.route('/documents/folder/<int:folder_id>/edit', methods=['POST'])
+    @require_login
+    @document_permission_required('write')
+    def documents_folder_edit(folder_id):
+        """Edit folder details."""
+        user_id = get_current_user_id()
+        if not check_folder_access(user_id, folder_id, 'write'):
+            return jsonify({'success': False, 'message': 'Permission denied'})
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        if not name:
+            return jsonify({'success': False, 'message': 'Folder name is required'})
+        try:
+            with get_db_context() as db:
+                db.execute("""
+                    UPDATE document_folders SET name = ?, description = ?, updated_at = datetime('now')
+                    WHERE id = ?
+                """, (name, description, folder_id))
+                db.commit()
+            log_folder_activity(folder_id, user_id, 'edit', f"Updated folder: {name}")
+            return jsonify({'success': True, 'message': 'Folder updated'})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)})
+
+    @app.route('/documents/folder/<int:folder_id>/delete', methods=['POST'])
+    @require_login
+    @document_permission_required('admin')
+    def documents_folder_delete(folder_id):
+        """Archive a folder."""
+        user_id = get_current_user_id()
+        if not check_folder_access(user_id, folder_id, 'admin'):
+            return jsonify({'success': False, 'message': 'Permission denied'})
+        try:
+            with get_db_context() as db:
+                db.execute("""
+                    UPDATE document_folders SET is_archived = 1, archived_by_user_id = ?, archived_at = datetime('now'), updated_at = datetime('now')
+                    WHERE id = ?
+                """, (user_id, folder_id))
+                db.commit()
+            log_folder_activity(folder_id, user_id, 'archive', "Folder archived")
+            return jsonify({'success': True, 'message': 'Folder archived'})
+        except Exception as e:
+            return jsonify({'success': False, 'message': str(e)})
+
+    @app.route('/documents/folder/<int:folder_id>/permissions')
+    @require_login
+    @document_permission_required('admin')
+    def documents_folder_permissions(folder_id):
+        """Manage folder permissions."""
+        user_id = get_current_user_id()
+        folder = get_folder_by_id(folder_id)
+        if not folder:
+            flash("Folder not found.", "error")
+            return redirect(url_for('documents_folders'))
+        if not check_folder_access(user_id, folder_id, 'admin'):
+            flash("Permission denied.", "error")
+            return redirect(url_for('documents_folder_detail', folder_id=folder_id))
+        with get_db_context() as db:
+            perms = db.execute("""
+                SELECT fp.*, u.username
+                FROM folder_permissions fp
+                LEFT JOIN users u ON fp.user_id = u.id
+                WHERE fp.folder_id = ?
+            """, (folder_id,)).fetchall()
+        return render_template('documents/folder_permissions.html',
+            folder=folder,
+            permissions=[dict(p) for p in perms],
+            page_title=f'Permissions - {folder["name"]}')
+
+    @app.route('/documents/folder/<int:folder_id>/activity')
+    @require_login
+    @document_permission_required('read')
+    def documents_folder_activity(folder_id):
+        """View folder activity log."""
+        user_id = get_current_user_id()
+        folder = get_folder_by_id(folder_id)
+        if not folder:
+            flash("Folder not found.", "error")
+            return redirect(url_for('documents_folders'))
+        if not check_folder_access(user_id, folder_id, 'read'):
+            flash("Permission denied.", "error")
+            return redirect(url_for('documents_folders'))
+        with get_db_context() as db:
+            activities = db.execute("""
+                SELECT fa.*, u.username
+                FROM folder_activity_log fa
+                LEFT JOIN users u ON fa.user_id = u.id
+                WHERE fa.folder_id = ?
+                ORDER BY fa.created_at DESC
+                LIMIT 100
+            """, (folder_id,)).fetchall()
+        return render_template('documents/folder_activity.html',
+            folder=folder,
+            activities=[dict(a) for a in activities],
+            page_title=f'Activity - {folder["name"]}')
+
+    @app.route('/documents/folder/api/tree')
+    @require_login
+    def documents_folder_tree_api():
+        """API endpoint for folder tree AJAX."""
+        user_id = get_current_user_id()
+        parent_id = request.args.get('parent_id')
+        parent_id = int(parent_id) if parent_id and parent_id != 'null' else None
+        if parent_id:
+            folders = get_folder_children(parent_id)
+        else:
+            folders = get_user_root_folders(user_id)
+        return jsonify({'success': True, 'folders': folders})
+
+    @app.route('/documents/favorites')
+    @require_login
+    @document_permission_required('view')
+    def documents_favorites():
+        """User's favorite documents."""
+        user_id = get_current_user_id()
+        favorites = get_user_favorites(user_id, limit=50)
+        return render_template('documents/favorites.html',
+            favorites=favorites,
+            page_title='My Favorites')
+
+    @app.route('/documents/favorite/<int:document_id>/toggle', methods=['POST'])
+    @require_login
+    def documents_favorite_toggle(document_id):
+        """Toggle favorite status."""
+        user_id = get_current_user_id()
+        if is_document_favorited(document_id, user_id):
+            remove_document_favorite(document_id, user_id)
+            return jsonify({'success': True, 'status': 'removed'})
+        else:
+            add_document_favorite(document_id, user_id)
+            return jsonify({'success': True, 'status': 'added'})
+
+    @app.route('/documents/quick-access')
+    @require_login
+    @document_permission_required('view')
+    def documents_quick_access():
+        """User's quick access items."""
+        user_id = get_current_user_id()
+        items = get_user_quick_access(user_id, limit=20)
+        return render_template('documents/quick_access.html',
+            items=items,
+            page_title='Quick Access')
+
+    @app.route('/documents/advanced-search')
+    @require_login
+    @document_permission_required('view')
+    def documents_advanced_search():
+        """Advanced search page."""
+        return render_template('documents/advanced_search.html',
+            page_title='Advanced Search')
+
+    @app.route('/documents/search/api', methods=['POST'])
+    @require_login
+    def documents_search_api():
+        """API endpoint for advanced search."""
+        criteria = {
+            'keyword': request.form.get('keyword', ''),
+            'folder_id': request.form.get('folder_id'),
+            'document_type': request.form.get('document_type'),
+            'owner_user_id': request.form.get('owner_user_id'),
+            'visibility': request.form.get('visibility'),
+        }
+        if criteria['folder_id']:
+            criteria['folder_id'] = int(criteria['folder_id'])
+        results = search_documents_advanced(criteria)
+        return jsonify({'success': True, 'results': results, 'count': len(results)})
+
+    @app.route('/documents/checkouts')
+    @require_login
+    @document_permission_required('view')
+    def documents_checkouts():
+        """Show checked out documents."""
+        user_id = get_current_user_id()
+        my_locks = get_user_locks(user_id)
+        from permissions import user_has_permission
+        if user_has_permission(user_id, 'documents', 'checkin_checkout', 'manage'):
+            overdue = get_overdue_locks()
+        else:
+            overdue = []
+        return render_template('documents/checkouts.html',
+            my_locks=my_locks,
+            overdue_locks=overdue,
+            page_title='Checked Out Files')
+
+    @app.route('/documents/<int:document_id>/lock', methods=['POST'])
+    @require_login
+    def documents_lock(document_id):
+        """Lock a document for checkout."""
+        user_id = get_current_user_id()
+        lock_type = request.form.get('lock_type', 'checkout')
+        reason = request.form.get('reason', '')
+        result, error = lock_document(document_id, user_id, lock_type, reason)
+        if error:
+            return jsonify({'success': False, 'message': error})
+        return jsonify({'success': True, 'message': 'Document locked', 'lock': result})
+
+    @app.route('/documents/<int:document_id>/unlock', methods=['POST'])
+    @require_login
+    def documents_unlock(document_id):
+        """Unlock a document."""
+        user_id = get_current_user_id()
+        force = request.form.get('force', 'false').lower() == 'true'
+        from permissions import user_has_permission
+        if force and not user_has_permission(user_id, 'documents', 'checkin_checkout', 'manage'):
+            return jsonify({'success': False, 'message': 'Only managers can force unlock'})
+        result, error = unlock_document(document_id, user_id, force)
+        if error:
+            return jsonify({'success': False, 'message': error})
+        return jsonify({'success': True, 'message': 'Document unlocked'})
+
+    @app.route('/documents/workspace')
+    @require_login
+    @document_permission_required('view')
+    def documents_workspace():
+        """Personal workspace."""
+        user_id = get_current_user_id()
+        stats = get_file_management_stats(user_id)
+        recent_locks = get_user_locks(user_id)[:5]
+        favorites = get_user_favorites(user_id, limit=6)
+        return render_template('documents/workspace.html',
+            stats=stats,
+            recent_locks=recent_locks,
+            favorites=favorites,
+            page_title='My Workspace')
+
+    @app.route('/documents/executive-dashboard')
+    @require_login
+    @document_permission_required('view')
+    def documents_executive_dashboard():
+        """Executive dashboard for documents."""
+        stats = get_file_management_stats()
+        return render_template('documents/executive_dashboard.html',
+            stats=stats,
+            page_title='Documents Executive Dashboard')
+
+    @app.route('/documents/reports-center')
+    @require_login
+    @document_permission_required('view')
+    def documents_reports_center():
+        """Reports center."""
+        return render_template('documents/reports_center.html',
+            page_title='Reports Center')
+
+    @app.route('/documents/report/file-inventory')
+    @require_login
+    @document_permission_required('view')
+    def documents_report_file_inventory():
+        """File inventory report."""
+        with get_db_context() as db:
+            docs = db.execute("""
+                SELECT d.*, f.name as folder_name, u.username as owner_name,
+                       v.version_number, v.uploaded_at as last_version_date
+                FROM documents d
+                LEFT JOIN document_folders f ON d.folder_id = f.id
+                LEFT JOIN users u ON d.owner_user_id = u.id
+                LEFT JOIN document_versions v ON d.current_version_id = v.id
+                WHERE d.archived = 0
+                ORDER BY d.updated_at DESC
+            """).fetchall()
+        return render_template('documents/report_file_inventory.html',
+            documents=[dict(d) for d in docs],
+            page_title='File Inventory Report')
+
+    @app.route('/documents/report/folder-utilization')
+    @require_login
+    @document_permission_required('view')
+    def documents_report_folder_utilization():
+        """Folder utilization report."""
+        with get_db_context() as db:
+            folders = db.execute("""
+                SELECT f.*,
+                       (SELECT COUNT(*) FROM document_folders WHERE parent_id = f.id) as subfolder_count,
+                       (SELECT COUNT(*) FROM documents WHERE folder_id = f.id) as document_count
+                FROM document_folders f
+                WHERE f.is_archived = 0
+                ORDER BY f.name
+            """).fetchall()
+        return render_template('documents/report_folder_utilization.html',
+            folders=[dict(f) for f in folders],
+            page_title='Folder Utilization Report')
+
+    @app.route('/documents/report/access-audit')
+    @require_login
+    @document_permission_required('view')
+    def documents_report_access_audit():
+        """Access audit report."""
+        with get_db_context() as db:
+            logs = db.execute("""
+                SELECT dal.*, d.title as document_title, u.username
+                FROM document_access_logs dal
+                LEFT JOIN documents d ON dal.document_id = d.id
+                LEFT JOIN users u ON dal.user_id = u.id
+                ORDER BY dal.accessed_at DESC
+                LIMIT 500
+            """).fetchall()
+        return render_template('documents/report_access_audit.html',
+            logs=[dict(l) for l in logs],
+            page_title='Access Audit Report')
+
+    @app.route('/documents/report/retention-status')
+    @require_login
+    @document_permission_required('view')
+    def documents_report_retention_status():
+        """Retention status report."""
+        with get_db_context() as db:
+            docs = db.execute("""
+                SELECT d.*, f.name as folder_name, u.username as owner_name
+                FROM documents d
+                LEFT JOIN document_folders f ON d.folder_id = f.id
+                LEFT JOIN users u ON d.owner_user_id = u.id
+                WHERE d.archived = 0 AND d.expiry_date IS NOT NULL
+                ORDER BY d.expiry_date ASC
+            """).fetchall()
+        return render_template('documents/report_retention_status.html',
+            documents=[dict(d) for d in docs],
+            page_title='Retention Status Report')
+
+    @app.route('/documents/<int:document_id>/preview')
+    @require_login
+    def documents_preview(document_id):
+        """Preview a document."""
+        user_id = get_current_user_id()
+        doc = get_one("""
+            SELECT d.*, v.file_path, v.file_name, v.mime_type
+            FROM documents d
+            LEFT JOIN document_versions v ON d.current_version_id = v.id
+            WHERE d.id = ?
+        """, (document_id,))
+        if not doc:
+            flash("Document not found.", "error")
+            return redirect(url_for('documents_all'))
+        file_path = doc.get('file_path') or doc.get('storage_path')
+        if not file_path or not os.path.exists(file_path):
+            flash("File not found on server.", "error")
+            return redirect(url_for('documents_detail', document_id=document_id))
+        can_download = document_has_permission(user_id, document_id, 'download')
+        mime_type = doc.get('mime_type', '')
+        file_ext = doc.get('file_type', '').lower()
+        is_pdf = file_ext == 'pdf' or mime_type == 'application/pdf'
+        is_image = mime_type.startswith('image/')
+        is_video = mime_type.startswith('video/')
+        is_audio = mime_type.startswith('audio/')
+        is_office = file_ext in ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx']
+        file_icon_map = {
+            'pdf': 'file-pdf', 'doc': 'file-word', 'docx': 'file-word',
+            'xls': 'file-excel', 'xlsx': 'file-excel', 'ppt': 'file-powerpoint', 'pptx': 'file-powerpoint',
+            'jpg': 'file-image', 'jpeg': 'file-image', 'png': 'file-image', 'gif': 'file-image',
+        }
+        file_icon = file_icon_map.get(file_ext, 'file-alt')
+        return render_template('documents/preview.html',
+            document=doc, can_download=can_download,
+            is_pdf=is_pdf, is_image=is_image, is_video=is_video,
+            is_audio=is_audio, is_office=is_office,
+            mime_type=mime_type, file_icon=file_icon)
+
+    @app.route('/documents/flow/notify', methods=['POST'])
+    @require_login
+    def documents_flow_notify():
+        """Flow notification endpoint for document events."""
+        event_type = request.form.get('event_type')
+        document_id = request.form.get('document_id')
+        user_id = get_current_user_id()
+        message = request.form.get('message', '')
+        if event_type == 'share':
+            create_notification(
+                user_id=user_id,
+                title='Document Shared',
+                message=message,
+                module='documents',
+                related_id=document_id
+            )
+        return jsonify({'success': True})

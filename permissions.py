@@ -1382,5 +1382,365 @@ def _create_default_roles():
                     add_permission_to_role(role_id, module, resource, action)
 
 
+# =============================================================================
+# FIELD-LEVEL SECURITY (Enterprise Data Protection)
+# =============================================================================
+# Sensitive fields that require elevated permissions to view or edit.
+# Used for: salary, bank account, SSN/tax ID, credit limit, etc.
+
+SENSITIVE_FIELDS = {
+    # HR / Employee fields
+    'hr': {
+        'employees': {
+            'salary': {'masked_default': '*****', 'access_level': 'restricted'},
+            'bank_account_number': {'masked_default': '****', 'access_level': 'restricted'},
+            'tax_id': {'masked_default': '***-**-****', 'access_level': 'restricted'},
+            'ssn': {'masked_default': '***-**-****', 'access_level': 'restricted'},
+            'date_of_birth': {'masked_default': '**/**/****', 'access_level': 'elevated'},
+            'emergency_contact_phone': {'masked_default': '*****', 'access_level': 'elevated'},
+            'emergency_contact_name': {'masked_default': '*****', 'access_level': 'elevated'},
+        },
+        'payroll': {
+            'net_pay': {'masked_default': '*****', 'access_level': 'restricted'},
+            'gross_pay': {'masked_default': '*****', 'access_level': 'restricted'},
+            'tax_withheld': {'masked_default': '*****', 'access_level': 'restricted'},
+            'bank_account': {'masked_default': '****', 'access_level': 'restricted'},
+        }
+    },
+    # Finance / Treasury fields
+    'finance': {
+        'accounts': {
+            'bank_account_number': {'masked_default': '****', 'access_level': 'restricted'},
+            'iban': {'masked_default': '****', 'access_level': 'restricted'},
+            'swift_code': {'masked_default': '*****', 'access_level': 'restricted'},
+        },
+        'bank_accounts': {
+            'account_number': {'masked_default': '****', 'access_level': 'restricted'},
+            'iban': {'masked_default': '****', 'access_level': 'restricted'},
+            'pin': {'masked_default': '*****', 'access_level': 'restricted'},
+            'online_password': {'masked_default': '*****', 'access_level': 'restricted'},
+        }
+    },
+    # Customer Intelligence
+    'customer_intelligence': {
+        'profiles': {
+            'credit_card': {'masked_default': '****', 'access_level': 'restricted'},
+            'tax_id': {'masked_default': '***-**-****', 'access_level': 'restricted'},
+        }
+    },
+    # CRM / Sales
+    'crm': {
+        'customers': {
+            'credit_limit': {'masked_default': None, 'access_level': 'elevated'},
+            'payment_terms_override': {'masked_default': None, 'access_level': 'elevated'},
+        }
+    },
+    # Treasury
+    'treasury': {
+        'bank_accounts': {
+            'account_number': {'masked_default': '****', 'access_level': 'restricted'},
+            'pin': {'masked_default': '*****', 'access_level': 'restricted'},
+            'password': {'masked_default': '*****', 'access_level': 'restricted'},
+        },
+        'counterparties': {
+            'bank_account': {'masked_default': '****', 'access_level': 'restricted'},
+        }
+    }
+}
+
+
+def get_sensitive_fields(module, resource):
+    """Get list of sensitive fields for a module/resource."""
+    if module not in SENSITIVE_FIELDS:
+        return []
+    resource_fields = SENSITIVE_FIELDS.get(module, {}).get(resource, {})
+    return list(resource_fields.keys())
+
+
+def is_sensitive_field(module, resource, field):
+    """Check if a field is marked as sensitive."""
+    if module not in SENSITIVE_FIELDS:
+        return False
+    return field in SENSITIVE_FIELDS.get(module, {}).get(resource, {})
+
+
+def get_field_access_level(module, resource, field):
+    """Get the access level required for a field: 'restricted', 'elevated', or None."""
+    if module not in SENSITIVE_FIELDS:
+        return None
+    field_info = SENSITIVE_FIELDS.get(module, {}).get(resource, {}).get(field, {})
+    return field_info.get('access_level')
+
+
+def mask_sensitive_value(module, resource, field, value, unmasked=False):
+    """
+    Mask a sensitive field value based on access level.
+
+    Args:
+        module: Module name (e.g., 'hr', 'finance')
+        resource: Resource name (e.g., 'employees', 'bank_accounts')
+        field: Field name
+        value: Original value
+        unmasked: If True, return the actual value (caller verified access)
+
+    Returns:
+        Masked string or original value if unmasked
+    """
+    if unmasked or not value:
+        return value
+
+    if module not in SENSITIVE_FIELDS:
+        return value
+
+    field_info = SENSITIVE_FIELDS.get(module, {}).get(resource, {}).get(field, {})
+    return field_info.get('masked_default', '*****')
+
+
+def filter_sensitive_fields(module, resource, record_dict, unmasked=False):
+    """
+    Filter a record dictionary to mask sensitive fields.
+
+    Args:
+        module: Module name
+        resource: Resource name
+        record_dict: Dictionary of field:value pairs
+        unmasked: If True, don't mask (caller verified access)
+
+    Returns:
+        New dictionary with sensitive fields masked
+    """
+    if module not in SENSITIVE_FIELDS:
+        return record_dict
+
+    sensitive = SENSITIVE_FIELDS.get(module, {}).get(resource, {})
+    if not sensitive:
+        return record_dict
+
+    result = dict(record_dict)
+    for field in sensitive:
+        if field in result:
+            result[field] = mask_sensitive_value(module, resource, field, result[field], unmasked)
+
+    return result
+
+
+def user_can_view_field(user_id, module, resource, field):
+    """
+    Check if a user can view a specific sensitive field.
+    Returns (can_view, reason).
+    """
+    access_level = get_field_access_level(module, resource, field)
+    if not access_level:
+        return True, None  # Not sensitive
+
+    # Get user's role
+    user_perms = get_user_permissions(user_id)
+    role_perms = user_perms.get(module, {})
+
+    # Admin role can view everything
+    if role_perms.get('admin') or '*' in role_perms.get('*', []):
+        return True, None
+
+    if access_level == 'restricted':
+        # Only roles explicitly granted the restricted field can view
+        # Check for field-level override permission
+        field_perm_key = f'{resource}.{field}'
+        if field_perm_key in role_perms:
+            actions = role_perms[field_perm_key]
+            if 'view_sensitive' in actions or '*' in actions:
+                return True, None
+
+        # Default: deny restricted fields
+        return False, f"Access to {field} requires elevated permissions"
+
+    elif access_level == 'elevated':
+        # Elevated fields need view permission on the resource at minimum
+        resource_perms = role_perms.get(resource, [])
+        if 'view' in resource_perms or 'admin' in resource_perms or '*' in resource_perms:
+            return True, None
+        return False, f"Access to {field} requires view permission on {resource}"
+
+    return True, None
+
+
+# =============================================================================
+# SEGREGATION OF DUTIES (SOD) MATRIX
+# =============================================================================
+
+SOD_RULES = [
+    # Finance SOD: Creator and approver must be different
+    {
+        'rule_id': 'FIN_SOD_001',
+        'name': 'Finance Transaction Separation',
+        'description': 'User who creates a journal entry cannot approve it',
+        'entity_type': 'finance_journal',
+        'create_permission': ('finance', 'journals', 'create'),
+        'approve_permission': ('finance', 'journals', 'approve'),
+        'severity': 'HIGH',
+    },
+    {
+        'rule_id': 'FIN_SOD_002',
+        'name': 'Payment Approval Separation',
+        'description': 'User who creates a payment cannot approve it',
+        'entity_type': 'finance_payment',
+        'create_permission': ('finance', 'ap_payments', 'create'),
+        'approve_permission': ('finance', 'ap_payments', 'approve'),
+        'severity': 'HIGH',
+    },
+    {
+        'rule_id': 'TR_SOD_001',
+        'name': 'Treasury Transfer Separation',
+        'description': 'User who creates a transfer cannot approve it',
+        'entity_type': 'treasury_transfer',
+        'create_permission': ('finance', 'transfers', 'create'),
+        'approve_permission': ('finance', 'transfers', 'approve'),
+        'severity': 'HIGH',
+    },
+    {
+        'rule_id': 'TR_SOD_002',
+        'name': 'Treasury Payment Run Separation',
+        'description': 'User who creates a payment run cannot execute it',
+        'entity_type': 'treasury_payment_run',
+        'create_permission': ('finance', 'payment_runs', 'create'),
+        'approve_permission': ('finance', 'payment_runs', 'approve'),
+        'execute_permission': ('finance', 'payment_runs', 'execute'),
+        'severity': 'HIGH',
+    },
+    {
+        'rule_id': 'ASSET_SOD_001',
+        'name': 'Asset Disposal Separation',
+        'description': 'User who creates a disposal request cannot approve it',
+        'entity_type': 'asset_disposal',
+        'create_permission': ('assets', 'disposal_requests', 'create'),
+        'approve_permission': ('assets', 'disposal_requests', 'approve'),
+        'severity': 'HIGH',
+    },
+    {
+        'rule_id': 'HR_SOD_001',
+        'name': 'Payroll Processing Separation',
+        'description': 'User who processes payroll cannot approve it',
+        'entity_type': 'hr_payroll',
+        'create_permission': ('hr', 'payroll', 'create'),
+        'approve_permission': ('hr', 'payroll', 'approve'),
+        'severity': 'HIGH',
+    },
+    {
+        'rule_id': 'PROC_SOD_001',
+        'name': 'Purchase Order Separation',
+        'description': 'User who creates a PO above threshold cannot approve it',
+        'entity_type': 'procurement_order',
+        'create_permission': ('procurement', 'orders', 'create'),
+        'approve_permission': ('procurement', 'orders', 'approve'),
+        'severity': 'MEDIUM',
+    },
+]
+
+
+def check_sod_violation(user_id, entity_type, action, entity_id=None, entity_data=None):
+    """
+    Check if performing an action would violate SOD rules.
+
+    Args:
+        user_id: ID of user attempting the action
+        entity_type: Type of entity (e.g., 'finance_journal')
+        action: Action being performed (e.g., 'approve')
+        entity_id: ID of specific entity (if known)
+        entity_data: Dict with entity data (e.g., {'created_by': user_id})
+
+    Returns:
+        (is_violation, violation_details)
+        - is_violation: True if SOD would be violated
+        - violation_details: Dict with rule details if violated
+    """
+    # Find applicable SOD rules
+    for rule in SOD_RULES:
+        if rule['entity_type'] != entity_type:
+            continue
+
+        # Check if this is an approval/execute action
+        approve_action = None
+        if action == 'approve' and 'approve_permission' in rule:
+            approve_action = rule['approve_permission']
+        elif action == 'execute' and 'execute_permission' in rule:
+            approve_action = rule['execute_permission']
+        else:
+            continue
+
+        # Get the creator of the entity
+        creator_id = None
+        if entity_data and 'created_by' in entity_data:
+            creator_id = entity_data['created_by']
+        elif entity_id:
+            # Try to look up from database
+            creator_id = _get_entity_creator(entity_type, entity_id)
+
+        # Check SOD violation
+        if creator_id and creator_id == user_id:
+            return True, {
+                'rule_id': rule['rule_id'],
+                'rule_name': rule['name'],
+                'description': rule['description'],
+                'severity': rule['severity'],
+                'message': f"SOD Violation: You cannot {action} an item you created. "
+                          f"Different personnel must create and approve for segregation of duties."
+            }
+
+    return False, None
+
+
+def _get_entity_creator(entity_type, entity_id):
+    """Get the creator user_id for an entity."""
+    # Generic lookup by entity_type pattern
+    creator_field_map = {
+        'finance_journal': ('finance_journals', 'created_by_user_id'),
+        'finance_payment': ('finance_supplier_payments', 'created_by'),
+        'treasury_transfer': ('treasury_transfer_requests', 'requested_by'),
+        'treasury_payment_run': ('treasury_payment_runs', 'created_by'),
+        'asset_disposal': ('disposal_requests', 'requested_by'),
+        'procurement_order': ('procurement_orders', 'created_by'),
+    }
+
+    if entity_type not in creator_field_map:
+        return None
+
+    table, field = creator_field_map[entity_type]
+    result = get_one(f"SELECT {field} FROM {table} WHERE id = ?", (entity_id,))
+    return result[field] if result else None
+
+
+def get_sod_violations_for_user(user_id):
+    """
+    Get all potential SOD violations for a user's current permissions.
+    Returns list of rules that would be violated by this user's permission set.
+    """
+    user_perms = get_user_permissions(user_id)
+    violations = []
+
+    for rule in SOD_RULES:
+        mod, res, act = rule.get('approve_permission', rule.get('execute_permission', (None, None, None)))
+        if not mod:
+            continue
+
+        # Check if user has both create and approve/execute on same rule
+        can_create = user_has_permission(user_id, mod, res, 'create')
+        can_approve = user_has_permission(user_id, mod, res, act.split('_')[-1] if '_' in act else act)
+
+        if can_create and can_approve:
+            violations.append({
+                'rule_id': rule['rule_id'],
+                'rule_name': rule['name'],
+                'description': rule['description'],
+                'severity': rule['severity'],
+                'create_permission': rule['create_permission'],
+                'approve_permission': rule.get('approve_permission') or rule.get('execute_permission'),
+            })
+
+    return violations
+
+
+# =============================================================================
+# INITIALIZE PERMISSIONS
+# =============================================================================
+
 # Initialize permissions when module is imported
 initialize_permissions()

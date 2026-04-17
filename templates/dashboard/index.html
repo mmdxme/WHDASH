@@ -1,0 +1,3492 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="enterprise-dashboard fade-in" id="enterprise-dashboard">
+    
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 1: GLOBAL HEADER / WELCOME BAR
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-header" id="zone-header">
+        <div class="welcome-bar">
+            <!-- Left: Greeting & Context -->
+            <div class="welcome-left">
+                <div class="greeting-block">
+                    <div class="greeting-icon">
+                        <i class="fas fa-sparkles"></i>
+                    </div>
+                    <div class="greeting-text">
+                        <h1 class="greeting-title">{{ dashboard.greeting }}</h1>
+                        <p class="greeting-subtitle">
+                            <span class="greeting-date">{{ dashboard.current_date }}</span>
+                            <span class="greeting-divider">•</span>
+                            <span class="greeting-company">{{ session.get('company_name', 'All Companies') }}</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Center: Quick Search -->
+            <div class="welcome-search">
+                <div class="global-search-wrapper">
+                    <i class="fas fa-search global-search-icon"></i>
+                    <input type="text" 
+                           id="dashboard-global-search" 
+                           class="global-search-input" 
+                           placeholder="{{ t('dashboard_search_placeholder', 'Search modules, reports, actions...') }}"
+                           autocomplete="off">
+                    <kbd class="search-kbd">⌘K</kbd>
+                </div>
+            </div>
+            
+            <!-- Right: User & Notifications -->
+            <div class="welcome-right">
+                <div class="header-actions">
+                    <!-- Quick Actions Dropdown -->
+                    <div class="quick-actions-dropdown">
+                        <button class="header-action-btn" id="quick-actions-trigger" title="{{ t('quick_actions', 'Quick Actions') }}">
+                            <i class="fas fa-bolt"></i>
+                            <span class="action-label">{{ t('actions', 'Actions') }}</span>
+                            <i class="fas fa-chevron-down action-chevron"></i>
+                        </button>
+                        <div class="quick-actions-menu" id="quick-actions-menu">
+                            <div class="menu-header">{{ t('quick_actions', 'Quick Actions') }}</div>
+                            {% for action in dashboard.quick_actions %}
+                            <a href="{{ action.url }}" class="quick-action-item">
+                                <i class="fas fa-{{ action.icon }}"></i>
+                                <span>{{ action.label }}</span>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <!-- Notifications Bell -->
+                    <button class="header-icon-btn" id="notifications-trigger" title="{{ t('notifications', 'Notifications') }}">
+                        <i class="fas fa-bell"></i>
+                        {% if dashboard.notifications.unread > 0 %}
+                        <span class="notification-badge">{{ dashboard.notifications.unread }}</span>
+                        {% endif %}
+                    </button>
+                    
+                    <!-- User Avatar -->
+                    <div class="user-profile-dropdown">
+                        <button class="user-avatar-btn" id="user-profile-trigger">
+                            <div class="user-avatar">
+                                {% if session.get('profile_pic') %}
+                                <img src="{{ url_for('static', filename='uploads/' + session.get('profile_pic', '')) }}" alt="Profile">
+                                {% else %}
+                                <i class="fas fa-user"></i>
+                                {% endif %}
+                            </div>
+                            <div class="user-info-mini">
+                                <span class="user-name-mini">{{ session.get('username', 'User') }}</span>
+                                <span class="user-role-badge">{{ session.get('user_role', 'User') }}</span>
+                            </div>
+                            <i class="fas fa-chevron-down user-chevron"></i>
+                        </button>
+                        <div class="user-profile-menu" id="user-profile-menu">
+                            <div class="profile-menu-header">
+                                <div class="profile-avatar-lg">
+                                    {% if session.get('profile_pic') %}
+                                    <img src="{{ url_for('static', filename='uploads/' + session.get('profile_pic', '')) }}" alt="Profile">
+                                    {% else %}
+                                    <i class="fas fa-user"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="profile-info">
+                                    <span class="profile-name">{{ session.get('username', 'User') }}</span>
+                                    <span class="profile-email">{{ session.get('email', 'user@company.com') }}</span>
+                                </div>
+                            </div>
+                            <div class="profile-menu-items">
+                                <a href="{{ url_for('profile') }}" class="profile-menu-item">
+                                    <i class="fas fa-user-circle"></i>
+                                    <span>{{ t('my_profile', 'My Profile') }}</span>
+                                </a>
+                                <a href="{{ url_for('preferences') }}" class="profile-menu-item">
+                                    <i class="fas fa-sliders-h"></i>
+                                    <span>{{ t('preferences', 'Preferences') }}</span>
+                                </a>
+                                <div class="menu-divider"></div>
+                                <a href="{{ url_for('logout') }}" class="profile-menu-item text-danger">
+                                    <i class="fas fa-sign-out-alt"></i>
+                                    <span>{{ t('logout', 'Logout') }}</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 2: EXECUTIVE KPI STRIP
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-kpi-strip" id="zone-kpi">
+        <div class="kpi-strip-header">
+            <h2 class="zone-title">
+                <i class="fas fa-chart-line zone-title-icon"></i>
+                {{ t('executive_kpis', 'Executive KPIs') }}
+            </h2>
+            <div class="kpi-controls">
+                <button class="kpi-control-btn" id="kpi-refresh" title="{{ t('refresh', 'Refresh') }}">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <div class="kpi-period-selector">
+                    <button class="period-btn active" data-period="today">{{ t('today', 'Today') }}</button>
+                    <button class="period-btn" data-period="week">{{ t('this_week', 'This Week') }}</button>
+                    <button class="period-btn" data-period="month">{{ t('this_month', 'This Month') }}</button>
+                </div>
+            </div>
+        </div>
+        <div class="kpi-cards-container" id="kpi-cards-container">
+            {% for kpi in dashboard.kpis %}
+            <div class="kpi-card glass-panel kpi-card--{{ kpi.severity }}" 
+                 data-kpi-id="{{ kpi.id }}"
+                 data-link="{{ kpi.link|default('#') }}"
+                 onclick="handleKpiClick(this)">
+                <div class="kpi-card-accent"></div>
+                <div class="kpi-card-content">
+                    <div class="kpi-card-icon-wrap">
+                        <div class="kpi-card-icon kpi-card-icon--{{ kpi.severity }}">
+                            <i class="fas fa-{{ kpi.icon }}"></i>
+                        </div>
+                    </div>
+                    <div class="kpi-card-body">
+                        <span class="kpi-card-label">{{ kpi.label }}</span>
+                        <span class="kpi-card-value">{{ kpi.formatted_value }}</span>
+                        {% if kpi.subtext %}
+                        <span class="kpi-card-subtext">{{ kpi.subtext }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="kpi-card-meta">
+                        {% if kpi.trend %}
+                        <div class="kpi-trend kpi-trend--{{ kpi.trend_direction }}">
+                            <i class="fas fa-{{ 'arrow-up' if kpi.trend_direction == 'up' else 'arrow-down' }}"></i>
+                            <span>{{ kpi.trend }}</span>
+                        </div>
+                        {% endif %}
+                        <div class="kpi-card-actions">
+                            <i class="fas fa-external-link-alt kpi-drill-down"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 3: SMART QUICK ACCESS / MODULE LAUNCHER
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-module-launcher" id="zone-modules">
+        <div class="module-launcher-header">
+            <h2 class="zone-title">
+                <i class="fas fa-th-large zone-title-icon"></i>
+                {{ t('module_launcher', 'Module Launcher') }}
+            </h2>
+            <div class="module-launcher-controls">
+                <div class="view-toggle">
+                    <button class="view-toggle-btn active" data-view="grid" title="{{ t('grid_view', 'Grid View') }}">
+                        <i class="fas fa-th"></i>
+                    </button>
+                    <button class="view-toggle-btn" data-view="compact" title="{{ t('compact_view', 'Compact View') }}">
+                        <i class="fas fa-th-large"></i>
+                    </button>
+                </div>
+                <button class="module-filter-btn" id="show-favorites-only">
+                    <i class="fas fa-star"></i>
+                    {{ t('favorites', 'Favorites') }}
+                </button>
+            </div>
+        </div>
+        
+        <!-- Recently Used Section -->
+        {% if dashboard.recent_modules %}
+        <div class="module-section recently-used">
+            <h3 class="module-section-title">
+                <i class="fas fa-clock"></i>
+                {{ t('recently_used', 'Recently Used') }}
+            </h3>
+            <div class="module-grid module-grid--recent">
+                {% for module in dashboard.recent_modules %}
+                <a href="{{ module.url }}" class="module-tile module-tile--recent" title="{{ module.label }}">
+                    <div class="module-tile-icon">
+                        <i class="fas fa-{{ module.icon }}"></i>
+                    </div>
+                    <span class="module-tile-label">{{ module.label }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Favorites Section -->
+        {% if dashboard.favorite_modules %}
+        <div class="module-section favorites">
+            <h3 class="module-section-title">
+                <i class="fas fa-star"></i>
+                {{ t('favorites', 'Favorites') }}
+            </h3>
+            <div class="module-grid module-grid--favorites">
+                {% for module in dashboard.favorite_modules %}
+                <a href="{{ module.url }}" class="module-tile module-tile--favorite" data-module-id="{{ module.id }}">
+                    <div class="module-tile-icon">
+                        <i class="fas fa-{{ module.icon }}"></i>
+                    </div>
+                    <span class="module-tile-label">{{ module.label }}</span>
+                    <button class="module-tile-star active" onclick="event.preventDefault(); toggleFavorite('{{ module.id }}')">
+                        <i class="fas fa-star"></i>
+                    </button>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Module Categories -->
+        {% for category in dashboard.module_categories %}
+        <div class="module-section" data-category="{{ category.id }}">
+            <h3 class="module-section-title">
+                <i class="fas fa-{{ category.icon }}"></i>
+                {{ category.label }}
+            </h3>
+            <div class="module-grid">
+                {% for module in category.modules %}
+                <a href="{{ module.url }}" 
+                   class="module-tile {% if module.is_favorite %}module-tile--favorite{% endif %}"
+                   data-module-id="{{ module.id }}"
+                   data-permission="{{ module.permission }}">
+                    <div class="module-tile-icon">
+                        <i class="fas fa-{{ module.icon }}"></i>
+                    </div>
+                    <div class="module-tile-content">
+                        <span class="module-tile-label">{{ module.label }}</span>
+                        {% if module.description %}
+                        <span class="module-tile-desc">{{ module.description }}</span>
+                        {% endif %}
+                    </div>
+                    {% if module.is_favorite %}
+                    <button class="module-tile-star active" onclick="event.preventDefault(); toggleFavorite('{{ module.id }}')">
+                        <i class="fas fa-star"></i>
+                    </button>
+                    {% else %}
+                    <button class="module-tile-star" onclick="event.preventDefault(); toggleFavorite('{{ module.id }}')">
+                        <i class="far fa-star"></i>
+                    </button>
+                    {% endif %}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 4 & 5: ALERTS + OPERATIONAL OVERVIEW (Two Column)
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <div class="dashboard-row dashboard-row--5035">
+        
+        <!-- Zone 4: Alerts / Exceptions -->
+        <section class="dashboard-zone zone-alerts" id="zone-alerts">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-exclamation-circle zone-title-icon text-danger"></i>
+                    {{ t('alerts_exceptions', 'Alerts & Exceptions') }}
+                    {% if dashboard.alerts.total_count > 0 %}
+                    <span class="zone-badge zone-badge--danger">{{ dashboard.alerts.total_count }}</span>
+                    {% endif %}
+                </h2>
+                <div class="zone-actions">
+                    <div class="alert-filters">
+                        <button class="alert-filter-btn active" data-filter="all">{{ t('all', 'All') }}</button>
+                        <button class="alert-filter-btn" data-filter="critical">{{ t('critical', 'Critical') }}</button>
+                        <button class="alert-filter-btn" data-filter="warning">{{ t('warning', 'Warning') }}</button>
+                    </div>
+                    <a href="{{ url_for('dashboard_alerts') }}" class="zone-action-link">
+                        {{ t('view_all', 'View All') }}
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="alerts-list" id="alerts-list">
+                {% if dashboard.alerts.items %}
+                    {% for alert in dashboard.alerts.items %}
+                    <div class="alert-item alert-item--{{ alert.severity }}" data-alert-id="{{ alert.id }}">
+                        <div class="alert-severity-indicator"></div>
+                        <div class="alert-icon">
+                            <i class="fas fa-{{ alert.icon }}"></i>
+                        </div>
+                        <div class="alert-content">
+                            <div class="alert-header-row">
+                                <span class="alert-title">{{ alert.title }}</span>
+                                <span class="alert-time">{{ alert.time_ago }}</span>
+                            </div>
+                            <p class="alert-message">{{ alert.message }}</p>
+                            {% if alert.action_label %}
+                            <div class="alert-actions">
+                                <a href="{{ alert.action_url }}" class="alert-action-btn alert-action-btn--primary">
+                                    {{ alert.action_label }}
+                                </a>
+                                {% if alert.dismissible %}
+                                <button class="alert-action-btn alert-action-btn--ghost" onclick="dismissAlert('{{ alert.id }}')">
+                                    {{ t('dismiss', 'Dismiss') }}
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-check-circle"></i>
+                    <p>{{ t('no_alerts', 'No alerts at this time') }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+        
+        <!-- Zone 5: Operational Overview -->
+        <section class="dashboard-zone zone-operational" id="zone-operational">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-cogs zone-title-icon text-info"></i>
+                    {{ t('operational_overview', 'Operational Overview') }}
+                </h2>
+                <a href="{{ url_for('operational_dashboard') }}" class="zone-action-link">
+                    {{ t('full_view', 'Full View') }}
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+            <div class="operational-widgets">
+                {% for widget in dashboard.operational_widgets %}
+                <div class="operational-widget" data-widget-type="{{ widget.type }}">
+                    <div class="widget-header">
+                        <div class="widget-icon">
+                            <i class="fas fa-{{ widget.icon }}"></i>
+                        </div>
+                        <h3 class="widget-title">{{ widget.title }}</h3>
+                        {% if widget.badge %}
+                        <span class="widget-badge widget-badge--{{ widget.badge_type }}">{{ widget.badge }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="widget-body">
+                        {% if widget.type == 'kpi' %}
+                        <div class="widget-kpi">
+                            <span class="widget-kpi-value">{{ widget.value }}</span>
+                            {% if widget.subtitle %}
+                            <span class="widget-kpi-subtitle">{{ widget.subtitle }}</span>
+                            {% endif %}
+                        </div>
+                        {% elif widget.type == 'list' %}
+                        <ul class="widget-list">
+                            {% for item in widget.items %}
+                            <li class="widget-list-item">
+                                <span class="item-label">{{ item.label }}</span>
+                                <span class="item-value">{{ item.value }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% elif widget.type == 'mini-chart' %}
+                        <canvas class="widget-mini-chart" data-chart-type="{{ widget.chart_type }}" data-chart-data="{{ widget.chart_data|tojson }}"></canvas>
+                        {% endif %}
+                    </div>
+                    {% if widget.link %}
+                    <a href="{{ widget.link }}" class="widget-footer-link">
+                        {{ t('view_details', 'View Details') }}
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 6 & 7: FINANCIAL SNAPSHOT + WORKFLOW (Two Column)
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <div class="dashboard-row dashboard-row--5050">
+        
+        <!-- Zone 6: Financial & Business Snapshot -->
+        <section class="dashboard-zone zone-financial" id="zone-financial">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-chart-pie zone-title-icon text-success"></i>
+                    {{ t('financial_snapshot', 'Financial Snapshot') }}
+                </h2>
+                <a href="{{ url_for('finance_dashboard') }}" class="zone-action-link">
+                    {{ t('full_finance', 'Finance') }}
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+            <div class="financial-widgets">
+                {% for widget in dashboard.financial_widgets %}
+                <div class="financial-widget">
+                    <div class="financial-widget-header">
+                        <span class="financial-widget-title">{{ widget.title }}</span>
+                        <i class="fas fa-{{ widget.icon }} financial-widget-icon"></i>
+                    </div>
+                    <div class="financial-widget-body">
+                        <span class="financial-widget-value">{{ widget.value }}</span>
+                        {% if widget.comparison %}
+                        <div class="financial-widget-comparison">
+                            <span class="comparison-label">{{ widget.comparison.label }}:</span>
+                            <span class="comparison-value comparison-value--{{ widget.comparison.direction }}">
+                                {{ widget.comparison.value }}
+                            </span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% if widget.chart_data %}
+                    <canvas class="financial-widget-chart" data-chart-data="{{ widget.chart_data|tojson }}"></canvas>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        
+        <!-- Zone 7: Workflow / Approval / SLA -->
+        <section class="dashboard-zone zone-workflow" id="zone-workflow">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-project-diagram zone-title-icon text-purple"></i>
+                    {{ t('workflow_approval', 'Workflow & Approvals') }}
+                    {% if dashboard.workflow.pending_count > 0 %}
+                    <span class="zone-badge zone-badge--warning">{{ dashboard.workflow.pending_count }}</span>
+                    {% endif %}
+                </h2>
+                <a href="{{ url_for('workflow_dashboard') }}" class="zone-action-link">
+                    {{ t('workflow_center', 'Workflow Center') }}
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+            <div class="workflow-content">
+                <!-- My Pending Approvals -->
+                <div class="workflow-section">
+                    <h3 class="workflow-section-title">
+                        <i class="fas fa-clipboard-check"></i>
+                        {{ t('my_pending_approvals', 'My Pending Approvals') }}
+                    </h3>
+                    <div class="approvals-list">
+                        {% if dashboard.workflow.pending_approvals %}
+                            {% for approval in dashboard.workflow.pending_approvals %}
+                            <div class="approval-item">
+                                <div class="approval-icon">
+                                    <i class="fas fa-{{ approval.icon }}"></i>
+                                </div>
+                                <div class="approval-content">
+                                    <span class="approval-title">{{ approval.title }}</span>
+                                    <span class="approval-meta">
+                                        {{ approval.requester }} • {{ approval.time_ago }}
+                                    </span>
+                                </div>
+                                <div class="approval-actions">
+                                    <button class="approval-btn approval-btn--approve" onclick="quickApprove('{{ approval.id }}')">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                    <button class="approval-btn approval-btn--reject" onclick="quickReject('{{ approval.id }}')">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                        <div class="empty-state empty-state--sm">
+                            <i class="fas fa-check-double"></i>
+                            <p>{{ t('no_pending_approvals', 'No pending approvals') }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- SLA Status -->
+                <div class="workflow-section">
+                    <h3 class="workflow-section-title">
+                        <i class="fas fa-tachometer-alt"></i>
+                        {{ t('sla_status', 'SLA Status') }}
+                    </h3>
+                    <div class="sla-metrics">
+                        <div class="sla-metric">
+                            <div class="sla-metric-header">
+                                <span class="sla-metric-label">{{ t('compliance', 'Compliance') }}</span>
+                                <span class="sla-metric-value">{{ dashboard.workflow.sla.compliance }}%</span>
+                            </div>
+                            <div class="sla-progress-bar">
+                                <div class="sla-progress-fill sla-progress-fill--{{ dashboard.workflow.sla.compliance_color }}"></div>
+                            </div>
+                        </div>
+                        <div class="sla-metric">
+                            <div class="sla-metric-header">
+                                <span class="sla-metric-label">{{ t('breaches', 'Breaches') }}</span>
+                                <span class="sla-metric-value text-danger">{{ dashboard.workflow.sla.breaches }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 8 & 9: FLOW + PERSONAL PRODUCTIVITY (Two Column)
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <div class="dashboard-row dashboard-row--5050">
+        
+        <!-- Zone 8: Flow / Communication -->
+        <section class="dashboard-zone zone-flow" id="zone-flow">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-comments zone-title-icon text-brand"></i>
+                    {{ t('flow_communication', 'Flow & Communication') }}
+                    {% if dashboard.flow.unread_count > 0 %}
+                    <span class="zone-badge zone-badge--info">{{ dashboard.flow.unread_count }}</span>
+                    {% endif %}
+                </h2>
+                <div class="flow-tabs">
+                    <button class="flow-tab-btn active" data-tab="announcements">{{ t('announcements', 'Announcements') }}</button>
+                    <button class="flow-tab-btn" data-tab="mentions">{{ t('mentions', 'Mentions') }}</button>
+                </div>
+            </div>
+            <div class="flow-content">
+                <div class="flow-tab-content active" id="flow-announcements">
+                    {% if dashboard.flow.announcements %}
+                    {% for item in dashboard.flow.announcements %}
+                    <div class="flow-item">
+                        <div class="flow-item-avatar">
+                            {% if item.author_avatar %}
+                            <img src="{{ item.author_avatar }}" alt="{{ item.author }}">
+                            {% else %}
+                            <i class="fas fa-user"></i>
+                            {% endif %}
+                        </div>
+                        <div class="flow-item-content">
+                            <div class="flow-item-header">
+                                <span class="flow-item-author">{{ item.author }}</span>
+                                <span class="flow-item-time">{{ item.time_ago }}</span>
+                            </div>
+                            <p class="flow-item-message">{{ item.message }}</p>
+                            {% if item.pinned %}
+                            <span class="flow-item-pinned">
+                                <i class="fas fa-thumbtack"></i> {{ t('pinned', 'Pinned') }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-bullhorn"></i>
+                        <p>{{ t('no_announcements', 'No announcements yet') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="flow-tab-content" id="flow-mentions">
+                    {% if dashboard.flow.mentions %}
+                    {% for mention in dashboard.flow.mentions %}
+                    <div class="flow-item flow-item--mention">
+                        <div class="flow-item-avatar">
+                            <i class="fas fa-at"></i>
+                        </div>
+                        <div class="flow-item-content">
+                            <p class="flow-item-message">{{ mention.message }}</p>
+                            <span class="flow-item-context">{{ mention.context }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-at"></i>
+                        <p>{{ t('no_mentions', 'No mentions') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="zone-footer">
+                <a href="{{ url_for('flow_dashboard') }}" class="zone-footer-link">
+                    <i class="fas fa-external-link-alt"></i>
+                    {{ t('open_flow', 'Open Flow') }}
+                </a>
+            </div>
+        </section>
+        
+        <!-- Zone 9: Personal Productivity -->
+        <section class="dashboard-zone zone-personal" id="zone-personal">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-user-check zone-title-icon text-teal"></i>
+                    {{ t('personal_productivity', 'Personal Productivity') }}
+                </h2>
+            </div>
+            <div class="personal-widgets">
+                <!-- My Tasks -->
+                <div class="personal-widget">
+                    <div class="personal-widget-header">
+                        <div class="personal-widget-icon">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <h3 class="personal-widget-title">{{ t('my_tasks', 'My Tasks') }}</h3>
+                        <span class="personal-widget-badge">{{ dashboard.personal.tasks.total }}</span>
+                    </div>
+                    <div class="personal-widget-body">
+                        <div class="task-summary">
+                            <div class="task-stat task-stat--overdue">
+                                <span class="task-stat-value">{{ dashboard.personal.tasks.overdue }}</span>
+                                <span class="task-stat-label">{{ t('overdue', 'Overdue') }}</span>
+                            </div>
+                            <div class="task-stat task-stat--today">
+                                <span class="task-stat-value">{{ dashboard.personal.tasks.today }}</span>
+                                <span class="task-stat-label">{{ t('due_today', 'Due Today') }}</span>
+                            </div>
+                            <div class="task-stat task-stat--upcoming">
+                                <span class="task-stat-value">{{ dashboard.personal.tasks.upcoming }}</span>
+                                <span class="task-stat-label">{{ t('upcoming', 'Upcoming') }}</span>
+                            </div>
+                        </div>
+                        {% if dashboard.personal.tasks.items %}
+                        <ul class="task-list">
+                            {% for task in dashboard.personal.tasks.items[:5] %}
+                            <li class="task-item">
+                                <label class="task-checkbox">
+                                    <input type="checkbox" {% if task.completed %}checked{% endif %} onchange="toggleTask('{{ task.id }}')">
+                                    <span class="task-checkmark"></span>
+                                </label>
+                                <span class="task-title {% if task.completed %}task-completed{% endif %}">{{ task.title }}</span>
+                                <span class="task-due {% if task.overdue %}text-danger{% endif %}">{{ task.due_date }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                    <a href="{{ url_for('my_tasks') }}" class="personal-widget-footer">
+                        {{ t('view_all_tasks', 'View All Tasks') }}
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+                
+                <!-- My Issues -->
+                <div class="personal-widget">
+                    <div class="personal-widget-header">
+                        <div class="personal-widget-icon">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <h3 class="personal-widget-title">{{ t('my_issues', 'My Issues') }}</h3>
+                        <span class="personal-widget-badge">{{ dashboard.personal.issues.total }}</span>
+                    </div>
+                    <div class="personal-widget-body">
+                        <div class="issue-priority-summary">
+                            {% for priority in dashboard.personal.issues.by_priority %}
+                            <div class="priority-item priority-item--{{ priority.level }}">
+                                <span class="priority-count">{{ priority.count }}</span>
+                                <span class="priority-label">{{ priority.label }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <a href="{{ url_for('my_issues') }}" class="personal-widget-footer">
+                        {{ t('view_all_issues', 'View All Issues') }}
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 10: REPORTS & ANALYTICS
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-reports" id="zone-reports">
+        <div class="zone-header">
+            <h2 class="zone-title">
+                <i class="fas fa-analytics zone-title-icon text-indigo"></i>
+                {{ t('reports_analytics', 'Reports & Analytics') }}
+            </h2>
+            <div class="zone-actions">
+                <a href="{{ url_for('reports_center') }}" class="zone-action-link">
+                    {{ t('all_reports', 'All Reports') }}
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+        <div class="reports-grid">
+            {% for report in dashboard.reports %}
+            <a href="{{ report.url }}" class="report-card">
+                <div class="report-card-icon">
+                    <i class="fas fa-{{ report.icon }}"></i>
+                </div>
+                <div class="report-card-content">
+                    <h3 class="report-card-title">{{ report.title }}</h3>
+                    <p class="report-card-desc">{{ report.description }}</p>
+                    <div class="report-card-meta">
+                        {% if report.last_run %}
+                        <span class="report-meta-item">
+                            <i class="fas fa-clock"></i>
+                            {{ report.last_run }}
+                        </span>
+                        {% endif %}
+                        {% if report.frequency %}
+                        <span class="report-meta-item">
+                            <i class="fas fa-sync"></i>
+                            {{ report.frequency }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="report-card-arrow">
+                    <i class="fas fa-arrow-right"></i>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 11: AI INSIGHTS / RECOMMENDATIONS
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-insights" id="zone-insights">
+        <div class="zone-header">
+            <h2 class="zone-title">
+                <i class="fas fa-brain zone-title-icon text-ai"></i>
+                {{ t('ai_insights', 'AI Insights & Recommendations') }}
+            </h2>
+            <div class="insight-filters">
+                <button class="insight-filter-btn active" data-filter="all">{{ t('all_insights', 'All') }}</button>
+                <button class="insight-filter-btn" data-filter="attention">{{ t('attention', 'Attention') }}</button>
+                <button class="insight-filter-btn" data-filter="recommendations">{{ t('recommendations', 'Actions') }}</button>
+            </div>
+        </div>
+        <div class="insights-grid">
+            {% for insight in dashboard.insights %}
+            <div class="insight-card insight-card--{{ insight.type }}" data-insight-id="{{ insight.id }}">
+                <div class="insight-card-header">
+                    <div class="insight-type-icon">
+                        <i class="fas fa-{{ insight.icon }}"></i>
+                    </div>
+                    <div class="insight-type-info">
+                        <span class="insight-type-label">{{ insight.type_label }}</span>
+                        {% if insight.confidence %}
+                        <div class="insight-confidence">
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" style="width: {{ insight.confidence }}%"></div>
+                            </div>
+                            <span class="confidence-value">{{ insight.confidence }}%</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="insight-card-body">
+                    <h3 class="insight-title">{{ insight.title }}</h3>
+                    <p class="insight-description">{{ insight.description }}</p>
+                    {% if insight.affected_items %}
+                    <div class="insight-affected">
+                        <span class="affected-label">{{ t('affected', 'Affected') }}:</span>
+                        <span class="affected-items">{{ insight.affected_items }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if insight.actions %}
+                <div class="insight-card-actions">
+                    {% for action in insight.actions %}
+                    <a href="{{ action.url }}" class="insight-action-btn insight-action-btn--{{ action.type }}">
+                        <i class="fas fa-{{ action.icon }}"></i>
+                        {{ action.label }}
+                    </a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <div class="insight-card-footer">
+                    <span class="insight-source">{{ insight.source_module }}</span>
+                    <span class="insight-time">{{ insight.time_ago }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 12: ACTIVITY TIMELINE / AUDIT HIGHLIGHTS
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-timeline" id="zone-timeline">
+        <div class="zone-header">
+            <h2 class="zone-title">
+                <i class="fas fa-history zone-title-icon text-secondary"></i>
+                {{ t('activity_timeline', 'Activity Timeline') }}
+            </h2>
+            <div class="timeline-filters">
+                <button class="timeline-filter-btn active" data-filter="all">{{ t('all', 'All') }}</button>
+                <button class="timeline-filter-btn" data-filter="approvals">{{ t('approvals', 'Approvals') }}</button>
+                <button class="timeline-filter-btn" data-filter="documents">{{ t('documents', 'Documents') }}</button>
+                <button class="timeline-filter-btn" data-filter="system">{{ t('system', 'System') }}</button>
+            </div>
+        </div>
+        <div class="timeline-container" id="activity-timeline">
+            {% for event in dashboard.timeline %}
+            <div class="timeline-item timeline-item--{{ event.category }}">
+                <div class="timeline-marker"></div>
+                <div class="timeline-content">
+                    <div class="timeline-header">
+                        <span class="timeline-event">{{ event.event }}</span>
+                        <span class="timeline-time">{{ event.time_ago }}</span>
+                    </div>
+                    <p class="timeline-details">{{ event.details }}</p>
+                    {% if event.user %}
+                    <span class="timeline-user">
+                        <i class="fas fa-user"></i>
+                        {{ event.user }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="zone-footer">
+            <a href="{{ url_for('audit_log') }}" class="zone-footer-link">
+                <i class="fas fa-book"></i>
+                {{ t('view_full_audit_log', 'View Full Audit Log') }}
+            </a>
+        </div>
+    </section>
+
+</div>
+
+<style>
+    /* ================================================================
+       ENTERPRISE DASHBOARD STYLES
+       ================================================================ */
+    
+    .enterprise-dashboard {
+        padding: 1rem 1.5rem 3rem;
+        max-width: 1920px;
+        margin: 0 auto;
+    }
+    
+    /* ---- Zone Base Styles ---- */
+    .dashboard-zone {
+        margin-bottom: 1.5rem;
+    }
+    
+    .zone-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    
+    .zone-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0;
+    }
+    
+    .zone-title-icon {
+        font-size: 1rem;
+        opacity: 0.8;
+    }
+    
+    .zone-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.5rem;
+        height: 1.5rem;
+        padding: 0 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .zone-badge--danger {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+    }
+    
+    .zone-badge--warning {
+        background: rgba(245, 158, 11, 0.15);
+        color: #f59e0b;
+    }
+    
+    .zone-badge--info {
+        background: rgba(59, 130, 246, 0.15);
+        color: #3b82f6;
+    }
+    
+    .zone-actions {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .zone-action-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        color: var(--theme-primary);
+        font-size: 0.875rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: opacity 0.2s;
+    }
+    
+    .zone-action-link:hover {
+        opacity: 0.8;
+    }
+    
+    .zone-footer {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--theme-border);
+    }
+    
+    .zone-footer-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--theme-text-secondary);
+        font-size: 0.875rem;
+        text-decoration: none;
+        transition: color 0.2s;
+    }
+    
+    .zone-footer-link:hover {
+        color: var(--theme-primary);
+    }
+    
+    /* ---- Zone 1: Welcome Bar ---- */
+    .zone-header {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .welcome-bar {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: 2rem;
+    }
+    
+    .welcome-left {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .greeting-block {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .greeting-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--theme-primary), var(--theme-primary-hover));
+        border-radius: 12px;
+        color: white;
+        font-size: 1.25rem;
+    }
+    
+    .greeting-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--theme-text-primary);
+        margin: 0;
+    }
+    
+    .greeting-subtitle {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0.25rem 0 0;
+        color: var(--theme-text-secondary);
+        font-size: 0.875rem;
+    }
+    
+    .greeting-divider {
+        opacity: 0.5;
+    }
+    
+    .welcome-search {
+        max-width: 500px;
+        width: 100%;
+    }
+    
+    .global-search-wrapper {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    
+    .global-search-icon {
+        position: absolute;
+        left: 1rem;
+        color: var(--theme-text-muted);
+    }
+    
+    html[dir="rtl"] .global-search-icon {
+        left: auto;
+        right: 1rem;
+    }
+    
+    .global-search-input {
+        width: 100%;
+        padding: 0.75rem 1rem 0.75rem 2.75rem;
+        background: var(--theme-bg);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.75rem;
+        color: var(--theme-text-primary);
+        font-size: 0.875rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    
+    html[dir="rtl"] .global-search-input {
+        padding: 0.75rem 2.75rem 0.75rem 1rem;
+    }
+    
+    .global-search-input:focus {
+        outline: none;
+        border-color: var(--theme-primary);
+        box-shadow: 0 0 0 3px rgba(var(--theme-primary-rgb), 0.1);
+    }
+    
+    .search-kbd {
+        position: absolute;
+        right: 1rem;
+        padding: 0.25rem 0.5rem;
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+    }
+    
+    html[dir="rtl"] .search-kbd {
+        right: auto;
+        left: 1rem;
+    }
+    
+    .welcome-right {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .header-action-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: var(--theme-bg);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.75rem;
+        color: var(--theme-text-primary);
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .header-action-btn:hover {
+        background: var(--theme-surface);
+        border-color: var(--theme-primary);
+    }
+    
+    .header-icon-btn {
+        position: relative;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--theme-bg);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.75rem;
+        color: var(--theme-text-primary);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .header-icon-btn:hover {
+        background: var(--theme-surface);
+        border-color: var(--theme-primary);
+    }
+    
+    .notification-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        min-width: 18px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--theme-danger);
+        border-radius: 9999px;
+        font-size: 0.625rem;
+        font-weight: 600;
+        color: white;
+    }
+    
+    html[dir="rtl"] .notification-badge {
+        right: auto;
+        left: -4px;
+    }
+    
+    /* User Avatar Dropdown */
+    .user-profile-dropdown {
+        position: relative;
+    }
+    
+    .user-avatar-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.375rem;
+        background: transparent;
+        border: none;
+        border-radius: 0.75rem;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    
+    .user-avatar-btn:hover {
+        background: var(--theme-surface);
+    }
+    
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--theme-primary), var(--theme-secondary));
+        border-radius: 50%;
+        color: white;
+        font-size: 1rem;
+        overflow: hidden;
+    }
+    
+    .user-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .user-info-mini {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        text-align: left;
+    }
+    
+    html[dir="rtl"] .user-info-mini {
+        align-items: flex-end;
+        text-align: right;
+    }
+    
+    .user-name-mini {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+    }
+    
+    .user-role-badge {
+        font-size: 0.75rem;
+        color: var(--theme-text-secondary);
+        background: var(--theme-surface);
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+    }
+    
+    .user-chevron {
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+    }
+    
+    /* Quick Actions Menu */
+    .quick-actions-dropdown {
+        position: relative;
+    }
+    
+    .quick-actions-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        width: 280px;
+        margin-top: 0.5rem;
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-10px);
+        transition: all 0.2s;
+        z-index: 1000;
+    }
+    
+    html[dir="rtl"] .quick-actions-menu {
+        right: auto;
+        left: 0;
+    }
+    
+    .quick-actions-dropdown.active .quick-actions-menu {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+    }
+    
+    .menu-header {
+        padding: 0.75rem 1rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--theme-text-muted);
+        border-bottom: 1px solid var(--theme-border);
+    }
+    
+    .quick-action-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem 1rem;
+        color: var(--theme-text-primary);
+        text-decoration: none;
+        transition: background 0.2s;
+    }
+    
+    .quick-action-item:hover {
+        background: var(--theme-hover);
+    }
+    
+    .quick-action-item i {
+        width: 20px;
+        color: var(--theme-text-muted);
+    }
+    
+    /* User Profile Menu */
+    .user-profile-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        width: 300px;
+        margin-top: 0.5rem;
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-10px);
+        transition: all 0.2s;
+        z-index: 1000;
+    }
+    
+    html[dir="rtl"] .user-profile-menu {
+        right: auto;
+        left: 0;
+    }
+    
+    .user-profile-dropdown.active .user-profile-menu {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+    }
+    
+    .profile-menu-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        border-bottom: 1px solid var(--theme-border);
+    }
+    
+    .profile-avatar-lg {
+        width: 56px;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--theme-primary), var(--theme-secondary));
+        border-radius: 50%;
+        color: white;
+        font-size: 1.5rem;
+        overflow: hidden;
+    }
+    
+    .profile-avatar-lg img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .profile-info {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .profile-name {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+    }
+    
+    .profile-email {
+        font-size: 0.875rem;
+        color: var(--theme-text-secondary);
+    }
+    
+    .profile-menu-items {
+        padding: 0.5rem;
+    }
+    
+    .profile-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        color: var(--theme-text-primary);
+        text-decoration: none;
+        border-radius: 0.5rem;
+        transition: background 0.2s;
+    }
+    
+    .profile-menu-item:hover {
+        background: var(--theme-hover);
+    }
+    
+    .profile-menu-item i {
+        width: 20px;
+        color: var(--theme-text-muted);
+    }
+    
+    .profile-menu-item.text-danger i {
+        color: var(--theme-danger);
+    }
+    
+    .menu-divider {
+        height: 1px;
+        background: var(--theme-border);
+        margin: 0.5rem 0;
+    }
+    
+    /* ---- Zone 2: KPI Strip ---- */
+    .zone-kpi-strip {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1.25rem;
+    }
+    
+    .kpi-strip-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+    }
+    
+    .kpi-controls {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .kpi-control-btn {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--theme-bg);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.5rem;
+        color: var(--theme-text-secondary);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .kpi-control-btn:hover {
+        background: var(--theme-hover);
+        color: var(--theme-primary);
+    }
+    
+    .kpi-control-btn.loading i {
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+    
+    .kpi-period-selector {
+        display: flex;
+        background: var(--theme-bg);
+        border-radius: 0.5rem;
+        padding: 0.25rem;
+    }
+    
+    .period-btn {
+        padding: 0.5rem 1rem;
+        background: transparent;
+        border: none;
+        border-radius: 0.375rem;
+        color: var(--theme-text-secondary);
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .period-btn:hover {
+        color: var(--theme-text-primary);
+    }
+    
+    .period-btn.active {
+        background: var(--theme-primary);
+        color: white;
+    }
+    
+    .kpi-cards-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1rem;
+    }
+    
+    .kpi-card {
+        position: relative;
+        overflow: hidden;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .kpi-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+    }
+    
+    .kpi-card-accent {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+    }
+    
+    html[dir="rtl"] .kpi-card-accent {
+        left: auto;
+        right: 0;
+    }
+    
+    .kpi-card--critical .kpi-card-accent { background: #ef4444; }
+    .kpi-card--warning .kpi-card-accent { background: #f59e0b; }
+    .kpi-card--success .kpi-card-accent { background: #10b981; }
+    .kpi-card--info .kpi-card-accent { background: #3b82f6; }
+    .kpi-card--neutral .kpi-card-accent { background: #6b7280; }
+    
+    .kpi-card-content {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 0.5rem 1rem 0.5rem 1.25rem;
+    }
+    
+    html[dir="rtl"] .kpi-card-content {
+        padding: 0.5rem 1.25rem 0.5rem 1rem;
+    }
+    
+    .kpi-card-icon-wrap {
+        flex-shrink: 0;
+    }
+    
+    .kpi-card-icon {
+        width: 44px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        font-size: 1.125rem;
+    }
+    
+    .kpi-card-icon--critical { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+    .kpi-card-icon--warning { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+    .kpi-card-icon--success { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+    .kpi-card-icon--info { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+    .kpi-card-icon--neutral { background: rgba(107, 114, 128, 0.15); color: #6b7280; }
+    
+    .kpi-card-body {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .kpi-card-label {
+        display: block;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--theme-text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 0.25rem;
+    }
+    
+    .kpi-card-value {
+        display: block;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--theme-text-primary);
+        line-height: 1.2;
+    }
+    
+    .kpi-card-subtext {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+        margin-top: 0.25rem;
+    }
+    
+    .kpi-card-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.5rem;
+    }
+    
+    .kpi-trend {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    
+    .kpi-trend--up { color: #10b981; }
+    .kpi-trend--down { color: #ef4444; }
+    
+    .kpi-drill-down {
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+        opacity: 0;
+        transition: opacity 0.2s;
+    }
+    
+    .kpi-card:hover .kpi-drill-down {
+        opacity: 1;
+    }
+    
+    /* ---- Zone 3: Module Launcher ---- */
+    .zone-module-launcher {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1.25rem;
+    }
+    
+    .module-launcher-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+    }
+    
+    .module-launcher-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .view-toggle {
+        display: flex;
+        background: var(--theme-bg);
+        border-radius: 0.5rem;
+        padding: 0.25rem;
+    }
+    
+    .view-toggle-btn {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        border-radius: 0.375rem;
+        color: var(--theme-text-muted);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .view-toggle-btn:hover {
+        color: var(--theme-text-primary);
+    }
+    
+    .view-toggle-btn.active {
+        background: var(--theme-primary);
+        color: white;
+    }
+    
+    .module-filter-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: var(--theme-bg);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.5rem;
+        color: var(--theme-text-secondary);
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .module-filter-btn:hover {
+        background: var(--theme-hover);
+        color: var(--theme-text-primary);
+    }
+    
+    .module-filter-btn.active {
+        background: rgba(245, 158, 11, 0.15);
+        border-color: #f59e0b;
+        color: #f59e0b;
+    }
+    
+    .module-section {
+        margin-bottom: 1.5rem;
+    }
+    
+    .module-section:last-child {
+        margin-bottom: 0;
+    }
+    
+    .module-section-title {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--theme-text-secondary);
+        margin-bottom: 0.75rem;
+    }
+    
+    .module-section-title i {
+        font-size: 0.75rem;
+    }
+    
+    .module-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .module-grid--recent,
+    .module-grid--favorites {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
+    
+    .module-tile {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 1rem;
+        background: var(--theme-bg);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.75rem;
+        text-decoration: none;
+        text-align: center;
+        transition: all 0.2s;
+    }
+    
+    .module-tile:hover {
+        background: var(--theme-hover);
+        border-color: var(--theme-primary);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .module-tile--favorite {
+        border-color: rgba(245, 158, 11, 0.3);
+    }
+    
+    .module-tile-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--theme-primary), var(--theme-secondary));
+        border-radius: 12px;
+        color: white;
+        font-size: 1.25rem;
+    }
+    
+    .module-tile--recent .module-tile-icon,
+    .module-tile--favorite .module-tile-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+    
+    .module-tile-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--theme-text-primary);
+        line-height: 1.3;
+    }
+    
+    .module-tile-desc {
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+        line-height: 1.3;
+    }
+    
+    .module-tile-star {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        color: var(--theme-text-muted);
+        cursor: pointer;
+        transition: all 0.2s;
+        opacity: 0;
+    }
+    
+    html[dir="rtl"] .module-tile-star {
+        right: auto;
+        left: 0.5rem;
+    }
+    
+    .module-tile:hover .module-tile-star {
+        opacity: 1;
+    }
+    
+    .module-tile-star.active {
+        color: #f59e0b;
+        opacity: 1;
+    }
+    
+    .module-tile-star:hover {
+        transform: scale(1.2);
+    }
+    
+    /* ---- Dashboard Rows ---- */
+    .dashboard-row {
+        display: grid;
+        gap: 1.5rem;
+    }
+    
+    .dashboard-row--5035 {
+        grid-template-columns: 35% 65%;
+    }
+    
+    .dashboard-row--5050 {
+        grid-template-columns: 50% 50%;
+    }
+    
+    @media (max-width: 1024px) {
+        .dashboard-row--5035,
+        .dashboard-row--5050 {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    /* ---- Zone 4: Alerts ---- */
+    .zone-alerts {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1.25rem;
+    }
+    
+    .alert-filters {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .alert-filter-btn {
+        padding: 0.375rem 0.75rem;
+        background: transparent;
+        border: 1px solid var(--theme-border);
+        border-radius: 9999px;
+        color: var(--theme-text-secondary);
+        font-size: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .alert-filter-btn:hover {
+        background: var(--theme-hover);
+    }
+    
+    .alert-filter-btn.active {
+        background: var(--theme-primary);
+        border-color: var(--theme-primary);
+        color: white;
+    }
+    
+    .alerts-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    
+    .alert-item {
+        position: relative;
+        display: flex;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: var(--theme-bg);
+        border-radius: 0.75rem;
+        overflow: hidden;
+    }
+    
+    .alert-severity-indicator {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+    }
+    
+    html[dir="rtl"] .alert-severity-indicator {
+        left: auto;
+        right: 0;
+    }
+    
+    .alert-item--critical .alert-severity-indicator { background: #ef4444; }
+    .alert-item--warning .alert-severity-indicator { background: #f59e0b; }
+    .alert-item--info .alert-severity-indicator { background: #3b82f6; }
+    
+    .alert-icon {
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.5rem;
+        font-size: 1rem;
+    }
+    
+    .alert-item--critical .alert-icon { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+    .alert-item--warning .alert-icon { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+    .alert-item--info .alert-icon { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+    
+    .alert-content {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .alert-header-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.5rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .alert-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+    }
+    
+    .alert-time {
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+        white-space: nowrap;
+    }
+    
+    .alert-message {
+        font-size: 0.8125rem;
+        color: var(--theme-text-secondary);
+        margin: 0;
+        line-height: 1.4;
+    }
+    
+    .alert-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+    }
+    
+    .alert-action-btn {
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-decoration: none;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .alert-action-btn--primary {
+        background: var(--theme-primary);
+        border: none;
+        color: white;
+    }
+    
+    .alert-action-btn--primary:hover {
+        background: var(--theme-primary-hover);
+    }
+    
+    .alert-action-btn--ghost {
+        background: transparent;
+        border: 1px solid var(--theme-border);
+        color: var(--theme-text-secondary);
+    }
+    
+    .alert-action-btn--ghost:hover {
+        background: var(--theme-hover);
+    }
+    
+    /* ---- Zone 5: Operational Overview ---- */
+    .zone-operational {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1.25rem;
+    }
+    
+    .operational-widgets {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+    
+    .operational-widget {
+        background: var(--theme-bg);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.75rem;
+        overflow: hidden;
+    }
+    
+    .widget-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--theme-border);
+    }
+    
+    .widget-icon {
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--theme-primary);
+        border-radius: 0.5rem;
+        color: white;
+        font-size: 0.875rem;
+    }
+    
+    .widget-title {
+        flex: 1;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+        margin: 0;
+    }
+    
+    .widget-badge {
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .widget-badge--danger {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+    }
+    
+    .widget-badge--warning {
+        background: rgba(245, 158, 11, 0.15);
+        color: #f59e0b;
+    }
+    
+    .widget-badge--success {
+        background: rgba(16, 185, 129, 0.15);
+        color: #10b981;
+    }
+    
+    .widget-body {
+        padding: 0.75rem;
+    }
+    
+    .widget-kpi {
+        text-align: center;
+        padding: 0.5rem 0;
+    }
+    
+    .widget-kpi-value {
+        display: block;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--theme-text-primary);
+    }
+    
+    .widget-kpi-subtitle {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+        margin-top: 0.25rem;
+    }
+    
+    .widget-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .widget-list-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.375rem 0;
+        font-size: 0.8125rem;
+    }
+    
+    .item-label {
+        color: var(--theme-text-secondary);
+    }
+    
+    .item-value {
+        font-weight: 600;
+        color: var(--theme-text-primary);
+    }
+    
+    .widget-mini-chart {
+        width: 100%;
+        height: 60px;
+    }
+    
+    .widget-footer-link {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        padding: 0.5rem;
+        background: var(--theme-surface);
+        border-top: 1px solid var(--theme-border);
+        color: var(--theme-text-secondary);
+        font-size: 0.75rem;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    
+    .widget-footer-link:hover {
+        background: var(--theme-hover);
+        color: var(--theme-primary);
+    }
+    
+    /* ---- Zone 6: Financial Snapshot ---- */
+    .zone-financial {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1.25rem;
+    }
+    
+    .financial-widgets {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+    
+    .financial-widget {
+        background: var(--theme-bg);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.75rem;
+        padding: 1rem;
+    }
+    
+    .financial-widget-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+    }
+    
+    .financial-widget-title {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--theme-text-secondary);
+        margin: 0;
+    }
+    
+    .financial-widget-icon {
+        font-size: 1rem;
+        color: var(--theme-text-muted);
+    }
+    
+    .financial-widget-value {
+        display: block;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--theme-text-primary);
+    }
+    
+    .financial-widget-comparison {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .comparison-label {
+        color: var(--theme-text-muted);
+    }
+    
+    .comparison-value--up { color: #10b981; }
+    .comparison-value--down { color: #ef4444; }
+    
+    /* ---- Zone 7: Workflow ---- */
+    .zone-workflow {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1.25rem;
+    }
+    
+    .workflow-content {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .workflow-section-title {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+        margin: 0 0 0.75rem;
+    }
+    
+    .approvals-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .approval-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: var(--theme-bg);
+        border-radius: 0.5rem;
+    }
+    
+    .approval-icon {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(var(--theme-primary-rgb), 0.15);
+        border-radius: 0.5rem;
+        color: var(--theme-primary);
+    }
+    
+    .approval-content {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .approval-title {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--theme-text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .approval-meta {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+    }
+    
+    .approval-actions {
+        display: flex;
+        gap: 0.375rem;
+    }
+    
+    .approval-btn {
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        border-radius: 0.375rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .approval-btn--approve {
+        background: rgba(16, 185, 129, 0.15);
+        color: #10b981;
+    }
+    
+    .approval-btn--approve:hover {
+        background: #10b981;
+        color: white;
+    }
+    
+    .approval-btn--reject {
+        background: rgba(239, 68, 68, 0.15);
+        color: #ef4444;
+    }
+    
+    .approval-btn--reject:hover {
+        background: #ef4444;
+        color: white;
+    }
+    
+    .sla-metrics {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .sla-metric-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.375rem;
+    }
+    
+    .sla-metric-label {
+        font-size: 0.8125rem;
+        color: var(--theme-text-secondary);
+    }
+    
+    .sla-metric-value {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+    }
+    
+    .sla-progress-bar {
+        height: 6px;
+        background: var(--theme-border);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+    
+    .sla-progress-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.3s;
+    }
+    
+    .sla-progress-fill--green { background: #10b981; }
+    .sla-progress-fill--yellow { background: #f59e0b; }
+    .sla-progress-fill--red { background: #ef4444; }
+    
+    /* ---- Zone 8: Flow ---- */
+    .zone-flow {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1.25rem;
+    }
+    
+    .flow-tabs {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .flow-tab-btn {
+        padding: 0.375rem 0.75rem;
+        background: transparent;
+        border: 1px solid var(--theme-border);
+        border-radius: 9999px;
+        color: var(--theme-text-secondary);
+        font-size: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .flow-tab-btn:hover {
+        background: var(--theme-hover);
+    }
+    
+    .flow-tab-btn.active {
+        background: var(--theme-primary);
+        border-color: var(--theme-primary);
+        color: white;
+    }
+    
+    .flow-content {
+        margin-top: 1rem;
+    }
+    
+    .flow-tab-content {
+        display: none;
+    }
+    
+    .flow-tab-content.active {
+        display: block;
+    }
+    
+    .flow-item {
+        display: flex;
+        gap: 0.75rem;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid var(--theme-border);
+    }
+    
+    .flow-item:last-child {
+        border-bottom: none;
+    }
+    
+    .flow-item-avatar {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--theme-bg);
+        border-radius: 50%;
+        color: var(--theme-text-muted);
+        font-size: 0.875rem;
+        flex-shrink: 0;
+    }
+    
+    .flow-item-content {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .flow-item-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.25rem;
+    }
+    
+    .flow-item-author {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+    }
+    
+    .flow-item-time {
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+    }
+    
+    .flow-item-message {
+        font-size: 0.8125rem;
+        color: var(--theme-text-secondary);
+        margin: 0;
+        line-height: 1.4;
+    }
+    
+    .flow-item-pinned {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        margin-top: 0.375rem;
+        font-size: 0.75rem;
+        color: var(--theme-primary);
+    }
+    
+    .flow-item--mention .flow-item-message {
+        font-style: italic;
+    }
+    
+    .flow-item-context {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+        margin-top: 0.25rem;
+    }
+    
+    /* ---- Zone 9: Personal Productivity ---- */
+    .zone-personal {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1.25rem;
+    }
+    
+    .personal-widgets {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .personal-widget {
+        background: var(--theme-bg);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.75rem;
+    }
+    
+    .personal-widget-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--theme-border);
+    }
+    
+    .personal-widget-icon {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(var(--theme-primary-rgb), 0.15);
+        border-radius: 0.5rem;
+        color: var(--theme-primary);
+    }
+    
+    .personal-widget-title {
+        flex: 1;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+        margin: 0;
+    }
+    
+    .personal-widget-badge {
+        padding: 0.125rem 0.5rem;
+        background: rgba(var(--theme-primary-rgb), 0.15);
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--theme-primary);
+    }
+    
+    .personal-widget-body {
+        padding: 0.75rem;
+    }
+    
+    .task-summary {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .task-stat {
+        text-align: center;
+        padding: 0.5rem;
+        background: var(--theme-surface);
+        border-radius: 0.5rem;
+    }
+    
+    .task-stat-value {
+        display: block;
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
+    
+    .task-stat--overdue .task-stat-value { color: #ef4444; }
+    .task-stat--today .task-stat-value { color: #f59e0b; }
+    .task-stat--upcoming .task-stat-value { color: #10b981; }
+    
+    .task-stat-label {
+        display: block;
+        font-size: 0.625rem;
+        text-transform: uppercase;
+        color: var(--theme-text-muted);
+        margin-top: 0.125rem;
+    }
+    
+    .task-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .task-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.375rem 0;
+        font-size: 0.8125rem;
+    }
+    
+    .task-checkbox {
+        position: relative;
+        display: inline-flex;
+        cursor: pointer;
+    }
+    
+    .task-checkbox input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    
+    .task-checkmark {
+        width: 16px;
+        height: 16px;
+        border: 2px solid var(--theme-border);
+        border-radius: 4px;
+        transition: all 0.2s;
+    }
+    
+    .task-checkbox input:checked + .task-checkmark {
+        background: var(--theme-primary);
+        border-color: var(--theme-primary);
+    }
+    
+    .task-checkbox input:checked + .task-checkmark::after {
+        content: '✓';
+        position: absolute;
+        top: -3px;
+        left: 2px;
+        font-size: 10px;
+        color: white;
+    }
+    
+    .task-title {
+        flex: 1;
+        color: var(--theme-text-primary);
+    }
+    
+    .task-title.task-completed {
+        text-decoration: line-through;
+        color: var(--theme-text-muted);
+    }
+    
+    .task-due {
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+    }
+    
+    .issue-priority-summary {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.5rem;
+    }
+    
+    .priority-item {
+        text-align: center;
+        padding: 0.5rem;
+        background: var(--theme-surface);
+        border-radius: 0.5rem;
+        border-left: 3px solid;
+    }
+    
+    html[dir="rtl"] .priority-item {
+        border-left: none;
+        border-right: 3px solid;
+    }
+    
+    .priority-item--critical { border-color: #ef4444; }
+    .priority-item--high { border-color: #f59e0b; }
+    .priority-item--medium { border-color: #3b82f6; }
+    .priority-item--low { border-color: #6b7280; }
+    
+    .priority-count {
+        display: block;
+        font-size: 1.125rem;
+        font-weight: 700;
+        color: var(--theme-text-primary);
+    }
+    
+    .priority-label {
+        display: block;
+        font-size: 0.625rem;
+        text-transform: uppercase;
+        color: var(--theme-text-muted);
+    }
+    
+    .personal-widget-footer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        padding: 0.5rem;
+        background: var(--theme-surface);
+        border-top: 1px solid var(--theme-border);
+        border-radius: 0 0 0.75rem 0.75rem;
+        color: var(--theme-text-secondary);
+        font-size: 0.75rem;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    
+    .personal-widget-footer:hover {
+        background: var(--theme-hover);
+        color: var(--theme-primary);
+    }
+    
+    html[dir="rtl"] .personal-widget-footer {
+        border-radius: 0.75rem 0 0 0;
+    }
+    
+    /* ---- Zone 10: Reports ---- */
+    .zone-reports {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1.25rem;
+    }
+    
+    .reports-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1rem;
+    }
+    
+    .report-card {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        background: var(--theme-bg);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.75rem;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    
+    .report-card:hover {
+        background: var(--theme-hover);
+        border-color: var(--theme-primary);
+        transform: translateX(4px);
+    }
+    
+    html[dir="rtl"] .report-card:hover {
+        transform: translateX(-4px);
+    }
+    
+    .report-card-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--theme-primary), var(--theme-secondary));
+        border-radius: 0.75rem;
+        color: white;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+    
+    .report-card-content {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .report-card-title {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+        margin: 0 0 0.25rem;
+    }
+    
+    .report-card-desc {
+        font-size: 0.8125rem;
+        color: var(--theme-text-muted);
+        margin: 0;
+    }
+    
+    .report-card-meta {
+        display: flex;
+        gap: 1rem;
+        margin-top: 0.375rem;
+    }
+    
+    .report-meta-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+    }
+    
+    .report-card-arrow {
+        color: var(--theme-text-muted);
+        transition: transform 0.2s;
+    }
+    
+    .report-card:hover .report-card-arrow {
+        transform: translateX(4px);
+        color: var(--theme-primary);
+    }
+    
+    html[dir="rtl"] .report-card:hover .report-card-arrow {
+        transform: translateX(-4px);
+    }
+    
+    /* ---- Zone 11: AI Insights ---- */
+    .zone-insights {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1.25rem;
+    }
+    
+    .insight-filters {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .insight-filter-btn {
+        padding: 0.375rem 0.75rem;
+        background: transparent;
+        border: 1px solid var(--theme-border);
+        border-radius: 9999px;
+        color: var(--theme-text-secondary);
+        font-size: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .insight-filter-btn:hover {
+        background: var(--theme-hover);
+    }
+    
+    .insight-filter-btn.active {
+        background: var(--theme-primary);
+        border-color: var(--theme-primary);
+        color: white;
+    }
+    
+    .insights-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 1rem;
+    }
+    
+    .insight-card {
+        background: var(--theme-bg);
+        border: 1px solid var(--theme-border);
+        border-radius: 0.75rem;
+        overflow: hidden;
+    }
+    
+    .insight-card-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 1rem;
+        border-bottom: 1px solid var(--theme-border);
+    }
+    
+    .insight-type-icon {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.5rem;
+        font-size: 1rem;
+    }
+    
+    .insight-card--attention .insight-type-icon { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+    .insight-card--recommendation .insight-type-icon { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+    .insight-card--prediction .insight-type-icon { background: rgba(139, 92, 246, 0.15); color: #8b5cf6; }
+    
+    .insight-type-info {
+        flex: 1;
+    }
+    
+    .insight-type-label {
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: var(--theme-text-muted);
+    }
+    
+    .insight-confidence {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.25rem;
+    }
+    
+    .confidence-bar {
+        flex: 1;
+        height: 4px;
+        background: var(--theme-border);
+        border-radius: 2px;
+        overflow: hidden;
+    }
+    
+    .confidence-fill {
+        height: 100%;
+        background: var(--theme-primary);
+        border-radius: 2px;
+    }
+    
+    .confidence-value {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--theme-text-secondary);
+    }
+    
+    .insight-card-body {
+        padding: 1rem;
+    }
+    
+    .insight-title {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+        margin: 0 0 0.5rem;
+    }
+    
+    .insight-description {
+        font-size: 0.8125rem;
+        color: var(--theme-text-secondary);
+        margin: 0;
+        line-height: 1.5;
+    }
+    
+    .insight-affected {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        padding: 0.5rem;
+        background: var(--theme-surface);
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+    }
+    
+    .affected-label {
+        color: var(--theme-text-muted);
+    }
+    
+    .affected-items {
+        font-weight: 500;
+        color: var(--theme-text-primary);
+    }
+    
+    .insight-card-actions {
+        display: flex;
+        gap: 0.5rem;
+        padding: 0 1rem 1rem;
+    }
+    
+    .insight-action-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    
+    .insight-action-btn--primary {
+        background: var(--theme-primary);
+        color: white;
+    }
+    
+    .insight-action-btn--primary:hover {
+        background: var(--theme-primary-hover);
+    }
+    
+    .insight-action-btn--secondary {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        color: var(--theme-text-primary);
+    }
+    
+    .insight-action-btn--secondary:hover {
+        background: var(--theme-hover);
+    }
+    
+    .insight-card-footer {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.75rem 1rem;
+        background: var(--theme-surface);
+        border-top: 1px solid var(--theme-border);
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+    }
+    
+    /* ---- Zone 12: Timeline ---- */
+    .zone-timeline {
+        background: var(--theme-surface);
+        border: 1px solid var(--theme-border);
+        border-radius: 1rem;
+        padding: 1.25rem;
+    }
+    
+    .timeline-filters {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .timeline-filter-btn {
+        padding: 0.375rem 0.75rem;
+        background: transparent;
+        border: 1px solid var(--theme-border);
+        border-radius: 9999px;
+        color: var(--theme-text-secondary);
+        font-size: 0.75rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .timeline-filter-btn:hover {
+        background: var(--theme-hover);
+    }
+    
+    .timeline-filter-btn.active {
+        background: var(--theme-primary);
+        border-color: var(--theme-primary);
+        color: white;
+    }
+    
+    .timeline-container {
+        position: relative;
+        max-height: 400px;
+        overflow-y: auto;
+        padding-left: 1.5rem;
+    }
+    
+    html[dir="rtl"] .timeline-container {
+        padding-left: 0;
+        padding-right: 1.5rem;
+    }
+    
+    .timeline-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 2px;
+        height: 100%;
+        background: var(--theme-border);
+    }
+    
+    html[dir="rtl"] .timeline-container::before {
+        left: auto;
+        right: 0;
+    }
+    
+    .timeline-item {
+        position: relative;
+        padding-bottom: 1.25rem;
+    }
+    
+    .timeline-item:last-child {
+        padding-bottom: 0;
+    }
+    
+    .timeline-marker {
+        position: absolute;
+        left: -1.625rem;
+        top: 0;
+        width: 12px;
+        height: 12px;
+        background: var(--theme-bg);
+        border: 2px solid var(--theme-primary);
+        border-radius: 50%;
+        z-index: 1;
+    }
+    
+    html[dir="rtl"] .timeline-marker {
+        left: auto;
+        right: -1.625rem;
+    }
+    
+    .timeline-item--approvals .timeline-marker { border-color: #10b981; }
+    .timeline-item--documents .timeline-marker { border-color: #3b82f6; }
+    .timeline-item--system .timeline-marker { border-color: #f59e0b; }
+    .timeline-item--critical .timeline-marker { border-color: #ef4444; }
+    
+    .timeline-content {
+        padding: 0.75rem;
+        background: var(--theme-bg);
+        border-radius: 0.5rem;
+    }
+    
+    .timeline-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.25rem;
+    }
+    
+    .timeline-event {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--theme-text-primary);
+    }
+    
+    .timeline-time {
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+    }
+    
+    .timeline-details {
+        font-size: 0.8125rem;
+        color: var(--theme-text-secondary);
+        margin: 0;
+        line-height: 1.4;
+    }
+    
+    .timeline-user {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        margin-top: 0.375rem;
+        font-size: 0.75rem;
+        color: var(--theme-text-muted);
+    }
+    
+    /* ---- Empty States ---- */
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        text-align: center;
+        color: var(--theme-text-muted);
+    }
+    
+    .empty-state i {
+        font-size: 2rem;
+        margin-bottom: 0.75rem;
+        opacity: 0.5;
+    }
+    
+    .empty-state p {
+        margin: 0;
+        font-size: 0.875rem;
+    }
+    
+    .empty-state--sm {
+        padding: 1rem;
+    }
+    
+    .empty-state--sm i {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    /* ---- Color Utilities ---- */
+    .text-danger { color: #ef4444; }
+    .text-warning { color: #f59e0b; }
+    .text-success { color: #10b981; }
+    .text-info { color: #3b82f6; }
+    .text-purple { color: #8b5cf6; }
+    .text-brand { color: var(--theme-primary); }
+    .text-teal { color: #14b8a6; }
+    .text-secondary { color: var(--theme-text-secondary); }
+    .text-ai { color: #a855f7; }
+    
+    /* ---- Responsive ---- */
+    @media (max-width: 1280px) {
+        .welcome-bar {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+        
+        .welcome-search {
+            max-width: 100%;
+        }
+        
+        .welcome-left,
+        .welcome-right {
+            justify-content: space-between;
+        }
+        
+        .kpi-cards-container {
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .enterprise-dashboard {
+            padding: 1rem;
+        }
+        
+        .kpi-cards-container {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .module-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        
+        .financial-widgets {
+            grid-template-columns: 1fr;
+        }
+        
+        .reports-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .insights-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    @media (max-width: 480px) {
+        .kpi-cards-container {
+            grid-template-columns: 1fr;
+        }
+        
+        .greeting-title {
+            font-size: 1.25rem;
+        }
+        
+        .user-info-mini {
+            display: none;
+        }
+    }
+</style>
+
+<script>
+    // ================================================================
+    // ENTERPRISE DASHBOARD JAVASCRIPT
+    // ================================================================
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        initWelcomeBar();
+        initKPIStrip();
+        initModuleLauncher();
+        initAlertsZone();
+        initFlowZone();
+        initTimeline();
+        initDropdowns();
+        initSearch();
+    });
+    
+    // ---- Welcome Bar ----
+    function initWelcomeBar() {
+        const quickActionsTrigger = document.getElementById('quick-actions-trigger');
+        const userProfileTrigger = document.getElementById('user-profile-trigger');
+        
+        if (quickActionsTrigger) {
+            quickActionsTrigger.addEventListener('click', function(e) {
+                e.stopPropagation();
+                document.querySelectorAll('.quick-actions-dropdown, .user-profile-dropdown').forEach(d => d.classList.remove('active'));
+                this.closest('.quick-actions-dropdown').classList.toggle('active');
+            });
+        }
+        
+        if (userProfileTrigger) {
+            userProfileTrigger.addEventListener('click', function(e) {
+                e.stopPropagation();
+                document.querySelectorAll('.quick-actions-dropdown, .user-profile-dropdown').forEach(d => d.classList.remove('active'));
+                this.closest('.user-profile-dropdown').classList.toggle('active');
+            });
+        }
+        
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.quick-actions-dropdown')) {
+                document.querySelector('.quick-actions-dropdown')?.classList.remove('active');
+            }
+            if (!e.target.closest('.user-profile-dropdown')) {
+                document.querySelector('.user-profile-dropdown')?.classList.remove('active');
+            }
+        });
+    }
+    
+    // ---- KPI Strip ----
+    function initKPIStrip() {
+        const refreshBtn = document.getElementById('kpi-refresh');
+        const periodBtns = document.querySelectorAll('.period-btn');
+        
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', function() {
+                this.classList.add('loading');
+                // Simulate refresh - in production, fetch new KPI data
+                setTimeout(() => {
+                    this.classList.remove('loading');
+                }, 1000);
+            });
+        }
+        
+        periodBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                periodBtns.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const period = this.dataset.period;
+                // In production, refetch KPIs for selected period
+            });
+        });
+    }
+    
+    // ---- Module Launcher ----
+    function initModuleLauncher() {
+        const viewToggleBtns = document.querySelectorAll('.view-toggle-btn');
+        const favoritesBtn = document.getElementById('show-favorites-only');
+        const moduleGrids = document.querySelectorAll('.module-grid');
+        
+        viewToggleBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                viewToggleBtns.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const view = this.dataset.view;
+                moduleGrids.forEach(grid => {
+                    grid.classList.toggle('module-grid--compact', view === 'compact');
+                });
+            });
+        });
+        
+        if (favoritesBtn) {
+            favoritesBtn.addEventListener('click', function() {
+                this.classList.toggle('active');
+                const showFavoritesOnly = this.classList.contains('active');
+                document.querySelectorAll('.module-tile').forEach(tile => {
+                    if (showFavoritesOnly && !tile.classList.contains('module-tile--favorite')) {
+                        tile.style.display = 'none';
+                    } else {
+                        tile.style.display = '';
+                    }
+                });
+            });
+        }
+    }
+    
+    // Toggle favorite module
+    window.toggleFavorite = function(moduleId) {
+        fetch('/dashboard/api/modules/favorite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ module_id: moduleId })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const tile = document.querySelector(`[data-module-id="${moduleId}"]`);
+                if (tile) {
+                    tile.classList.toggle('module-tile--favorite');
+                    const starBtn = tile.querySelector('.module-tile-star');
+                    if (starBtn) {
+                        starBtn.classList.toggle('active');
+                        starBtn.querySelector('i').className = starBtn.classList.contains('active') ? 'fas fa-star' : 'far fa-star';
+                    }
+                }
+            }
+        })
+        .catch(err => console.error('Error toggling favorite:', err));
+    };
+    
+    // Handle KPI card click
+    function handleKpiClick(card) {
+        const link = card.dataset.link;
+        if (link && link !== '#') {
+            window.location.href = link;
+        }
+    }
+    
+    // ---- Alerts Zone ----
+    function initAlertsZone() {
+        const filterBtns = document.querySelectorAll('.alert-filter-btn');
+        
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                filterBtns.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const filter = this.dataset.filter;
+                document.querySelectorAll('.alert-item').forEach(item => {
+                    if (filter === 'all' || item.classList.contains(`alert-item--${filter}`)) {
+                        item.style.display = '';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            });
+        });
+    }
+    
+    // Dismiss alert
+    window.dismissAlert = function(alertId) {
+        fetch('/dashboard/api/alerts/dismiss', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ alert_id: alertId })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const alertItem = document.querySelector(`[data-alert-id="${alertId}"]`);
+                if (alertItem) {
+                    alertItem.style.opacity = '0';
+                    setTimeout(() => alertItem.remove(), 300);
+                }
+            }
+        })
+        .catch(err => console.error('Error dismissing alert:', err));
+    };
+    
+    // ---- Flow Zone ----
+    function initFlowZone() {
+        const tabBtns = document.querySelectorAll('.flow-tab-btn');
+        
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                tabBtns.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const tab = this.dataset.tab;
+                document.querySelectorAll('.flow-tab-content').forEach(content => {
+                    content.classList.toggle('active', content.id === `flow-${tab}`);
+                });
+            });
+        });
+    }
+    
+    // ---- Timeline ----
+    function initTimeline() {
+        const filterBtns = document.querySelectorAll('.timeline-filter-btn');
+        
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                filterBtns.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                const filter = this.dataset.filter;
+                document.querySelectorAll('.timeline-item').forEach(item => {
+                    if (filter === 'all' || item.classList.contains(`timeline-item--${filter}`)) {
+                        item.style.display = '';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            });
+        });
+    }
+    
+    // ---- Dropdowns ----
+    function initDropdowns() {
+        // Close dropdowns when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.quick-actions-dropdown')) {
+                document.querySelector('.quick-actions-dropdown')?.classList.remove('active');
+            }
+            if (!e.target.closest('.user-profile-dropdown')) {
+                document.querySelector('.user-profile-dropdown')?.classList.remove('active');
+            }
+        });
+    }
+    
+    // ---- Global Search ----
+    function initSearch() {
+        const searchInput = document.getElementById('dashboard-global-search');
+        if (searchInput) {
+            searchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    const query = this.value.trim();
+                    if (query) {
+                        window.location.href = `/search?q=${encodeURIComponent(query)}`;
+                    }
+                }
+                if (e.key === 'Escape') {
+                    this.value = '';
+                    this.blur();
+                }
+            });
+            
+            // Keyboard shortcut
+            document.addEventListener('keydown', function(e) {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                    e.preventDefault();
+                    searchInput.focus();
+                }
+            });
+        }
+    }
+    
+    // ---- Quick Approve/Reject ----
+    window.quickApprove = function(approvalId) {
+        fetch('/dashboard/api/workflow/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approval_id: approvalId })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const item = document.querySelector(`[data-approval-id="${approvalId}"]`);
+                if (item) {
+                    item.style.opacity = '0';
+                    setTimeout(() => item.remove(), 300);
+                }
+            }
+        })
+        .catch(err => console.error('Error approving:', err));
+    };
+    
+    window.quickReject = function(approvalId) {
+        fetch('/dashboard/api/workflow/reject', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ approval_id: approvalId })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const item = document.querySelector(`[data-approval-id="${approvalId}"]`);
+                if (item) {
+                    item.style.opacity = '0';
+                    setTimeout(() => item.remove(), 300);
+                }
+            }
+        })
+        .catch(err => console.error('Error rejecting:', err));
+    };
+    
+    // ---- Task Toggle ----
+    window.toggleTask = function(taskId) {
+        fetch('/dashboard/api/tasks/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ task_id: taskId })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                const taskItem = document.querySelector(`[data-task-id="${taskId}"]`);
+                if (taskItem) {
+                    taskItem.classList.toggle('task-completed', data.completed);
+                }
+            }
+        })
+        .catch(err => console.error('Error toggling task:', err));
+    };
+</script>
+{% endblock %}

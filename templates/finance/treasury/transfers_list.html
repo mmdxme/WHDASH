@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Internal and bank transfer requests</p>
+            </div>
+            <a href="{{ url_for('treasury.transfers_create') }}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> New Transfer
+            </a>
+        </div>
+
+        <!-- Filters -->
+        <div class="glass-card p-4 mb-6">
+            <form method="get" class="flex gap-4 items-end flex-wrap">
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Status</label>
+                    <select name="status" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                        <option value="">All</option>
+                        <option value="Pending" {% if filters.status == 'Pending' %}selected{% endif %}>Pending</option>
+                        <option value="Approved" {% if filters.status == 'Approved' %}selected{% endif %}>Approved</option>
+                        <option value="Rejected" {% if filters.status == 'Rejected' %}selected{% endif %}>Rejected</option>
+                        <option value="Completed" {% if filters.status == 'Completed' %}selected{% endif %}>Completed</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Type</label>
+                    <select name="request_type" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                        <option value="">All</option>
+                        <option value="bank_transfer" {% if filters.request_type == 'bank_transfer' %}selected{% endif %}>Bank Transfer</option>
+                        <option value="internal_transfer" {% if filters.request_type == 'internal_transfer' %}selected{% endif %}>Internal</option>
+                        <option value="inter_branch" {% if filters.request_type == 'inter_branch' %}selected{% endif %}>Inter-Branch</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Start Date</label>
+                    <input type="date" name="start_date" value="{{ filters.start_date or '' }}" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">End Date</label>
+                    <input type="date" name="end_date" value="{{ filters.end_date or '' }}" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-filter"></i> Filter
+                </button>
+            </form>
+        </div>
+
+        <!-- Transfers Table -->
+        <div class="glass-card p-6">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Request #</th>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>From</th>
+                        <th>To</th>
+                        <th class="text-right">Amount</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for transfer in transfers %}
+                    <tr>
+                        <td class="font-mono font-semibold">{{ transfer.request_number }}</td>
+                        <td>{{ transfer.transfer_date }}</td>
+                        <td>
+                            <span class="badge badge-low">{{ transfer.request_type|replace('_', ' ')|title }}</span>
+                        </td>
+                        <td class="text-gray-400">
+                            {% if transfer.from_bank_account_id %}
+                            Bank #{{ transfer.from_bank_account_id }}
+                            {% elif transfer.from_petty_cash_id %}
+                            Petty Cash #{{ transfer.from_petty_cash_id }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="text-gray-400">
+                            {% if transfer.to_bank_account_id %}
+                            Bank #{{ transfer.to_bank_account_id }}
+                            {% elif transfer.to_petty_cash_id %}
+                            Petty Cash #{{ transfer.to_petty_cash_id }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="text-right amount">{{ "%.2f"|format(transfer.amount or 0) }} {{ transfer.currency }}</td>
+                        <td>
+                            <span class="badge {% if transfer.status == 'Approved' %}badge-low{% elif transfer.status == 'Pending' %}badge-high{% elif transfer.status == 'Rejected' %}badge-critical{% else %}badge-medium{% endif %}">
+                                {{ transfer.status }}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('treasury.transfer_detail', transfer_id=transfer.id) }}" class="text-primary hover:underline mr-2">View</a>
+                            {% if transfer.status == 'Pending' %}
+                            <form method="post" action="{{ url_for('treasury.transfer_approve', transfer_id=transfer.id) }}" class="inline">
+                                <button type="submit" class="text-success hover:underline mr-2">Approve</button>
+                            </form>
+                            <form method="post" action="{{ url_for('treasury.transfer_reject', transfer_id=transfer.id) }}" class="inline">
+                                <button type="submit" class="text-danger hover:underline">Reject</button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center text-gray-500 py-8">
+                            No transfer requests found.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

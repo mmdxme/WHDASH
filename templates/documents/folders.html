@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="{{ current_lang }}" dir="{{ 'rtl' if current_lang in ['ar', 'fa'] else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background: #F9FAFB; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .folder-card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.2s; cursor: pointer; }
+        .folder-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .folder-icon { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1"><i class="fas fa-folder-tree me-2 text-warning"></i>{{ page_title }}</h1>
+                <p class="text-muted mb-0">Browse and manage your folder hierarchy</p>
+            </div>
+            {% if has_permission('documents', 'files', 'create') %}
+            <button class="btn btn-primary" onclick="showCreateRootFolder()">
+                <i class="fas fa-folder-plus me-1"></i>{{ t('create_folder') or 'Create Root Folder' }}
+            </button>
+            {% endif %}
+        </div>
+
+        <!-- Folder Grid -->
+        <div class="row g-4">
+            {% for folder in folders %}
+            <div class="col-md-4 col-lg-3">
+                <div class="card folder-card h-100" onclick="window.location.href='{{ url_for('documents_folder_detail', folder_id=folder.id) }}'">
+                    <div class="card-body">
+                        <div class="d-flex align-items-start">
+                            <div class="folder-icon me-3" style="background: #FEF3C7; color: #D97706;">
+                                <i class="fas fa-folder"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <h5 class="mb-1">{{ folder.name }}</h5>
+                                {% if folder.description %}
+                                <p class="text-muted small mb-2">{{ folder.description[:50] }}{% if folder.description|length > 50 %}...{% endif %}</p>
+                                {% endif %}
+                                <div class="d-flex gap-3 small text-muted">
+                                    <span><i class="fas fa-file me-1"></i>{{ folder.document_count or 0 }} {{ t('files') or 'files' }}</span>
+                                    <span><i class="fas fa-folder me-1"></i>{{ folder.subfolder_count or 0 }} {{ t('folders') or 'folders' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-transparent border-top">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="small text-muted">{{ folder.owner_username or 'Unknown' }}</span>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('documents_folder_detail', folder_id=folder.id) }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="col-12 text-center py-5">
+                <i class="fas fa-folder-open fa-4x text-muted mb-3"></i>
+                <h5 class="text-muted">{{ t('no_folders') or 'No folders yet' }}</h5>
+                <p class="text-muted">{{ t('create_first_folder') or 'Create your first folder to organize documents' }}</p>
+                {% if has_permission('documents', 'files', 'create') %}
+                <button class="btn btn-primary" onclick="showCreateRootFolder()">
+                    <i class="fas fa-folder-plus me-1"></i>{{ t('create_folder') or 'Create First Folder' }}
+                </button>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Create Root Folder Modal -->
+    <div class="modal fade" id="createRootFolderModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-folder-plus me-2"></i>{{ t('create_folder') or 'Create Root Folder' }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <form method="POST" action="{{ url_for('documents_create_folder') }}">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('folder_name') or 'Folder Name' }} *</label>
+                            <input type="text" name="name" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('description') or 'Description' }}</label>
+                            <textarea name="description" class="form-control" rows="2"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('visibility') or 'Visibility' }}</label>
+                            <select name="visibility" class="form-select">
+                                <option value="Private">{{ t('private') or 'Private' }}</option>
+                                <option value="Department">{{ t('department') or 'Department' }}</option>
+                                <option value="Company">{{ t('company') or 'Company' }}</option>
+                                <option value="Public">{{ t('public') or 'Public' }}</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">{{ t('color') or 'Color' }}</label>
+                            <input type="color" name="color" class="form-control form-control-color" value="#D97706">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('cancel') or 'Cancel' }}</button>
+                        <button type="submit" class="btn btn-primary"><i class="fas fa-check me-1"></i>{{ t('create') or 'Create' }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function showCreateRootFolder() {
+            new bootstrap.Modal(document.getElementById('createRootFolderModal')).show();
+        }
+    </script>
+</body>
+</html>

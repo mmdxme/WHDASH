@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Comparing forecasts against actual cash flows</p>
+            </div>
+        </div>
+
+        <!-- Variance Summary -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Total Inflow (Actual)</p>
+                <p class="text-2xl font-bold text-success amount">{{ "%.2f"|format(actuals|sum(attribute='total_inflow') if actuals else 0) }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Total Outflow (Actual)</p>
+                <p class="text-2xl font-bold text-danger amount">{{ "%.2f"|format(actuals|sum(attribute='total_outflow') if actuals else 0) }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Net Position (Actual)</p>
+                {% set net_actual = (actuals|sum(attribute='total_inflow') if actuals else 0) - (actuals|sum(attribute='total_outflow') if actuals else 0) %}
+                <p class="text-2xl font-bold {% if net_actual >= 0 %}text-success{% else %}text-danger{% endif %} amount">{{ "%.2f"|format(net_actual) }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Variance</p>
+                {% set total_forecast_in = forecast.forecast.values()|sum(attribute='inflow') if forecast.forecast else 0 %}
+                {% set total_forecast_out = forecast.forecast.values()|sum(attribute='outflow') if forecast.forecast else 0 %}
+                {% set variance = net_actual - (total_forecast_in - total_forecast_out) %}
+                <p class="text-2xl font-bold {% if variance >= 0 %}text-success{% else %}text-danger{% endif %} amount">{{ "%.2f"|format(variance) }}</p>
+            </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="glass-card p-6 mb-6">
+            <h2 class="text-xl font-semibold text-white mb-4">Forecast vs Actual Trend</h2>
+            <canvas id="varianceChart" height="100"></canvas>
+        </div>
+
+        <!-- Detailed Comparison Table -->
+        <div class="glass-card p-6">
+            <h2 class="text-xl font-semibold text-white mb-4">Daily Variance Analysis</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th class="text-right">Forecast Inflow</th>
+                        <th class="text-right">Actual Inflow</th>
+                        <th class="text-right">Inflow Variance</th>
+                        <th class="text-right">Forecast Outflow</th>
+                        <th class="text-right">Actual Outflow</th>
+                        <th class="text-right">Outflow Variance</th>
+                        <th class="text-right">Net Variance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for date, fdata in forecast.forecast.items() %}
+                    {% set actual_data = actuals|selectattr('snapshot_date', 'equalto', date)|first %}
+                    {% set actual_inflow = actual_data.total_inflow if actual_data else 0 %}
+                    {% set actual_outflow = actual_data.total_outflow if actual_data else 0 %}
+                    {% set inflow_var = actual_inflow - fdata.inflow %}
+                    {% set outflow_var = actual_outflow - fdata.outflow %}
+                    <tr>
+                        <td class="font-semibold">{{ date }}</td>
+                        <td class="text-right amount text-primary">{{ "%.2f"|format(fdata.inflow) }}</td>
+                        <td class="text-right amount text-success">{{ "%.2f"|format(actual_inflow) }}</td>
+                        <td class="text-right amount {% if inflow_var >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ "%.2f"|format(inflow_var) }}
+                        </td>
+                        <td class="text-right amount text-primary">{{ "%.2f"|format(fdata.outflow) }}</td>
+                        <td class="text-right amount text-danger">{{ "%.2f"|format(actual_outflow) }}</td>
+                        <td class="text-right amount {% if outflow_var <= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ "%.2f"|format(outflow_var) }}
+                        </td>
+                        <td class="text-right amount {% if (inflow_var - outflow_var) >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {{ "%.2f"|format(inflow_var - outflow_var) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('varianceChart').getContext('2d');
+        const forecastLabels = {{ forecast.forecast.keys()|list|tojson }};
+        const inflowForecast = {{ forecast.forecast.values()|map(attribute='inflow')|list|tojson }};
+        const outflowForecast = {{ forecast.forecast.values()|map(attribute='outflow')|list|tojson }};
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: forecastLabels,
+                datasets: [
+                    {
+                        label: 'Forecast Inflow',
+                        data: inflowForecast,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        fill: true
+                    },
+                    {
+                        label: 'Forecast Outflow',
+                        data: outflowForecast,
+                        borderColor: '#ef4444',
+                        backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { labels: { color: '#e5e7eb' } } },
+                scales: { x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                         y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } } }
+            }
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>

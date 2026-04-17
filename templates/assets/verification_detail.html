@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 fade-in">
+    <div class="max-w-3xl mx-auto">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-100">Verification Details</h1>
+                <p class="text-slate-400 text-sm mt-1">{{ verification.verification_number }}</p>
+            </div>
+            <div class="flex gap-3">
+                {% if verification.status == 'Scheduled' %}
+                <button onclick="completeVerification()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors">
+                    <i class="fas fa-check mr-2"></i>Complete
+                </button>
+                {% endif %}
+                <a href="{{ url_for('assets.verifications') }}" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors">
+                    <i class="fas fa-arrow-left mr-2"></i>Back
+                </a>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-6">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h3 class="text-lg font-semibold text-white">{{ verification.asset_name or 'Location: ' ~ verification.location_name }}</h3>
+                    {% if verification.asset_code %}
+                    <p class="text-slate-400">{{ verification.asset_code }}</p>
+                    {% endif %}
+                </div>
+                {% if verification.status == 'Completed' %}
+                <span class="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Completed</span>
+                {% elif verification.status == 'In Progress' %}
+                <span class="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-sm">In Progress</span>
+                {% else %}
+                <span class="px-3 py-1 bg-yellow-500/20 text-yellow-400 rounded-full text-sm">{{ verification.status }}</span>
+                {% endif %}
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                    <p class="text-slate-400">Verification Type</p>
+                    <p class="text-white">{{ verification.verification_type }}</p>
+                </div>
+                <div>
+                    <p class="text-slate-400">Verification Date</p>
+                    <p class="text-white">{{ verification.verification_date }}</p>
+                </div>
+                <div>
+                    <p class="text-slate-400">Location</p>
+                    <p class="text-white">{{ verification.location_name or '-' }}</p>
+                </div>
+                <div>
+                    <p class="text-slate-400">Scheduled Date</p>
+                    <p class="text-white">{{ verification.scheduled_date or '-' }}</p>
+                </div>
+                <div>
+                    <p class="text-slate-400">Created By</p>
+                    <p class="text-white">{{ verification.created_by_name }}</p>
+                </div>
+                <div>
+                    <p class="text-slate-400">Verified By</p>
+                    <p class="text-white">{{ verification.verified_by_name or '-' }}</p>
+                </div>
+            </div>
+
+            {% if verification.condition_rating %}
+            <div class="mt-4 pt-4 border-t border-slate-700">
+                <p class="text-slate-400 text-xs">Condition Rating After Verification</p>
+                <p class="text-white">{{ verification.condition_rating }}</p>
+            </div>
+            {% endif %}
+
+            {% if verification.discrepancy_notes %}
+            <div class="mt-4 pt-4 border-t border-slate-700">
+                <p class="text-slate-400 text-xs">Discrepancy Notes</p>
+                <p class="text-white">{{ verification.discrepancy_notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function completeVerification() {
+    const condition = prompt('Condition rating after verification:');
+    const found = confirm('Is the asset found at the expected location?');
+    const discrepancy = found ? '' : prompt('Discrepancy notes:');
+    
+    fetch('{{ url_for("assets.verification_complete", ver_id=verification.id) }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            condition_rating: condition,
+            is_found: found ? 1 : 0,
+            discrepancy_notes: discrepancy
+        })
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) location.reload();
+    });
+}
+</script>
+{% endblock %}

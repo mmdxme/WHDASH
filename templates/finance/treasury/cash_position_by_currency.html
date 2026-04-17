@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Cash position breakdown by currency</p>
+            </div>
+            <a href="{{ url_for('treasury.cash_position') }}" class="text-primary hover:text-primary-light">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Cash Position
+            </a>
+        </div>
+
+        <!-- Currency Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-6">
+            {% for currency, data in cash_position.by_currency.items() %}
+            <div class="glass-card p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-xl font-semibold text-white">{{ currency }}</h3>
+                    <span class="px-3 py-1 bg-primary/20 text-primary rounded-full text-sm">{{ loop.index }}</span>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Total Balance</span>
+                        <span class="amount text-white">{{ "%.2f"|format(data.total_balance) }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Bank Balance</span>
+                        <span class="amount text-success">{{ "%.2f"|format(data.get('bank_balance', 0)) }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Petty Cash</span>
+                        <span class="amount text-warning">{{ "%.2f"|format(data.get('petty_cash_balance', 0)) }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-400">Cash Boxes</span>
+                        <span class="amount text-info">{{ "%.2f"|format(data.get('cash_box_balance', 0)) }}</span>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="col-span-full glass-card p-8 text-center">
+                <p class="text-gray-400">No currency data available</p>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Detailed Table -->
+        <div class="glass-card p-6">
+            <h2 class="text-xl font-semibold text-white mb-4">Currency-wise Cash Details</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Currency</th>
+                        <th class="text-right">Bank</th>
+                        <th class="text-right">Petty Cash</th>
+                        <th class="text-right">Cash Boxes</th>
+                        <th class="text-right">Total</th>
+                        <th>% of Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for currency, data in cash_position.by_currency.items() %}
+                    {% set total = cash_position.total_position %}
+                    <tr>
+                        <td class="font-semibold text-white">{{ currency }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(data.get('bank_balance', 0)) }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(data.get('petty_cash_balance', 0)) }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(data.get('cash_box_balance', 0)) }}</td>
+                        <td class="text-right amount text-success">{{ "%.2f"|format(data.total_balance) }}</td>
+                        <td>
+                            <div class="flex items-center">
+                                <div class="w-24 bg-gray-700 rounded-full h-2 mr-2">
+                                    <div class="bg-primary h-2 rounded-full" style="width: {{ '%.0f'|format((data.total_balance / total * 100) if total > 0 else 0) }}%"></div>
+                                </div>
+                                <span class="text-sm text-gray-400">{{ "%.1f"|format((data.total_balance / total * 100) if total > 0 else 0) }}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

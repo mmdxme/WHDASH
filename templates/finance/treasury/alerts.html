@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">
+                    {% if unread_count > 0 %}
+                    <span class="text-danger">{{ unread_count }} unread alerts</span>
+                    {% else %}
+                    All alerts resolved
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="glass-card p-4 mb-6">
+            <form method="get" class="flex gap-4 items-end flex-wrap">
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Status</label>
+                    <select name="is_read" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                        <option value="all" {% if filters.is_read == 'all' %}selected{% endif %}>All</option>
+                        <option value="false" {% if filters.is_read == 'false' %}selected{% endif %}>Unread</option>
+                        <option value="true" {% if filters.is_read == 'true' %}selected{% endif %}>Read</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Severity</label>
+                    <select name="severity" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                        <option value="">All</option>
+                        <option value="critical" {% if filters.severity == 'critical' %}selected{% endif %}>Critical</option>
+                        <option value="high" {% if filters.severity == 'high' %}selected{% endif %}>High</option>
+                        <option value="medium" {% if filters.severity == 'medium' %}selected{% endif %}>Medium</option>
+                        <option value="low" {% if filters.severity == 'low' %}selected{% endif %}>Low</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Type</label>
+                    <select name="alert_type" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                        <option value="">All</option>
+                        <option value="low_balance">Low Balance</option>
+                        <option value="large_outflow">Large Outflow</option>
+                        <option value="overdue_collection">Overdue Collection</option>
+                        <option value="reconciliation">Reconciliation</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">Filter</button>
+            </form>
+        </div>
+
+        <!-- Alerts List -->
+        <div class="space-y-4">
+            {% for alert in alerts %}
+            <div class="glass-card p-6 alert-{% if alert.severity == 'critical' %}critical{% elif alert.severity == 'high' %}high{% else %}medium{% endif %} {% if not alert.is_read %}border-l-4{% endif %}">
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-3 mb-2">
+                            <h3 class="text-lg font-semibold text-white">{{ alert.title }}</h3>
+                            <span class="badge {% if alert.severity == 'critical' %}badge-critical{% elif alert.severity == 'high' %}badge-high{% elif alert.severity == 'medium' %}badge-medium{% else %}badge-low{% endif %}">
+                                {{ alert.severity|upper }}
+                            </span>
+                            {% if not alert.is_read %}
+                            <span class="badge badge-high">NEW</span>
+                            {% endif %}
+                        </div>
+                        <p class="text-gray-400 mb-2">{{ alert.message }}</p>
+                        <div class="flex gap-4 text-sm text-gray-500">
+                            <span><i class="fas fa-clock mr-1"></i>{{ alert.created_at }}</span>
+                            {% if alert.amount %}
+                            <span class="amount">{{ "%.2f"|format(alert.amount) }} {{ alert.currency or 'AED' }}</span>
+                            {% endif %}
+                            <span><i class="fas fa-tag mr-1"></i>{{ alert.alert_type|replace('_', ' ')|title }}</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2 ml-4">
+                        {% if not alert.is_resolved %}
+                        <form method="post" action="{{ url_for('treasury.alert_resolve', alert_id=alert.id) }}">
+                            <input type="text" name="resolution_notes" placeholder="Resolution notes" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white text-sm mb-2 w-full">
+                            <button type="submit" class="btn btn-success w-full">Resolve</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="glass-card p-12 text-center">
+                <i class="fas fa-check-circle text-success text-4xl mb-4"></i>
+                <h3 class="text-xl font-semibold text-white mb-2">No Alerts</h3>
+                <p class="text-gray-400">There are no treasury alerts matching your criteria.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

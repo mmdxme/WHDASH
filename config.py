@@ -72,6 +72,72 @@ VAPID_SUBJECT = os.environ.get('VAPID_SUBJECT', 'mailto:notifications@example.co
 
 DATABASE_PATH = os.environ.get('DATABASE_PATH', os.path.join(BASE_DIR, 'warehouse.db'))
 
+# =============================================================================
+# DATABASE ENGINE SELECTION (PostgreSQL-ready Architecture)
+# =============================================================================
+# Set DB_ENGINE to 'postgresql' to switch from SQLite to PostgreSQL
+
+DB_ENGINE = os.environ.get('DB_ENGINE', 'sqlite').lower()
+
+# PostgreSQL Configuration (used when DB_ENGINE='postgresql')
+POSTGRESQL_HOST = os.environ.get('POSTGRESQL_HOST', 'localhost')
+POSTGRESQL_PORT = int(os.environ.get('POSTGRESQL_PORT', '5432'))
+POSTGRESQL_DATABASE = os.environ.get('POSTGRESQL_DATABASE', 'whdash')
+POSTGRESQL_USER = os.environ.get('POSTGRESQL_USER', 'whdash_user')
+POSTGRESQL_PASSWORD = os.environ.get('POSTGRESQL_PASSWORD', '')
+POSTGRESQL_SCHEMA = os.environ.get('POSTGRESQL_SCHEMA', 'public')
+
+# Build PostgreSQL connection URL
+if DB_ENGINE == 'postgresql' and POSTGRESQL_PASSWORD:
+    POSTGRESQL_URL = f"postgresql://{POSTGRESQL_USER}:{POSTGRESQL_PASSWORD}@{POSTGRESQL_HOST}:{POSTGRESQL_PORT}/{POSTGRESQL_DATABASE}"
+elif DB_ENGINE == 'postgresql':
+    POSTGRESQL_URL = f"postgresql://{POSTGRESQL_USER}@{POSTGRESQL_HOST}:{POSTGRESQL_PORT}/{POSTGRESQL_DATABASE}"
+else:
+    POSTGRESQL_URL = None
+
+# =============================================================================
+# REDIS CONFIGURATION (Session & Cache)
+# =============================================================================
+
+REDIS_URL = os.environ.get('REDIS_URL', '')
+REDIS_CACHE_URL = os.environ.get('REDIS_CACHE_URL', '')
+
+# If REDIS_URL is not set but we're in production, try default local Redis
+if not REDIS_URL and ENV == 'production':
+    REDIS_URL = 'redis://localhost:6379/0'
+if not REDIS_CACHE_URL and not REDIS_URL:
+    REDIS_CACHE_URL = 'redis://localhost:6379/1'
+
+# Use Redis for sessions if REDIS_URL is configured
+SESSION_TYPE = 'redis' if REDIS_URL else 'filesystem'
+
+# Cache configuration
+CACHE_TYPE = 'redis' if REDIS_CACHE_URL or REDIS_URL else 'simple'
+CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', '300'))
+
+
+# =============================================================================
+# CELERY BACKGROUND JOB CONFIGURATION
+# =============================================================================
+
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', '')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', '')
+
+# If Redis is configured, use it as Celery broker by default
+if not CELERY_BROKER_URL and REDIS_URL:
+    CELERY_BROKER_URL = REDIS_URL.replace('/0/', '/2/') if '/0/' in REDIS_URL else f"{REDIS_URL}/2"
+if not CELERY_RESULT_BACKEND and REDIS_URL:
+    CELERY_RESULT_BACKEND = REDIS_URL.replace('/0/', '/3/') if '/0/' in REDIS_URL else f"{REDIS_URL}/3"
+
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TIMEZONE = os.environ.get('CELERY_TIMEZONE', 'UTC')
+CELERY_ENABLE_UTC = True
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes max per task
+CELERY_RESULT_EXTENDED = True
+
 
 # =============================================================================
 # UPLOAD SETTINGS
@@ -88,7 +154,6 @@ MAX_DOCUMENT_SIZE = 50 * 1024 * 1024  # 50MB
 # SESSION CONFIGURATION
 # =============================================================================
 
-SESSION_TYPE = 'filesystem'
 SESSION_PERMANENT = True
 PERMANENT_SESSION_LIFETIME = 120  # minutes
 # Session file directory - use a persistent location
@@ -146,14 +211,6 @@ RATELIMIT_API = "1000 per day"
 
 PAGINATION_PAGE_SIZES = [25, 50, 100, 200]
 DEFAULT_PAGE_SIZE = 50
-
-
-# =============================================================================
-# CACHE SETTINGS (for future Redis integration)
-# =============================================================================
-
-CACHE_TYPE = 'simple'  # Can be 'redis' in production
-CACHE_DEFAULT_TIMEOUT = 300  # 5 minutes
 
 
 # =============================================================================

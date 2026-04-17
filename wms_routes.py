@@ -1196,6 +1196,79 @@ def register_wms_routes(app, get_db):
             )
         ''')
 
+        # Wave Management
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS wms_wave_templates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                template_name TEXT UNIQUE NOT NULL,
+                description TEXT,
+                picking_strategy TEXT DEFAULT 'WAVE',
+                allocation_rule TEXT DEFAULT 'FIFO',
+                max_picks_per_operator INTEGER DEFAULT 50,
+                auto_assign_tasks INTEGER DEFAULT 1,
+                release_type TEXT DEFAULT 'IMMEDIATE',
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER,
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )
+        ''')
+
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS wms_waves (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wave_number TEXT UNIQUE NOT NULL,
+                template_id INTEGER,
+                warehouse_id INTEGER NOT NULL,
+                company_id INTEGER,
+                description TEXT,
+                picking_strategy TEXT DEFAULT 'WAVE',
+                allocation_rule TEXT DEFAULT 'FIFO',
+                max_picks_per_operator INTEGER DEFAULT 50,
+                auto_assign_tasks INTEGER DEFAULT 1,
+                release_type TEXT DEFAULT 'IMMEDIATE',
+                scheduled_release_time TEXT,
+                status TEXT DEFAULT 'PLANNED',
+                priority INTEGER DEFAULT 5,
+                order_count INTEGER DEFAULT 0,
+                total_lines INTEGER DEFAULT 0,
+                total_picks INTEGER DEFAULT 0,
+                picks_completed INTEGER DEFAULT 0,
+                released_by INTEGER,
+                released_at TEXT,
+                completed_by INTEGER,
+                completed_at TEXT,
+                cancelled_by INTEGER,
+                cancelled_at TEXT,
+                cancel_reason TEXT,
+                notes TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                created_by INTEGER,
+                FOREIGN KEY (template_id) REFERENCES wms_wave_templates(id),
+                FOREIGN KEY (warehouse_id) REFERENCES wms_warehouses(id),
+                FOREIGN KEY (company_id) REFERENCES wms_companies(id),
+                FOREIGN KEY (released_by) REFERENCES users(id),
+                FOREIGN KEY (completed_by) REFERENCES users(id),
+                FOREIGN KEY (cancelled_by) REFERENCES users(id),
+                FOREIGN KEY (created_by) REFERENCES users(id)
+            )
+        ''')
+
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS wms_wave_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                wave_id INTEGER NOT NULL,
+                order_id INTEGER NOT NULL,
+                added_by INTEGER,
+                added_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (wave_id) REFERENCES wms_waves(id),
+                FOREIGN KEY (order_id) REFERENCES wms_outbound_orders(id),
+                FOREIGN KEY (added_by) REFERENCES users(id)
+            )
+        ''')
+
         # QC Inspections
         db.execute('''
             CREATE TABLE IF NOT EXISTS wms_qc_inspections (
@@ -1253,6 +1326,110 @@ def register_wms_routes(app, get_db):
                 FOREIGN KEY (prepared_by) REFERENCES users(id),
                 FOREIGN KEY (checked_by) REFERENCES users(id),
                 FOREIGN KEY (approved_by) REFERENCES users(id)
+            )
+        ''')
+
+        # RF Scan Log
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS wms_rf_scan_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                operator_id INTEGER,
+                scan_type TEXT NOT NULL,
+                barcode TEXT,
+                item_id INTEGER,
+                quantity REAL,
+                location_id INTEGER,
+                operation_status TEXT DEFAULT 'SUCCESS',
+                error_message TEXT,
+                response_time_ms INTEGER,
+                scan_time TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (operator_id) REFERENCES users(id),
+                FOREIGN KEY (item_id) REFERENCES wms_items(id),
+                FOREIGN KEY (location_id) REFERENCES wms_locations(id)
+            )
+        ''')
+
+        # Yard Vehicles
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS wms_yard_vehicles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plate_number TEXT NOT NULL,
+                driver_name TEXT,
+                driver_phone TEXT,
+                carrier_name TEXT,
+                vehicle_type TEXT DEFAULT 'INBOUND',
+                warehouse_id INTEGER NOT NULL,
+                dock_id INTEGER,
+                status TEXT DEFAULT 'WAITING',
+                arrival_time TEXT,
+                departure_time TEXT,
+                expected_duration_minutes INTEGER DEFAULT 60,
+                is_active INTEGER DEFAULT 1,
+                notes TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (warehouse_id) REFERENCES wms_warehouses(id),
+                FOREIGN KEY (dock_id) REFERENCES wms_dock_doors(id)
+            )
+        ''')
+
+        # Dock Doors
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS wms_dock_doors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                door_number TEXT NOT NULL,
+                warehouse_id INTEGER NOT NULL,
+                door_type TEXT DEFAULT 'BOTH',
+                status TEXT DEFAULT 'AVAILABLE',
+                current_vehicle_id INTEGER,
+                height_limit_cm INTEGER,
+                width_limit_cm INTEGER,
+                weight_limit_kg INTEGER,
+                is_active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (warehouse_id) REFERENCES wms_warehouses(id),
+                FOREIGN KEY (current_vehicle_id) REFERENCES wms_yard_vehicles(id)
+            )
+        ''')
+
+        # Dock Schedule
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS wms_dock_schedule (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                scheduled_date TEXT NOT NULL,
+                scheduled_time TEXT,
+                warehouse_id INTEGER NOT NULL,
+                dock_id INTEGER,
+                vehicle_type TEXT,
+                carrier_name TEXT,
+                plate_number TEXT,
+                driver_name TEXT,
+                driver_phone TEXT,
+                reference_number TEXT,
+                estimated_duration_minutes INTEGER,
+                status TEXT DEFAULT 'SCHEDULED',
+                notes TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (warehouse_id) REFERENCES wms_warehouses(id),
+                FOREIGN KEY (dock_id) REFERENCES wms_dock_doors(id)
+            )
+        ''')
+
+        # Yard Activity Log
+        db.execute('''
+            CREATE TABLE IF NOT EXISTS wms_yard_activity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                vehicle_id INTEGER,
+                event TEXT NOT NULL,
+                plate_number TEXT,
+                driver_name TEXT,
+                dock_number TEXT,
+                user_id INTEGER,
+                timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (vehicle_id) REFERENCES wms_yard_vehicles(id),
+                FOREIGN KEY (user_id) REFERENCES users(id)
             )
         ''')
 
@@ -4974,4 +5151,758 @@ def register_wms_routes(app, get_db):
             title=title,
             order=order,
             pick_tasks=pick_tasks
+        )
+
+    # ============================================================
+    # WAVE MANAGEMENT
+    # ============================================================
+
+    @app.route('/wms/waves')
+    @wms_permission_required('waves', 'view')
+    def wms_waves():
+        """Wave management - list all waves."""
+        db = get_db()
+        status = request.args.get('status', '')
+        warehouse_id = request.args.get('warehouse_id', '')
+        search = request.args.get('search', '')
+        page = int(request.args.get('page', 1))
+        per_page = 30
+
+        query = '''
+            SELECT w.*, wt.template_name, wh.name as warehouse_name,
+                   u.username as created_by_name
+            FROM wms_waves w
+            LEFT JOIN wms_wave_templates wt ON wt.id = w.template_id
+            JOIN wms_warehouses wh ON wh.id = w.warehouse_id
+            LEFT JOIN users u ON u.id = w.created_by
+            WHERE 1=1
+        '''
+        params = []
+        if status:
+            query += " AND w.status = ?"
+            params.append(status)
+        if warehouse_id:
+            query += " AND w.warehouse_id = ?"
+            params.append(warehouse_id)
+        if search:
+            query += " AND (w.wave_number LIKE ? OR w.description LIKE ?)"
+            params.append(f'%{search}%')
+            params.append(f'%{search}%')
+
+        total = len(db.execute(query, params).fetchall())
+        query += " ORDER BY w.created_at DESC LIMIT ? OFFSET ?"
+        params.extend([per_page, (page - 1) * per_page])
+        waves = db.execute(query, params).fetchall()
+
+        # Wave stats
+        stats = {}
+        for s in ['PLANNED', 'RELEASED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']:
+            stats[s.lower()] = db.execute(
+                'SELECT COUNT(*) as cnt FROM wms_waves WHERE status = ?', (s,)).fetchone()['cnt']
+        stats['total_orders'] = db.execute(
+            'SELECT COUNT(*) as cnt FROM wms_wave_orders').fetchone()['cnt']
+
+        warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
+        templates = db.execute('SELECT * FROM wms_wave_templates WHERE is_active = 1 ORDER BY template_name').fetchall()
+
+        title = 'Wave Management'
+        return render_template('wms/waves.html',
+            title=title,
+            waves=waves,
+            templates=templates,
+            stats=stats,
+            warehouses=warehouses,
+            status=status,
+            warehouse_id=warehouse_id,
+            search=search,
+            page=page,
+            per_page=per_page,
+            total_count=total,
+            total_pages=(total + per_page - 1) // per_page if total > 0 else 1
+        )
+
+    @app.route('/wms/waves/new', methods=['GET', 'POST'])
+    @wms_permission_required('waves', 'create')
+    def wms_waves_new():
+        """Create a new wave."""
+        db = get_db()
+
+        if request.method == 'POST':
+            warehouse_id = request.form.get('warehouse_id')
+            template_id = request.form.get('template_id') or None
+            priority = int(request.form.get('priority', 5))
+            description = request.form.get('description', '')
+            picking_strategy = request.form.get('picking_strategy', 'WAVE')
+            allocation_rule = request.form.get('allocation_rule', 'FIFO')
+            max_picks = int(request.form.get('max_picks_per_operator', 50))
+            auto_assign = 1 if request.form.get('auto_assign') else 0
+            release_type = request.form.get('release_type', 'IMMEDIATE')
+            scheduled_time = request.form.get('scheduled_release_time') or None
+
+            template = db.execute('SELECT * FROM wms_wave_templates WHERE id = ?', (template_id,)).fetchone() if template_id else None
+            if template and not picking_strategy:
+                picking_strategy = template['picking_strategy']
+            if template and not allocation_rule:
+                allocation_rule = template['allocation_rule']
+            if template and not max_picks:
+                max_picks = template['max_picks_per_operator'] or 50
+
+            wave_number = generate_wms_code('WAVE')
+
+            result = db.execute('''
+                INSERT INTO wms_waves (wave_number, template_id, warehouse_id, description,
+                    picking_strategy, allocation_rule, max_picks_per_operator, auto_assign_tasks,
+                    release_type, scheduled_release_time, status, priority, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?, ?)
+            ''', (wave_number, template_id, warehouse_id, description, picking_strategy,
+                  allocation_rule, max_picks, auto_assign, release_type, scheduled_time,
+                  priority, session.get('user_id')))
+            db.commit()
+
+            flash(f'Wave {wave_number} created successfully', 'success')
+            return redirect(url_for('wms_waves'))
+
+        # GET
+        template_id = request.args.get('template_id')
+        template = db.execute('SELECT * FROM wms_wave_templates WHERE id = ?', (template_id,)).fetchone() if template_id else None
+        warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
+        templates = db.execute('SELECT * FROM wms_wave_templates WHERE is_active = 1 ORDER BY template_name').fetchall()
+        wave_number = generate_wms_code('WAVE')
+
+        title = 'Create Wave'
+        return render_template('wms/wave_form.html',
+            title=title,
+            templates=templates,
+            warehouses=warehouses,
+            template=template,
+            wave_number=wave_number
+        )
+
+    @app.route('/wms/wave/<int:wave_id>')
+    @wms_permission_required('waves', 'view')
+    def wms_wave_detail(wave_id):
+        """View wave details."""
+        db = get_db()
+
+        wave = db.execute('''
+            SELECT w.*, wt.template_name, wh.name as warehouse_name,
+                   u.username as created_by_name
+            FROM wms_waves w
+            LEFT JOIN wms_wave_templates wt ON wt.id = w.template_id
+            JOIN wms_warehouses wh ON wh.id = w.warehouse_id
+            LEFT JOIN users u ON u.id = w.created_by
+            WHERE w.id = ?
+        ''', (wave_id,)).fetchone()
+
+        if not wave:
+            flash('Wave not found', 'error')
+            return redirect(url_for('wms_waves'))
+
+        orders = db.execute('''
+            SELECT o.*, wo.added_at,
+                   c.name as customer_name,
+                   (SELECT COUNT(*) FROM wms_outbound_order_lines WHERE order_id = o.id) as line_count,
+                   (SELECT COUNT(*) FROM wms_pick_tasks WHERE order_id = o.id) as pick_count
+            FROM wms_wave_orders wo
+            JOIN wms_outbound_orders o ON o.id = wo.order_id
+            LEFT JOIN customers c ON c.id = o.customer_id
+            WHERE wo.wave_id = ?
+        ''', (wave_id,)).fetchall()
+
+        picks = db.execute('''
+            SELECT p.*, i.item_code, i.name as item_name,
+                   l.code as source_location, u.username as assigned_to_name
+            FROM wms_pick_tasks p
+            JOIN wms_items i ON i.id = p.item_id
+            LEFT JOIN wms_locations l ON l.id = p.source_location_id
+            LEFT JOIN users u ON u.id = p.assigned_to
+            WHERE p.order_id IN (SELECT order_id FROM wms_wave_orders WHERE wave_id = ?)
+            ORDER BY p.created_at
+        ''', (wave_id,)).fetchall()
+
+        progress = 0
+        if wave['total_picks'] > 0:
+            progress = (wave['picks_completed'] / wave['total_picks']) * 100
+
+        title = f'Wave {wave["wave_number"]}'
+        return render_template('wms/wave_detail.html',
+            title=title,
+            wave=wave,
+            orders=orders,
+            picks=picks,
+            progress=progress
+        )
+
+    @app.route('/wms/wave/<int:wave_id>/release', methods=['POST'])
+    @wms_permission_required('waves', 'release')
+    def wms_wave_release(wave_id):
+        """Release a wave."""
+        db = get_db()
+
+        wave = db.execute('SELECT * FROM wms_waves WHERE id = ?', (wave_id,)).fetchone()
+        if not wave:
+            flash('Wave not found', 'error')
+            return redirect(url_for('wms_waves'))
+
+        if wave['status'] not in ['PLANNED']:
+            flash(f'Cannot release wave in status {wave["status"]}', 'error')
+            return redirect(url_for('wms_wave_detail', wave_id=wave_id))
+
+        # Get orders in wave
+        wave_orders = db.execute('SELECT order_id FROM wms_wave_orders WHERE wave_id = ?', (wave_id,)).fetchall()
+
+        for wo in wave_orders:
+            # Update order status to PICKING
+            db.execute('''
+                UPDATE wms_outbound_orders SET status = 'PICKING' WHERE id = ?
+            ''', (wo['order_id'],))
+
+        # Update wave status
+        db.execute('''
+            UPDATE wms_waves SET status = 'RELEASED', released_by = ?, released_at = ?
+            WHERE id = ?
+        ''', (session.get('user_id'), datetime.now().isoformat(), wave_id))
+        db.commit()
+
+        log_wms_audit('WAVE_RELEASED', 'wms_waves', wave_id, {'wave_number': wave['wave_number']})
+        create_wms_notification(session.get('user_id'), f'Wave {wave["wave_number"]} Released',
+            f'Wave {wave["wave_number"]} has been released with {wave["order_count"]} orders',
+            'success', 'wave', wave_id)
+
+        flash(f'Wave {wave["wave_number"]} released successfully', 'success')
+        return redirect(url_for('wms_wave_detail', wave_id=wave_id))
+
+    @app.route('/wms/wave/<int:wave_id>/cancel', methods=['POST'])
+    @wms_permission_required('waves', 'cancel')
+    def wms_wave_cancel(wave_id):
+        """Cancel a wave."""
+        db = get_db()
+
+        wave = db.execute('SELECT * FROM wms_waves WHERE id = ?', (wave_id,)).fetchone()
+        if not wave:
+            flash('Wave not found', 'error')
+            return redirect(url_for('wms_waves'))
+
+        if wave['status'] in ['COMPLETED', 'CANCELLED']:
+            flash(f'Cannot cancel wave in status {wave["status"]}', 'error')
+            return redirect(url_for('wms_wave_detail', wave_id=wave_id))
+
+        cancel_reason = request.form.get('cancel_reason', 'User cancelled')
+
+        # Revert order statuses
+        wave_orders = db.execute('SELECT order_id FROM wms_wave_orders WHERE wave_id = ?', (wave_id,)).fetchall()
+        for wo in wave_orders:
+            db.execute('''
+                UPDATE wms_outbound_orders SET status = 'ALLOCATED' WHERE id = ?
+            ''', (wo['order_id'],))
+
+        db.execute('''
+            UPDATE wms_waves SET status = 'CANCELLED', cancelled_by = ?, cancelled_at = ?, cancel_reason = ?
+            WHERE id = ?
+        ''', (session.get('user_id'), datetime.now().isoformat(), cancel_reason, wave_id))
+        db.commit()
+
+        log_wms_audit('WAVE_CANCELLED', 'wms_waves', wave_id, {'wave_number': wave['wave_number'], 'reason': cancel_reason})
+        flash(f'Wave {wave["wave_number"]} cancelled', 'warning')
+        return redirect(url_for('wms_wave_detail', wave_id=wave_id))
+
+    @app.route('/wms/wave/<int:wave_id>/complete', methods=['POST'])
+    @wms_permission_required('waves', 'complete')
+    def wms_wave_complete(wave_id):
+        """Complete a wave."""
+        db = get_db()
+
+        wave = db.execute('SELECT * FROM wms_waves WHERE id = ?', (wave_id,)).fetchone()
+        if not wave:
+            flash('Wave not found', 'error')
+            return redirect(url_for('wms_waves'))
+
+        if wave['status'] not in ['RELEASED', 'IN_PROGRESS']:
+            flash(f'Cannot complete wave in status {wave["status"]}', 'error')
+            return redirect(url_for('wms_wave_detail', wave_id=wave_id))
+
+        db.execute('''
+            UPDATE wms_waves SET status = 'COMPLETED', completed_by = ?, completed_at = ?
+            WHERE id = ?
+        ''', (session.get('user_id'), datetime.now().isoformat(), wave_id))
+        db.commit()
+
+        log_wms_audit('WAVE_COMPLETED', 'wms_waves', wave_id, {'wave_number': wave['wave_number']})
+        flash(f'Wave {wave["wave_number"]} completed', 'success')
+        return redirect(url_for('wms_wave_detail', wave_id=wave_id))
+
+    @app.route('/wms/waves/templates')
+    @wms_permission_required('waves', 'view')
+    def wms_wave_templates():
+        """Wave templates management."""
+        db = get_db()
+
+        templates = db.execute('SELECT * FROM wms_wave_templates ORDER BY template_name').fetchall()
+
+        title = 'Wave Templates'
+        return render_template('wms/wave_templates.html',
+            title=title,
+            templates=templates
+        )
+
+    @app.route('/wms/waves/templates/new', methods=['GET', 'POST'])
+    @wms_permission_required('waves', 'create')
+    def wms_wave_templates_new():
+        """Create wave template."""
+        db = get_db()
+
+        if request.method == 'POST':
+            template_name = request.form.get('template_name')
+            description = request.form.get('description', '')
+            picking_strategy = request.form.get('picking_strategy', 'WAVE')
+            allocation_rule = request.form.get('allocation_rule', 'FIFO')
+            max_picks = int(request.form.get('max_picks_per_operator', 50))
+            auto_assign = 1 if request.form.get('auto_assign') else 0
+            release_type = request.form.get('release_type', 'IMMEDIATE')
+
+            db.execute('''
+                INSERT INTO wms_wave_templates (template_name, description, picking_strategy,
+                    allocation_rule, max_picks_per_operator, auto_assign_tasks, release_type, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (template_name, description, picking_strategy, allocation_rule,
+                  max_picks, auto_assign, release_type, session.get('user_id')))
+            db.commit()
+
+            flash(f'Template {template_name} created', 'success')
+            return redirect(url_for('wms_wave_templates'))
+
+        title = 'Create Wave Template'
+        return render_template('wms/wave_template_form.html', title=title)
+
+    # ============================================================
+    # RF / BARCODE / SCAN
+    # ============================================================
+
+    @app.route('/wms/rf-scan')
+    @wms_permission_required('rf_scan', 'view')
+    def wms_rf_scan():
+        """RF Scan Workbench."""
+        db = get_db()
+        title = 'RF Scan Workbench'
+        return render_template('wms/rf_scan.html',
+            title=title,
+            connection_status='READY'
+        )
+
+    @app.route('/wms/rf/scan-history')
+    @wms_permission_required('rf_scan', 'view')
+    def wms_rf_scan_history():
+        """Scan history log."""
+        db = get_db()
+        page = int(request.args.get('page', 1))
+        per_page = 50
+
+        scans = db.execute('''
+            SELECT s.*, u.username as operator_name
+            FROM wms_rf_scan_log s
+            LEFT JOIN users u ON u.id = s.operator_id
+            ORDER BY s.scan_time DESC LIMIT ? OFFSET ?
+        ''', (per_page, (page-1)*per_page)).fetchall()
+
+        title = 'Scan History'
+        return render_template('wms/rf_scan_history.html',
+            title=title,
+            scans=scans,
+            page=page,
+            per_page=per_page
+        )
+
+    # ============================================================
+    # YARD / GATE / DOCK MANAGEMENT
+    # ============================================================
+
+    @app.route('/wms/yard')
+    @wms_permission_required('yard', 'view')
+    def wms_yard():
+        """Yard management overview."""
+        db = get_db()
+        status = request.args.get('status', '')
+        warehouse_id = request.args.get('warehouse_id', '')
+
+        vehicles = db.execute('''
+            SELECT y.*, w.name as warehouse_name, d.door_number as dock_number
+            FROM wms_yard_vehicles y
+            JOIN wms_warehouses w ON w.id = y.warehouse_id
+            LEFT JOIN wms_dock_doors d ON d.id = y.dock_id
+            WHERE y.is_active = 1
+            ORDER BY y.arrival_time DESC
+        ''').fetchall()
+
+        docks = db.execute('SELECT * FROM wms_dock_doors WHERE is_active = 1 ORDER BY door_number').fetchall()
+
+        warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
+
+        stats = {
+            'waiting': db.execute("SELECT COUNT(*) as cnt FROM wms_yard_vehicles WHERE status = 'WAITING' AND is_active = 1").fetchone()['cnt'],
+            'at_dock': db.execute("SELECT COUNT(*) as cnt FROM wms_yard_vehicles WHERE status = 'AT_DOCK' AND is_active = 1").fetchone()['cnt'],
+            'loading': db.execute("SELECT COUNT(*) as cnt FROM wms_yard_vehicles WHERE status IN ('LOADING', 'UNLOADING') AND is_active = 1").fetchone()['cnt'],
+            'departed': db.execute("SELECT COUNT(*) as cnt FROM wms_yard_vehicles WHERE status = 'DEPARTED' AND DATE(departure_time) = DATE('now')").fetchone()['cnt'],
+        }
+
+        activity = db.execute('''
+            SELECT y.*, u.username as user_name
+            FROM wms_yard_activity_log y
+            LEFT JOIN users u ON u.id = y.user_id
+            ORDER BY y.timestamp DESC LIMIT 20
+        ''').fetchall()
+
+        title = 'Yard Management'
+        return render_template('wms/yard.html',
+            title=title,
+            vehicles=vehicles,
+            docks=docks,
+            warehouses=warehouses,
+            stats=stats,
+            activity=activity
+        )
+
+    @app.route('/wms/yard/arrival', methods=['GET', 'POST'])
+    @wms_permission_required('yard', 'create')
+    def wms_yard_arrival():
+        """Register vehicle arrival."""
+        db = get_db()
+
+        if request.method == 'POST':
+            plate_number = request.form.get('plate_number')
+            driver_name = request.form.get('driver_name')
+            driver_phone = request.form.get('driver_phone')
+            carrier_name = request.form.get('carrier_name')
+            vehicle_type = request.form.get('vehicle_type', 'INBOUND')
+            warehouse_id = request.form.get('warehouse_id')
+            expected_duration = request.form.get('expected_duration', 60)
+
+            db.execute('''
+                INSERT INTO wms_yard_vehicles (plate_number, driver_name, driver_phone, carrier_name,
+                    vehicle_type, warehouse_id, status, expected_duration_minutes, arrival_time)
+                VALUES (?, ?, ?, ?, ?, ?, 'WAITING', ?, ?)
+            ''', (plate_number, driver_name, driver_phone, carrier_name, vehicle_type,
+                  warehouse_id, expected_duration, datetime.now().isoformat()))
+            db.commit()
+
+            # Log activity
+            db.execute('''
+                INSERT INTO wms_yard_activity_log (vehicle_id, event, plate_number, driver_name, user_id)
+                VALUES ((SELECT last_insert_rowid()), 'ARRIVED', ?, ?, ?)
+            ''', (plate_number, driver_name, session.get('user_id')))
+
+            flash(f'Vehicle {plate_number} registered', 'success')
+            return redirect(url_for('wms_yard'))
+
+        warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
+        title = 'Register Arrival'
+        return render_template('wms/yard_arrival_form.html', title=title, warehouses=warehouses)
+
+    @app.route('/wms/yard/<int:vehicle_id>/assign-dock', methods=['POST'])
+    @wms_permission_required('yard', 'update')
+    def wms_yard_assign_dock(vehicle_id):
+        """Assign dock to vehicle."""
+        db = get_db()
+        dock_id = request.form.get('dock_id')
+
+        vehicle = db.execute('SELECT * FROM wms_yard_vehicles WHERE id = ?', (vehicle_id,)).fetchone()
+        dock = db.execute('SELECT * FROM wms_dock_doors WHERE id = ?', (dock_id,)).fetchone() if dock_id else None
+
+        db.execute('''
+            UPDATE wms_yard_vehicles SET dock_id = ?, status = 'AT_DOCK' WHERE id = ?
+        ''', (dock_id, vehicle_id))
+        db.commit()
+
+        if dock:
+            db.execute('''
+                UPDATE wms_dock_doors SET status = 'OCCUPIED', current_vehicle_id = ? WHERE id = ?
+            ''', (vehicle_id, dock_id))
+
+        db.execute('''
+            INSERT INTO wms_yard_activity_log (vehicle_id, event, plate_number, driver_name, dock_number, user_id)
+            VALUES (?, 'ASSIGNED_DOCK', ?, ?, ?, ?)
+        ''', (vehicle_id, vehicle['plate_number'], vehicle['driver_name'],
+              dock['door_number'] if dock else None, session.get('user_id')))
+        db.commit()
+
+        flash(f'Dock {dock["door_number"] if dock else "None"} assigned to {vehicle["plate_number"]}', 'success')
+        return redirect(url_for('wms_yard'))
+
+    @app.route('/wms/yard/<int:vehicle_id>/depart', methods=['POST'])
+    @wms_permission_required('yard', 'update')
+    def wms_yard_depart(vehicle_id):
+        """Mark vehicle as departed."""
+        db = get_db()
+
+        vehicle = db.execute('SELECT * FROM wms_yard_vehicles WHERE id = ?', (vehicle_id,)).fetchone()
+
+        db.execute('''
+            UPDATE wms_yard_vehicles SET status = 'DEPARTED', departure_time = ?, is_active = 0 WHERE id = ?
+        ''', (datetime.now().isoformat(), vehicle_id))
+
+        if vehicle['dock_id']:
+            db.execute('''
+                UPDATE wms_dock_doors SET status = 'AVAILABLE', current_vehicle_id = NULL WHERE id = ?
+            ''', (vehicle['dock_id'],))
+
+        db.execute('''
+            INSERT INTO wms_yard_activity_log (vehicle_id, event, plate_number, driver_name, user_id)
+            VALUES (?, 'DEPARTED', ?, ?, ?)
+        ''', (vehicle_id, vehicle['plate_number'], vehicle['driver_name'], session.get('user_id')))
+        db.commit()
+
+        flash(f'Vehicle {vehicle["plate_number"]} departed', 'success')
+        return redirect(url_for('wms_yard'))
+
+    @app.route('/wms/dock-doors')
+    @wms_permission_required('yard', 'view')
+    def wms_dock_doors():
+        """Dock door management."""
+        db = get_db()
+        warehouse_id = request.args.get('warehouse_id', '')
+
+        docks = db.execute('''
+            SELECT d.*, w.name as warehouse_name
+            FROM wms_dock_doors d
+            JOIN wms_warehouses w ON w.id = d.warehouse_id
+            ORDER BY d.warehouse_id, d.door_number
+        ''').fetchall()
+
+        warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
+
+        title = 'Dock Doors'
+        return render_template('wms/dock_doors.html',
+            title=title,
+            docks=docks,
+            warehouses=warehouses
+        )
+
+    @app.route('/wms/dock-schedule')
+    @wms_permission_required('yard', 'view')
+    def wms_dock_schedule():
+        """Dock scheduling calendar."""
+        db = get_db()
+
+        scheduled = db.execute('''
+            SELECT s.*, w.name as warehouse_name, d.door_number
+            FROM wms_dock_schedule s
+            JOIN wms_warehouses w ON w.id = s.warehouse_id
+            LEFT JOIN wms_dock_doors d ON d.id = s.dock_id
+            WHERE s.scheduled_date >= date('now', '-1 day')
+            ORDER BY s.scheduled_date, s.scheduled_time
+        ''').fetchall()
+
+        title = 'Dock Schedule'
+        return render_template('wms/dock_schedule.html',
+            title=title,
+            scheduled=scheduled
+        )
+
+    # ============================================================
+    # LABOR / TASK MANAGEMENT
+    # ============================================================
+
+    @app.route('/wms/labor')
+    @wms_permission_required('labor', 'view')
+    def wms_labor():
+        """Labor and task management."""
+        db = get_db()
+        warehouse_id = request.args.get('warehouse_id', '')
+        status = request.args.get('status', '')
+
+        tasks = db.execute('''
+            SELECT t.*, w.name as warehouse_name, l.code as location_code,
+                   u.username as assigned_to_name, u2.username as completed_by_name
+            FROM wms_work_tasks t
+            JOIN wms_warehouses w ON w.id = t.warehouse_id
+            LEFT JOIN wms_locations l ON l.id = t.location_id
+            LEFT JOIN users u ON u.id = t.assigned_to
+            LEFT JOIN users u2 ON u2.id = t.completed_by
+            WHERE 1=1
+            ORDER BY t.priority DESC, t.created_at DESC
+        ''').fetchall()
+
+        # Productivity stats
+        today = date.today().isoformat()
+        stats = {
+            'total_tasks': db.execute('''
+                SELECT COUNT(*) as cnt FROM wms_work_tasks
+                WHERE DATE(created_at) = ?
+            ''', (today,)).fetchone()['cnt'],
+            'completed': db.execute('''
+                SELECT COUNT(*) as cnt FROM wms_work_tasks
+                WHERE status = 'COMPLETED' AND DATE(completed_at) = ?
+            ''', (today,)).fetchone()['cnt'],
+            'in_progress': db.execute('''
+                SELECT COUNT(*) as cnt FROM wms_work_tasks WHERE status = 'IN_PROGRESS'
+            ''').fetchone()['cnt'],
+            'pending': db.execute('''
+                SELECT COUNT(*) as cnt FROM wms_work_tasks WHERE status = 'PENDING'
+            ''').fetchone()['cnt'],
+            'avg_completion_minutes': db.execute('''
+                SELECT AVG(actual_minutes) as avg FROM wms_work_tasks
+                WHERE status = 'COMPLETED' AND DATE(completed_at) = ?
+            ''', (today,)).fetchone()['avg'] or 0,
+        }
+
+        # Operator workload
+        operators = db.execute('''
+            SELECT u.id, u.username,
+                   COUNT(t.id) as assigned_tasks,
+                   SUM(CASE WHEN t.status = 'COMPLETED' THEN 1 ELSE 0 END) as completed_tasks,
+                   AVG(CASE WHEN t.completed_at IS NOT NULL AND t.started_at IS NOT NULL
+                       THEN (julianday(t.completed_at) - julianday(t.started_at)) * 24 * 60 ELSE NULL END) as avg_minutes
+            FROM users u
+            LEFT JOIN wms_work_tasks t ON t.assigned_to = u.id AND DATE(t.created_at) = ?
+            WHERE u.is_active = 1
+            GROUP BY u.id
+            HAVING assigned_tasks > 0
+        ''', (today,)).fetchall()
+
+        warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
+
+        title = 'Labor Management'
+        return render_template('wms/labor.html',
+            title=title,
+            tasks=tasks,
+            stats=stats,
+            operators=operators,
+            warehouses=warehouses
+        )
+
+    @app.route('/wms/labor/productivity')
+    @wms_permission_required('labor', 'view')
+    def wms_labor_productivity():
+        """Labor productivity reports."""
+        db = get_db()
+
+        # Daily productivity over last 30 days
+        daily_stats = db.execute('''
+            SELECT DATE(created_at) as day,
+                   COUNT(*) as total,
+                   SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed,
+                   AVG(CASE WHEN completed_at IS NOT NULL AND started_at IS NOT NULL
+                       THEN (julianday(completed_at) - julianday(started_at)) * 24 * 60 ELSE NULL END) as avg_minutes
+            FROM wms_work_tasks
+            WHERE created_at >= date('now', '-30 days')
+            GROUP BY DATE(created_at)
+            ORDER BY day DESC
+        ''').fetchall()
+
+        title = 'Labor Productivity'
+        return render_template('wms/labor_productivity.html',
+            title=title,
+            daily_stats=daily_stats
+        )
+
+    @app.route('/wms/executive-dashboard')
+    @wms_permission_required('dashboard', 'view')
+    def wms_executive_dashboard():
+        """Executive Warehouse Dashboard."""
+        db = get_db()
+        user_id = session.get('user_id')
+        wh_filter = get_warehouse_filter(user_id)
+
+        # KPIs
+        kpis = {
+            'total_skus': db.execute('SELECT COUNT(*) as cnt FROM wms_items WHERE is_active = 1').fetchone()['cnt'],
+            'total_units': db.execute(f'SELECT COALESCE(SUM(quantity), 0) as qty FROM wms_inventory_balances WHERE 1=1 {wh_filter}').fetchone()['qty'],
+            'pending_receiving': db.execute(f'SELECT COUNT(*) as cnt FROM wms_inbound_receipts WHERE status IN ("EXPECTED", "ARRIVED", "PARTIAL") {wh_filter.replace("warehouse_id", "warehouse_id")}').fetchone()['cnt'],
+            'pending_putaway': db.execute(f'SELECT COUNT(*) as cnt FROM wms_putaway_tasks WHERE status = "PENDING" {wh_filter.replace("warehouse_id", "wms_putaway_tasks.warehouse_id")}').fetchone()['cnt'],
+            'active_picks': db.execute(f'SELECT COUNT(*) as cnt FROM wms_pick_tasks WHERE status IN ("PENDING", "IN_PROGRESS") {wh_filter.replace("warehouse_id", "wms_pick_tasks.warehouse_id")}').fetchone()['cnt'],
+            'open_alerts': db.execute(f'SELECT COUNT(*) as cnt FROM wms_alerts WHERE is_active = 1 AND is_acknowledged = 0 {wh_filter.replace("warehouse_id", "warehouse_id")}').fetchone()['cnt'],
+            'available': db.execute(f'SELECT COALESCE(SUM(quantity), 0) as qty FROM wms_inventory_balances WHERE status = "AVAILABLE" {wh_filter}').fetchone()['qty'],
+            'reserved': db.execute(f'SELECT COALESCE(SUM(quantity), 0) as qty FROM wms_inventory_balances WHERE status = "RESERVED" {wh_filter}').fetchone()['qty'],
+            'blocked': db.execute(f'SELECT COALESCE(SUM(quantity), 0) as qty FROM wms_inventory_balances WHERE status = "BLOCKED" {wh_filter}').fetchone()['qty'],
+            'quarantine': db.execute(f'SELECT COALESCE(SUM(quantity), 0) as qty FROM wms_inventory_balances WHERE status = "QUARANTINE" {wh_filter}').fetchone()['qty'],
+            'sku_growth': 5,  # Placeholder - would compute from history
+            'utilization_pct': 68,  # Placeholder
+        }
+
+        # Warehouse utilization
+        warehouse_util = db.execute(f'''
+            SELECT w.name,
+                   COUNT(CASE WHEN l.is_empty = 0 THEN 1 END) as used_locations,
+                   COUNT(*) as total_locations,
+                   (COUNT(CASE WHEN l.is_empty = 0 THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0)) as utilization
+            FROM wms_warehouses w
+            LEFT JOIN wms_locations l ON l.warehouse_id = w.id AND l.is_active = 1
+            WHERE w.is_active = 1 {wh_filter}
+            GROUP BY w.id
+            ORDER BY w.name
+        ''').fetchall()
+
+        # 7-day inbound trend (simulated)
+        inbound_trend = []
+        for i in range(6, -1, -1):
+            inbound_trend.append({
+                'day': date.today().strftime('%a')[0:2],
+                'receipts': 10 + (i * 2) % 10,
+                'received': 8 + (i * 2) % 8
+            })
+
+        # 7-day outbound trend (simulated)
+        outbound_trend = []
+        for i in range(6, -1, -1):
+            outbound_trend.append({
+                'day': date.today().strftime('%a')[0:2],
+                'orders': 8 + (i * 3) % 15,
+                'shipped': 7 + (i * 3) % 12
+            })
+
+        inbound_max = max([d['receipts'] for d in inbound_trend]) or 1
+        outbound_max = max([d['orders'] for d in outbound_trend]) or 1
+
+        # Top moving items
+        top_items = db.execute(f'''
+            SELECT i.item_code, i.name, COUNT(m.id) as moves
+            FROM wms_items i
+            LEFT JOIN wms_inventory_ledger m ON m.item_id = i.id AND m.created_at >= date('now', '-7 days')
+            WHERE i.is_active = 1
+            GROUP BY i.id
+            ORDER BY moves DESC
+            LIMIT 8
+        ''').fetchall()
+
+        # Exceptions
+        exceptions = []
+        exc_types = [
+            ('Low Stock', db.execute(f'SELECT COUNT(*) as cnt FROM wms_items WHERE reorder_point > 0 AND is_active = 1 {wh_filter}').fetchone()['cnt']),
+            ('Near Expiry', db.execute(f'SELECT COUNT(DISTINCT item_id) as cnt FROM wms_lots WHERE expiry_date BETWEEN date("now") AND date("now", "+30 days") AND quantity > 0').fetchone()['cnt']),
+            ('Negative Stock', db.execute(f'SELECT COUNT(*) as cnt FROM wms_inventory_balances WHERE quantity < 0').fetchone()['cnt']),
+            ('Pending Count', db.execute(f'SELECT COUNT(*) as cnt FROM wms_stock_count_lines WHERE status = "PENDING"').fetchone()['cnt']),
+            ('QC Hold', db.execute(f'SELECT COUNT(*) as cnt FROM wms_inventory_balances WHERE status = "QUARANTINE"').fetchone()['cnt']),
+            ('Short Pick', db.execute(f'SELECT COUNT(*) as cnt FROM wms_pick_tasks WHERE short_pick_reason IS NOT NULL').fetchone()['cnt']),
+        ]
+        for etype, cnt in exc_types:
+            if cnt > 0:
+                exceptions.append({'type': etype, 'count': cnt})
+
+        # Top operators
+        top_operators = db.execute('''
+            SELECT u.username, COUNT(t.id) as tasks, SUM(CASE WHEN t.status = "COMPLETED" THEN 1 ELSE 0 END) as completed
+            FROM users u
+            LEFT JOIN wms_work_tasks t ON t.assigned_to = u.id AND DATE(t.created_at) = DATE("now")
+            WHERE u.is_active = 1
+            GROUP BY u.id
+            HAVING tasks > 0
+            ORDER BY completed DESC
+            LIMIT 5
+        ''').fetchall()
+
+        selected_warehouse = db.execute(f'SELECT name FROM wms_warehouses WHERE is_active = 1 {wh_filter} LIMIT 1').fetchone()
+        selected_warehouse = selected_warehouse['name'] if selected_warehouse else 'All Warehouses'
+
+        title = 'Executive Warehouse Dashboard'
+        return render_template('wms/executive_dashboard.html',
+            title=title,
+            kpis=kpis,
+            warehouse_util=warehouse_util,
+            inbound_trend=inbound_trend,
+            outbound_trend=outbound_trend,
+            inbound_max=inbound_max,
+            outbound_max=outbound_max,
+            top_items=top_items,
+            exceptions=exceptions,
+            top_operators=top_operators,
+            selected_warehouse=selected_warehouse
         )

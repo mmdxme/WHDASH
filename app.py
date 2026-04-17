@@ -63,6 +63,7 @@ from quick_tools_routes import register_quick_tools_routes
 from feedback_routes import register_feedback_routes
 from org_planning_routes import register_org_planning_routes
 from org_planning_models import run_org_planning_migrations
+from dashboard_routes import dashboard_bp
 
 # =============================================================================
 # UNIFIED PLATFORM MODULES (Enterprise Integration)
@@ -145,6 +146,16 @@ import html
 @app.template_filter('escape_html')
 def _escape_html(text):
     return html.escape(text) if text else ''
+
+import json
+@app.template_filter('from_json')
+def _from_json(text):
+    if not text:
+        return []
+    try:
+        return json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return []
 
 # Session cookie security settings
 app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to session cookie
@@ -536,6 +547,11 @@ register_feedback_routes(app)
 # =============================================================================
 register_org_planning_routes(app)
 run_org_planning_migrations()
+
+# =============================================================================
+# REGISTER ENTERPRISE DASHBOARD
+# =============================================================================
+app.register_blueprint(dashboard_bp)
 
 def init_db():
     db = get_db()
@@ -2559,14 +2575,8 @@ def logout():
 
 @app.route('/')
 def index():
-    db = get_db()
-    companies = [dict(r) for r in db.execute("SELECT * FROM companies ORDER BY name").fetchall()]
-    categories = [dict(r) for r in db.execute("SELECT * FROM categories ORDER BY name").fetchall()]
-    brands = [dict(r) for r in db.execute("SELECT * FROM brands ORDER BY name").fetchall()]
-    statuses = [dict(r) for r in db.execute("SELECT * FROM statuses ORDER BY name").fetchall()]
-    vitalities = [dict(r) for r in db.execute("SELECT * FROM vitalities ORDER BY name").fetchall()]
-    
-    return render_template('index.html', title="Dashboard", companies=companies, categories=categories, brands=brands, statuses=statuses, vitalities=vitalities)
+    """Main landing page - Enterprise Dashboard."""
+    return redirect(url_for('dashboard.enterprise_dashboard'))
 
 @app.route('/profile', methods=['GET', 'POST'])
 def profile():

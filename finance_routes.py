@@ -1976,6 +1976,238 @@ def api_calculate_tax():
     return jsonify(result)
 
 
+# =============================================================================
+# CO-PA / PROFITABILITY ANALYSIS ROUTES
+# =============================================================================
+
+@finance_bp.route('/profit-centers')
+@require_permission('finance', 'cost_centers', 'view')
+def profit_centers():
+    """List and manage profit centers."""
+    company_id = session.get('company_id')
+    profit_centers = get_profit_centers(company_id=company_id)
+
+    return render_template('finance/profit_centers.html',
+                           profit_centers=profit_centers,
+                           active_page='profit-centers')
+
+
+@finance_bp.route('/profit-centers/create', methods=['GET', 'POST'])
+@require_permission('finance', 'cost_centers', 'create')
+def profit_center_create():
+    """Create a new profit center."""
+    company_id = session.get('company_id')
+
+    if request.method == 'POST':
+        data = {
+            'code': request.form.get('code'),
+            'name': request.form.get('name'),
+            'name_ar': request.form.get('name_ar'),
+            'description': request.form.get('description'),
+            'parent_id': request.form.get('parent_id') or None,
+            'manager_name': request.form.get('manager_name'),
+            'profit_center_type': request.form.get('profit_center_type', 'operational'),
+            'is_legal_entity': 1 if request.form.get('is_legal_entity') else 0,
+            'company_id': company_id,
+        }
+
+        try:
+            pc_id = create_profit_center(data)
+            flash(f'Profit Center created successfully', 'success')
+            return redirect(url_for('finance.profit_centers'))
+        except Exception as e:
+            flash(f'Error creating profit center: {e}', 'error')
+
+    parent_centers = get_profit_centers(company_id=company_id, active_only=True)
+    return render_template('finance/profit_center_create.html',
+                           parent_centers=parent_centers,
+                           active_page='profit-centers')
+
+
+@finance_bp.route('/profit-centers/<int:pc_id>')
+@require_permission('finance', 'cost_centers', 'view')
+def profit_center_detail(pc_id):
+    """View profit center detail with P&L."""
+    company_id = session.get('company_id')
+    pc = get_profit_center_by_id(pc_id)
+    if not pc:
+        flash('Profit center not found', 'error')
+        return redirect(url_for('finance.profit_centers'))
+
+    fiscal_year_id = request.args.get('fiscal_year_id', type=int)
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    pnl = get_profit_center_pnl(pc_id, fiscal_year_id=fiscal_year_id, start_date=start_date, end_date=end_date)
+
+    return render_template('finance/profit_center_detail.html',
+                           profit_center=pc,
+                           pnl=pnl,
+                           active_page='profit-centers')
+
+
+@finance_bp.route('/copa-segments')
+@require_permission('finance', 'cost_centers', 'view')
+def copa_segments():
+    """List CO-PA segment definitions."""
+    company_id = session.get('company_id')
+    segments = get_copa_segments(company_id=company_id)
+
+    return render_template('finance/copa_segments.html',
+                           segments=segments,
+                           active_page='copa-segments')
+
+
+@finance_bp.route('/copa-segments/create', methods=['GET', 'POST'])
+@require_permission('finance', 'cost_centers', 'create')
+def copa_segment_create():
+    """Create a new CO-PA segment."""
+    company_id = session.get('company_id')
+
+    if request.method == 'POST':
+        values = []
+        value_names = request.form.getlist('value_name')
+        value_codes = request.form.getlist('value_code')
+        for vn, vc in zip(value_names, value_codes):
+            if vn and vc:
+                values.append({'value_name': vn, 'value_code': vc})
+
+        data = {
+            'segment_name': request.form.get('segment_name'),
+            'segment_code': request.form.get('segment_code'),
+            'dimension_type': request.form.get('dimension_type'),
+            'description': request.form.get('description'),
+            'company_id': company_id,
+        }
+
+        try:
+            seg_id = create_copa_segment(data, values)
+            flash('CO-PA Segment created successfully', 'success')
+            return redirect(url_for('finance.copa_segments'))
+        except Exception as e:
+            flash(f'Error creating segment: {e}', 'error')
+
+    return render_template('finance/copa_segment_create.html',
+                           active_page='copa-segments')
+
+
+@finance_bp.route('/cost-allocations')
+@require_permission('finance', 'cost_centers', 'view')
+def cost_allocations():
+    """List cost allocation rules."""
+    company_id = session.get('company_id')
+    rules = get_allocation_rules(company_id=company_id)
+
+    return render_template('finance/cost_allocations.html',
+                           rules=rules,
+                           active_page='cost-allocations')
+
+
+@finance_bp.route('/cost-allocations/create', methods=['GET', 'POST'])
+@require_permission('finance', 'cost_centers', 'create')
+def cost_allocation_create():
+    """Create a new cost allocation rule."""
+    company_id = session.get('company_id')
+
+    if request.method == 'POST':
+        data = {
+            'rule_name': request.form.get('rule_name'),
+            'rule_code': request.form.get('rule_code'),
+            'source_cost_center_id': request.form.get('source_cost_center_id') or None,
+            'target_cost_center_id': request.form.get('target_cost_center_id') or None,
+            'target_profit_center_id': request.form.get('target_profit_center_id') or None,
+            'allocation_basis': request.form.get('allocation_basis', 'fixed'),
+            'basis_value': request.form.get('basis_value', 0),
+            'basis_formula': request.form.get('basis_formula'),
+            'percentage': request.form.get('percentage', 100),
+            'amount': request.form.get('amount', 0),
+            'effective_from': request.form.get('effective_from') or None,
+            'effective_to': request.form.get('effective_to') or None,
+            'description': request.form.get('description'),
+            'company_id': company_id,
+        }
+
+        try:
+            rule_id = create_allocation_rule(data)
+            flash('Cost Allocation Rule created successfully', 'success')
+            return redirect(url_for('finance.cost_allocations'))
+        except Exception as e:
+            flash(f'Error creating rule: {e}', 'error')
+
+    cost_centers = get_cost_centers(company_id=company_id, active_only=True)
+    profit_centers = get_profit_centers(company_id=company_id, active_only=True)
+    return render_template('finance/cost_allocation_create.html',
+                           cost_centers=cost_centers,
+                           profit_centers=profit_centers,
+                           active_page='cost-allocations')
+
+
+@finance_bp.route('/cost-allocations/execute', methods=['GET', 'POST'])
+@require_permission('finance', 'cost_centers', 'create')
+def cost_allocation_execute():
+    """Execute cost allocation for a period."""
+    company_id = session.get('company_id')
+    user_id = session.get('user_id')
+
+    if request.method == 'POST':
+        period_id = request.form.get('period_id', type=int)
+        fiscal_year_id = request.form.get('fiscal_year_id', type=int)
+
+        try:
+            result = execute_cost_allocation(
+                period_id=period_id,
+                fiscal_year_id=fiscal_year_id,
+                company_id=company_id,
+                executed_by=user_id
+            )
+            if result['status'] == 'completed':
+                flash(f'Cost allocation completed. {result["rules_processed"]} rules executed. Total allocated: {result["total_allocated"]}', 'success')
+            else:
+                flash(f'Allocation completed with status: {result["status"]}', 'info')
+        except Exception as e:
+            flash(f'Error executing allocation: {e}', 'error')
+
+    return redirect(url_for('finance.cost_allocations'))
+
+
+@finance_bp.route('/reports/profitability')
+@require_permission('finance', 'reports', 'view')
+def profitability_report():
+    """CO-PA profitability analysis report."""
+    company_id = session.get('company_id')
+
+    fiscal_year_id = request.args.get('fiscal_year_id', type=int)
+    period_id = request.args.get('period_id', type=int)
+    dimension_type = request.args.get('dimension_type')
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    report_data = get_copa_profitability_report(
+        company_id=company_id,
+        fiscal_year_id=fiscal_year_id,
+        period_id=period_id,
+        dimension_type=dimension_type,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+    fiscal_years = get_fiscal_years(company_id=company_id)
+    segments = get_copa_segments(company_id=company_id)
+
+    return render_template('finance/profitability_report.html',
+                           report_data=report_data,
+                           fiscal_years=fiscal_years,
+                           segments=segments,
+                           filters={
+                               'fiscal_year_id': fiscal_year_id,
+                               'period_id': period_id,
+                               'dimension_type': dimension_type,
+                               'start_date': start_date,
+                               'end_date': end_date
+                           },
+                           active_page='profitability-report')
+
+
 # Register the blueprint with the Flask app
 def register_finance_routes(app):
     """Register finance routes with the Flask app."""

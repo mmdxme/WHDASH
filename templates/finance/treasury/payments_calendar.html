@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.5rem; }
+        .calendar-header { text-align: center; padding: 0.5rem; color: #94a3b8; font-size: 0.75rem; font-weight: 600; }
+        .calendar-day { min-height: 100px; padding: 0.5rem; background: #1e293b; border-radius: 0.5rem; border: 1px solid #334155; }
+        .calendar-day.today { border-color: #3b82f6; }
+        .calendar-day .day-number { font-size: 0.875rem; font-weight: 600; margin-bottom: 0.25rem; }
+        .payment-item { font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.25rem; margin-bottom: 0.25rem; cursor: pointer; }
+        .payment-item.critical { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .payment-item.high { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+        .payment-item.normal { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Payment calendar view</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="{{ url_for('treasury.payments') }}" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-list mr-2"></i>List View
+                </a>
+            </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex gap-6 mb-6">
+            <div class="flex items-center gap-2">
+                <div class="w-4 h-4 rounded bg-danger/20"></div>
+                <span class="text-sm text-gray-400">Critical</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="w-4 h-4 rounded bg-warning/20"></div>
+                <span class="text-sm text-gray-400">High Priority</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="w-4 h-4 rounded bg-primary/20"></div>
+                <span class="text-sm text-gray-400">Normal</span>
+            </div>
+        </div>
+
+        <!-- Payment Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Due Today</p>
+                <p class="text-2xl font-bold text-danger amount">0.00</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Due This Week</p>
+                <p class="text-2xl font-bold text-warning amount">0.00</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Due This Month</p>
+                <p class="text-2xl font-bold text-white amount">0.00</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Overdue</p>
+                <p class="text-2xl font-bold text-danger amount">0.00</p>
+            </div>
+        </div>
+
+        <!-- Calendar -->
+        <div class="glass-card p-6">
+            <div class="calendar-grid mb-2">
+                <div class="calendar-header">Sun</div>
+                <div class="calendar-header">Mon</div>
+                <div class="calendar-header">Tue</div>
+                <div class="calendar-header">Wed</div>
+                <div class="calendar-header">Thu</div>
+                <div class="calendar-header">Fri</div>
+                <div class="calendar-header">Sat</div>
+            </div>
+            <div class="calendar-grid">
+                {% set current_day = 1 %}
+                {% set days_in_month = 31 %}
+                {% for i in range(35) %}
+                    {% if loop.index0 < 4 %}
+                    <div class="calendar-day opacity-50"></div>
+                    {% elif current_day <= days_in_month %}
+                    <div class="calendar-day">
+                        <div class="day-number">{{ current_day }}</div>
+                    </div>
+                    {% set current_day = current_day + 1 %}
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Payments List -->
+        <div class="glass-card p-6 mt-6">
+            <h2 class="text-xl font-semibold text-white mb-4">All Due Payments</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Due Date</th>
+                        <th>Supplier</th>
+                        <th>Reference</th>
+                        <th>Priority</th>
+                        <th class="text-right">Amount</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in payments %}
+                    <tr>
+                        <td class="font-semibold">{{ payment.due_date }}</td>
+                        <td>{{ payment.supplier_name }}</td>
+                        <td class="font-mono text-gray-400">{{ payment.reference or payment.bill_number }}</td>
+                        <td>
+                            <span class="px-2 py-1 text-xs rounded {% if payment.priority == 'critical' %}bg-danger/20 text-danger{% elif payment.priority == 'high' %}bg-warning/20 text-warning{% else %}bg-primary/20 text-primary{% endif %}">
+                                {{ payment.priority or 'normal' }}
+                            </span>
+                        </td>
+                        <td class="text-right amount">{{ "%.2f"|format(payment.amount or payment.total_amount or 0) }}</td>
+                        <td>
+                            <span class="px-2 py-1 bg-gray-600/20 text-gray-400 text-xs rounded">
+                                {{ payment.status or 'pending' }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center py-8">
+                            <p class="text-gray-400">No due payments</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

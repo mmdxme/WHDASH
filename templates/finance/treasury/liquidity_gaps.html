@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Identify liquidity gaps and surplus periods</p>
+            </div>
+            <a href="{{ url_for('treasury.liquidity') }}" class="text-primary hover:text-primary-light">
+                <i class="fas fa-arrow-left mr-2"></i>Back to Liquidity
+            </a>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Current Position</p>
+                <p class="text-2xl font-bold text-white amount">{{ "%.2f"|format(liquidity.current_position.total_position) }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Minimum Required</p>
+                <p class="text-2xl font-bold text-danger amount">{{ "%.2f"|format(liquidity.minimum_required) }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Surplus</p>
+                <p class="text-2xl font-bold text-success amount">{{ "%.2f"|format(liquidity.current_position.total_position - liquidity.minimum_required) }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Gap Days</p>
+                <p class="text-2xl font-bold text-warning amount">{{ gaps|length }}</p>
+            </div>
+        </div>
+
+        <!-- Liquidity Gap Chart -->
+        <div class="glass-card p-6 mb-6">
+            <h2 class="text-xl font-semibold text-white mb-4">Projected Liquidity Position</h2>
+            <canvas id="liquidityChart" height="100"></canvas>
+        </div>
+
+        <!-- Gaps Table -->
+        <div class="glass-card p-6">
+            <h2 class="text-xl font-semibold text-white mb-4">Liquidity Gap Details</h2>
+            {% if gaps %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th class="text-right">Projected Balance</th>
+                        <th class="text-right">Minimum Required</th>
+                        <th class="text-right">Gap Amount</th>
+                        <th>Severity</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for gap in gaps %}
+                    <tr class="bg-danger/10">
+                        <td class="font-semibold text-danger">{{ gap.date }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(gap.projected_balance) }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(gap.minimum_required) }}</td>
+                        <td class="text-right amount text-danger">{{ "%.2f"|format(gap.gap) }}</td>
+                        <td>
+                            {% if gap.gap > liquidity.minimum_required * 0.5 %}
+                            <span class="px-2 py-1 bg-danger/20 text-danger text-xs rounded">Critical</span>
+                            {% else %}
+                            <span class="px-2 py-1 bg-warning/20 text-warning text-xs rounded">Warning</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fas fa-check-circle text-success text-4xl mb-4"></i>
+                <p class="text-gray-400">No liquidity gaps detected</p>
+                <p class="text-gray-500 text-sm mt-2">Your projected cash position stays above minimum requirements</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('liquidityChart').getContext('2d');
+        const gapDates = {{ gaps|map(attribute='date')|list|tojson }};
+        const gapBalances = {{ gaps|map(attribute='projected_balance')|list|tojson }};
+        const minRequired = {{ liquidity.minimum_required }};
+
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: gapDates,
+                datasets: [{
+                    label: 'Projected Balance',
+                    data: gapBalances,
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    fill: true
+                }, {
+                    label: 'Minimum Required',
+                    data: Array(gapDates.length).fill(minRequired),
+                    borderColor: '#94a3b8',
+                    borderDash: [5, 5],
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { labels: { color: '#e5e7eb' } } },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                }
+            }
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>

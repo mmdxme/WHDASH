@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('wave_management', 'Wave Management') }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ total_waves }} {{ t('waves_total', 'total waves') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('wms_waves_new') }}" class="px-4 py-2 bg-brand-500 text-white rounded-xl hover:bg-brand-400 text-sm font-medium">
+                <i class="fa-solid fa-plus mr-2"></i>{{ t('create_wave', 'Create Wave') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{{ t('planned', 'Planned') }}</p>
+            <p class="text-3xl font-extrabold text-slate-300">{{ stats.planned|default(0) }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{{ t('released', 'Released') }}</p>
+            <p class="text-3xl font-extrabold text-cyan-400">{{ stats.released|default(0) }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{{ t('in_progress', 'In Progress') }}</p>
+            <p class="text-3xl font-extrabold text-amber-400">{{ stats.in_progress|default(0) }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{{ t('completed', 'Completed') }}</p>
+            <p class="text-3xl font-extrabold text-emerald-400">{{ stats.completed|default(0) }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{{ t('cancelled', 'Cancelled') }}</p>
+            <p class="text-3xl font-extrabold text-red-400">{{ stats.cancelled|default(0) }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{{ t('total_orders', 'Total Orders') }}</p>
+            <p class="text-3xl font-extrabold text-brand-400">{{ stats.total_orders|default(0) }}</p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-5">
+        <form method="GET" class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div>
+                <select name="status" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <option value="">{{ t('all_statuses', 'All Statuses') }}</option>
+                    <option value="PLANNED" {% if status=='PLANNED' %}selected{% endif %}>{{ t('planned', 'Planned') }}</option>
+                    <option value="RELEASED" {% if status=='RELEASED' %}selected{% endif %}>{{ t('released', 'Released') }}</option>
+                    <option value="IN_PROGRESS" {% if status=='IN_PROGRESS' %}selected{% endif %}>{{ t('in_progress', 'In Progress') }}</option>
+                    <option value="COMPLETED" {% if status=='COMPLETED' %}selected{% endif %}>{{ t('completed', 'Completed') }}</option>
+                    <option value="CANCELLED" {% if status=='CANCELLED' %}selected{% endif %}>{{ t('cancelled', 'Cancelled') }}</option>
+                </select>
+            </div>
+            <div>
+                <select name="warehouse_id" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <option value="">{{ t('all_warehouses', 'All Warehouses') }}</option>
+                    {% for wh in warehouses %}
+                    <option value="{{ wh.id }}" {% if warehouse_id|int == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <input type="text" name="search" value="{{ search }}" placeholder="{{ t('wave_number_or_template', 'Wave number, template...') }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="flex-1 px-4 py-2.5 bg-brand-500 text-white rounded-xl text-sm font-medium"><i class="fa-solid fa-filter mr-2"></i>{{ t('filter', 'Filter') }}</button>
+                <a href="{{ url_for('wms_waves') }}" class="px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-slate-400"><i class="fa-solid fa-xmark"></i></a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Wave Templates Quick Access -->
+    <div class="glass-panel rounded-2xl p-5">
+        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">{{ t('wave_templates', 'Wave Templates') }}</h3>
+        <div class="flex flex-wrap gap-2">
+            {% for tmpl in templates %}
+            <a href="{{ url_for('wms_waves_new') }}?template_id={{ tmpl.id }}" class="px-4 py-2 bg-violet-500/10 border border-violet-500/20 rounded-xl text-violet-400 text-sm hover:bg-violet-500/20 transition-all">
+                <i class="fa-solid fa-layer-group mr-2"></i>{{ tmpl.template_name }}
+            </a>
+            {% else %}
+            <span class="text-slate-500 text-sm">{{ t('no_templates_defined', 'No templates defined') }}</span>
+            {% endfor %}
+            <a href="{{ url_for('wms_wave_templates') }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-slate-400 text-sm hover:bg-white/10 transition-all">
+                <i class="fa-solid fa-gear mr-2"></i>{{ t('manage_templates', 'Manage Templates') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Waves Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="text-left py-4 px-5 font-semibold">{{ t('wave', 'Wave') }}</th>
+                        <th class="text-left py-4 px-5 font-semibold">{{ t('template', 'Template') }}</th>
+                        <th class="text-left py-4 px-5 font-semibold">{{ t('warehouse', 'Warehouse') }}</th>
+                        <th class="text-center py-4 px-5 font-semibold">{{ t('orders', 'Orders') }}</th>
+                        <th class="text-center py-4 px-5 font-semibold">{{ t('lines', 'Lines') }}</th>
+                        <th class="text-center py-4 px-5 font-semibold">{{ t('picks', 'Picks') }}</th>
+                        <th class="text-center py-4 px-5 font-semibold">{{ t('progress', 'Progress') }}</th>
+                        <th class="text-center py-4 px-5 font-semibold">{{ t('priority', 'Priority') }}</th>
+                        <th class="text-center py-4 px-5 font-semibold">{{ t('status', 'Status') }}</th>
+                        <th class="text-center py-4 px-5 font-semibold">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for w in waves %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-4 px-5">
+                            <a href="{{ url_for('wms_wave_detail', wave_id=w.id) }}" class="text-brand-400 hover:text-brand-300 font-medium">{{ w.wave_number }}</a>
+                            {% if w.description %}
+                            <p class="text-xs text-slate-500 mt-0.5">{{ w.description[:40] }}</p>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-5 text-slate-400">{{ w.template_name or '-' }}</td>
+                        <td class="py-4 px-5 text-slate-300">{{ w.warehouse_name }}</td>
+                        <td class="py-4 px-5 text-center text-slate-300">{{ w.order_count }}</td>
+                        <td class="py-4 px-5 text-center text-slate-300">{{ w.total_lines }}</td>
+                        <td class="py-4 px-5 text-center text-slate-300">{{ w.total_picks }}</td>
+                        <td class="py-4 px-5 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <div class="w-16 bg-slate-700 rounded-full h-2">
+                                    <div class="h-2 rounded-full {% if w.progress >= 100 %}bg-emerald-500{% elif w.progress >= 50 %}bg-cyan-500{% else %}bg-amber-500{% endif %}" style="width: {{ w.progress|default(0) }}%"></div>
+                                </div>
+                                <span class="text-xs text-slate-400 tabular-nums">{{ w.progress|default(0)|int }}%</span>
+                            </div>
+                        </td>
+                        <td class="py-4 px-5 text-center">
+                            <span class="px-2 py-1 rounded text-xs font-bold
+                                {% if w.priority >= 8 %}bg-red-500/10 text-red-400
+                                {% elif w.priority >= 5 %}bg-amber-500/10 text-amber-400
+                                {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ w.priority }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5 text-center">
+                            <span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider
+                                {% if w.status == 'COMPLETED' %}bg-emerald-500/10 text-emerald-400
+                                {% elif w.status == 'IN_PROGRESS' %}bg-amber-500/10 text-amber-400
+                                {% elif w.status == 'RELEASED' %}bg-cyan-500/10 text-cyan-400
+                                {% elif w.status == 'CANCELLED' %}bg-red-500/10 text-red-400
+                                {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ w.status }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5 text-center">
+                            <div class="flex items-center justify-center gap-1">
+                                <a href="{{ url_for('wms_wave_detail', wave_id=w.id) }}" class="px-3 py-1.5 rounded-lg bg-brand-500/10 text-brand-400 hover:bg-brand-500/20 text-xs font-medium">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                                {% if w.status in ['PLANNED'] %}
+                                <form method="POST" action="{{ url_for('wms_wave_release', wave_id=w.id) }}" style="display:inline;">
+                                    <button type="submit" class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs font-medium">
+                                        <i class="fa-solid fa-play"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                                {% if w.status in ['PLANNED', 'RELEASED'] %}
+                                <form method="POST" action="{{ url_for('wms_wave_cancel', wave_id=w.id) }}" style="display:inline;" onsubmit="return confirm('Cancel this wave?');">
+                                    <button type="submit" class="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs font-medium">
+                                        <i class="fa-solid fa-xmark"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="10" class="py-16 text-center text-slate-500">
+                            <i class="fa-solid fa-layer-group text-5xl mb-4 block opacity-20"></i>
+                            <p class="text-lg font-medium">{{ t('no_waves_found', 'No waves found') }}</p>
+                            <a href="{{ url_for('wms_waves_new') }}" class="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm hover:bg-brand-400">
+                                <i class="fa-solid fa-plus"></i>{{ t('create_first_wave', 'Create First Wave') }}
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if total_pages > 1 %}
+        <div class="flex items-center justify-between px-6 py-4 border-t border-white/5">
+            <p class="text-sm text-slate-400">Page {{ page }} of {{ total_pages }}</p>
+            <div class="flex gap-2">
+                {% if page > 1 %}
+                <a href="?page={{ page-1 }}&status={{ status }}&warehouse_id={{ warehouse_id }}&search={{ search }}" class="px-3 py-2 rounded-lg bg-white/5 text-slate-400 text-sm"><i class="fa-solid fa-chevron-left"></i></a>
+                {% endif %}
+                <span class="px-4 py-2 bg-brand-500/10 text-brand-400 rounded-lg text-sm font-medium">{{ page }}</span>
+                {% if page < total_pages %}
+                <a href="?page={{ page+1 }}&status={{ status }}&warehouse_id={{ warehouse_id }}&search={{ search }}" class="px-3 py-2 rounded-lg bg-white/5 text-slate-400 text-sm"><i class="fa-solid fa-chevron-right"></i></a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

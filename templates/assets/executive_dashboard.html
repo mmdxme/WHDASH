@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-100">Executive Asset Dashboard</h1>
+            <p class="text-slate-400 text-sm mt-1">Enterprise Fixed Assets Overview & Analytics</p>
+        </div>
+        <div class="flex gap-3">
+            <button onclick="exportDashboard()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-download mr-2"></i>Export
+            </button>
+            <a href="{{ url_for('assets.workspace') }}" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-th mr-2"></i>Workspace
+            </a>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">Total Assets</p>
+                    <p class="text-3xl font-bold text-white mt-1">{{ stats.total_assets or 0 }}</p>
+                    <p class="text-green-400 text-xs mt-1">{{ stats.active_assets or 0 }} Active</p>
+                </div>
+                <div class="w-14 h-14 bg-brand-500/20 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-building text-brand-400 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">Total Acquisition Cost</p>
+                    <p class="text-3xl font-bold text-white mt-1">{{ (stats.total_cost or 0) | round | int | commafy }}</p>
+                    <p class="text-slate-500 text-xs mt-1">AED</p>
+                </div>
+                <div class="w-14 h-14 bg-green-500/20 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-coins text-green-400 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">Accumulated Depreciation</p>
+                    <p class="text-3xl font-bold text-yellow-400 mt-1">{{ (stats.total_accumulated or 0) | round | int | commafy }}</p>
+                    <p class="text-slate-500 text-xs mt-1">AED</p>
+                </div>
+                <div class="w-14 h-14 bg-yellow-500/20 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-calculator text-yellow-400 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">Net Book Value</p>
+                    <p class="text-3xl font-bold text-brand-400 mt-1">{{ (stats.total_nbv or 0) | round | int | commafy }}</p>
+                    <p class="text-slate-500 text-xs mt-1">AED</p>
+                </div>
+                <div class="w-14 h-14 bg-purple-500/20 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-chart-line text-purple-400 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+        <div class="glass-panel rounded-xl p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-check-circle text-green-400"></i>
+                </div>
+                <div>
+                    <p class="text-slate-400 text-xs">Active</p>
+                    <p class="text-xl font-bold text-white">{{ stats.active_assets or 0 }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-wrench text-yellow-400"></i>
+                </div>
+                <div>
+                    <p class="text-slate-400 text-xs">Under Maintenance</p>
+                    <p class="text-xl font-bold text-white">{{ stats.under_maintenance or 0 }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-clock text-orange-400"></i>
+                </div>
+                <div>
+                    <p class="text-slate-400 text-xs">Pending Disposal</p>
+                    <p class="text-xl font-bold text-white">{{ stats.pending_disposal or 0 }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-red-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-trash-alt text-red-400"></i>
+                </div>
+                <div>
+                    <p class="text-slate-400 text-xs">Disposed</p>
+                    <p class="text-xl font-bold text-white">{{ stats.disposed or 0 }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-tools text-blue-400"></i>
+                </div>
+                <div>
+                    <p class="text-slate-400 text-xs">Maint. (Month)</p>
+                    <p class="text-xl font-bold text-white">{{ (maint_costs.month_cost or 0) | round(2) | commafy }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-xl p-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-calendar text-purple-400"></i>
+                </div>
+                <div>
+                    <p class="text-slate-400 text-xs">Maint. (Year)</p>
+                    <p class="text-xl font-bold text-white">{{ (maint_costs.year_cost or 0) | round(2) | commafy }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <!-- Assets by Category -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4">Assets by Category</h2>
+            <div class="space-y-3">
+                {% for cat in by_category %}
+                <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 bg-brand-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-tag text-brand-400 text-sm"></i>
+                        </div>
+                        <span class="text-slate-200 text-sm">{{ cat.name }}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-white font-medium">{{ cat.count }}</span>
+                        <span class="text-slate-400 text-xs ml-2">{{ cat.cost | round | int | commafy }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No category data available</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Assets by Branch -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4">Assets by Branch</h2>
+            <div class="space-y-3">
+                {% for branch in by_branch %}
+                <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-map-marker-alt text-blue-400 text-sm"></i>
+                        </div>
+                        <span class="text-slate-200 text-sm">{{ branch.name }}</span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-white font-medium">{{ branch.count }}</span>
+                        <span class="text-slate-400 text-xs ml-2">{{ branch.cost | round | int | commafy }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No branch data available</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <!-- Top 10 Costly Assets -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4">Top 10 Costly Assets</h2>
+            <div class="space-y-3">
+                {% for asset in top_assets %}
+                <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                    <div>
+                        <p class="text-slate-200 text-sm font-medium">{{ asset.name }}</p>
+                        <p class="text-slate-500 text-xs">{{ asset.asset_code }}</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-brand-400 font-medium">{{ asset.acquisition_cost | round | int | commafy }}</p>
+                        <p class="text-slate-400 text-xs">NBV: {{ asset.net_book_value | round | int | commafy }}</p>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No assets found</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Warranty Expiry Alerts -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4">
+                <i class="fas fa-shield-alt text-orange-400 mr-2"></i>Warranty Expiry
+            </h2>
+            <div class="space-y-3">
+                {% for asset in warranty_expiry %}
+                <div class="p-3 bg-orange-500/10 border border-orange-500/20 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-slate-200 text-sm font-medium">{{ asset.name }}</p>
+                            <p class="text-slate-500 text-xs">{{ asset.asset_code }}</p>
+                        </div>
+                        <span class="text-orange-400 text-xs font-medium">{{ asset.warranty_expiry_date }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No warranty expiries in 30 days</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Insurance Expiry Alerts -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4">
+                <i class="fas fa-file-contract text-red-400 mr-2"></i>Insurance Expiry
+            </h2>
+            <div class="space-y-3">
+                {% for asset in insurance_expiry %}
+                <div class="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-slate-200 text-sm font-medium">{{ asset.name }}</p>
+                            <p class="text-slate-500 text-xs">{{ asset.asset_code }}</p>
+                        </div>
+                        <span class="text-red-400 text-xs font-medium">{{ asset.insurance_expiry_date }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No insurance expiries in 30 days</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- End of Useful Life & Depreciation Trend -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Assets Nearing End of Life -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4">
+                <i class="fas fa-hourglass-half text-yellow-400 mr-2"></i>Assets Nearing End of Life
+            </h2>
+            <div class="space-y-3">
+                {% for asset in end_of_life %}
+                <div class="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-slate-200 text-sm font-medium">{{ asset.name }}</p>
+                            <p class="text-slate-500 text-xs">{{ asset.asset_code }} | {{ asset.useful_life_years }} years useful life</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-yellow-400 text-xs font-medium">{{ asset.days_remaining | round | int }} days left</span>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No assets approaching end of life</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Depreciation Trend -->
+        <div class="glass-panel rounded-xl p-5">
+            <h2 class="text-lg font-semibold text-white mb-4">Depreciation Trend</h2>
+            <div class="space-y-3">
+                {% for dep in depr_trend %}
+                <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                    <span class="text-slate-200 text-sm">{{ dep.period }}</span>
+                    <div class="flex items-center gap-3">
+                        <div class="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-yellow-500 rounded-full" style="width: {{ (dep.amount / (depr_trend[0].amount if depr_trend else 1)) * 100 }}%"></div>
+                        </div>
+                        <span class="text-yellow-400 text-sm font-medium">{{ dep.amount | round | int | commafy }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No depreciation data</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function exportDashboard() {
+    window.location.href = '{{ url_for("assets.report_export", report_type="depreciation") }}';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('dock_doors', 'Dock Doors') }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ docks|length }} {{ t('doors_configured', 'doors configured') }}</p>
+        </div>
+        <a href="{{ url_for('wms_dock_schedule') }}" class="px-4 py-2 bg-brand-500/10 border border-brand-500/20 rounded-xl text-brand-400 hover:bg-brand-500/20 text-sm font-medium">
+            <i class="fa-solid fa-calendar mr-2"></i>{{ t('view_schedule', 'View Schedule') }}
+        </a>
+    </div>
+
+    <!-- Dock Status Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {% for dock in docks %}
+        <div class="glass-panel rounded-2xl p-5
+            {% if dock.status == 'OCCUPIED' %}border-emerald-500/30{% elif dock.status == 'RESERVED' %}border-amber-500/30{% else %}border-slate-500/20{% endif %}">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <span class="w-10 h-10 rounded-xl bg-slate-700 flex items-center justify-center">
+                        <i class="fa-solid fa-door-open text-slate-400"></i>
+                    </span>
+                    <div>
+                        <h3 class="text-white font-bold">{{ dock.door_number }}</h3>
+                        <p class="text-xs text-slate-500">{{ dock.warehouse_name }}</p>
+                    </div>
+                </div>
+                <span class="px-2 py-1 rounded-lg text-xs font-bold
+                    {% if dock.status == 'OCCUPIED' %}bg-emerald-500/10 text-emerald-400
+                    {% elif dock.status == 'RESERVED' %}bg-amber-500/10 text-amber-400
+                    {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                    {{ dock.status }}
+                </span>
+            </div>
+
+            {% if dock.current_vehicle_id %}
+            <div class="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20 mb-3">
+                <p class="text-xs text-emerald-400 mb-1">{{ t('currently_loaded', 'Currently Loaded') }}</p>
+                <p class="text-white font-medium text-sm">{{ dock.current_vehicle_id }}</p>
+            </div>
+            {% endif %}
+
+            <div class="space-y-2 text-xs text-slate-400">
+                <div class="flex justify-between">
+                    <span>{{ t('type', 'Type') }}</span>
+                    <span class="text-white">{{ dock.door_type or 'BOTH' }}</span>
+                </div>
+                {% if dock.height_limit_cm %}
+                <div class="flex justify-between">
+                    <span>{{ t('height_limit', 'Height Limit') }}</span>
+                    <span>{{ dock.height_limit_cm }}cm</span>
+                </div>
+                {% endif %}
+                {% if dock.weight_limit_kg %}
+                <div class="flex justify-between">
+                    <span>{{ t('weight_limit', 'Weight Limit') }}</span>
+                    <span>{{ dock.weight_limit_kg }}kg</span>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="col-span-full glass-panel rounded-2xl p-12 text-center">
+            <i class="fa-solid fa-door-open text-5xl text-slate-600 mb-4 block"></i>
+            <p class="text-lg font-medium text-slate-400">{{ t('no_docks_configured', 'No dock doors configured') }}</p>
+            <a href="#" class="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm hover:bg-brand-400">
+                <i class="fa-solid fa-plus"></i>{{ t('add_first_dock', 'Add First Dock Door') }}
+            </a>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Dock Utilization Summary -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('dock_utilization', 'Dock Utilization') }}</h3>
+        <div class="grid grid-cols-3 gap-4 text-center">
+            <div class="p-4 rounded-xl bg-emerald-500/10">
+                <p class="text-3xl font-extrabold text-emerald-400">
+                    {{ docks|selectattr('status', 'equalto', 'OCCUPIED')|list|length }}
+                </p>
+                <p class="text-xs text-slate-400 mt-1">{{ t('occupied', 'Occupied') }}</p>
+            </div>
+            <div class="p-4 rounded-xl bg-amber-500/10">
+                <p class="text-3xl font-extrabold text-amber-400">
+                    {{ docks|selectattr('status', 'equalto', 'RESERVED')|list|length }}
+                </p>
+                <p class="text-xs text-slate-400 mt-1">{{ t('reserved', 'Reserved') }}</p>
+            </div>
+            <div class="p-4 rounded-xl bg-slate-500/10">
+                <p class="text-3xl font-extrabold text-slate-400">
+                    {{ docks|selectattr('status', 'equalto', 'AVAILABLE')|list|length }}
+                </p>
+                <p class="text-xs text-slate-400 mt-1">{{ t('available', 'Available') }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

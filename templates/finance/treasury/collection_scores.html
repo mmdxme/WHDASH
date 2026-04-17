@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">AR collection risk scoring and analysis</p>
+            </div>
+            <div class="flex gap-3">
+                <form method="POST" action="{{ url_for('treasury.calculate_collection_scores') }}">
+                    <button type="submit" class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded">
+                        <i class="fas fa-calculator mr-2"></i>Recalculate Scores
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Total Customers</p>
+                <p class="text-2xl font-bold text-white">{{ scores|length }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">High Risk</p>
+                <p class="text-2xl font-bold text-danger">{{ scores|selectattr('risk_classification', 'equalto', 'high')|list|length }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Medium Risk</p>
+                <p class="text-2xl font-bold text-warning">{{ scores|selectattr('risk_classification', 'equalto', 'medium')|list|length }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Low Risk</p>
+                <p class="text-2xl font-bold text-success">{{ scores|selectattr('risk_classification', 'equalto', 'low')|list|length }}</p>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="glass-card p-4 mb-6">
+            <form method="get" class="flex flex-wrap gap-4 items-center">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Risk Classification</label>
+                    <select name="risk_classification" class="bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                        <option value="">All</option>
+                        <option value="high" {% if filters.risk_classification == 'high' %}selected{% endif %}>High</option>
+                        <option value="medium" {% if filters.risk_classification == 'medium' %}selected{% endif %}>Medium</option>
+                        <option value="low" {% if filters.risk_classification == 'low' %}selected{% endif %}>Low</option>
+                    </select>
+                </div>
+                <div class="pt-6">
+                    <button type="submit" class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded">
+                        <i class="fas fa-filter mr-2"></i>Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Scores Table -->
+        <div class="glass-card p-6">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th>Scoring Date</th>
+                        <th class="text-right">Total Exposure</th>
+                        <th class="text-right">Overdue Exposure</th>
+                        <th class="text-right">Collection Probability</th>
+                        <th>Risk Level</th>
+                        <th>Recommended Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for score in scores %}
+                    <tr>
+                        <td class="font-semibold text-white">{{ score.customer_name or score.customer_id }}</td>
+                        <td>{{ score.scoring_date }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(score.total_exposure or 0) }}</td>
+                        <td class="text-right amount text-danger">{{ "%.2f"|format(score.overdue_exposure or 0) }}</td>
+                        <td class="text-right">
+                            <div class="flex items-center justify-end">
+                                <div class="w-16 bg-gray-700 rounded-full h-2 mr-2">
+                                    <div class="h-2 rounded-full {% if score.collection_probability >= 70 %}bg-success{% elif score.collection_probability >= 40 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                         style="width: {{ score.collection_probability or 0 }}%"></div>
+                                </div>
+                                <span class="amount">{{ "%.0f"|format(score.collection_probability or 0) }}%</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="px-2 py-1 text-xs rounded {% if score.risk_classification == 'high' %}bg-danger/20 text-danger{% elif score.risk_classification == 'medium' %}bg-warning/20 text-warning{% else %}bg-success/20 text-success{% endif %}">
+                                {{ score.risk_classification|title }}
+                            </span>
+                        </td>
+                        <td class="text-sm text-gray-400">{{ score.recommended_action or 'Standard follow-up' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center py-8">
+                            <p class="text-gray-400">No collection scores found</p>
+                            <p class="text-gray-500 text-sm mt-2">Click "Recalculate Scores" to generate collection risk scores</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

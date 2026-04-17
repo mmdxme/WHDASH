@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="{{ session.get('language', 'en') }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% trans %}Cost Allocations{% endtrans %} - MMDx</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        .page-container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .card { background: var(--surface-1); border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th { text-align: left; padding: 12px; border-bottom: 2px solid var(--border); color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; }
+        .data-table td { padding: 14px 12px; border-bottom: 1px solid var(--border); }
+        .data-table tr:hover { background: var(--surface-2); }
+        .btn { padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer; font-size: 0.875rem; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-success { background: #22c55e; color: white; }
+        .btn-success:hover { opacity: 0.9; }
+        .empty-state { text-align: center; padding: 60px; color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+    {% block content %}
+    <div class="page-container">
+        <div class="page-header">
+            <h1 style="font-size:1.75rem;font-weight:600"><i class="fas fa-random" style="margin-right:10px;color:var(--accent)"></i>{% trans %}Cost Allocations{% endtrans %}</h1>
+            <div style="display:flex;gap:10px">
+                <a href="{{ url_for('finance.cost_allocation_create') }}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> {% trans %}Create Rule{% endtrans %}
+                </a>
+                <form method="POST" action="{{ url_for('finance.cost_allocation_execute') }}" onsubmit="return confirm('{% trans %}Execute cost allocation for selected period?{% endtrans %}')" style="display:inline">
+                    <select name="period_id" class="form-control" style="display:inline;width:auto;padding:8px">
+                        <option value="">-- Select Period --</option>
+                    </select>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-play"></i> {% trans %}Execute Allocation{% endtrans %}
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            {% if rules %}
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>{% trans %}Rule Name{% endtrans %}</th>
+                        <th>{% trans %}Source CC{% endtrans %}</th>
+                        <th>{% trans %}Target CC{% endtrans %}</th>
+                        <th>{% trans %}Basis{% endtrans %}</th>
+                        <th>{% trans %}Amount{% endtrans %}</th>
+                        <th>{% trans %}Status{% endtrans %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rule in rules %}
+                    <tr>
+                        <td><strong>{{ rule.rule_name }}</strong><br><small style="color:var(--text-secondary)">{{ rule.rule_code }}</small></td>
+                        <td>{{ rule.source_cc_code or '-' }} {{ rule.source_cc_name or '' }}</td>
+                        <td>{{ rule.target_cc_code or '-' }} {{ rule.target_cc_name or '' }}</td>
+                        <td>{{ rule.allocation_basis }}{% if rule.percentage < 100 %} ({{ rule.percentage }}%){% endif %}</td>
+                        <td>{{ rule.amount | round(2) }}</td>
+                        <td>
+                            {% if rule.is_active %}
+                            <span class="badge badge-active">{% trans %}Active{% endtrans %}</span>
+                            {% else %}
+                            <span class="badge badge-inactive">{% trans %}Inactive{% endtrans %}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">
+                <i class="fas fa-random" style="font-size:3rem;opacity:0.3;margin-bottom:16px"></i>
+                <h3>{% trans %}No Allocation Rules{% endtrans %}</h3>
+                <p>{% trans %}Create rules to distribute shared costs to consuming profit centers.{% endtrans %}</p>
+                <a href="{{ url_for('finance.cost_allocation_create') }}" class="btn btn-primary" style="margin-top:16px">
+                    <i class="fas fa-plus"></i> {% trans %}Create First Rule{% endtrans %}
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

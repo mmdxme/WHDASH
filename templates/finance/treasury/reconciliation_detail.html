@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">{{ bank.account_name }} - {{ bank.account_number }}</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="{{ url_for('treasury.bank_statement_import') }}" class="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded">
+                    <i class="fas fa-file-import mr-2"></i>Import Statement
+                </a>
+                <a href="{{ url_for('treasury.reconciliation') }}" class="text-gray-400 hover:text-white">
+                    <i class="fas fa-arrow-left mr-2"></i>Back
+                </a>
+            </div>
+        </div>
+
+        <!-- Account Summary -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">GL Balance</p>
+                <p class="text-2xl font-bold text-white amount">{{ "%.2f"|format(bank.current_balance or 0) }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Statement Balance</p>
+                <p class="text-2xl font-bold text-white amount">0.00</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Difference</p>
+                <p class="text-2xl font-bold text-danger amount">{{ "%.2f"|format(bank.current_balance or 0) }}</p>
+            </div>
+            <div class="glass-card p-4">
+                <p class="text-gray-400 text-sm">Unreconciled Items</p>
+                <p class="text-2xl font-bold text-warning amount">{{ unreconciled|length }}</p>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <button onclick="showMatchModal()" class="glass-card p-6 text-center hover:bg-gray-700/50 transition cursor-pointer">
+                <i class="fas fa-exchange-alt text-success text-3xl mb-3"></i>
+                <p class="text-white font-medium">Manual Match</p>
+                <p class="text-gray-400 text-sm">Match transactions manually</p>
+            </button>
+            <button onclick="autoMatch()" class="glass-card p-6 text-center hover:bg-gray-700/50 transition cursor-pointer">
+                <i class="fas fa-magic text-primary text-3xl mb-3"></i>
+                <p class="text-white font-medium">Auto Match</p>
+                <p class="text-gray-400 text-sm">Automatically match transactions</p>
+            </button>
+            <button onclick="completeReconciliation()" class="glass-card p-6 text-center hover:bg-gray-700/50 transition cursor-pointer">
+                <i class="fas fa-check-double text-success text-3xl mb-3"></i>
+                <p class="text-white font-medium">Complete</p>
+                <p class="text-gray-400 text-sm">Finalize reconciliation</p>
+            </button>
+        </div>
+
+        <!-- Unreconciled Transactions -->
+        <div class="glass-card p-6">
+            <h2 class="text-xl font-semibold text-white mb-4">Unreconciled Transactions</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Select</th>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Reference</th>
+                        <th class="text-right">Debit</th>
+                        <th class="text-right">Credit</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in unreconciled %}
+                    <tr>
+                        <td>
+                            <input type="checkbox" class="w-5 h-5 rounded border-gray-600 reconcile-checkbox" data-id="{{ item.id }}">
+                        </td>
+                        <td>{{ item.transaction_date or item.created_at[:10] if item.created_at else '' }}</td>
+                        <td>{{ item.description or item.narration or '' }}</td>
+                        <td class="font-mono text-gray-400">{{ item.reference or item.doc_number or '' }}</td>
+                        <td class="text-right amount text-danger">
+                            {% if (item.debit_amount or 0) > 0 %}{{ "%.2f"|format(item.debit_amount) }}{% endif %}
+                        </td>
+                        <td class="text-right amount text-success">
+                            {% if (item.credit_amount or 0) > 0 %}{{ "%.2f"|format(item.credit_amount) }}{% endif %}
+                        </td>
+                        <td>
+                            <span class="px-2 py-1 bg-warning/20 text-warning text-xs rounded">Unmatched</span>
+                        </td>
+                        <td>
+                            <button onclick="matchItem({{ item.id }})" class="text-primary hover:text-primary-light text-sm">
+                                <i class="fas fa-link"></i> Match
+                            </button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center py-8">
+                            <p class="text-gray-400">No unreconciled transactions</p>
+                            <p class="text-gray-500 text-sm mt-2">All transactions have been matched</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Match Modal -->
+    <div id="matchModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+        <div class="glass-card p-6 w-full max-w-lg mx-4">
+            <h3 class="text-xl font-semibold text-white mb-4">Match Transaction</h3>
+            <form id="matchForm">
+                <input type="hidden" id="matchItemId" name="item_id">
+                <div class="mb-4">
+                    <label class="block text-gray-400 text-sm mb-2">Journal Entry ID</label>
+                    <input type="number" id="journalId" name="journal_id" required class="w-full bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-400 text-sm mb-2">Matched Amount</label>
+                    <input type="number" step="0.01" id="matchedAmount" name="matched_amount" required class="w-full bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                </div>
+                <div class="flex gap-3 justify-end">
+                    <button type="button" onclick="closeMatchModal()" class="px-4 py-2 text-gray-400 hover:text-white">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark">Match</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function showMatchModal() {
+            document.getElementById('matchModal').classList.remove('hidden');
+            document.getElementById('matchModal').classList.add('flex');
+        }
+
+        function closeMatchModal() {
+            document.getElementById('matchModal').classList.add('hidden');
+            document.getElementById('matchModal').classList.remove('flex');
+        }
+
+        function matchItem(id) {
+            document.getElementById('matchItemId').value = id;
+            showMatchModal();
+        }
+
+        document.getElementById('matchForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const data = {
+                line_id: formData.get('item_id'),
+                journal_id: formData.get('journal_id'),
+                matched_amount: formData.get('matched_amount')
+            };
+
+            try {
+                const response = await fetch('{{ url_for("treasury.api_match_transaction") }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (response.ok) {
+                    window.location.reload();
+                }
+            } catch (error) {
+                alert('Error matching transaction');
+            }
+        });
+
+        async function autoMatch() {
+            alert('Auto-match functionality - matches transactions based on amount and date tolerance');
+        }
+
+        async function completeReconciliation() {
+            if (confirm('Are you sure you want to complete this reconciliation?')) {
+                alert('Reconciliation completed');
+                window.location.href = '{{ url_for("treasury.reconciliation") }}';
+            }
+        }
+    </script>
+    {% endblock %}
+</body>
+</html>

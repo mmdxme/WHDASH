@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('wms_waves') }}" class="text-slate-400 hover:text-white"><i class="fa-solid fa-arrow-left"></i></a>
+                <h1 class="text-2xl font-bold text-white">{{ wave.wave_number }}</h1>
+                <span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider
+                    {% if wave.status == 'COMPLETED' %}bg-emerald-500/10 text-emerald-400
+                    {% elif wave.status == 'IN_PROGRESS' %}bg-amber-500/10 text-amber-400
+                    {% elif wave.status == 'RELEASED' %}bg-cyan-500/10 text-cyan-400
+                    {% elif wave.status == 'CANCELLED' %}bg-red-500/10 text-red-400
+                    {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                    {{ wave.status }}
+                </span>
+            </div>
+            <p class="text-slate-400 text-sm mt-1 ml-10">{{ wave.template_name }} / {{ wave.warehouse_name }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            {% if wave.status == 'PLANNED' %}
+            <form method="POST" action="{{ url_for('wms_wave_release', wave_id=wave.id) }}">
+                <button type="submit" class="px-4 py-2 bg-emerald-500 text-white rounded-xl hover:bg-emerald-400 text-sm font-medium">
+                    <i class="fa-solid fa-play mr-2"></i>{{ t('release_wave', 'Release Wave') }}
+                </button>
+            </form>
+            {% endif %}
+            {% if wave.status in ['PLANNED', 'RELEASED'] %}
+            <form method="POST" action="{{ url_for('wms_wave_cancel', wave_id=wave.id) }}" onsubmit="return confirm('Cancel this wave?');">
+                <button type="submit" class="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 hover:bg-red-500/20 text-sm font-medium">
+                    <i class="fa-solid fa-xmark mr-2"></i>{{ t('cancel', 'Cancel') }}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="glass-panel rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-bold text-white">{{ t('wave_progress', 'Wave Progress') }}</h3>
+            <span class="text-2xl font-extrabold text-brand-400">{{ progress|int }}%</span>
+        </div>
+        <div class="w-full bg-slate-700 rounded-full h-4 mb-4">
+            <div class="h-4 rounded-full {% if progress >= 100 %}bg-emerald-500{% elif progress >= 50 %}bg-cyan-500{% else %}bg-amber-500{% endif %}" style="width: {{ progress }}%"></div>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+            <div>
+                <p class="text-xs text-slate-400">{{ t('orders', 'Orders') }}</p>
+                <p class="text-lg font-bold text-white">{{ wave.order_count }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-slate-400">{{ t('total_lines', 'Total Lines') }}</p>
+                <p class="text-lg font-bold text-white">{{ wave.total_lines }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-slate-400">{{ t('total_picks', 'Total Picks') }}</p>
+                <p class="text-lg font-bold text-white">{{ wave.total_picks }}</p>
+            </div>
+            <div>
+                <p class="text-xs text-slate-400">{{ t('picks_completed', 'Picks Completed') }}</p>
+                <p class="text-lg font-bold text-emerald-400">{{ wave.picks_completed|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs text-slate-400 mb-1">{{ t('warehouse', 'Warehouse') }}</p>
+            <p class="text-white font-medium">{{ wave.warehouse_name }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs text-slate-400 mb-1">{{ t('created_by', 'Created By') }}</p>
+            <p class="text-white font-medium">{{ wave.created_by_name or 'System' }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs text-slate-400 mb-1">{{ t('created_at', 'Created At') }}</p>
+            <p class="text-white font-medium">{{ wave.created_at[:16] if wave.created_at else '-' }}</p>
+        </div>
+        {% if wave.released_at %}
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs text-slate-400 mb-1">{{ t('released_at', 'Released At') }}</p>
+            <p class="text-white font-medium">{{ wave.released_at[:16] if wave.released_at else '-' }}</p>
+        </div>
+        {% endif %}
+        {% if wave.completed_at %}
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs text-slate-400 mb-1">{{ t('completed_at', 'Completed At') }}</p>
+            <p class="text-white font-medium">{{ wave.completed_at[:16] if wave.completed_at else '-' }}</p>
+        </div>
+        {% endif %}
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs text-slate-400 mb-1">{{ t('priority', 'Priority') }}</p>
+            <span class="px-3 py-1 rounded-lg text-sm font-bold
+                {% if wave.priority >= 8 %}bg-red-500/10 text-red-400{% elif wave.priority >= 5 %}bg-amber-500/10 text-amber-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                {{ wave.priority }}
+            </span>
+        </div>
+    </div>
+
+    <!-- Orders in Wave -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between p-5 border-b border-white/5">
+            <h3 class="text-lg font-bold text-white">{{ t('orders_in_wave', 'Orders in Wave') }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="text-left py-3 px-5 font-semibold">{{ t('order', 'Order') }}</th>
+                        <th class="text-left py-3 px-5 font-semibold">{{ t('customer', 'Customer') }}</th>
+                        <th class="text-center py-3 px-5 font-semibold">{{ t('lines', 'Lines') }}</th>
+                        <th class="text-center py-3 px-5 font-semibold">{{ t('picks', 'Picks') }}</th>
+                        <th class="text-right py-3 px-5 font-semibold">{{ t('progress', 'Progress') }}</th>
+                        <th class="text-center py-3 px-5 font-semibold">{{ t('status', 'Status') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for o in orders %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-3 px-5">
+                            <a href="{{ url_for('wms_outbound_order_detail', order_id=o.id) }}" class="text-brand-400 hover:text-brand-300 font-medium">{{ o.order_number }}</a>
+                        </td>
+                        <td class="py-3 px-5 text-slate-300">{{ o.customer_name or '-' }}</td>
+                        <td class="py-3 px-5 text-center text-slate-400">{{ o.line_count }}</td>
+                        <td class="py-3 px-5 text-center text-slate-400">{{ o.pick_count }}</td>
+                        <td class="py-3 px-5 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                <div class="w-16 bg-slate-700 rounded-full h-1.5">
+                                    <div class="h-1.5 rounded-full {% if o.progress >= 100 %}bg-emerald-500{% elif o.progress >= 50 %}bg-cyan-500{% else %}bg-amber-500{% endif %}" style="width: {{ o.progress|default(0) }}%"></div>
+                                </div>
+                                <span class="text-xs text-slate-400 tabular-nums">{{ o.progress|default(0)|int }}%</span>
+                            </div>
+                        </td>
+                        <td class="py-3 px-5 text-center">
+                            <span class="px-2 py-1 rounded text-xs font-bold
+                                {% if o.status == 'COMPLETED' %}bg-emerald-500/10 text-emerald-400
+                                {% elif o.status == 'PICKING' %}bg-amber-500/10 text-amber-400
+                                {% elif o.status == 'ALLOCATED' %}bg-cyan-500/10 text-cyan-400
+                                {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ o.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-file-circle-question text-4xl mb-3 block opacity-20"></i>
+                            {{ t('no_orders_in_wave', 'No orders in this wave') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pick Tasks in Wave -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between p-5 border-b border-white/5">
+            <h3 class="text-lg font-bold text-white">{{ t('pick_tasks', 'Pick Tasks') }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="text-left py-3 px-5 font-semibold">{{ t('task', 'Task') }}</th>
+                        <th class="text-left py-3 px-5 font-semibold">{{ t('item', 'Item') }}</th>
+                        <th class="text-left py-3 px-5 font-semibold">{{ t('location', 'Location') }}</th>
+                        <th class="text-right py-3 px-5 font-semibold">{{ t('qty', 'Qty') }}</th>
+                        <th class="text-left py-3 px-5 font-semibold">{{ t('assigned_to', 'Assigned To') }}</th>
+                        <th class="text-center py-3 px-5 font-semibold">{{ t('status', 'Status') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in picks %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-3 px-5 text-brand-400 font-medium">{{ p.task_number }}</td>
+                        <td class="py-3 px-5">
+                            <span class="text-white">{{ p.item_code }}</span>
+                            <span class="text-slate-400 text-xs ml-2">{{ p.item_name[:30] }}</span>
+                        </td>
+                        <td class="py-3 px-5 text-slate-400">{{ p.source_location }}</td>
+                        <td class="py-3 px-5 text-right text-cyan-400 font-bold tabular-nums">{{ p.quantity|int }}</td>
+                        <td class="py-3 px-5 text-slate-400">{{ p.assigned_to_name or '-' }}</td>
+                        <td class="py-3 px-5 text-center">
+                            <span class="px-3 py-1 rounded-lg text-xs font-bold uppercase
+                                {% if p.status == 'COMPLETED' %}bg-emerald-500/10 text-emerald-400
+                                {% elif p.status == 'IN_PROGRESS' %}bg-cyan-500/10 text-cyan-400
+                                {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ p.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-hand text-4xl mb-3 block opacity-20"></i>
+                            {{ t('no_pick_tasks', 'No pick tasks in this wave') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

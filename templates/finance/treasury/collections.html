@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">AR-Treasury integration for expected receipts</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="{{ url_for('treasury.collections') }}?sync=true" class="btn btn-primary">
+                    <i class="fas fa-sync"></i> Sync from AR
+                </a>
+                <a href="{{ url_for('treasury.collections_calendar') }}" class="btn btn-outline">
+                    <i class="fas fa-calendar"></i> Calendar
+                </a>
+                <a href="{{ url_for('treasury.collections_overdue') }}" class="btn btn-outline">
+                    <i class="fas fa-exclamation-circle"></i> Overdue
+                </a>
+            </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="glass-card p-4 text-center">
+                <p class="text-gray-400 text-sm">Total Collections</p>
+                <p class="text-2xl font-bold text-white">{{ summary.total_collections or 0 }}</p>
+            </div>
+            <div class="glass-card p-4 text-center">
+                <p class="text-gray-400 text-sm">Total Amount</p>
+                <p class="text-2xl font-bold text-white amount">{{ "%.2f"|format(summary.total_open_amount or 0) }}</p>
+            </div>
+            <div class="glass-card p-4 text-center">
+                <p class="text-gray-400 text-sm">High Risk</p>
+                <p class="text-2xl font-bold text-danger amount">{{ "%.2f"|format(summary.high_risk_amount or 0) }}</p>
+            </div>
+            <div class="glass-card p-4 text-center">
+                <p class="text-gray-400 text-sm">Certain Receipts</p>
+                <p class="text-2xl font-bold text-success amount">{{ "%.2f"|format(summary.certain_amount or 0) }}</p>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="glass-card p-4 mb-6">
+            <form method="get" class="flex gap-4 items-end flex-wrap">
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Risk Level</label>
+                    <select name="risk_level" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                        <option value="">All</option>
+                        <option value="high" {% if filters.risk_level == 'high' %}selected{% endif %}>High</option>
+                        <option value="medium" {% if filters.risk_level == 'medium' %}selected{% endif %}>Medium</option>
+                        <option value="normal" {% if filters.risk_level == 'normal' %}selected{% endif %}>Normal</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Likelihood</label>
+                    <select name="likelihood" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                        <option value="">All</option>
+                        <option value="certain" {% if filters.likelihood == 'certain' %}selected{% endif %}>Certain</option>
+                        <option value="probable" {% if filters.likelihood == 'probable' %}selected{% endif %}>Probable</option>
+                        <option value="possible" {% if filters.likelihood == 'possible' %}selected{% endif %}>Possible</option>
+                        <option value="uncertain" {% if filters.likelihood == 'uncertain' %}selected{% endif %}>Uncertain</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Start Date</label>
+                    <input type="date" name="start_date" value="{{ filters.start_date or '' }}" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">End Date</label>
+                    <input type="date" name="end_date" value="{{ filters.end_date or '' }}" class="bg-gray-800 border border-gray-700 rounded px-3 py-2 text-white">
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-filter"></i> Filter
+                </button>
+            </form>
+        </div>
+
+        <!-- Collections Table -->
+        <div class="glass-card p-6">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Customer</th>
+                        <th>Invoice #</th>
+                        <th>Due Date</th>
+                        <th class="text-right">Original</th>
+                        <th class="text-right">Open Amount</th>
+                        <th class="text-right">Expected</th>
+                        <th>Risk</th>
+                        <th>Likelihood</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for col in collections %}
+                    <tr>
+                        <td class="font-semibold">{{ col.customer_name or 'Customer #' ~ col.customer_id }}</td>
+                        <td class="text-gray-400">{{ col.invoice_number or '-' }}</td>
+                        <td class="{% if col.due_date and col.due_date < today %}text-danger{% endif %}">
+                            {{ col.due_date or '-' }}
+                        </td>
+                        <td class="text-right amount">{{ "%.2f"|format(col.original_amount or 0) }}</td>
+                        <td class="text-right amount">{{ "%.2f"|format(col.open_amount or 0) }}</td>
+                        <td class="text-right amount text-success">{{ "%.2f"|format(col.expected_amount or 0) }}</td>
+                        <td>
+                            <span class="badge {% if col.risk_level == 'high' %}badge-critical{% elif col.risk_level == 'medium' %}badge-high{% else %}badge-low{% endif %}">
+                                {{ col.risk_level|title }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge badge-low">{{ col.likelihood|Title }}</span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center text-gray-500 py-8">
+                            No collections found. <a href="{{ url_for('treasury.collections') }}?sync=true" class="text-primary hover:underline">Sync from AR</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

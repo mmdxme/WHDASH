@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">{{ transfer.request_number }} - {{ transfer.status }}</p>
+            </div>
+            <div class="flex gap-3">
+                {% if transfer.status == 'Pending' %}
+                <form method="POST" action="{{ url_for('treasury.transfer_approve', transfer_id=transfer.id) }}" class="inline">
+                    <button type="submit" class="bg-success hover:bg-success-dark text-white px-4 py-2 rounded">
+                        <i class="fas fa-check mr-2"></i>Approve
+                    </button>
+                </form>
+                <form method="POST" action="{{ url_for('treasury.transfer_reject', transfer_id=transfer.id) }}" class="inline">
+                    <button type="submit" class="bg-danger hover:bg-danger-dark text-white px-4 py-2 rounded">
+                        <i class="fas fa-times mr-2"></i>Reject
+                    </button>
+                </form>
+                {% endif %}
+                <a href="{{ url_for('treasury.transfers_list') }}" class="text-gray-400 hover:text-white px-4 py-2">
+                    <i class="fas fa-arrow-left mr-2"></i>Back
+                </a>
+            </div>
+        </div>
+
+        <!-- Status Timeline -->
+        <div class="glass-card p-6 mb-6">
+            <h2 class="text-xl font-semibold text-white mb-4">Transfer Status</h2>
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <div class="w-10 h-10 rounded-full {% if transfer.status in ['Approved', 'Executed', 'Confirmed'] %}bg-success{% else %}bg-gray-600{% endif %} flex items-center justify-center">
+                        <i class="fas fa-check text-white"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="font-semibold text-white">Requested</p>
+                        <p class="text-sm text-gray-400">{{ transfer.created_at[:10] if transfer.created_at else '' }}</p>
+                    </div>
+                </div>
+                <div class="flex-1 h-1 bg-gray-600 mx-4"></div>
+                <div class="flex items-center">
+                    <div class="w-10 h-10 rounded-full {% if transfer.status in ['Approved'] %}bg-success{% elif transfer.status == 'Rejected' %}bg-danger{% else %}bg-gray-600{% endif %} flex items-center justify-center">
+                        <i class="fas fa {% if transfer.status in ['Approved'] %}fa-check{% elif transfer.status == 'Rejected' %}fa-times{% else %}fa-clock{% endif %} text-white"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="font-semibold text-white">Approved</p>
+                        <p class="text-sm text-gray-400">{{ transfer.approved_at[:10] if transfer.approved_at else 'Pending' }}</p>
+                    </div>
+                </div>
+                <div class="flex-1 h-1 bg-gray-600 mx-4"></div>
+                <div class="flex items-center">
+                    <div class="w-10 h-10 rounded-full {% if transfer.status == 'Executed' %}bg-success{% elif transfer.status == 'Rejected' %}bg-danger{% else %}bg-gray-600{% endif %} flex items-center justify-center">
+                        <i class="fas fa-paper-plane text-white"></i>
+                    </div>
+                    <div class="ml-3">
+                        <p class="font-semibold text-white">Executed</p>
+                        <p class="text-sm text-gray-400">{{ transfer.executed_at[:10] if transfer.executed_at else 'Pending' }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transfer Details -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="glass-card p-6">
+                <h2 class="text-xl font-semibold text-white mb-4">Transfer Details</h2>
+                <div class="space-y-4">
+                    <div class="flex justify-between border-b border-gray-700 pb-3">
+                        <span class="text-gray-400">Request Number</span>
+                        <span class="font-semibold text-white">{{ transfer.request_number }}</span>
+                    </div>
+                    <div class="flex justify-between border-b border-gray-700 pb-3">
+                        <span class="text-gray-400">Amount</span>
+                        <span class="font-bold text-2xl text-white amount">{{ "%.2f"|format(transfer.amount) }} {{ transfer.currency }}</span>
+                    </div>
+                    <div class="flex justify-between border-b border-gray-700 pb-3">
+                        <span class="text-gray-400">Transfer Type</span>
+                        <span class="text-white">{{ transfer.transfer_type or 'Bank Transfer' }}</span>
+                    </div>
+                    <div class="flex justify-between border-b border-gray-700 pb-3">
+                        <span class="text-gray-400">Priority</span>
+                        <span class="px-2 py-1 text-xs rounded {% if transfer.priority == 'high' %}bg-danger/20 text-danger{% elif transfer.priority == 'medium' %}bg-warning/20 text-warning{% else %}bg-primary/20 text-primary{% endif %}">
+                            {{ transfer.priority or 'normal' }}
+                        </span>
+                    </div>
+                    <div class="flex justify-between border-b border-gray-700 pb-3">
+                        <span class="text-gray-400">Scheduled Date</span>
+                        <span class="text-white">{{ transfer.scheduled_date or 'Immediate' }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="glass-card p-6">
+                <h2 class="text-xl font-semibold text-white mb-4">Account Details</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-gray-400 text-sm">From Account</p>
+                        <p class="text-white font-semibold">{{ transfer.from_account_name or transfer.from_account_id or 'N/A' }}</p>
+                        <p class="text-gray-500 text-sm">{{ transfer.from_account_number or '' }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-400 text-sm">To Account</p>
+                        <p class="text-white font-semibold">{{ transfer.to_account_name or transfer.to_account_id or 'N/A' }}</p>
+                        <p class="text-gray-500 text-sm">{{ transfer.to_account_number or '' }}</p>
+                    </div>
+                </div>
+                {% if transfer.remarks %}
+                <div class="mt-4 pt-4 border-t border-gray-700">
+                    <p class="text-gray-400 text-sm">Remarks</p>
+                    <p class="text-white">{{ transfer.remarks }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Approval History -->
+        <div class="glass-card p-6 mt-6">
+            <h2 class="text-xl font-semibold text-white mb-4">Approval History</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Action</th>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Date</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>{% if transfer.status == 'Rejected' %}<span class="text-danger">Rejected</span>{% else %}<span class="text-success">Approved</span>{% endif %}</td>
+                        <td>{{ transfer.approved_by_name or transfer.approved_by or 'N/A' }}</td>
+                        <td>{{ transfer.approver_role or 'Treasury Manager' }}</td>
+                        <td>{{ transfer.approved_at[:19] if transfer.approved_at else 'Pending' }}</td>
+                        <td>{{ transfer.approval_notes or '' }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

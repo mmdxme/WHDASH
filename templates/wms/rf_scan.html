@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('rf_scan_workbench', 'RF Scan Workbench') }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ t('scan_workbench_subtitle', 'Scan barcode to perform warehouse operations') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="px-3 py-1.5 rounded-xl text-xs font-bold
+                {% if connection_status == 'CONNECTED' %}bg-emerald-500/10 text-emerald-400
+                {% elif connection_status == 'DISCONNECTED' %}bg-red-500/10 text-red-400
+                {% else %}bg-amber-500/10 text-amber-400{% endif %}">
+                <i class="fa-solid fa-wifi mr-1"></i>{{ connection_status }}
+            </span>
+        </div>
+    </div>
+
+    <!-- Scan Operation Selection -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+        <button onclick="setOperation('RECEIVE')" id="op-receive" class="glass-panel rounded-xl p-4 text-center hover:bg-cyan-500/10 border border-transparent hover:border-cyan-500/20 transition-all">
+            <i class="fa-solid fa-truck-ramp-box text-2xl text-cyan-400 mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300">{{ t('receive', 'Receive') }}</span>
+        </button>
+        <button onclick="setOperation('PUTAWAY')" id="op-putaway" class="glass-panel rounded-xl p-4 text-center hover:bg-violet-500/10 border border-transparent hover:border-violet-500/20 transition-all">
+            <i class="fa-solid fa-box text-2xl text-violet-400 mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300">{{ t('putaway', 'Putaway') }}</span>
+        </button>
+        <button onclick="setOperation('PICK')" id="op-pick" class="glass-panel rounded-xl p-4 text-center hover:bg-blue-500/10 border border-transparent hover:border-blue-500/20 transition-all">
+            <i class="fa-solid fa-hand text-2xl text-blue-400 mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300">{{ t('pick', 'Pick') }}</span>
+        </button>
+        <button onclick="setOperation('TRANSFER')" id="op-transfer" class="glass-panel rounded-xl p-4 text-center hover:bg-teal-500/10 border border-transparent hover:border-teal-500/20 transition-all">
+            <i class="fa-solid fa-right-left text-2xl text-teal-400 mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300">{{ t('transfer', 'Transfer') }}</span>
+        </button>
+        <button onclick="setOperation('COUNT')" id="op-count" class="glass-panel rounded-xl p-4 text-center hover:bg-amber-500/10 border border-transparent hover:border-amber-500/20 transition-all">
+            <i class="fa-solid fa-clipboard-list text-2xl text-amber-400 mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300">{{ t('count', 'Count') }}</span>
+        </button>
+        <button onclick="setOperation('LOOKUP')" id="op-lookup" class="glass-panel rounded-xl p-4 text-center hover:bg-slate-500/10 border border-transparent hover:border-slate-500/20 transition-all">
+            <i class="fa-solid fa-magnifying-glass text-2xl text-slate-400 mb-2 block"></i>
+            <span class="text-xs font-medium text-slate-300">{{ t('lookup', 'Lookup') }}</span>
+        </button>
+    </div>
+
+    <!-- Active Operation Panel -->
+    <div class="glass-panel rounded-2xl p-6" id="operationPanel">
+        <div class="text-center py-12">
+            <i class="fa-solid fa-barcode text-5xl text-slate-600 mb-4 block"></i>
+            <p class="text-slate-400 text-lg">{{ t('select_operation', 'Select an operation above to begin scanning') }}</p>
+        </div>
+    </div>
+
+    <!-- Scan History -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between p-5 border-b border-white/5">
+            <h3 class="text-lg font-bold text-white">{{ t('scan_history', 'Scan History') }}</h3>
+            <div class="flex items-center gap-2">
+                <select id="historyFilter" class="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-white">
+                    <option value="ALL">{{ t('all_operations', 'All Operations') }}</option>
+                    <option value="RECEIVE">{{ t('receive', 'Receive') }}</option>
+                    <option value="PUTAWAY">{{ t('putaway', 'Putaway') }}</option>
+                    <option value="PICK">{{ t('pick', 'Pick') }}</option>
+                    <option value="TRANSFER">{{ t('transfer', 'Transfer') }}</option>
+                    <option value="COUNT">{{ t('count', 'Count') }}</option>
+                </select>
+                <button onclick="clearHistory()" class="px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-slate-400 hover:bg-white/10">
+                    <i class="fa-solid fa-trash mr-1"></i>{{ t('clear', 'Clear') }}
+                </button>
+            </div>
+        </div>
+        <div class="overflow-x-auto max-h-80">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="py-3 px-4 font-semibold text-left">{{ t('time', 'Time') }}</th>
+                        <th class="py-3 px-4 font-semibold text-left">{{ t('barcode', 'Barcode') }}</th>
+                        <th class="py-3 px-4 font-semibold text-left">{{ t('operation', 'Operation') }}</th>
+                        <th class="py-3 px-4 font-semibold text-left">{{ t('item', 'Item') }}</th>
+                        <th class="py-3 px-4 font-semibold text-right">{{ t('quantity', 'Qty') }}</th>
+                        <th class="py-3 px-4 font-semibold text-center">{{ t('result', 'Result') }}</th>
+                    </tr>
+                </thead>
+                <tbody id="scanHistoryTable">
+                    <tr>
+                        <td colspan="6" class="py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-list text-4xl mb-3 block opacity-20"></i>
+                            {{ t('no_scans_yet', 'No scans recorded yet') }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentOperation = null;
+let scanHistory = [];
+
+function setOperation(op) {
+    currentOperation = op;
+    // Highlight active button
+    document.querySelectorAll('[id^="op-"]').forEach(function(btn) {
+        btn.classList.remove('border-brand-500/50', 'bg-brand-500/10');
+    });
+    document.getElementById('op-' + op.toLowerCase()).classList.add('border-brand-500/50', 'bg-brand-500/10');
+
+    // Update operation panel
+    const panel = document.getElementById('operationPanel');
+    const operationTitles = {
+        'RECEIVE': '{{ t("scan_to_receive", "Scan to Receive") }}',
+        'PUTAWAY': '{{ t("scan_to_putaway", "Scan to Putaway") }}',
+        'PICK': '{{ t("scan_to_pick", "Scan to Pick") }}',
+        'TRANSFER': '{{ t("scan_to_transfer", "Scan to Transfer") }}',
+        'COUNT': '{{ t("scan_to_count", "Scan to Count") }}',
+        'LOOKUP': '{{ t("scan_to_lookup", "Scan to Lookup") }}'
+    };
+
+    panel.innerHTML = `
+        <div class="text-center">
+            <h3 class="text-xl font-bold text-white mb-4">${operationTitles[op]}</h3>
+            <div class="max-w-md mx-auto">
+                <div class="relative">
+                    <input type="text" id="scanInput" autofocus autocomplete="off"
+                        class="w-full px-6 py-4 bg-white/5 border-2 border-brand-500/30 rounded-xl text-xl text-center font-mono text-white focus:border-brand-500 focus:outline-none"
+                        placeholder="{{ t("scan_or_enter_barcode", "Scan or enter barcode...") }}">
+                    <button onclick="simulateScan()" class="absolute right-3 top-1/2 -translate-y-1/2 px-4 py-2 bg-brand-500 rounded-lg text-white text-sm hover:bg-brand-400">
+                        <i class="fa-solid fa-qrcode"></i>
+                    </button>
+                </div>
+                <div class="mt-4 flex items-center justify-center gap-4 text-sm">
+                    <span class="text-slate-500">{{ t("last_scan", "Last Scan") }}: <span id="lastScan" class="text-slate-400 font-mono">--</span></span>
+                    <span class="text-slate-500">|</span>
+                    <span class="text-slate-500">{{ t("scans_today", "Scans Today") }}: <span id="scanCount" class="text-brand-400 font-bold">0</span></span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('scanInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            processScan(this.value);
+            this.value = '';
+        }
+    });
+
+    document.getElementById('scanInput').focus();
+}
+
+function simulateScan() {
+    // Simulate a barcode scan with random data
+    const barcodes = ['PN-10001-LOT001', 'PN-10002-LOT002', 'SKU-20001', 'BN-30001-2024', 'ITM-40001'];
+    const barcode = barcodes[Math.floor(Math.random() * barcodes.length)];
+    document.getElementById('scanInput').value = barcode;
+    processScan(barcode);
+}
+
+function processScan(barcode) {
+    if (!barcode) return;
+
+    const timestamp = new Date().toLocaleTimeString();
+    const op = currentOperation || 'LOOKUP';
+
+    // Simulate processing
+    const result = {
+        timestamp: timestamp,
+        barcode: barcode,
+        operation: op,
+        item: 'Item ' + barcode.substring(0, 8),
+        quantity: Math.floor(Math.random() * 100) + 1,
+        status: 'success'
+    };
+
+    // Add to history
+    scanHistory.unshift(result);
+    if (scanHistory.length > 50) scanHistory.pop();
+
+    document.getElementById('lastScan').textContent = barcode;
+    document.getElementById('scanCount').textContent = scanHistory.filter(s => s.operation === op).length;
+
+    updateHistoryTable();
+}
+
+function updateHistoryTable() {
+    const tbody = document.getElementById('scanHistoryTable');
+    const filter = document.getElementById('historyFilter').value;
+
+    const filtered = filter === 'ALL' ? scanHistory : scanHistory.filter(s => s.operation === filter);
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="py-12 text-center text-slate-500"><i class="fa-solid fa-list text-4xl mb-3 block opacity-20"></i>{{ t("no_matching_scans", "No matching scans") }}</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(s => `
+        <tr class="border-b border-white/5 hover:bg-white/5">
+            <td class="py-3 px-4 text-slate-400 text-xs">${s.timestamp}</td>
+            <td class="py-3 px-4 font-mono text-brand-400">${s.barcode}</td>
+            <td class="py-3 px-4">
+                <span class="px-2 py-1 rounded text-xs font-bold
+                    {% if s.operation == 'RECEIVE' %}bg-cyan-500/10 text-cyan-400
+                    {% elif s.operation == 'PUTAWAY' %}bg-violet-500/10 text-violet-400
+                    {% elif s.operation == 'PICK' %}bg-blue-500/10 text-blue-400
+                    {% elif s.operation == 'TRANSFER' %}bg-teal-500/10 text-teal-400
+                    {% elif s.operation == 'COUNT' %}bg-amber-500/10 text-amber-400
+                    {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                    ${s.operation}
+                </span>
+            </td>
+            <td class="py-3 px-4 text-white">${s.item}</td>
+            <td class="py-3 px-4 text-right text-slate-300 tabular-nums">${s.quantity}</td>
+            <td class="py-3 px-4 text-center">
+                <span class="px-2 py-1 rounded text-xs font-bold
+                    ${s.status === 'success' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'}">
+                    ${s.status.toUpperCase()}
+                </span>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function clearHistory() {
+    scanHistory = [];
+    updateHistoryTable();
+}
+
+// Listen for filter changes
+document.getElementById('historyFilter').addEventListener('change', updateHistoryTable);
+</script>
+{% endblock %}

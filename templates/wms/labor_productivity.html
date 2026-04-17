@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('labor_productivity', 'Labor Productivity') }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ t('productivity_subtitle', 'Operator performance and task completion analytics') }}</p>
+        </div>
+        <a href="{{ url_for('wms_labor') }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-slate-400 hover:bg-white/10 text-sm font-medium">
+            <i class="fa-solid fa-arrow-left mr-2"></i>{{ t('back_to_labor', 'Back to Labor') }}
+        </a>
+    </div>
+
+    <!-- Productivity Summary -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{{ t('total_tasks', 'Total Tasks') }}</p>
+            <p class="text-3xl font-extrabold text-white">
+                {{ daily_stats|sum(attribute='total')|default(0) }}
+            </p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{{ t('completed', 'Completed') }}</p>
+            <p class="text-3xl font-extrabold text-emerald-400">
+                {{ daily_stats|sum(attribute='completed')|default(0) }}
+            </p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{{ t('avg_time_minutes', 'Avg Time (min)') }}</p>
+            <p class="text-3xl font-extrabold text-cyan-400">
+                {{ "%.1f"|format((daily_stats|sum(attribute='avg_minutes') / daily_stats|length if daily_stats else 0)) }}
+            </p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">{{ t('completion_rate', 'Completion Rate') }}</p>
+            <p class="text-3xl font-extrabold text-violet-400">
+                {% set total = daily_stats|sum(attribute='total') %}
+                {% set completed = daily_stats|sum(attribute='completed') %}
+                {{ "%.0f"|format((completed / total * 100) if total > 0 else 0) }}%
+            </p>
+        </div>
+    </div>
+
+    <!-- Daily Productivity Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="flex items-center justify-between p-5 border-b border-white/5">
+            <h3 class="text-lg font-bold text-white">{{ t('daily_productivity', 'Daily Productivity (Last 30 Days)') }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
+                        <th class="py-3 px-4 font-semibold text-left">{{ t('date', 'Date') }}</th>
+                        <th class="py-3 px-4 font-semibold text-center">{{ t('total_tasks', 'Total Tasks') }}</th>
+                        <th class="py-3 px-4 font-semibold text-center">{{ t('completed', 'Completed') }}</th>
+                        <th class="py-3 px-4 font-semibold text-center">{{ t('avg_time', 'Avg Time (min)') }}</th>
+                        <th class="py-3 px-4 font-semibold text-left">{{ t('performance', 'Performance') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for day in daily_stats %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-3 px-4 text-slate-300">{{ day.day }}</td>
+                        <td class="py-3 px-4 text-center text-white font-medium">{{ day.total }}</td>
+                        <td class="py-3 px-4 text-center text-emerald-400 font-bold">{{ day.completed }}</td>
+                        <td class="py-3 px-4 text-center text-slate-400">{{ "%.1f"|format(day.avg_minutes or 0) }}</td>
+                        <td class="py-3 px-4">
+                            {% set pct = ((day.completed / day.total * 100) if day.total > 0 else 0)|int %}
+                            <div class="flex items-center gap-2">
+                                <div class="w-20 bg-slate-700 rounded-full h-2">
+                                    <div class="h-2 rounded-full {% if pct >= 80 %}bg-emerald-500{% elif pct >= 50 %}bg-cyan-500{% else %}bg-amber-500{% endif %}" style="width: {{ pct }}%"></div>
+                                </div>
+                                <span class="text-xs text-slate-400 tabular-nums">{{ pct }}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="py-16 text-center text-slate-500">
+                            <i class="fa-solid fa-chart-line text-5xl mb-4 block opacity-20"></i>
+                            <p class="text-lg font-medium">{{ t('no_productivity_data', 'No productivity data available') }}</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

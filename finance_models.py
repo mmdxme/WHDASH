@@ -45,6 +45,11 @@ def initialize_finance_schema():
     _create_bank_reconciliation()
     _create_financial_close()
     _create_reconciliation_tables()
+    # CO-PA / Profitability Analysis
+    _create_profit_centers()
+    _create_copa_segments()
+    _create_copa_records()
+    _create_cost_allocations()
     # Note: posting_rules and finance_settings tables are created within _create_journals()
 
 
@@ -5433,6 +5438,769 @@ def create_asset_disposal_approval_flow(asset_id, asset_code, asset_name, dispos
         )
         return asset_id
     except:
+        return None
+
+
+# =============================================================================
+# CO-PA: CONTROLLING / PROFITABILITY ANALYSIS
+# =============================================================================
+# SAP-style CO-PA provides detailed profitability analysis by segment:
+# - Profit Centers (organizational revenue/cost ownership)
+# - CO-PA Segments (business dimensions: product line, region, customer segment)
+# - Cost Allocations (shared costs distributed to consuming segments)
+# - Profitability Reports (segment P&L, contribution analysis)
+
+def _create_profit_centers():
+    """Create profit center tables for CO-PA."""
+    if not table_exists('finance_profit_centers'):
+        with get_db_context() as db:
+            db.execute("""
+                CREATE TABLE finance_profit_centers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    code TEXT UNIQUE NOT NULL,
+                    name TEXT NOT NULL,
+                    name_ar TEXT,
+                    description TEXT,
+                    parent_id INTEGER,
+                    manager_name TEXT,
+                    profit_center_type TEXT DEFAULT 'operational',
+                    is_active INTEGER DEFAULT 1,
+                    is_legal_entity INTEGER DEFAULT 0,
+                    company_id INTEGER,
+                    branch_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (parent_id) REFERENCES finance_profit_centers(id),
+                    FOREIGN KEY (company_id) REFERENCES companies(id)
+                )
+            """)
+            db.execute("CREATE INDEX idx_pc_code ON finance_profit_centers(code)")
+            db.execute("CREATE INDEX idx_pc_parent ON finance_profit_centers(parent_id)")
+            db.execute("CREATE INDEX idx_pc_company ON finance_profit_centers(company_id)")
+            db.commit()
+
+
+def _create_copa_segments():
+    """Create CO-PA segment definitions (business dimension values)."""
+    if not table_exists('finance_copa_segments'):
+        with get_db_context() as db:
+            db.execute("""
+                CREATE TABLE finance_copa_segments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    segment_name TEXT NOT NULL,
+                    segment_code TEXT UNIQUE NOT NULL,
+                    dimension_type TEXT NOT NULL,
+                    description TEXT,
+                    is_active INTEGER DEFAULT 1,
+                    company_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (company_id) REFERENCES companies(id)
+                )
+            """)
+
+            db.execute("""
+                CREATE TABLE finance_copa_segment_values (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    segment_id INTEGER NOT NULL,
+                    value_code TEXT UNIQUE NOT NULL,
+                    value_name TEXT NOT NULL,
+                    value_name_ar TEXT,
+                    description TEXT,
+                    is_active INTEGER DEFAULT 1,
+                    FOREIGN KEY (segment_id) REFERENCES finance_copa_segments(id)
+                )
+            """)
+
+            db.execute("""
+                CREATE TABLE finance_copa_assignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_type TEXT NOT NULL,
+                    source_id INTEGER NOT NULL,
+                    segment_id INTEGER NOT NULL,
+                    segment_value_id INTEGER NOT NULL,
+                    company_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (segment_id) REFERENCES finance_copa_segments(id),
+                    FOREIGN KEY (segment_value_id) REFERENCES finance_copa_segment_values(id)
+                )
+            """)
+            db.execute("CREATE INDEX idx_copa_source ON finance_copa_assignments(source_type, source_id)")
+            db.execute("CREATE INDEX idx_copa_seg ON finance_copa_assignments(segment_id)")
+            db.commit()
+
+
+def _create_copa_records():
+    """Create CO-PA line item records (detailed profitability transactions)."""
+    if not table_exists('finance_copa_records'):
+        with get_db_context() as db:
+            db.execute("""
+                CREATE TABLE finance_copa_records (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    record_number TEXT UNIQUE NOT NULL,
+                    fiscal_year_id INTEGER,
+                    period_id INTEGER,
+                    record_date TEXT NOT NULL,
+                    record_type TEXT NOT NULL,
+                    source_document_type TEXT,
+                    source_document_id INTEGER,
+                    source_document_number TEXT,
+                    account_id INTEGER,
+                    account_code TEXT,
+                    account_name TEXT,
+                    account_type TEXT,
+                    amount_type TEXT NOT NULL,
+                    amount REAL DEFAULT 0,
+                    quantity REAL DEFAULT 0,
+                    unit_price REAL DEFAULT 0,
+                    currency_code TEXT DEFAULT 'AED',
+                    cost_center_id INTEGER,
+                    profit_center_id INTEGER,
+                    customer_id INTEGER,
+                    customer_name TEXT,
+                    supplier_id INTEGER,
+                    supplier_name TEXT,
+                    product_id INTEGER,
+                    product_name TEXT,
+                    product_category TEXT,
+                    sales_region TEXT,
+                    sales_channel TEXT,
+                    business_unit TEXT,
+                    project_id INTEGER,
+                    notes TEXT,
+                    company_id INTEGER,
+                    branch_id INTEGER,
+                    created_by INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (fiscal_year_id) REFERENCES finance_fiscal_years(id),
+                    FOREIGN KEY (period_id) REFERENCES finance_fiscal_periods(id),
+                    FOREIGN KEY (account_id) REFERENCES finance_accounts(id),
+                    FOREIGN KEY (cost_center_id) REFERENCES finance_cost_centers(id),
+                    FOREIGN KEY (profit_center_id) REFERENCES finance_profit_centers(id),
+                    FOREIGN KEY (company_id) REFERENCES companies(id)
+                )
+            """)
+            db.execute("CREATE INDEX idx_copa_record_date ON finance_copa_records(record_date)")
+            db.execute("CREATE INDEX idx_copa_record_type ON finance_copa_records(record_type)")
+            db.execute("CREATE INDEX idx_copa_pc ON finance_copa_records(profit_center_id)")
+            db.execute("CREATE INDEX idx_copa_cc ON finance_copa_records(cost_center_id)")
+            db.execute("CREATE INDEX idx_copa_fiscal ON finance_copa_records(fiscal_year_id, period_id)")
+            db.execute("CREATE INDEX idx_copa_product ON finance_copa_records(product_id)")
+            db.execute("CREATE INDEX idx_copa_customer ON finance_copa_records(customer_id)")
+            db.commit()
+
+
+def _create_cost_allocations():
+    """Create cost allocation rules and execution tables."""
+    if not table_exists('finance_cost_allocation_rules'):
+        with get_db_context() as db:
+            db.execute("""
+                CREATE TABLE finance_cost_allocation_rules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    rule_name TEXT NOT NULL,
+                    rule_code TEXT UNIQUE NOT NULL,
+                    source_cost_center_id INTEGER,
+                    target_cost_center_id INTEGER,
+                    target_profit_center_id INTEGER,
+                    allocation_basis TEXT NOT NULL,
+                    basis_value REAL DEFAULT 0,
+                    basis_formula TEXT,
+                    percentage REAL DEFAULT 100,
+                    amount REAL DEFAULT 0,
+                    is_active INTEGER DEFAULT 1,
+                    effective_from TEXT,
+                    effective_to TEXT,
+                    description TEXT,
+                    company_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (source_cost_center_id) REFERENCES finance_cost_centers(id),
+                    FOREIGN KEY (target_cost_center_id) REFERENCES finance_cost_centers(id),
+                    FOREIGN KEY (target_profit_center_id) REFERENCES finance_profit_centers(id),
+                    FOREIGN KEY (company_id) REFERENCES companies(id)
+                )
+            """)
+
+            db.execute("""
+                CREATE TABLE finance_cost_allocation_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_number TEXT UNIQUE NOT NULL,
+                    run_date TEXT NOT NULL,
+                    fiscal_year_id INTEGER,
+                    period_id INTEGER,
+                    status TEXT DEFAULT 'Draft',
+                    total_allocated REAL DEFAULT 0,
+                    rule_count INTEGER DEFAULT 0,
+                    executed_by INTEGER,
+                    notes TEXT,
+                    company_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (fiscal_year_id) REFERENCES finance_fiscal_years(id),
+                    FOREIGN KEY (period_id) REFERENCES finance_fiscal_periods(id),
+                    FOREIGN KEY (executed_by) REFERENCES users(id),
+                    FOREIGN KEY (company_id) REFERENCES companies(id)
+                )
+            """)
+
+            db.execute("""
+                CREATE TABLE finance_cost_allocation_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    run_id INTEGER NOT NULL,
+                    rule_id INTEGER NOT NULL,
+                    source_cost_center_id INTEGER,
+                    target_cost_center_id INTEGER,
+                    target_profit_center_id INTEGER,
+                    allocated_amount REAL DEFAULT 0,
+                    basis_value_used REAL DEFAULT 0,
+                    percentage_applied REAL DEFAULT 100,
+                    FOREIGN KEY (run_id) REFERENCES finance_cost_allocation_runs(id),
+                    FOREIGN KEY (rule_id) REFERENCES finance_cost_allocation_rules(id),
+                    FOREIGN KEY (source_cost_center_id) REFERENCES finance_cost_centers(id),
+                    FOREIGN KEY (target_cost_center_id) REFERENCES finance_cost_centers(id),
+                    FOREIGN KEY (target_profit_center_id) REFERENCES finance_profit_centers(id)
+                )
+            """)
+            db.execute("CREATE INDEX idx_alloc_run ON finance_cost_allocation_results(run_id)")
+            db.commit()
+
+
+# ============================================================================
+# PROFIT CENTER CRUD
+# ============================================================================
+
+def get_profit_centers(company_id=None, active_only=True, parent_id=None):
+    """Get profit centers."""
+    sql = "SELECT * FROM finance_profit_centers WHERE 1=1"
+    params = []
+
+    if company_id:
+        sql += " AND company_id = ?"
+        params.append(company_id)
+    if active_only:
+        sql += " AND is_active = 1"
+    if parent_id is not None:
+        sql += " AND parent_id = ?"
+        params.append(parent_id)
+
+    sql += " ORDER BY code"
+    return get_all(sql, params if params else None)
+
+
+def get_profit_center_by_id(pc_id):
+    """Get profit center by ID."""
+    return get_one("SELECT * FROM finance_profit_centers WHERE id = ?", (pc_id,))
+
+
+def create_profit_center(data):
+    """Create a new profit center."""
+    with get_db_context() as db:
+        cursor = db.execute("""
+            INSERT INTO finance_profit_centers (
+                code, name, name_ar, description, parent_id,
+                manager_name, profit_center_type, is_active, is_legal_entity,
+                company_id, branch_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data.get('code'),
+            data.get('name'),
+            data.get('name_ar'),
+            data.get('description'),
+            data.get('parent_id'),
+            data.get('manager_name'),
+            data.get('profit_center_type', 'operational'),
+            data.get('is_active', 1),
+            data.get('is_legal_entity', 0),
+            data.get('company_id'),
+            data.get('branch_id')
+        ))
+        db.commit()
+        return cursor.lastrowid
+
+
+def get_profit_center_pnl(pc_id, fiscal_year_id=None, start_date=None, end_date=None):
+    """
+    Get Profit & Loss statement for a profit center.
+
+    Returns revenue, costs, and net profit for the period.
+    """
+    sql = """
+        SELECT
+            a.account_type,
+            COALESCE(SUM(CASE WHEN copa.amount_type = 'revenue' THEN copa.amount ELSE 0 END), 0) as total_revenue,
+            COALESCE(SUM(CASE WHEN copa.amount_type = 'cost' THEN copa.amount ELSE 0 END), 0) as total_cost,
+            COALESCE(SUM(CASE WHEN copa.amount_type = 'revenue' THEN copa.amount ELSE -copa.amount END), 0) as contribution
+        FROM finance_copa_records copa
+        INNER JOIN finance_accounts a ON copa.account_id = a.id
+        WHERE copa.profit_center_id = ?
+        AND copa.record_type = 'actual'
+    """
+    params = [pc_id]
+
+    if fiscal_year_id:
+        sql += " AND copa.fiscal_year_id = ?"
+        params.append(fiscal_year_id)
+    if start_date:
+        sql += " AND copa.record_date >= ?"
+        params.append(start_date)
+    if end_date:
+        sql += " AND copa.record_date <= ?"
+        params.append(end_date)
+
+    sql += " GROUP BY a.account_type ORDER BY a.account_type"
+
+    rows = get_all(sql, params)
+
+    result = {'revenue': 0, 'cost_of_sales': 0, 'gross_profit': 0, 'operating_costs': {}, 'net_profit': 0, 'line_items': rows}
+    for row in rows:
+        if row['account_type'] in ('REVENUE', 'OTHER_INCOME'):
+            result['revenue'] += float(row['contribution'] or 0)
+        elif row['account_type'] == 'COGS':
+            result['cost_of_sales'] += abs(float(row['contribution'] or 0))
+        else:
+            result['operating_costs'][row['account_type']] = abs(float(row['contribution'] or 0))
+
+    result['gross_profit'] = result['revenue'] - result['cost_of_sales']
+    result['net_profit'] = result['gross_profit'] - sum(result['operating_costs'].values())
+    return result
+
+
+# ============================================================================
+# CO-PA SEGMENT MANAGEMENT
+# ============================================================================
+
+def get_copa_segments(company_id=None, dimension_type=None):
+    """Get CO-PA segment definitions."""
+    sql = "SELECT * FROM finance_copa_segments WHERE 1=1"
+    params = []
+    if company_id:
+        sql += " AND company_id = ?"
+        params.append(company_id)
+    if dimension_type:
+        sql += " AND dimension_type = ?"
+        params.append(dimension_type)
+    return get_all(sql, params if params else None)
+
+
+def create_copa_segment(data, values=None):
+    """Create a CO-PA segment with optional values."""
+    with get_db_context() as db:
+        cursor = db.execute("""
+            INSERT INTO finance_copa_segments (segment_name, segment_code, dimension_type, description, is_active, company_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (
+            data.get('segment_name'),
+            data.get('segment_code'),
+            data.get('dimension_type'),
+            data.get('description'),
+            data.get('is_active', 1),
+            data.get('company_id')
+        ))
+        segment_id = cursor.lastrowid
+
+        if values:
+            for val in values:
+                db.execute("""
+                    INSERT INTO finance_copa_segment_values (segment_id, value_code, value_name, value_name_ar, description)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (segment_id, val.get('value_code'), val.get('value_name'), val.get('value_name_ar'), val.get('description')))
+
+        db.commit()
+        return segment_id
+
+
+def get_segment_values(segment_id):
+    """Get all values for a CO-PA segment."""
+    return get_all("SELECT * FROM finance_copa_segment_values WHERE segment_id = ? AND is_active = 1", (segment_id,))
+
+
+def assign_to_segment(source_type, source_id, segment_id, segment_value_id, company_id=None):
+    """Assign a source entity (customer, product, etc.) to a CO-PA segment value."""
+    with get_db_context() as db:
+        cursor = db.execute("""
+            INSERT OR REPLACE INTO finance_copa_assignments
+            (source_type, source_id, segment_id, segment_value_id, company_id)
+            VALUES (?, ?, ?, ?, ?)
+        """, (source_type, source_id, segment_id, segment_value_id, company_id))
+        db.commit()
+        return cursor.lastrowid
+
+
+def get_segment_assignments(source_type, source_id):
+    """Get all segment assignments for a source entity."""
+    return get_all("""
+        SELECT ca.*, cs.segment_name, cs.dimension_type,
+               csv.value_name, csv.value_code
+        FROM finance_copa_assignments ca
+        INNER JOIN finance_copa_segments cs ON ca.segment_id = cs.id
+        INNER JOIN finance_copa_segment_values csv ON ca.segment_value_id = csv.id
+        WHERE ca.source_type = ? AND ca.source_id = ?
+    """, (source_type, source_id))
+
+
+# ============================================================================
+# CO-PA RECORDING
+# ============================================================================
+
+def get_next_copa_record_number():
+    """Generate next CO-PA record number."""
+    prefix = 'COPA'
+    result = get_one("""
+        SELECT MAX(CAST(SUBSTR(record_number, LENGTH(?) + 1) AS INTEGER)) as max_num
+        FROM finance_copa_records
+        WHERE record_number LIKE ? || '%'
+    """, (prefix, prefix))
+    next_num = (result.get('max_num') or 0) + 1
+    return f"{prefix}-{next_num:08d}"
+
+
+def record_copa_from_journal(journal_id, company_id=None):
+    """
+    Extract CO-PA records from a posted journal entry.
+    Called automatically when journals are posted for profitability analysis.
+    """
+    journal = get_journal_by_id(journal_id)
+    if not journal or journal.get('status') != 'Posted':
+        return []
+
+    lines = get_all("""
+        SELECT jl.*, a.code as account_code, a.name as account_name, a.account_type,
+               a.account_category
+        FROM finance_journal_lines jl
+        INNER JOIN finance_accounts a ON jl.account_id = a.id
+        WHERE jl.journal_id = ?
+    """, (journal_id,))
+
+    company_id = company_id or journal.get('company_id')
+    created_records = []
+
+    for line in lines:
+        record_number = get_next_copa_record_number()
+        amount_type = 'revenue' if line['credit'] > 0 and line['account_type'] in ('REVENUE', 'OTHER_INCOME') else 'cost'
+
+        with get_db_context() as db:
+            cursor = db.execute("""
+                INSERT INTO finance_copa_records (
+                    record_number, fiscal_year_id, period_id, record_date, record_type,
+                    source_document_type, source_document_id, source_document_number,
+                    account_id, account_code, account_name, account_type,
+                    amount_type, amount, currency_code,
+                    cost_center_id, profit_center_id,
+                    company_id, created_by, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                record_number,
+                journal.get('fiscal_year_id'),
+                journal.get('period_id'),
+                journal.get('journal_date'),
+                'actual',
+                'journal',
+                journal_id,
+                journal.get('journal_number'),
+                line['account_id'],
+                line['account_code'],
+                line['account_name'],
+                line['account_type'],
+                amount_type,
+                line['credit'] if amount_type == 'revenue' else line['debit'],
+                'AED',
+                line.get('cost_center_id'),
+                journal.get('profit_center_id'),
+                company_id,
+                journal.get('created_by'),
+                datetime.now().isoformat()
+            ))
+            db.commit()
+            created_records.append(cursor.lastrowid)
+
+    return created_records
+
+
+def get_copa_profitability_report(
+    company_id=None, fiscal_year_id=None, period_id=None,
+    profit_center_id=None, cost_center_id=None,
+    dimension_type=None, dimension_value_id=None,
+    start_date=None, end_date=None
+):
+    """
+    Generate CO-PA profitability report by segment.
+
+    This is the core SAP-style profitability analysis:
+    - Groups revenue and costs by chosen dimension (product, region, customer)
+    - Calculates contribution margin per segment
+    - Shows budget vs actual variance per segment
+    """
+    sql = """
+        SELECT
+            copa.segment_id,
+            copa.segment_value_id,
+            cs.segment_name,
+            cs.dimension_type,
+            csv.value_name,
+            csv.value_code,
+            COALESCE(SUM(CASE WHEN copa.amount_type = 'revenue' THEN copa.amount ELSE 0 END), 0) as total_revenue,
+            COALESCE(SUM(CASE WHEN copa.amount_type = 'cost' THEN copa.amount ELSE 0 END), 0) as total_cost,
+            COUNT(DISTINCT copa.customer_id) as customer_count,
+            COUNT(DISTINCT copa.product_id) as product_count,
+            SUM(Copa.quantity) as total_quantity
+        FROM finance_copa_records copa
+        INNER JOIN finance_copa_segments cs ON copa.segment_id = cs.id
+        INNER JOIN finance_copa_segment_values csv ON copa.segment_value_id = csv.id
+        WHERE copa.record_type = 'actual'
+    """
+    params = []
+
+    if company_id:
+        sql += " AND copa.company_id = ?"
+        params.append(company_id)
+    if fiscal_year_id:
+        sql += " AND copa.fiscal_year_id = ?"
+        params.append(fiscal_year_id)
+    if period_id:
+        sql += " AND copa.period_id = ?"
+        params.append(period_id)
+    if profit_center_id:
+        sql += " AND copa.profit_center_id = ?"
+        params.append(profit_center_id)
+    if cost_center_id:
+        sql += " AND copa.cost_center_id = ?"
+        params.append(cost_center_id)
+    if dimension_type:
+        sql += " AND cs.dimension_type = ?"
+        params.append(dimension_type)
+    if dimension_value_id:
+        sql += " AND copa.segment_value_id = ?"
+        params.append(dimension_value_id)
+    if start_date:
+        sql += " AND copa.record_date >= ?"
+        params.append(start_date)
+    if end_date:
+        sql += " AND copa.record_date <= ?"
+        params.append(end_date)
+
+    sql += " GROUP BY copa.segment_id, copa.segment_value_id ORDER BY total_revenue DESC"
+
+    rows = get_all(sql, params)
+
+    result = []
+    for row in rows:
+        revenue = float(row['total_revenue'] or 0)
+        cost = float(row['total_cost'] or 0)
+        contribution = revenue - cost
+        margin_pct = (contribution / revenue * 100) if revenue > 0 else 0
+
+        result.append({
+            'segment_name': row['segment_name'],
+            'dimension_type': row['dimension_type'],
+            'value_name': row['value_name'],
+            'value_code': row['value_code'],
+            'total_revenue': revenue,
+            'total_cost': cost,
+            'contribution': contribution,
+            'margin_percentage': round(margin_pct, 2),
+            'customer_count': row['customer_count'],
+            'product_count': row['product_count'],
+            'total_quantity': float(row['total_quantity'] or 0)
+        })
+
+    return result
+
+
+# ============================================================================
+# COST ALLOCATION
+# ============================================================================
+
+def get_allocation_rules(company_id=None, active_only=True):
+    """Get cost allocation rules."""
+    sql = """
+        SELECT ar.*,
+               scc.code as source_cc_code, scc.name as source_cc_name,
+               tcc.code as target_cc_code, tcc.name as target_cc_name,
+               pc.code as target_pc_code, pc.name as target_pc_name
+        FROM finance_cost_allocation_rules ar
+        LEFT JOIN finance_cost_centers scc ON ar.source_cost_center_id = scc.id
+        LEFT JOIN finance_cost_centers tcc ON ar.target_cost_center_id = tcc.id
+        LEFT JOIN finance_profit_centers pc ON ar.target_profit_center_id = pc.id
+        WHERE 1=1
+    """
+    params = []
+    if company_id:
+        sql += " AND ar.company_id = ?"
+        params.append(company_id)
+    if active_only:
+        sql += " AND ar.is_active = 1"
+    return get_all(sql, params if params else None)
+
+
+def create_allocation_rule(data):
+    """Create a cost allocation rule."""
+    with get_db_context() as db:
+        cursor = db.execute("""
+            INSERT INTO finance_cost_allocation_rules (
+                rule_name, rule_code, source_cost_center_id, target_cost_center_id,
+                target_profit_center_id, allocation_basis, basis_value, basis_formula,
+                percentage, amount, is_active, effective_from, effective_to,
+                description, company_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data.get('rule_name'),
+            data.get('rule_code'),
+            data.get('source_cost_center_id'),
+            data.get('target_cost_center_id'),
+            data.get('target_profit_center_id'),
+            data.get('allocation_basis', 'fixed'),
+            data.get('basis_value', 0),
+            data.get('basis_formula'),
+            data.get('percentage', 100),
+            data.get('amount', 0),
+            data.get('is_active', 1),
+            data.get('effective_from'),
+            data.get('effective_to'),
+            data.get('description'),
+            data.get('company_id')
+        ))
+        db.commit()
+        return cursor.lastrowid
+
+
+def execute_cost_allocation(period_id, fiscal_year_id, company_id=None, executed_by=None):
+    """
+    Execute cost allocation for a period.
+    Runs all active allocation rules and creates CO-PA records for allocated costs.
+    """
+    rules = get_allocation_rules(company_id=company_id, active_only=True)
+    if not rules:
+        return {'status': 'no_rules', 'rules_processed': 0, 'total_allocated': 0}
+
+    with get_db_context() as db:
+        from datetime import datetime
+        run_number = f"ALLOC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+        cursor = db.execute("""
+            INSERT INTO finance_cost_allocation_runs
+            (run_number, run_date, fiscal_year_id, period_id, status, executed_by, company_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (run_number, datetime.now().date().isoformat(), fiscal_year_id, period_id, 'Completed', executed_by, company_id))
+        run_id = cursor.lastrowid
+
+        total_allocated = 0
+
+        for rule in rules:
+            if rule.get('basis_formula'):
+                allocated_amount = _calculate_allocation_amount(rule, db)
+            elif rule.get('percentage'):
+                allocated_amount = float(rule.get('amount', 0)) * float(rule['percentage']) / 100
+            else:
+                allocated_amount = float(rule.get('amount', 0))
+
+            db.execute("""
+                INSERT INTO finance_cost_allocation_results
+                (run_id, rule_id, source_cost_center_id, target_cost_center_id,
+                 target_profit_center_id, allocated_amount, basis_value_used, percentage_applied)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                run_id,
+                rule['id'],
+                rule['source_cost_center_id'],
+                rule['target_cost_center_id'],
+                rule['target_profit_center_id'],
+                allocated_amount,
+                rule.get('basis_value', 0),
+                rule.get('percentage', 100)
+            ))
+
+            # Create CO-PA record for the allocated cost
+            if allocated_amount > 0:
+                record_number = get_next_copa_record_number()
+                db.execute("""
+                    INSERT INTO finance_copa_records (
+                        record_number, fiscal_year_id, period_id, record_date, record_type,
+                        source_document_type, source_document_id, source_document_number,
+                        account_id, account_name, account_type,
+                        amount_type, amount, currency_code,
+                        cost_center_id, profit_center_id, company_id, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    record_number,
+                    fiscal_year_id,
+                    period_id,
+                    datetime.now().date().isoformat(),
+                    'allocated',
+                    'allocation_run',
+                    run_id,
+                    run_number,
+                    None,
+                    f"Cost Allocation: {rule['rule_name']}",
+                    'EXPENSE',
+                    'cost',
+                    allocated_amount,
+                    'AED',
+                    rule['target_cost_center_id'],
+                    rule['target_profit_center_id'],
+                    company_id,
+                    datetime.now().isoformat()
+                ))
+
+            total_allocated += allocated_amount
+
+        db.execute("""
+            UPDATE finance_cost_allocation_runs
+            SET total_allocated = ?, rule_count = ?, status = 'Completed'
+            WHERE id = ?
+        """, (total_allocated, len(rules), run_id))
+        db.commit()
+
+    return {'status': 'completed', 'run_id': run_id, 'rules_processed': len(rules), 'total_allocated': total_allocated}
+
+
+def _calculate_allocation_amount(rule, db):
+    """Calculate allocation amount based on basis formula."""
+    formula = rule.get('basis_formula')
+    if not formula:
+        return float(rule.get('amount', 0))
+
+    # Support common formulas: FTE, revenue_share, square_footage
+    if formula == 'fte':
+        result = db.execute("""
+            SELECT COUNT(*) as fte_count FROM employees WHERE cost_center_id = ?
+            AND is_active = 1
+        """, (rule['source_cost_center_id'],)).fetchone()
+        basis = result['fte_count'] if result else 1
+    elif formula == 'revenue_share':
+        result = db.execute("""
+            SELECT SUM(amount) as total_revenue
+            FROM finance_copa_records
+            WHERE profit_center_id = ? AND amount_type = 'revenue'
+        """, (rule.get('target_profit_center_id'),)).fetchone()
+        basis = result['total_revenue'] if result and result['total_revenue'] else 1
+    elif formula == 'square_footage':
+        basis = float(rule.get('basis_value', 1))
+    else:
+        basis = float(rule.get('basis_value', 1))
+
+    total_basis = db.execute("""
+        SELECT SUM(basis_value) as total FROM finance_cost_allocation_rules
+        WHERE allocation_basis = ? AND is_active = 1 AND target_profit_center_id IS NOT NULL
+    """, (rule.get('allocation_basis'),)).fetchone()
+
+    total = total_basis['total'] if total_basis and total_basis['total'] else 1
+    return float(rule.get('amount', 0)) * (basis / total)
+
+
+def get_allocation_run_results(run_id):
+    """Get results of a cost allocation run."""
+    try:
+        return get_all("""
+            SELECT ar.*,
+                   scc.code as source_cc_code, scc.name as source_cc_name,
+                   tcc.code as target_cc_code, tcc.name as target_cc_name,
+                   pc.code as target_pc_code, pc.name as target_pc_name
+            FROM finance_cost_allocation_results ar
+            LEFT JOIN finance_cost_centers scc ON ar.source_cost_center_id = scc.id
+            LEFT JOIN finance_cost_centers tcc ON ar.target_cost_center_id = tcc.id
+            LEFT JOIN finance_profit_centers pc ON ar.target_profit_center_id = pc.id
+            WHERE ar.run_id = ?
+        """, (run_id,))
+    except Exception:
         return None
 
 

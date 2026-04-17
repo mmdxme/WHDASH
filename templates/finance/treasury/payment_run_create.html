@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .glass-card { background: #1e293b; border-radius: 0.75rem; border: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="container mx-auto px-4 py-6">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+                <p class="text-gray-400 mt-1">Create payment run from pending bills</p>
+            </div>
+            <a href="{{ url_for('treasury.payment_runs') }}" class="text-gray-400 hover:text-white">
+                <i class="fas fa-arrow-left mr-2"></i>Back
+            </a>
+        </div>
+
+        <form method="POST" class="glass-card p-6 max-w-4xl">
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">Run Name *</label>
+                    <input type="text" name="run_name" required class="w-full bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">Run Date *</label>
+                    <input type="date" name="run_date" required class="w-full bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">Bank Account *</label>
+                    <select name="bank_account_id" required class="w-full bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                        <option value="">Select Account</option>
+                        {% for account in bank_accounts %}
+                        <option value="{{ account.id }}">{{ account.bank_name }} - {{ account.account_number }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">Payment Type</label>
+                    <select name="payment_type" class="w-full bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                        <option value="standard">Standard</option>
+                        <option value="priority">Priority</option>
+                        <option value="urgent">Urgent</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">Payment Method</label>
+                    <select name="payment_method" class="w-full bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                        <option value="bank_transfer">Bank Transfer</option>
+                        <option value="cheque">Cheque</option>
+                        <option value="swift">SWIFT</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">Scheduled Date</label>
+                    <input type="date" name="scheduled_date" class="w-full bg-gray-800 border border-gray-600 text-white rounded px-3 py-2">
+                </div>
+            </div>
+
+            <h2 class="text-xl font-semibold text-white mb-4">Select Bills to Pay</h2>
+            <div class="glass-card p-4 mb-6">
+                <table class="w-full">
+                    <thead>
+                        <tr>
+                            <th class="text-left"><input type="checkbox" id="selectAll"></th>
+                            <th class="text-left">Bill #</th>
+                            <th class="text-left">Supplier</th>
+                            <th class="text-right">Amount</th>
+                            <th class="text-left">Due Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bill in pending_bills %}
+                        <tr class="border-b border-gray-700">
+                            <td><input type="checkbox" name="selected_bills" value="{{ bill.id }}" class="bill-checkbox"></td>
+                            <td>{{ bill.bill_number }}</td>
+                            <td>{{ bill.supplier_name }}</td>
+                            <td class="text-right amount">{{ "%.2f"|format((bill.total_amount or 0) - (bill.amount_paid or 0)) }}</td>
+                            <td>{{ bill.due_date }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center py-4 text-gray-400">No pending bills</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pt-4">
+                <button type="submit" class="bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded font-semibold w-full">
+                    <i class="fas fa-save mr-2"></i>Create Payment Run
+                </button>
+            </div>
+        </form>
+    </div>
+    <script>
+        document.getElementById('selectAll').addEventListener('change', function() {
+            document.querySelectorAll('.bill-checkbox').forEach(cb => cb.checked = this.checked);
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>
