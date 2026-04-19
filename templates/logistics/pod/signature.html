@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center gap-4">
+        <a href="{{ url_for('logistics.pod_view', id=pod.id) }}" class="p-2 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-all">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-white">Capture Signature</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ pod.shipment_code }}</p>
+        </div>
+    </div>
+
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Draw Signature</h2>
+
+        <form method="POST" class="space-y-6">
+            <div class="bg-white rounded-xl p-4">
+                <canvas id="signatureCanvas" width="500" height="200" class="w-full border border-gray-300 rounded cursor-crosshair"></canvas>
+                <input type="hidden" name="signature_data" id="signatureData">
+            </div>
+
+            <div class="flex items-center justify-between">
+                <button type="button" id="clearBtn" class="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-medium transition-all">
+                    <i class="fa-solid fa-eraser mr-2"></i>Clear
+                </button>
+                <div class="flex items-center gap-4">
+                    <a href="{{ url_for('logistics.pod_view', id=pod.id) }}" class="px-6 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-all">Cancel</a>
+                    <button type="submit" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                        <i class="fa-solid fa-check mr-2"></i>Save Signature
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const canvas = document.getElementById('signatureCanvas');
+    const ctx = canvas.getContext('2d');
+    const signatureData = document.getElementById('signatureData');
+    const clearBtn = document.getElementById('clearBtn');
+
+    let isDrawing = false;
+    let lastX = 0;
+    let lastY = 0;
+
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+
+    function startDrawing(e) {
+        isDrawing = true;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        lastX = x;
+        lastY = y;
+    }
+
+    function draw(e) {
+        if (!isDrawing) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+
+        lastX = x;
+        lastY = y;
+    }
+
+    function stopDrawing() {
+        isDrawing = false;
+        signatureData.value = canvas.toDataURL();
+    }
+
+    canvas.addEventListener('mousedown', startDrawing);
+    canvas.addEventListener('mousemove', draw);
+    canvas.addEventListener('mouseup', stopDrawing);
+    canvas.addEventListener('mouseout', stopDrawing);
+
+    clearBtn.addEventListener('click', function() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        signatureData.value = '';
+    });
+
+    signatureData.value = canvas.toDataURL();
+});
+</script>
+{% endblock %}

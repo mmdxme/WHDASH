@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --light-bg: #F9FAFB;
+        }
+        body { background: var(--light-bg); font-family: 'Segoe UI', system-ui, sans-serif; }
+        .card-header-custom { background: white; border-bottom: 2px solid #E5E7EB; font-weight: 600; padding: 1rem 1.25rem; }
+        .table-responsive { border-radius: 8px; overflow: hidden; }
+        .table thead th { background: #F3F4F6; font-weight: 600; font-size: 0.8125rem; text-transform: uppercase; color: #6B7280; border: none; }
+        .log-entry { border-left: 3px solid var(--primary); padding-left: 1rem; margin-bottom: 1rem; }
+        .log-timestamp { color: #6B7280; font-size: 0.875rem; }
+        .log-action { font-weight: 500; }
+        .log-entity { color: var(--primary); }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <!-- Page Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1"><i class="fas fa-history me-2 text-primary"></i>Quality Audit Log</h1>
+                <p class="text-muted mb-0">Complete audit trail of all quality management changes</p>
+            </div>
+            <div>
+                <a href="#" class="btn btn-outline-primary" onclick="window.print();">
+                    <i class="fas fa-print me-1"></i> Print Log
+                </a>
+                <a href="{{ url_for('quality.quality_audit_log_export') }}" class="btn btn-outline-secondary">
+                    <i class="fas fa-download me-1"></i> Export
+                </a>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form method="get" class="row g-3">
+                    <div class="col-md-2">
+                        <label class="form-label">Entity Type</label>
+                        <select name="entity_type" class="form-select">
+                            <option value="">All Types</option>
+                            <option value="INSPECTION">Inspection</option>
+                            <option value="NCR">NCR</option>
+                            <option value="CAPA">CAPA</option>
+                            <option value="AUDIT">Audit</option>
+                            <option value="AUDIT_FINDING">Audit Finding</option>
+                            <option value="SETTING">Setting</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Action</label>
+                        <select name="action" class="form-select">
+                            <option value="">All Actions</option>
+                            <option value="CREATE">Create</option>
+                            <option value="UPDATE">Update</option>
+                            <option value="DELETE">Delete</option>
+                            <option value="STATUS_CHANGE">Status Change</option>
+                            <option value="APPROVE">Approve</option>
+                            <option value="CLOSE">Close</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">From Date</label>
+                        <input type="date" name="from_date" class="form-control">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">To Date</label>
+                        <input type="date" name="to_date" class="form-control">
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary me-2"><i class="fas fa-search"></i></button>
+                        <a href="{{ url_for('quality.audit_log') }}" class="btn btn-outline-secondary"><i class="fas fa-times"></i></a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Summary Stats -->
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="icon me-3" style="background: #E0E7FF; color: #4F46E5;">
+                                <i class="fas fa-clipboard-list"></i>
+                            </div>
+                            <div>
+                                <div class="number text-dark">{{ logs|length if logs else 0 }}</div>
+                                <div class="label">Total Entries</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="icon me-3" style="background: #D1FAE5; color: #059669;">
+                                <i class="fas fa-plus-circle"></i>
+                            </div>
+                            <div>
+                                <div class="number text-dark">{{ logs|selectattr('action', 'equalto', 'CREATE')|list|length if logs else 0 }}</div>
+                                <div class="label">Creations</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="icon me-3" style="background: #DBEAFE; color: #1E40AF;">
+                                <i class="fas fa-edit"></i>
+                            </div>
+                            <div>
+                                <div class="number text-dark">{{ logs|selectattr('action', 'equalto', 'UPDATE')|list|length if logs else 0 }}</div>
+                                <div class="label">Updates</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="icon me-3" style="background: #FEF3C7; color: #D97706;">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div>
+                                <div class="number text-dark">{{ logs|selectattr('action', 'equalto', 'STATUS_CHANGE')|list|length if logs else 0 }}</div>
+                                <div class="label">Status Changes</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Audit Log Table -->
+        <div class="card">
+            <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-list me-2"></i>Audit Trail</span>
+                <span class="text-muted small">Showing most recent 100 entries</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Log #</th>
+                                <th>Entity Type</th>
+                                <th>Entity ID</th>
+                                <th>Action</th>
+                                <th>User</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if logs %}
+                                {% for log in logs %}
+                                <tr>
+                                    <td class="log-timestamp">{{ log.timestamp[:19] if log.timestamp else 'N/A' }}</td>
+                                    <td>{{ log.log_number or log.id }}</td>
+                                    <td>
+                                        <span class="badge bg-secondary">{{ log.entity_type or 'N/A' }}</span>
+                                    </td>
+                                    <td>{{ log.entity_id or 'N/A' }}</td>
+                                    <td>
+                                        {% if log.action == 'CREATE' %}
+                                        <span class="badge bg-success">CREATE</span>
+                                        {% elif log.action == 'UPDATE' %}
+                                        <span class="badge bg-primary">UPDATE</span>
+                                        {% elif log.action == 'DELETE' %}
+                                        <span class="badge bg-danger">DELETE</span>
+                                        {% elif log.action == 'STATUS_CHANGE' %}
+                                        <span class="badge bg-warning">STATUS</span>
+                                        {% elif log.action == 'APPROVE' %}
+                                        <span class="badge bg-info">APPROVE</span>
+                                        {% elif log.action == 'CLOSE' %}
+                                        <span class="badge bg-success">CLOSE</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ log.action or 'N/A' }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ log.user_name or log.user_id or 'System' }}</td>
+                                    <td>
+                                        {% if log.field_name %}
+                                        <small class="text-muted">
+                                            {{ log.field_name }}
+                                            {% if log.old_value %} "{{ log.old_value[:20] }}..."{% endif %}
+                                            → "{{ log.new_value[:20] }}..."
+                                        </small>
+                                        {% elif log.notes %}
+                                        <small class="text-muted">{{ log.notes[:50] }}...</small>
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-4">
+                                        <i class="fas fa-history fa-2x mb-2 d-block"></i>
+                                        No audit log entries found.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detail Modal for viewing full log entry -->
+        <div class="modal fade" id="logDetailModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Audit Log Details</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="logDetailContent">
+                        <!-- Filled by JavaScript -->
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

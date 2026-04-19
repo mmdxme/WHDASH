@@ -1,0 +1,221 @@
+{% extends "scm/base_scm.html" %}
+
+{% block extra_head %}
+<style>
+    .exception-card {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(30, 41, 59, 0.5) 100%);
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .exception-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .exception-row:hover {
+        background: rgba(59, 130, 246, 0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-slate-900/50">
+    <!-- Header -->
+    <div class="scm-header px-6 py-4 mb-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-pink-500 flex items-center justify-center">
+                    <i class="fas fa-exclamation-circle text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white">{{ title }}</h1>
+                    <p class="text-slate-400 text-sm">Forecast exceptions, alerts, and action queue</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="window.print()" class="px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-slate-300 text-sm transition">
+                    <i class="fas fa-print mr-2"></i>{{ t.print|default('Print') }}
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Exception Summary Cards -->
+    <div class="px-6 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="exception-card rounded-xl p-4 text-center cursor-pointer hover:border-red-500/50 transition"
+                 onclick="filterExceptions('FORECAST_DEVIATION')">
+                <div class="text-3xl font-bold text-red-400 mb-1">{{ exception_types.FORECAST_DEVIATION }}</div>
+                <div class="text-slate-400 text-sm">{{ t.forecast_deviation|default('Forecast Deviation') }}</div>
+            </div>
+
+            <div class="exception-card rounded-xl p-4 text-center cursor-pointer hover:border-orange-500/50 transition"
+                 onclick="filterExceptions('ACCURACY_BREACH')">
+                <div class="text-3xl font-bold text-orange-400 mb-1">{{ exception_types.ACCURACY_BREACH }}</div>
+                <div class="text-slate-400 text-sm">{{ t.accuracy_breach|default('Accuracy Breach') }}</div>
+            </div>
+
+            <div class="exception-card rounded-xl p-4 text-center cursor-pointer hover:border-yellow-500/50 transition"
+                 onclick="filterExceptions('HIGH_BIAS')">
+                <div class="text-3xl font-bold text-yellow-400 mb-1">{{ exception_types.HIGH_BIAS }}</div>
+                <div class="text-slate-400 text-sm">{{ t.high_bias|default('High Bias') }}</div>
+            </div>
+
+            <div class="exception-card rounded-xl p-4 text-center cursor-pointer hover:border-purple-500/50 transition"
+                 onclick="filterExceptions('PENDING_OVERRIDES')">
+                <div class="text-3xl font-bold text-purple-400 mb-1">{{ exception_types.PENDING_OVERRIDES }}</div>
+                <div class="text-slate-400 text-sm">{{ t.pending_overrides|default('Pending Overrides') }}</div>
+            </div>
+
+            <div class="exception-card rounded-xl p-4 text-center cursor-pointer hover:border-blue-500/50 transition"
+                 onclick="filterExceptions('PENDING_CONSENSUS')">
+                <div class="text-3xl font-bold text-blue-400 mb-1">{{ exception_types.PENDING_CONSENSUS }}</div>
+                <div class="text-slate-400 text-sm">{{ t.pending_consensus|default('Pending Consensus') }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Exception Queue -->
+    <div class="px-6 mb-6">
+        <div class="exception-card rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-white">
+                    <i class="fas fa-list text-red-400 mr-2"></i>
+                    {{ t.exception_queue|default('Exception Queue') }}
+                </h3>
+                <div class="flex items-center gap-2">
+                    <select id="exceptionFilter" class="px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                        <option value="">{{ t.all_types|default('All Types') }}</option>
+                        <option value="FORECAST_DEVIATION">{{ t.forecast_deviation|default('Forecast Deviation') }}</option>
+                        <option value="HIGH_VOLATILITY">{{ t.high_volatility|default('High Volatility') }}</option>
+                        <option value="DEMAND_SPIKE">{{ t.demand_spike|default('Demand Spike') }}</option>
+                        <option value="DEMAND_DROP">{{ t.demand_drop|default('Demand Drop') }}</option>
+                    </select>
+                </div>
+            </div>
+
+            {% if all_exceptions %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-slate-700">
+                            <th class="text-left py-3 px-4">{{ t.type|default('Type') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.item|default('Item') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.severity|default('Severity') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.title|default('Title') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.date|default('Date') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.actions|default('Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-300">
+                        {% for exc in all_exceptions %}
+                        <tr class="exception-row border-b border-slate-800 cursor-pointer"
+                            data-type="{{ exc.alert_type if exc.source == 'ALERT' else exc.alert_type }}">
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-1 rounded text-xs font-medium
+                                    {% if exc.alert_type == 'FORECAST_DEVIATION' %}bg-red-500/20 text-red-400
+                                    {% elif exc.alert_type == 'HIGH_VOLATILITY' %}bg-orange-500/20 text-orange-400
+                                    {% elif exc.alert_type == 'DEMAND_SPIKE' %}bg-green-500/20 text-green-400
+                                    {% elif exc.alert_type == 'DEMAND_DROP' %}bg-yellow-500/20 text-yellow-400
+                                    {% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                                    {{ exc.alert_type }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">
+                                {% if exc.item_id %}
+                                <div class="font-medium">{{ exc.item_code if exc.item_code else 'Item #' + exc.item_id|string }}</div>
+                                <div class="text-xs text-slate-500">{{ exc.item_name[:30] if exc.item_name else '' }}</div>
+                                {% else %}
+                                <span class="text-slate-500">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="exception-badge
+                                    {% if exc.severity == 'CRITICAL' %}bg-red-500/20 text-red-400
+                                    {% elif exc.severity == 'HIGH' %}bg-orange-500/20 text-orange-400
+                                    {% elif exc.severity == 'MEDIUM' %}bg-yellow-500/20 text-yellow-400
+                                    {% else %}bg-green-500/20 text-green-400{% endif %}">
+                                    {{ exc.severity }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">{{ exc.title }}</td>
+                            <td class="py-3 px-4 text-slate-500">{{ exc.created_at[:10] }}</td>
+                            <td class="py-3 px-4">
+                                <div class="flex items-center gap-2">
+                                    <button class="px-3 py-1 rounded text-xs bg-green-500/20 text-green-400 hover:bg-green-500/30">
+                                        <i class="fas fa-check mr-1"></i>{{ t.resolve|default('Resolve') }}
+                                    </button>
+                                    <form action="{{ url_for('scm.demand_exceptions_escalate') }}" method="POST" class="inline">
+                                        <input type="hidden" name="exception_id" value="{{ exc.id }}">
+                                        <input type="hidden" name="exception_type" value="{{ exc.alert_type }}">
+                                        <button type="submit" class="px-3 py-1 rounded text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30">
+                                            <i class="fas fa-arrow-up mr-1"></i>{{ t.escalate|default('Escalate') }}
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-16 text-slate-400">
+                <i class="fas fa-check-circle text-green-400 text-5xl mb-3"></i>
+                <p class="text-xl font-medium">{{ t.no_exceptions|default('No exceptions!') }}</p>
+                <p class="text-sm">{{ t.all_clear|default('All demand planning metrics are within thresholds') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Exception Rules -->
+    <div class="px-6 mb-6">
+        <div class="exception-card rounded-xl p-5">
+            <h3 class="text-lg font-semibold text-white mb-4">
+                <i class="fas fa-sliders-h text-sky-400 mr-2"></i>
+                {{ t.exception_thresholds|default('Exception Thresholds') }}
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                <div class="p-4 rounded-lg bg-slate-800/50">
+                    <h4 class="text-sky-400 font-medium mb-2">{{ t.forecast_deviation|default('Forecast Deviation') }}</h4>
+                    <p class="text-slate-400">{{ t.deviation_threshold|default('Alert when forecast deviates > 20% from actual demand') }}</p>
+                </div>
+                <div class="p-4 rounded-lg bg-slate-800/50">
+                    <h4 class="text-orange-400 font-medium mb-2">{{ t.volatility|default('Volatility') }}</h4>
+                    <p class="text-slate-400">{{ t.volatility_threshold|default('Alert when CV > 0.5 or Z-score > 2.0') }}</p>
+                </div>
+                <div class="p-4 rounded-lg bg-slate-800/50">
+                    <h4 class="text-purple-400 font-medium mb-2">{{ t.bias|default('Bias') }}</h4>
+                    <p class="text-slate-400">{{ t.bias_threshold|default('Alert when |bias%| > 20% over rolling period') }}</p>
+                </div>
+                <div class="p-4 rounded-lg bg-slate-800/50">
+                    <h4 class="text-green-400 font-medium mb-2">{{ t.accuracy|default('Accuracy') }}</h4>
+                    <p class="text-slate-400">{{ t.accuracy_threshold|default('Alert when MAPE > 30% for any item') }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function filterExceptions(type) {
+    const filter = document.getElementById('exceptionFilter');
+    filter.value = type;
+    filterExceptionsByType();
+}
+
+document.getElementById('exceptionFilter').addEventListener('change', filterExceptionsByType);
+
+function filterExceptionsByType() {
+    const filter = document.getElementById('exceptionFilter').value;
+    document.querySelectorAll('.exception-row').forEach(row => {
+        if (!filter || row.dataset.type === filter) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+</script>
+{% endblock %}

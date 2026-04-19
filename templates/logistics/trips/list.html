@@ -2,27 +2,96 @@
 {% block content %}
 <div class="space-y-6">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div><h1 class="text-3xl font-bold text-white">{{ title }}</h1><p class="text-slate-400 mt-1">Manage logistics trips</p></div>
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 mt-1">Manage logistics trips</p>
+        </div>
+        <a href="{{ url_for('logistics.trips_new') }}" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+            <i class="fa-solid fa-plus mr-2"></i>New Trip
+        </a>
     </div>
+
+    <div class="glass-panel rounded-2xl p-4">
+        <form method="GET" class="flex items-center gap-4 flex-wrap">
+            <select name="status" onchange="this.form.submit()" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                <option value="">All Status</option>
+                <option value="draft" {% if status == 'draft' %}selected{% endif %}>Draft</option>
+                <option value="planned" {% if status == 'planned' %}selected{% endif %}>Planned</option>
+                <option value="ready_for_dispatch" {% if status == 'ready_for_dispatch' %}selected{% endif %}>Ready for Dispatch</option>
+                <option value="dispatched" {% if status == 'dispatched' %}selected{% endif %}>Dispatched</option>
+                <option value="en_route" {% if status == 'en_route' %}selected{% endif %}>En Route</option>
+                <option value="arrived" {% if status == 'arrived' %}selected{% endif %}>Arrived</option>
+                <option value="completed" {% if status == 'completed' %}selected{% endif %}>Completed</option>
+                <option value="partially_completed" {% if status == 'partially_completed' %}selected{% endif %}>Partially Completed</option>
+                <option value="failed" {% if status == 'failed' %}selected{% endif %}>Failed</option>
+                <option value="cancelled" {% if status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                <option value="closed" {% if status == 'closed' %}selected{% endif %}>Closed</option>
+            </select>
+            <input type="date" name="date_from" value="{{ date_from }}" placeholder="From" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <input type="date" name="date_to" value="{{ date_to }}" placeholder="To" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium">Filter</button>
+        </form>
+    </div>
+
     {% if trips %}
     <div class="glass-panel rounded-2xl overflow-hidden">
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
-                <thead><tr class="text-slate-400 border-b border-white/5">
-                    <th class="text-left py-4 px-5 font-medium">Trip ID</th>
-                    <th class="text-left py-4 px-5 font-medium">Vehicle</th>
-                    <th class="text-left py-4 px-5 font-medium">Driver</th>
-                    <th class="text-left py-4 px-5 font-medium">Date</th>
-                    <th class="text-left py-4 px-5 font-medium">Status</th>
-                </tr></thead>
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-4 px-5 font-medium">Trip Code</th>
+                        <th class="text-left py-4 px-5 font-medium">Name</th>
+                        <th class="text-left py-4 px-5 font-medium">Vehicle</th>
+                        <th class="text-left py-4 px-5 font-medium">Driver</th>
+                        <th class="text-left py-4 px-5 font-medium">Planned Departure</th>
+                        <th class="text-left py-4 px-5 font-medium">Status</th>
+                        <th class="text-left py-4 px-5 font-medium">Actions</th>
+                    </tr>
+                </thead>
                 <tbody>
                     {% for t in trips %}
                     <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
-                        <td class="py-4 px-5 text-brand-400 font-medium">#{{ t.id }}</td>
+                        <td class="py-4 px-5">
+                            <a href="{{ url_for('logistics.trips_view', id=t.id) }}" class="text-brand-400 hover:text-brand-300 font-medium">{{ t.trip_code or '#' ~ t.id }}</a>
+                        </td>
+                        <td class="py-4 px-5 text-white">{{ t.trip_name or '-' }}</td>
                         <td class="py-4 px-5 text-white">{{ t.plate_number or '-' }}</td>
                         <td class="py-4 px-5 text-white">{{ t.driver_name or '-' }}</td>
-                        <td class="py-4 px-5 text-slate-300">{{ t.date or '-' }}</td>
-                        <td class="py-4 px-5"><span class="px-2 py-1 rounded-full text-xs font-medium {% if t.status=='completed' %}bg-emerald-500/10 text-emerald-400{% elif t.status=='in_progress' %}bg-amber-500/10 text-amber-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">{{ t.status }}</span></td>
+                        <td class="py-4 px-5 text-slate-300">
+                            {% if t.planned_departure %}
+                            {{ t.planned_departure.strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-5">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium {% if t.status == 'completed' %}bg-emerald-500/10 text-emerald-400{% elif t.status in ['dispatched', 'en_route'] %}bg-blue-500/10 text-blue-400{% elif t.status == 'failed' %}bg-red-500/10 text-red-400{% elif t.status in ['cancelled', 'closed'] %}bg-slate-500/10 text-slate-400{% elif t.status in ['planned', 'ready_for_dispatch'] %}bg-amber-500/10 text-amber-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ t.status|replace('_', ' ')|title }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5">
+                            <div class="flex items-center gap-1">
+                                <a href="{{ url_for('logistics.trips_view', id=t.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="View">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                                {% if t.status not in ['completed', 'cancelled', 'closed'] %}
+                                <a href="{{ url_for('logistics.trips_edit', id=t.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="Edit">
+                                    <i class="fa-solid fa-edit"></i>
+                                </a>
+                                <a href="{{ url_for('logistics.trips_timeline', id=t.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="Timeline">
+                                    <i class="fa-solid fa-timeline"></i>
+                                </a>
+                                {% endif %}
+                                {% if t.status in ['planned', 'ready_for_dispatch'] %}
+                                <a href="{{ url_for('logistics.trips_assign', id=t.id) }}" class="p-2 hover:bg-blue-500/10 rounded-lg text-blue-400 transition-all" title="Assign">
+                                    <i class="fa-solid fa-user-check"></i>
+                                </a>
+                                {% endif %}
+                                <a href="{{ url_for('logistics.trips_cost', id=t.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="Cost">
+                                    <i class="fa-solid fa-dollar-sign"></i>
+                                </a>
+                            </div>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -31,9 +100,14 @@
     </div>
     {% else %}
     <div class="glass-panel rounded-2xl p-16 text-center">
-        <div class="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto mb-4"><i class="fa-solid fa-route text-3xl text-slate-600"></i></div>
+        <div class="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto mb-4">
+            <i class="fa-solid fa-route text-3xl text-slate-600"></i>
+        </div>
         <h3 class="text-lg font-bold text-white mb-2">No trips found</h3>
-        <p class="text-slate-400">Create dispatches to generate trips</p>
+        <p class="text-slate-400 mb-6">Create a new trip to get started</p>
+        <a href="{{ url_for('logistics.trips_new') }}" class="inline-flex items-center gap-2 px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+            <i class="fa-solid fa-plus"></i>New Trip
+        </a>
     </div>
     {% endif %}
 </div>

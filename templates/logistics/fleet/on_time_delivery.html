@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div><h1 class="text-3xl font-bold text-white">{{ title }}</h1><p class="text-slate-400 mt-1">On-time delivery KPIs</p></div>
+        <div class="flex items-center gap-3">
+            <input type="date" id="dateFrom" value="{{ date_from }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <span class="text-slate-500">to</span>
+            <input type="date" id="dateTo" value="{{ date_to }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <button onclick="applyFilters()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-filter mr-2"></i>Apply
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Delivered</span>
+                <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-truck text-blue-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white">{{ stats.total_delivered|default(0) }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">On-Time</span>
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-check text-emerald-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-emerald-400">{{ stats.on_time|default(0) }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Late</span>
+                <div class="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-times text-red-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-red-400">{{ stats.late|default(0) }}</div>
+        </div>
+    </div>
+
+    <!-- By Customer -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">On-Time by Customer</h2>
+        {% if by_customer %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Customer</th>
+                        <th class="text-right py-3 px-3 font-medium">Total</th>
+                        <th class="text-right py-3 px-3 font-medium">On-Time</th>
+                        <th class="text-right py-3 px-3 font-medium">Rate</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in by_customer %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-white">{{ c.customer_name or '-' }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ c.total }}</td>
+                        <td class="py-3 px-3 text-right text-emerald-400">{{ c.on_time }}</td>
+                        <td class="py-3 px-3 text-right">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium {% if c.on_time / c.total >= 0.9 %}bg-emerald-500/10 text-emerald-400{% elif c.on_time / c.total >= 0.7 %}bg-amber-500/10 text-amber-400{% else %}bg-red-500/10 text-red-400{% endif %}">
+                                {{ (c.on_time / c.total * 100)|round(1) }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-400 text-center py-8">No customer data available</p>
+        {% endif %}
+    </div>
+
+    <!-- Late Deliveries -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Recent Late Deliveries</h2>
+        {% if late_deliveries %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Shipment</th>
+                        <th class="text-left py-3 px-3 font-medium">Customer</th>
+                        <th class="text-right py-3 px-3 font-medium">Delay (hrs)</th>
+                        <th class="text-left py-3 px-3 font-medium">Delivery Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for l in late_deliveries %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-brand-400">{{ l.shipment_code }}</td>
+                        <td class="py-3 px-3 text-slate-300">{{ l.customer_name or '-' }}</td>
+                        <td class="py-3 px-3 text-right text-red-400">{{ l.delay_hours|default(0) }}</td>
+                        <td class="py-3 px-3 text-slate-400">{{ l.actual_delivery[:16] if l.actual_delivery else '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-400 text-center py-8">No late deliveries</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function applyFilters() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    window.location.href = `{{ url_for('logistics.fleet_on_time_delivery') }}?date_from=${dateFrom}&date_to=${dateTo}`;
+}
+</script>
+{% endblock %}

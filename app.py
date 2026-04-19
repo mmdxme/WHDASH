@@ -54,6 +54,7 @@ from asset_routes import register_asset_routes
 from maintenance_routes import register_maintenance_routes
 from finance_routes import register_finance_routes
 from quality_routes import register_quality_routes
+from spc_routes import register_spc_routes
 from ecommerce_routes import register_ecommerce_routes
 from document_routes import register_document_routes
 from workflow_routes import register_workflow_routes
@@ -454,6 +455,8 @@ from issue_tracker_routes import issue_bp
 app.register_blueprint(issue_bp)
 register_logistics_routes(app)
 register_planning_routes(app, get_db)
+from scm_routes import register_scm_routes
+register_scm_routes(app, get_db)
 register_marketing_routes(app)
 register_ci_routes(app)
 register_social_media_routes(app)
@@ -466,8 +469,27 @@ register_asset_routes(app)
 register_maintenance_routes(app)
 register_finance_routes(app)
 register_quality_routes(app)
+register_spc_routes(app)
 register_ecommerce_routes(app)
 register_document_routes(app)
+
+# =============================================================================
+# Enterprise Payroll Module
+# =============================================================================
+from payroll_routes import payroll_bp
+from payroll_models import run_payroll_migrations, seed_payroll_default_data
+
+# Initialize payroll tables
+try:
+    run_payroll_migrations()
+    seed_payroll_default_data()
+    print("Payroll module initialized successfully")
+except Exception as e:
+    print(f"Warning: Payroll module initialization: {str(e)}")
+
+# Register payroll blueprint
+app.register_blueprint(payroll_bp)
+print("Payroll blueprint registered at /payroll")
 
 # Register Workflow / BPM routes
 register_workflow_routes(app)
@@ -494,6 +516,10 @@ initialize_finance_enhancement_tables()
 # Initialize Quality Management tables
 from quality_models import initialize_quality_tables
 initialize_quality_tables()
+
+# Initialize SPC tables
+from spc_models import initialize_spc_tables
+initialize_spc_tables()
 
 # Initialize Customer Intelligence tables
 init_ci_tables()

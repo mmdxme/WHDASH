@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 mt-1">All delivery stops across trips</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <a href="{{ url_for('logistics.stops_sequence') }}" class="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-list-ol mr-2"></i>Sequence
+            </a>
+            <a href="{{ url_for('logistics.stops_checkpoints') }}" class="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-clock-rotate-left mr-2"></i>Checkpoints
+            </a>
+        </div>
+    </div>
+
+    <div class="glass-panel rounded-2xl p-6">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <input type="text" name="search" value="{{ search }}" placeholder="Search stops..."
+                       class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            </div>
+            <div>
+                <select name="status" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                    <option value="">All Status</option>
+                    <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="arrived" {% if status == 'arrived' %}selected{% endif %}>Arrived</option>
+                    <option value="completed" {% if status == 'completed' %}selected{% endif %}>Completed</option>
+                    <option value="failed" {% if status == 'failed' %}selected{% endif %}>Failed</option>
+                    <option value="skipped" {% if status == 'skipped' %}selected{% endif %}>Skipped</option>
+                </select>
+            </div>
+            <div>
+                <input type="date" name="date_from" value="{{ date_from }}" placeholder="From"
+                       class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            </div>
+            <div>
+                <input type="date" name="date_to" value="{{ date_to }}" placeholder="To"
+                       class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            </div>
+            <div class="flex gap-2">
+                <button type="submit" class="flex-1 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                    <i class="fa-solid fa-filter mr-2"></i>Filter
+                </button>
+                <a href="{{ url_for('logistics.stops_list') }}" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium transition-all">
+                    <i class="fa-solid fa-xmark"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    {% if stops %}
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-right py-4 px-5 font-medium">Stop</th>
+                        <th class="text-right py-4 px-5 font-medium ltr-col">Trip</th>
+                        <th class="text-right py-4 px-5 font-medium">Customer</th>
+                        <th class="text-right py-4 px-5 font-medium ltr-col">Planned Arrival</th>
+                        <th class="text-right py-4 px-5 font-medium">Status</th>
+                        <th class="text-right py-4 px-5 font-medium">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in stops %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-4 px-5">
+                            <p class="text-white font-medium">{{ s.stop_name }}</p>
+                            <p class="text-slate-500 text-xs">{{ s.address or 'No address' }}</p>
+                        </td>
+                        <td class="py-4 px-5">
+                            <a href="{{ url_for('logistics.trips_view', id=s.trip_id) }}" class="text-brand-400 hover:text-brand-300 ltr-content">
+                                {{ s.trip_code }}
+                            </a>
+                        </td>
+                        <td class="py-4 px-5 text-slate-300">{{ s.customer_name or '-' }}</td>
+                        <td class="py-4 px-5 text-slate-300">
+                            {% if s.planned_arrival %}
+                            {{ s.planned_arrival.strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-5">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium {% if s.status == 'completed' %}bg-emerald-500/10 text-emerald-400{% elif s.status == 'failed' %}bg-red-500/10 text-red-400{% elif s.status == 'arrived' %}bg-blue-500/10 text-blue-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                {{ s.status }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5">
+                            <div class="flex items-center gap-2">
+                                <a href="{{ url_for('logistics.stops_view', id=s.id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                                {% if s.status == 'pending' %}
+                                <button onclick="quickCheckin({{ s.id }})" class="p-2 hover:bg-blue-500/10 rounded-lg text-blue-400 transition-all" title="Quick Check-in">
+                                    <i class="fa-solid fa-sign-in-alt"></i>
+                                </button>
+                                {% endif %}
+                                {% if s.status == 'arrived' %}
+                                <button onclick="quickComplete({{ s.id }})" class="p-2 hover:bg-emerald-500/10 rounded-lg text-emerald-400 transition-all" title="Quick Complete">
+                                    <i class="fa-solid fa-check"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if total_pages > 1 %}
+        <div class="p-4 border-t border-white/5 flex items-center justify-between">
+            <p class="text-slate-400 text-sm">Showing {{ ((page - 1) * 25) + 1 }} - {{ [page * 25, total]|min }} of {{ total }} stops</p>
+            <div class="flex items-center gap-2">
+                {% if page > 1 %}
+                <a href="?page={{ page - 1 }}&status={{ status }}&search={{ search }}&date_from={{ date_from }}&date_to={{ date_to }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm">Prev</a>
+                {% endif %}
+                <span class="text-white text-sm">Page {{ page }} of {{ total_pages }}</span>
+                {% if page < total_pages %}
+                <a href="?page={{ page + 1 }}&status={{ status }}&search={{ search }}&date_from={{ date_from }}&date_to={{ date_to }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg text-sm">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="glass-panel rounded-2xl p-16 text-center">
+        <div class="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto mb-4">
+            <i class="fa-solid fa-map-pin text-3xl text-slate-600"></i>
+        </div>
+        <h3 class="text-lg font-bold text-white mb-2">No stops found</h3>
+        <p class="text-slate-400">Adjust your filters or create a trip with stops</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function quickCheckin(stopId) {
+    fetch(`/logistics/stops/${stopId}/checkin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'notes=Quick check-in from list'
+    }).then(r => r.json()).then(d => location.reload()).catch(() => location.reload());
+}
+
+function quickComplete(stopId) {
+    fetch(`/logistics/stops/${stopId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receiver_name: 'Customer' })
+    }).then(r => r.json()).then(d => location.reload()).catch(() => location.reload());
+}
+</script>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center gap-4">
+        <a href="{{ url_for('logistics.loads_view', id=load.id) }}" class="p-2 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-all">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 mt-1">Select shipments to assign to this load</p>
+        </div>
+    </div>
+
+    <form method="POST" class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-4 border-b border-white/10 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <span class="text-slate-400">Select shipments:</span>
+                <span id="selected-count" class="px-3 py-1 bg-brand-500/20 text-brand-400 rounded-full text-sm font-medium">0 selected</span>
+            </div>
+            <button type="submit" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-save mr-2"></i>Assign Selected
+            </button>
+        </div>
+
+        {% if unassigned %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-4 px-5 font-medium w-12">
+                            <input type="checkbox" id="select-all" class="w-4 h-4 rounded border-slate-500">
+                        </th>
+                        <th class="text-left py-4 px-5 font-medium">Tracking #</th>
+                        <th class="text-left py-4 px-5 font-medium">Customer</th>
+                        <th class="text-left py-4 px-5 font-medium">Weight (kg)</th>
+                        <th class="text-left py-4 px-5 font-medium">Volume (m³)</th>
+                        <th class="text-left py-4 px-5 font-medium">Priority</th>
+                        <th class="text-left py-4 px-5 font-medium">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in unassigned %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-4 px-5">
+                            <input type="checkbox" name="shipment_ids" value="{{ s.id }}"
+                                class="shipment-checkbox w-4 h-4 rounded border-slate-500"
+                                {% if s.id in assigned_ids %}checked{% endif %}>
+                        </td>
+                        <td class="py-4 px-5 text-brand-400 font-medium">{{ s.tracking_number or 'SN-' ~ s.id }}</td>
+                        <td class="py-4 px-5 text-white">{{ s.customer_name or s.receiver_name or '-' }}</td>
+                        <td class="py-4 px-5 text-white">{{ s.weight_kg or 0 }}</td>
+                        <td class="py-4 px-5 text-white">{{ s.volume_m3 or 0 }}</td>
+                        <td class="py-4 px-5">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium {% if s.priority == 'urgent' %}bg-red-500/10 text-red-400{% elif s.priority == 'high' %}bg-amber-500/10 text-amber-400{% else %}bg-blue-500/10 text-blue-400{% endif %}">
+                                {{ s.priority|title }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-5 text-slate-400">{{ s.status|replace('_', ' ')|title }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-12 text-center">
+            <i class="fa-solid fa-inbox text-4xl text-slate-500 mb-4"></i>
+            <h3 class="text-lg font-medium text-white mb-2">No unassigned shipments</h3>
+            <p class="text-slate-400">All available shipments have been assigned or there are no pending shipments.</p>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAll = document.getElementById('select-all');
+    const checkboxes = document.querySelectorAll('.shipment-checkbox');
+    const countEl = document.getElementById('selected-count');
+
+    function updateCount() {
+        const checked = document.querySelectorAll('.shipment-checkbox:checked').length;
+        countEl.textContent = checked + ' selected';
+    }
+
+    selectAll.addEventListener('change', function() {
+        checkboxes.forEach(cb => cb.checked = this.checked);
+        updateCount();
+    });
+
+    checkboxes.forEach(cb => cb.addEventListener('change', updateCount));
+    updateCount();
+});
+</script>
+{% endblock %}

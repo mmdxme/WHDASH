@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div><h1 class="text-3xl font-bold text-white">{{ title }}</h1><p class="text-slate-400 mt-1">Fuel efficiency and cost analysis</p></div>
+        <div class="flex items-center gap-3">
+            <input type="date" id="dateFrom" value="{{ date_from }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <span class="text-slate-500">to</span>
+            <input type="date" id="dateTo" value="{{ date_to }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <button onclick="applyFilters()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-filter mr-2"></i>Apply
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Fuel Cost</span>
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-coins text-amber-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-amber-400">{{ fuel_stats.total_fuel_cost|default(0)|round(2) }} AED</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cost/KM</span>
+                <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-road text-blue-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white">{{ fuel_stats.cost_per_km|default(0)|round(3) }} AED</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Distance</span>
+                <div class="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-route text-cyan-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white">{{ fuel_stats.total_distance|default(0)|round(0) }} km</div>
+        </div>
+    </div>
+
+    <!-- By Vehicle -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Fuel Efficiency by Vehicle</h2>
+        {% if by_vehicle %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Vehicle</th>
+                        <th class="text-left py-3 px-3 font-medium">Plate</th>
+                        <th class="text-left py-3 px-3 font-medium">Fuel Type</th>
+                        <th class="text-right py-3 px-3 font-medium">Total KM</th>
+                        <th class="text-right py-3 px-3 font-medium">Total Fuel</th>
+                        <th class="text-right py-3 px-3 font-medium">KM/Liter</th>
+                        <th class="text-right py-3 px-3 font-medium">Cost/KM</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in by_vehicle %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-white">{{ v.vehicle_code }}</td>
+                        <td class="py-3 px-3 text-slate-300">{{ v.plate_number }}</td>
+                        <td class="py-3 px-3 text-slate-400">{{ v.fuel_type or '-' }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ v.total_km|default(0)|round(0) }}</td>
+                        <td class="py-3 px-3 text-right text-amber-400">{{ v.total_fuel|default(0)|round(2) }} AED</td>
+                        <td class="py-3 px-3 text-right text-emerald-400">{{ v.km_per_liter|default(0)|round(2) }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ v.cost_per_km|default(0)|round(3) }} AED</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-400 text-center py-8">No fuel data available</p>
+        {% endif %}
+    </div>
+
+    <!-- Daily Trends -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Daily Fuel Cost Trend</h2>
+        {% if trends %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Date</th>
+                        <th class="text-right py-3 px-3 font-medium">Distance (km)</th>
+                        <th class="text-right py-3 px-3 font-medium">Fuel Cost (AED)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in trends %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-white">{{ t.fuel_date }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ t.daily_km|default(0)|round(0) }}</td>
+                        <td class="py-3 px-3 text-right text-amber-400">{{ t.daily_cost|default(0)|round(2) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-400 text-center py-8">No trend data available</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function applyFilters() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    window.location.href = `{{ url_for('logistics.fleet_fuel_efficiency') }}?date_from=${dateFrom}&date_to=${dateTo}`;
+}
+</script>
+{% endblock %}

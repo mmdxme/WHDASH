@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div><h1 class="text-3xl font-bold text-white">{{ title }}</h1><p class="text-slate-400 mt-1">Carbon emission tracking and environmental metrics</p></div>
+        <div class="flex items-center gap-3">
+            <input type="date" id="dateFrom" value="{{ date_from }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <span class="text-slate-500">to</span>
+            <input type="date" id="dateTo" value="{{ date_to }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <button onclick="applyFilters()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-filter mr-2"></i>Apply
+            </button>
+        </div>
+    </div>
+
+    <!-- Carbon KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total CO2</span>
+                <div class="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-leaf text-green-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-green-400">{{ carbon_stats.total_carbon|default(0)|round(0) }} kg</div>
+            <p class="text-xs text-slate-500 mt-1">{{ (carbon_stats.total_carbon|default(0) / 1000)|round(2) }} tonnes</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">CO2/KM</span>
+                <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-chart-line text-blue-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white">{{ ((carbon_stats.carbon_per_km|default(0)) * 1000)|round(2) }} g/km</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Distance</span>
+                <div class="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-road text-cyan-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white">{{ carbon_stats.total_distance|default(0)|round(0) }} km</div>
+        </div>
+    </div>
+
+    <!-- Environmental Impact -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Environmental Impact</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div class="text-center p-6 bg-emerald-500/5 rounded-xl">
+                <i class="fa-solid fa-tree text-4xl text-emerald-400 mb-3"></i>
+                <p class="text-2xl font-bold text-white">{{ ((carbon_stats.total_carbon|default(0) / 1000) / 7)|round(1) }}</p>
+                <p class="text-sm text-slate-400">Trees to offset (annual)</p>
+            </div>
+            <div class="text-center p-6 bg-blue-500/5 rounded-xl">
+                <i class="fa-solid fa-globe text-4xl text-blue-400 mb-3"></i>
+                <p class="text-2xl font-bold text-white">{{ ((carbon_stats.total_carbon|default(0) / 1000) * 2.5)|round(1) }} km2</p>
+                <p class="text-sm text-slate-400">Forest area needed</p>
+            </div>
+            <div class="text-center p-6 bg-amber-500/5 rounded-xl">
+                <i class="fa-solid fa-car text-4xl text-amber-400 mb-3"></i>
+                <p class="text-2xl font-bold text-white">{{ ((carbon_stats.total_distance|default(0) / 1000) * 0.21)|round(0) }}</p>
+                <p class="text-sm text-slate-400">Cars off road equivalent</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- By Vehicle Type -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Emissions by Vehicle Type</h2>
+        {% if by_type %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Vehicle Type</th>
+                        <th class="text-right py-3 px-3 font-medium">Vehicles</th>
+                        <th class="text-right py-3 px-3 font-medium">Total KM</th>
+                        <th class="text-right py-3 px-3 font-medium">Total CO2</th>
+                        <th class="text-right py-3 px-3 font-medium">Avg CO2/KM</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in by_type %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-white">{{ t.vehicle_type or 'Unknown' }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ t.vehicle_count }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ t.total_km|default(0)|round(0) }}</td>
+                        <td class="py-3 px-3 text-right text-green-400">{{ t.total_carbon|default(0)|round(0) }} kg</td>
+                        <td class="py-3 px-3 text-right text-slate-400">{% if t.total_km > 0 %}{{ (t.total_carbon / t.total_km * 1000)|round(2) }}{% else %}0{% endif %} g/km</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-400 text-center py-8">No emission data available</p>
+        {% endif %}
+    </div>
+
+    <!-- Daily Trend -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Daily Carbon Trend</h2>
+        {% if daily %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Date</th>
+                        <th class="text-right py-3 px-3 font-medium">CO2 (kg)</th>
+                        <th class="text-right py-3 px-3 font-medium">Distance (km)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in daily %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-white">{{ d.carbon_date }}</td>
+                        <td class="py-3 px-3 text-right text-green-400">{{ d.daily_carbon|default(0)|round(0) }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ d.daily_km|default(0)|round(0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-400 text-center py-8">No daily data available</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function applyFilters() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    window.location.href = `{{ url_for('logistics.fleet_carbon') }}?date_from=${dateFrom}&date_to=${dateTo}`;
+}
+</script>
+{% endblock %}

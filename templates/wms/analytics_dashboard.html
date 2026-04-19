@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('analytics_dashboard', 'Analytics Dashboard') }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ t('analytics_dashboard_desc', 'Business intelligence and KPI overview') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="exportData('csv')" class="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 hover:bg-emerald-500/20 transition-all text-sm font-medium">
+                <i class="fa-solid fa-file-csv mr-2"></i>{{ t('export_csv', 'Export CSV') }}
+            </button>
+            <button onclick="exportData('json')" class="px-4 py-2 bg-brand-500/10 border border-brand-500/20 rounded-xl text-brand-400 hover:bg-brand-500/20 transition-all text-sm font-medium">
+                <i class="fa-solid fa-file-export mr-2"></i>{{ t('export_json', 'Export JSON') }}
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase">{{ t('inventory_value', 'Inventory Value') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-dollar-sign text-emerald-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-emerald-400 tabular-nums">${{ "%.2f"|format(inventory_kpis.total_value|default(0)) }}</p>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase">{{ t('total_units', 'Total Units') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-brand-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-boxes-stacked text-brand-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-white tabular-nums">{{ "%.0f"|format(inventory_kpis.total_units|default(0)) }}</p>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase">{{ t('active_skus', 'Active SKUs') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-barcode text-cyan-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-cyan-400 tabular-nums">{{ inventory_kpis.sku_count|default(0) }}</p>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase">{{ t('locations', 'Locations') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-map-pin text-violet-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-violet-400 tabular-nums">{{ inventory_kpis.location_count|default(0) }}</p>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase">{{ t('utilization', 'Utilization') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-chart-pie text-amber-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-amber-400 tabular-nums">{{ "%.1f"|format(inventory_kpis.utilization_pct|default(0)) }}%</p>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- ABC Analysis -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t('abc_analysis', 'ABC Inventory Analysis') }}</h3>
+            <div class="h-64">
+                <canvas id="abcChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Stock Status -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t('stock_status', 'Stock Status Distribution') }}</h3>
+            <div class="h-64">
+                <canvas id="stockStatusChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Movement Trend -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-semibold text-white mb-4">{{ t('movement_trend_30d', '30-Day Movement Trend') }}</h3>
+        <div class="h-80">
+            <canvas id="movementTrendChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <a href="{{ url_for('wms_analytics_inventory_aging') }}" class="glass-panel rounded-xl p-5 hover:bg-orange-500/10 border border-transparent hover:border-orange-500/20 transition-all">
+            <div class="flex items-center gap-4">
+                <span class="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-clock text-orange-400 text-xl"></i>
+                </span>
+                <div>
+                    <h3 class="text-white font-semibold">{{ t('inventory_aging', 'Inventory Aging') }}</h3>
+                    <p class="text-slate-400 text-sm">{{ t('expiry_analysis', 'Expiry date analysis') }}</p>
+                </div>
+            </div>
+        </a>
+
+        <a href="{{ url_for('wms_analytics_operator_productivity') }}" class="glass-panel rounded-xl p-5 hover:bg-cyan-500/10 border border-transparent hover:border-cyan-500/20 transition-all">
+            <div class="flex items-center gap-4">
+                <span class="w-12 h-12 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-user-check text-cyan-400 text-xl"></i>
+                </span>
+                <div>
+                    <h3 class="text-white font-semibold">{{ t('operator_productivity', 'Operator Productivity') }}</h3>
+                    <p class="text-slate-400 text-sm">{{ t('labor_analysis', 'Labor performance') }}</p>
+                </div>
+            </div>
+        </a>
+
+        <a href="{{ url_for('wms_reports') }}" class="glass-panel rounded-xl p-5 hover:bg-violet-500/10 border border-transparent hover:border-violet-500/20 transition-all">
+            <div class="flex items-center gap-4">
+                <span class="w-12 h-12 rounded-xl bg-violet-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-file-alt text-violet-400 text-xl"></i>
+                </span>
+                <div>
+                    <h3 class="text-white font-semibold">{{ t('all_reports', 'All Reports') }}</h3>
+                    <p class="text-slate-400 text-sm">{{ t('full_report_list', 'View all WMS reports') }}</p>
+                </div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<script>
+// Initialize charts when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    loadCharts();
+});
+
+async function loadCharts() {
+    // ABC Analysis Chart
+    try {
+        const abcRes = await fetch('/wms/analytics/api/chart/inventory_abc');
+        const abcData = await abcRes.json();
+        if (abcData.success && abcData.data.length > 0) {
+            new Chart(document.getElementById('abcChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: abcData.data.map(d => 'Class ' + d.label),
+                    datasets: [{
+                        data: abcData.data.map(d => d.value),
+                        backgroundColor: ['#10b981', '#f59e0b', '#6b7280']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+    } catch (e) { console.log('ABC chart error:', e); }
+
+    // Stock Status Chart
+    try {
+        const statusRes = await fetch('/wms/analytics/api/chart/stock_status');
+        const statusData = await statusRes.json();
+        if (statusData.success && statusData.data.length > 0) {
+            new Chart(document.getElementById('stockStatusChart'), {
+                type: 'pie',
+                data: {
+                    labels: statusData.data.map(d => d.label),
+                    datasets: [{
+                        data: statusData.data.map(d => d.value),
+                        backgroundColor: ['#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+    } catch (e) { console.log('Status chart error:', e); }
+}
+
+function exportData(format) {
+    window.location.href = '/wms/analytics/api/export/' + format;
+}
+</script>
+{% endblock %}

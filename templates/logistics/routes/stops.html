@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center gap-4">
+        <a href="{{ url_for('logistics.routes_view', id=route.id) }}" class="p-2 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-all">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 text-sm mt-1">Manage stops for this route</p>
+        </div>
+    </div>
+
+    <div class="glass-panel rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h2 class="text-lg font-bold text-white">{{ route.route_code }} - {{ route.route_name }}</h2>
+                <p class="text-slate-400 text-sm">{{ route.distance_km or 0 }} km | {{ route.estimated_time_minutes or 0 }} min</p>
+            </div>
+            <button onclick="showAddStopForm()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-plus mr-2"></i>Add Stop
+            </button>
+        </div>
+
+        <div id="addStopForm" class="hidden mb-6 p-4 bg-white/5 rounded-xl border border-brand-500/30">
+            <h3 class="text-white font-bold mb-4">Add New Stop</h3>
+            <form action="{{ url_for('logistics.routes_stops', id=route.id) }}" method="POST" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <input type="hidden" name="action" value="add_stop">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Stop Name *</label>
+                    <input type="text" name="stop_name" required class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Address</label>
+                    <input type="text" name="address" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Latitude</label>
+                    <input type="number" step="0.000001" name="latitude" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Longitude</label>
+                    <input type="number" step="0.000001" name="longitude" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Est. Arrival</label>
+                    <input type="time" name="estimated_arrival" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Est. Departure</label>
+                    <input type="time" name="estimated_departure" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Service Time (min)</label>
+                    <input type="number" name="service_time_minutes" value="15" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                </div>
+                <div class="flex items-end gap-2">
+                    <button type="submit" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium">Add</button>
+                    <button type="button" onclick="hideAddStopForm()" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl text-sm font-medium">Cancel</button>
+                </div>
+            </form>
+        </div>
+
+        <form action="{{ url_for('logistics.routes_stops', id=route.id) }}" method="POST">
+            <input type="hidden" name="action" value="update_stops">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-white/5">
+                            <th class="text-left py-3 px-4 font-medium w-16">Order</th>
+                            <th class="text-left py-3 px-4 font-medium">Stop Name</th>
+                            <th class="text-left py-3 px-4 font-medium">Address</th>
+                            <th class="text-left py-3 px-4 font-medium w-24">Est. Arrival</th>
+                            <th class="text-left py-3 px-4 font-medium w-24">Est. Depart</th>
+                            <th class="text-left py-3 px-4 font-medium w-24">Service</th>
+                            <th class="text-left py-3 px-4 font-medium w-20">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for stop in stops %}
+                        <tr class="border-b border-white/5 hover:bg-white/5">
+                            <td class="py-3 px-4">
+                                <input type="number" name="stop_order[]" value="{{ stop.stop_order }}" min="1"
+                                       class="w-16 px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-sm text-center">
+                                <input type="hidden" name="stop_id[]" value="{{ stop.id }}">
+                            </td>
+                            <td class="py-3 px-4">
+                                <input type="text" name="stop_name[]" value="{{ stop.stop_name }}"
+                                       class="w-full px-3 py-1 bg-white/5 border border-white/10 rounded text-white text-sm">
+                            </td>
+                            <td class="py-3 px-4">
+                                <input type="text" name="stop_address[]" value="{{ stop.address or '' }}"
+                                       class="w-full px-3 py-1 bg-white/5 border border-white/10 rounded text-white text-sm">
+                            </td>
+                            <td class="py-3 px-4">
+                                <input type="time" name="stop_estimated_arrival[]" value="{{ stop.estimated_arrival or '' }}"
+                                       class="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-sm">
+                            </td>
+                            <td class="py-3 px-4">
+                                <input type="time" name="stop_estimated_departure[]" value="{{ stop.estimated_departure or '' }}"
+                                       class="w-full px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-sm">
+                            </td>
+                            <td class="py-3 px-4">
+                                <input type="number" name="service_time[]" value="{{ stop.service_time_minutes or 15 }}" min="1"
+                                       class="w-20 px-2 py-1 bg-white/5 border border-white/10 rounded text-white text-sm">
+                            </td>
+                            <td class="py-3 px-4">
+                                <form action="{{ url_for('logistics.routes_stops', id=route.id) }}" method="POST" class="inline">
+                                    <input type="hidden" name="action" value="delete_stop">
+                                    <input type="hidden" name="stop_id" value="{{ stop.id }}">
+                                    <button type="submit" onclick="return confirm('Delete this stop?')"
+                                            class="p-2 hover:bg-red-500/10 rounded text-red-400 transition-all">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="py-8 text-center text-slate-400">No stops defined. Click "Add Stop" to create one.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if stops %}
+            <div class="mt-4 flex justify-end">
+                <button type="submit" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                    <i class="fa-solid fa-save mr-2"></i>Save Changes
+                </button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<script>
+function showAddStopForm() {
+    document.getElementById('addStopForm').classList.remove('hidden');
+}
+
+function hideAddStopForm() {
+    document.getElementById('addStopForm').classList.add('hidden');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('zone_picking', 'Zone Picking') }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ t('zone_picking_desc', 'Zone-based picking with multi-operator handoff') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="refreshZones()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-sync-alt mr-2"></i>{{ t('refresh', 'Refresh') }}
+            </button>
+            <a href="{{ url_for('wms_pickup_queue') }}" class="px-4 py-2 bg-brand-500/10 border border-brand-500/20 rounded-xl text-brand-400 hover:bg-brand-500/20 transition-all text-sm font-medium">
+                <i class="fa-solid fa-list mr-2"></i>{{ t('all_picks', 'All Picks') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Zone Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {% for zone in zones %}
+        <div class="glass-panel rounded-2xl p-5 {% if zone.pending_picks > 10 %}border-amber-500/30{% endif %}">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-white font-bold">{{ zone.name }}</h3>
+                <span class="px-2 py-1 rounded-lg text-xs bg-brand-500/10 text-brand-400 font-mono">{{ zone.code }}</span>
+            </div>
+            <p class="text-slate-400 text-xs mb-3">{{ zone.warehouse_name }}</p>
+            <div class="flex items-center justify-between mb-4">
+                <span class="text-3xl font-bold {% if zone.pending_picks > 10 %}text-amber-400{% else %}text-white{% endif %}">{{ zone.pending_picks }}</span>
+                <span class="text-slate-500 text-sm">{{ t('pending_picks', 'pending picks') }}</span>
+            </div>
+            <div class="flex items-center justify-between text-xs">
+                <span class="text-emerald-400">{{ zone.in_progress_picks|default(0) }} {{ t('in_progress', 'in progress') }}</span>
+                <span class="text-slate-500">{{ zone.completed_today|default(0) }} {{ t('completed_today', 'completed today') }}</span>
+            </div>
+            <div class="mt-4 flex gap-2">
+                <button onclick="openZoneQueue({{ zone.id }}, '{{ zone.code }}')" class="flex-1 px-3 py-2 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 rounded-lg text-xs font-medium">
+                    <i class="fa-solid fa-list mr-1"></i>{{ t('view_queue', 'View Queue') }}
+                </button>
+                <button onclick="assignOperator({{ zone.id }})" class="flex-1 px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 rounded-lg text-xs font-medium">
+                    <i class="fa-solid fa-user-plus mr-1"></i>{{ t('assign', 'Assign') }}
+                </button>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-span-4 text-center text-slate-500 py-12">
+            <i class="fa-solid fa-map text-5xl mb-4 block opacity-30"></i>
+            <p class="text-lg">{{ t('no_zones', 'No picking zones configured') }}</p>
+            <p class="text-sm mt-2">{{ t('configure_zones', 'Configure zones in Warehouse Settings') }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pick Queue Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-5 border-b border-white/5">
+            <h3 class="text-lg font-bold text-white">{{ t('pick_queue', 'Pick Queue') }}</h3>
+        </div>
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-slate-400 border-b border-white/5">
+                    <th class="text-left py-4 px-4">{{ t('pick_number', 'Pick #') }}</th>
+                    <th class="text-center py-4 px-4">{{ t('zone', 'Zone') }}</th>
+                    <th class="text-left py-4 px-4">{{ t('item', 'Item') }}</th>
+                    <th class="text-center py-4 px-4">{{ t('qty', 'Qty') }}</th>
+                    <th class="text-left py-4 px-4">{{ t('location', 'Location') }}</th>
+                    <th class="text-center py-4 px-4">{{ t('status', 'Status') }}</th>
+                    <th class="text-center py-4 px-4">{{ t('actions', 'Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pick in picks %}
+                <tr class="border-b border-white/5 hover:bg-white/5">
+                    <td class="py-4 px-4 text-white font-mono text-xs">{{ pick.task_number }}</td>
+                    <td class="py-4 px-4 text-center"><span class="px-2 py-1 rounded-lg text-xs bg-brand-500/10 text-brand-400">{{ pick.zone_code|default('N/A') }}</span></td>
+                    <td class="py-4 px-4 text-slate-300">{{ pick.item_code|default(pick.sku) }}</td>
+                    <td class="py-4 px-4 text-center text-white font-bold">{{ pick.quantity|int }}</td>
+                    <td class="py-4 px-4 text-slate-400 font-mono text-xs">{{ pick.location_code|default(pick.source_location) }}</td>
+                    <td class="py-4 px-4 text-center">
+                        {% if pick.status == 'PENDING' %}
+                        <span class="px-2 py-1 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-400">{{ t('pending', 'Pending') }}</span>
+                        {% elif pick.status == 'ASSIGNED' %}
+                        <span class="px-2 py-1 rounded-lg text-xs font-bold bg-brand-500/10 text-brand-400">{{ t('assigned', 'Assigned') }}</span>
+                        {% elif pick.status == 'IN_PROGRESS' %}
+                        <span class="px-2 py-1 rounded-lg text-xs font-bold bg-blue-500/10 text-blue-400">{{ t('in_progress', 'In Progress') }}</span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400">{{ t('completed', 'Completed') }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-4 px-4 text-center">
+                        <div class="flex items-center justify-center gap-2">
+                            {% if pick.status == 'PENDING' %}
+                            <button onclick="quickAssign({{ pick.id }})" class="px-3 py-1 bg-brand-500/10 hover:bg-brand-500/20 text-brand-400 rounded-lg text-xs font-medium">
+                                <i class="fa-solid fa-user-plus"></i>
+                            </button>
+                            {% endif %}
+                            <a href="{{ url_for('wms_pickup_detail', task_id=pick.id) if pick.id else '#' }}" class="px-3 py-1 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-lg text-xs font-medium">
+                                <i class="fa-solid fa-eye"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="py-12 text-center text-slate-500"><i class="fa-solid fa-check-circle text-4xl mb-3 block opacity-30"></i>{{ t('no_pending_picks', 'No pending picks') }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Zone Statistics -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="glass-panel rounded-2xl p-5">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('zone_performance', 'Zone Performance') }}</h3>
+            <div class="space-y-3">
+                {% for zone in zones %}
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-300 text-sm">{{ zone.name }}</span>
+                    <div class="flex items-center gap-2">
+                        <div class="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-brand-500 rounded-full" style="width: {{ (zone.completed_today|default(0) / 100 * 100)|int if zone.completed_today|default(0) else 50 }}%"></div>
+                        </div>
+                        <span class="text-slate-400 text-xs w-16 text-right">{{ zone.completed_today|default(0) }} {{ t('picks', 'picks') }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-5">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('active_operators', 'Active Operators') }}</h3>
+            <div id="activeOperators" class="space-y-2">
+                {% for op in operators %}
+                <div class="flex items-center justify-between bg-slate-800/50 rounded-xl p-3">
+                    <div class="flex items-center gap-3">
+                        <span class="w-8 h-8 rounded-full bg-brand-500/20 flex items-center justify-center text-brand-400 text-xs font-bold">{{ op.name[:2]|upper }}</span>
+                        <div>
+                            <p class="text-white text-sm font-medium">{{ op.name }}</p>
+                            <p class="text-slate-500 text-xs">{{ op.current_zone|default('Unassigned') }}</p>
+                        </div>
+                    </div>
+                    <span class="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400">{{ op.active_picks }} {{ t('active', 'active') }}</span>
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-sm text-center py-4">{{ t('no_active_operators', 'No active operators') }}</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function refreshZones() {
+    location.reload();
+}
+
+function openZoneQueue(zoneId, zoneCode) {
+    // Filter picks by zone
+    window.location.href = '{{ url_for("wms_pickup_queue") }}?zone=' + zoneCode;
+}
+
+function assignOperator(zoneId) {
+    // Open operator assignment modal
+    showModal('{{ t("assign_operator", "Assign Operator") }}', '<p>{{ t("operator_assignment", "Operator assignment functionality") }}</p>');
+}
+
+function quickAssign(pickId) {
+    fetch('/wms/zone-picking/quick-assign/' + pickId, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    }).then(r => r.json()).then(data => {
+        if (data.success) {
+            flash('Pick assigned successfully!', 'success');
+            location.reload();
+        } else {
+            flash('Error: ' + data.error, 'error');
+        }
+    });
+}
+</script>
+{% endblock %}

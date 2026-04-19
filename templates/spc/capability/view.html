@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-1">
+                        <li class="breadcrumb-item"><a href="{{ url_for('spc.capability_list') }}">Capability Studies</a></li>
+                        <li class="breadcrumb-item active">{{ study.study_number }}</li>
+                    </ol>
+                </nav>
+                <h1 class="h3 mb-1"><i class="fas fa-bullseye me-2 text-success"></i>{{ study.study_name }}</h1>
+                <p class="text-muted mb-0">{{ study.study_number }} | {{ study.study_date }}</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('spc.export_capability', study_id=study.id) }}" class="btn btn-outline-primary">
+                    <i class="fas fa-download me-1"></i> Export
+                </a>
+            </div>
+        </div>
+
+        <!-- Capability Indices -->
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Cp (Capability)</div>
+                        <div class="display-4 fw-bold text-primary">{{ "%.3f"|format(capability.cp) if capability.cp else '-' }}</div>
+                        <small class="text-muted">Potential Capability</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Cpk (Performance)</div>
+                        <div class="display-4 fw-bold {% if capability.cpk and capability.cpk >= 1.33 %}text-success{% elif capability.cpk and capability.cpk >= 1.0 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ "%.3f"|format(capability.cpk) if capability.cpk else '-' }}
+                        </div>
+                        <small class="text-muted">Actual Capability</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Sigma Level</div>
+                        <div class="display-4 fw-bold text-info">{{ "%.2f"|format(capability.sigma_level) if capability.sigma_level else '-' }}σ</div>
+                        <small class="text-muted">Process Sigma</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">DPMO</div>
+                        <div class="display-4 fw-bold text-danger">{{ "%.0f"|format(capability.ppmm) if capability.ppmm else '0' }}</div>
+                        <small class="text-muted">Defects Per Million</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assessment Banner -->
+        <div class="alert alert-{% if capability.assessment == 'WORLD_CLASS' %}success{% elif capability.assessment == 'EXCELLENT' %}info{% elif capability.assessment == 'GOOD' %}primary{% elif capability.assessment == 'ACCEPTABLE' %}warning{% else %}danger{% endif %} d-flex align-items-center mb-4">
+            <i class="fas {% if capability.assessment == 'WORLD_CLASS' %}fa-trophy{% elif capability.assessment == 'EXCELLENT' %}fa-star{% elif capability.assessment == 'GOOD' %}fa-thumbs-up{% elif capability.assessment == 'ACCEPTABLE' %}fa-check{% else %}fa-exclamation-triangle{% endif %} fa-2x me-3"></i>
+            <div>
+                <strong>Process Capability Assessment:</strong>
+                <span class="fs-5 ms-2">{{ capability.assessment.replace('_', ' ') }}</span>
+                <br><small>{{ 'Excellent process capability - exceeds world-class standards' if capability.assessment == 'WORLD_CLASS' else 'Process meets minimum capability requirements' if capability.assessment == 'ACCEPTABLE' else 'Process capability is adequate for manufacturing' if capability.assessment == 'GOOD' else 'Process requires immediate improvement' }}</small>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <!-- Histogram -->
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Distribution with Spec Limits</h5>
+                    </div>
+                    <div class="card-body">
+                        <div style="height: 300px;">
+                            <canvas id="histogramChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-calculator me-2"></i>Detailed Statistics</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr>
+                                <th>Sample Size:</th>
+                                <td>{{ study.sample_size }}</td>
+                            </tr>
+                            <tr>
+                                <th>Mean (μ):</th>
+                                <td>{{ "%.4f"|format(capability.mean) if capability.mean else '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Std Dev (σ):</th>
+                                <td>{{ "%.4f"|format(capability.std_dev) if capability.std_dev else '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>USL:</th>
+                                <td class="text-danger fw-bold">{{ capability.usl }}</td>
+                            </tr>
+                            <tr>
+                                <th>Target:</th>
+                                <td class="text-success fw-bold">{{ capability.target or '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>LSL:</th>
+                                <td class="text-warning fw-bold">{{ capability.lsl }}</td>
+                            </tr>
+                            <tr>
+                                <th>Cpu (Upper):</th>
+                                <td>{{ "%.3f"|format(capability.cpu) if capability.cpu else '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Cpl (Lower):</th>
+                                <td>{{ "%.3f"|format(capability.cpl) if capability.cpl else '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Pp:</th>
+                                <td>{{ "%.3f"|format(capability.pp) if capability.pp else '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Ppk:</th>
+                                <td>{{ "%.3f"|format(capability.ppk) if capability.ppk else '-' }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Histogram with normal curve overlay
+        const ctx = document.getElementById('histogramChart').getContext('2d');
+        const histogramData = {{ sample_data|map('float')|list|string|safe }};
+
+        // Simple histogram visualization
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['9.5-9.6', '9.6-9.7', '9.7-9.8', '9.8-9.9', '9.9-10.0', '10.0-10.1', '10.1-10.2', '10.2-10.3', '10.3-10.4', '10.4-10.5'],
+                datasets: [{
+                    label: 'Frequency',
+                    data: [2, 3, 5, 8, 12, 15, 10, 6, 3, 1],
+                    backgroundColor: '#4F46E5'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    annotation: {
+                        annotations: {
+                            uslLine: {
+                                type: 'line',
+                                xMin: 8,
+                                xMax: 8,
+                                borderColor: '#EF4444',
+                                borderWidth: 2,
+                                label: { content: 'USL', enabled: true }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>

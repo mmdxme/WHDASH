@@ -1,0 +1,322 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-100">Downtime & Reliability Center</h1>
+            <p class="text-slate-400 text-sm mt-1">Track equipment downtime, MTBF, MTTR, and reliability metrics</p>
+        </div>
+        <div class="flex gap-3">
+            <a href="{{ url_for('maintenance.downtime_new') }}" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-plus mr-2"></i>Log Downtime
+            </a>
+            <a href="{{ url_for('maintenance.report_downtime') }}" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-chart-bar mr-2"></i>Full Report
+            </a>
+        </div>
+    </div>
+
+    <!-- Key Reliability KPIs -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <!-- MTBF -->
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-xs uppercase tracking-wider">MTBF</span>
+                <span class="w-10 h-10 bg-cyan-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-clock text-cyan-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-bold text-cyan-400">{{ stats.mtbf|default(0)|round(1) }}</p>
+            <p class="text-slate-500 text-xs mt-1">Mean Time Between Failures (hours)</p>
+            <div class="mt-3 flex items-center text-xs">
+                {% if stats.mtbf_trend == 'up' %}
+                <span class="text-green-400"><i class="fas fa-arrow-up mr-1"></i>Improved</span>
+                {% elif stats.mtbf_trend == 'down' %}
+                <span class="text-red-400"><i class="fas fa-arrow-down mr-1"></i>Declined</span>
+                {% else %}
+                <span class="text-slate-500">Stable</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- MTTR -->
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-xs uppercase tracking-wider">MTTR</span>
+                <span class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-wrench text-purple-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-bold text-purple-400">{{ stats.mttr|default(0)|round(1) }}</p>
+            <p class="text-slate-500 text-xs mt-1">Mean Time to Repair (hours)</p>
+            <div class="mt-3 flex items-center text-xs">
+                {% if stats.mttr_trend == 'down' %}
+                <span class="text-green-400"><i class="fas fa-arrow-down mr-1"></i>Improved</span>
+                {% elif stats.mttr_trend == 'up' %}
+                <span class="text-red-400"><i class="fas fa-arrow-up mr-1"></i>Slower</span>
+                {% else %}
+                <span class="text-slate-500">Stable</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Availability -->
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-xs uppercase tracking-wider">Availability</span>
+                <span class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-chart-line text-green-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-bold text-green-400">{{ stats.availability|default(0)|round(1) }}%</p>
+            <p class="text-slate-500 text-xs mt-1">Equipment Uptime</p>
+            <div class="mt-3 flex items-center text-xs">
+                {% if stats.availability >= 95 %}
+                <span class="text-green-400"><i class="fas fa-check-circle mr-1"></i>World Class</span>
+                {% elif stats.availability >= 85 %}
+                <span class="text-yellow-400"><i class="fas fa-exclamation-circle mr-1"></i>Good</span>
+                {% else %}
+                <span class="text-red-400"><i class="fas fa-times-circle mr-1"></i>Needs Attention</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Total Downtime -->
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-xs uppercase tracking-wider">Total Downtime</span>
+                <span class="w-10 h-10 bg-red-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-power-off text-red-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-bold text-red-400">{{ stats.total_downtime|default(0)|round(1) }}</p>
+            <p class="text-slate-500 text-xs mt-1">Hours This Month</p>
+            <div class="mt-3 flex items-center text-xs">
+                <span class="text-slate-500">{{ stats.incident_count|default(0) }} incidents</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Secondary Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <!-- Planned vs Unplanned -->
+        <div class="glass-panel rounded-xl p-5">
+            <h3 class="text-slate-400 text-xs uppercase tracking-wider mb-4">Planned vs Unplanned Downtime</h3>
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-300">Planned</span>
+                    <span class="text-blue-400 font-medium">{{ stats.planned_downtime|default(0)|round(1) }}h</span>
+                </div>
+                <div class="w-full bg-slate-700 rounded-full h-3">
+                    <div class="bg-blue-500 h-3 rounded-full" style="width: {{ stats.planned_pct|default(0) }}%"></div>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-300">Unplanned</span>
+                    <span class="text-red-400 font-medium">{{ stats.unplanned_downtime|default(0)|round(1) }}h</span>
+                </div>
+                <div class="w-full bg-slate-700 rounded-full h-3">
+                    <div class="bg-red-500 h-3 rounded-full" style="width: {{ stats.unplanned_pct|default(0) }}%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Downtime Cost Impact -->
+        <div class="glass-panel rounded-xl p-5">
+            <h3 class="text-slate-400 text-xs uppercase tracking-wider mb-4">Cost Impact</h3>
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-300">Production Loss</span>
+                    <span class="text-orange-400 font-medium">{{ stats.production_loss|default(0)|round(0)|int }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-300">Repair Cost</span>
+                    <span class="text-yellow-400 font-medium">{{ stats.repair_cost|default(0)|round(0)|int }}</span>
+                </div>
+                <div class="flex items-center justify-between">
+                    <span class="text-slate-300">Total Cost</span>
+                    <span class="text-red-400 font-bold">{{ stats.total_cost|default(0)|round(0)|int }}</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Failure Reasons -->
+        <div class="glass-panel rounded-xl p-5">
+            <h3 class="text-slate-400 text-xs uppercase tracking-wider mb-4">Top Failure Reasons</h3>
+            <div class="space-y-2">
+                {% for reason in top_failure_reasons %}
+                <div class="flex items-center justify-between p-2 bg-slate-800/50 rounded">
+                    <span class="text-slate-300 text-sm">{{ reason.reason }}</span>
+                    <span class="text-red-400 font-medium">{{ reason.count }}</span>
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-sm text-center">No data available</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <!-- Recent Downtime Incidents -->
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white">Recent Downtime Incidents</h2>
+                <a href="{{ url_for('maintenance.downtime_list') }}" class="text-brand-400 hover:text-brand-300 text-sm">View All</a>
+            </div>
+            <div class="space-y-3 max-h-80 overflow-y-auto">
+                {% for incident in recent_incidents %}
+                <div class="p-3 bg-slate-800/50 rounded-lg 
+                    {% if incident.impact_level == 'Critical' %}border-l-4 border-red-500
+                    {% elif incident.impact_level == 'High' %}border-l-4 border-orange-500
+                    {% elif incident.impact_level == 'Medium' %}border-l-4 border-yellow-500
+                    {% else %}border-l-4 border-slate-500{% endif %}">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-slate-200 font-medium text-sm">{{ incident.log_number }}</p>
+                            <p class="text-slate-500 text-xs">{{ incident.asset_name }} - {{ incident.downtime_reason }}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-red-400 font-bold">{{ incident.total_hours|default(0)|round(1) }}h</p>
+                            <p class="text-slate-500 text-xs">{{ incident.downtime_start }}</p>
+                        </div>
+                    </div>
+                    {% if incident.is_resolved %}
+                    <div class="mt-2 flex items-center text-xs text-green-400">
+                        <i class="fas fa-check-circle mr-1"></i>Resolved
+                    </div>
+                    {% else %}
+                    <div class="mt-2 flex items-center text-xs text-yellow-400">
+                        <i class="fas fa-clock mr-1"></i>Ongoing
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm text-center py-4">No downtime incidents recorded</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Equipment Reliability Heatmap -->
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white">Equipment Reliability Heatmap</h2>
+                <a href="{{ url_for('maintenance.reliability_heatmap') }}" class="text-brand-400 hover:text-brand-300 text-sm">Full View</a>
+            </div>
+            <div class="grid grid-cols-4 gap-2">
+                {% for equip in reliability_heatmap %}
+                <div class="p-3 rounded-lg text-center cursor-pointer hover:bg-slate-700/50 transition-colors"
+                    style="background-color: {{ equip.color }}">
+                    <p class="text-white text-xs font-medium truncate">{{ equip.asset_code }}</p>
+                    <p class="text-white/80 text-lg font-bold">{{ equip.reliability_score|default(0)|round(0) }}%</p>
+                    <p class="text-white/60 text-xs">{{ equip.incident_count }} incidents</p>
+                </div>
+                {% else %}
+                <div class="col-span-4 text-center py-8 text-slate-500">No equipment data</div>
+                {% endfor %}
+            </div>
+            <div class="mt-4 flex items-center justify-center gap-4 text-xs">
+                <div class="flex items-center gap-1">
+                    <div class="w-4 h-4 rounded bg-red-500"></div>
+                    <span class="text-slate-400">Critical (&lt;60%)</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <div class="w-4 h-4 rounded bg-orange-500"></div>
+                    <span class="text-slate-400">Low (60-75%)</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <div class="w-4 h-4 rounded bg-yellow-500"></div>
+                    <span class="text-slate-400">Medium (75-85%)</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <div class="w-4 h-4 rounded bg-green-500"></div>
+                    <span class="text-slate-400">Good (&gt;85%)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Availability Trend Chart -->
+    <div class="glass-panel rounded-xl p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-white">Availability Trend (Last 12 Months)</h2>
+            <div class="flex gap-2">
+                <button class="px-3 py-1 bg-slate-700 text-slate-300 rounded text-xs">MTBF</button>
+                <button class="px-3 py-1 bg-brand-600 text-white rounded text-xs">Availability %</button>
+                <button class="px-3 py-1 bg-slate-700 text-slate-300 rounded text-xs">MTTR</button>
+            </div>
+        </div>
+        <div id="availabilityChart" class="h-48 flex items-center justify-center text-slate-500 border-2 border-dashed border-slate-700 rounded">
+            <i class="fas fa-chart-line text-4xl mr-3"></i>
+            <span>Availability trend visualization</span>
+        </div>
+    </div>
+
+    <!-- Recurring Failures -->
+    <div class="glass-panel rounded-xl p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-white">Recurring Failure Patterns</h2>
+            <a href="{{ url_for('maintenance.recurring_failures') }}" class="text-brand-400 hover:text-brand-300 text-sm">View All</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-800/50">
+                    <tr>
+                        <th class="text-left text-slate-400 text-xs font-medium uppercase px-4 py-3">Equipment</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Failure Count</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Total Downtime</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Avg MTTR</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Root Cause</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-700">
+                    {% for pattern in recurring_patterns %}
+                    <tr class="hover:bg-slate-700/30">
+                        <td class="px-4 py-3 text-slate-200">{{ pattern.asset_name }}</td>
+                        <td class="px-4 py-3 text-center text-red-400 font-medium">{{ pattern.failure_count }}</td>
+                        <td class="px-4 py-3 text-center text-slate-300">{{ pattern.total_downtime|round(1) }}h</td>
+                        <td class="px-4 py-3 text-center text-slate-300">{{ pattern.avg_mttr|round(1) }}h</td>
+                        <td class="px-4 py-3 text-center text-slate-400">{{ pattern.root_cause or 'Unknown' }}</td>
+                        <td class="px-4 py-3 text-center">
+                            {% if pattern.status == 'Open' %}
+                            <span class="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs">Open</span>
+                            {% elif pattern.status == 'Under Review' %}
+                            <span class="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs">Under Review</span>
+                            {% else %}
+                            <span class="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs">Resolved</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="px-4 py-8 text-center text-slate-400">No recurring failure patterns detected</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <a href="{{ url_for('maintenance.downtime_new') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/50 transition-colors text-center">
+            <i class="fas fa-plus-circle text-red-400 text-2xl mb-2"></i>
+            <p class="text-slate-200 text-sm font-medium">Log Downtime</p>
+        </a>
+        <a href="{{ url_for('maintenance.failure_modes') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/50 transition-colors text-center">
+            <i class="fas fa-exclamation-triangle text-orange-400 text-2xl mb-2"></i>
+            <p class="text-slate-200 text-sm font-medium">Failure Modes</p>
+        </a>
+        <a href="{{ url_for('maintenance.mtbf_mttr') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/50 transition-colors text-center">
+            <i class="fas fa-calculator text-cyan-400 text-2xl mb-2"></i>
+            <p class="text-slate-200 text-sm font-medium">MTBF/MTTR Calc</p>
+        </a>
+        <a href="{{ url_for('maintenance.report_reliability') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/50 transition-colors text-center">
+            <i class="fas fa-file-alt text-blue-400 text-2xl mb-2"></i>
+            <p class="text-slate-200 text-sm font-medium">Reliability Report</p>
+        </a>
+    </div>
+</div>
+{% endblock %}

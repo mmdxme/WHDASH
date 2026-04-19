@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center gap-4">
+        <a href="{{ url_for('logistics.stops_list') }}" class="p-2 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-all">
+            <i class="fa-solid fa-arrow-left"></i>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 text-sm mt-1">Stop details and status</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="lg:col-span-2 space-y-6">
+            <div class="glass-panel rounded-2xl p-6">
+                <div class="flex items-start justify-between mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-white">{{ stop.stop_name }}</h2>
+                        <p class="text-slate-400 mt-1">{{ stop.address or 'No address specified' }}</p>
+                    </div>
+                    <span class="px-3 py-1 rounded-full text-sm font-medium {% if stop.status == 'completed' %}bg-emerald-500/10 text-emerald-400{% elif stop.status == 'failed' %}bg-red-500/10 text-red-400{% elif stop.status == 'arrived' %}bg-blue-500/10 text-blue-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                        {{ stop.status|upper }}
+                    </span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="p-4 bg-white/5 rounded-xl">
+                        <p class="text-slate-400 text-xs mb-1">Trip</p>
+                        <a href="{{ url_for('logistics.trips_view', id=stop.trip_id) }}" class="text-brand-400 hover:text-brand-300 font-medium">{{ stop.trip_code }}</a>
+                    </div>
+                    <div class="p-4 bg-white/5 rounded-xl">
+                        <p class="text-slate-400 text-xs mb-1">Customer</p>
+                        <p class="text-white font-medium">{{ stop.customer_name or '-' }}</p>
+                    </div>
+                    <div class="p-4 bg-white/5 rounded-xl">
+                        <p class="text-slate-400 text-xs mb-1">Contact Phone</p>
+                        <p class="text-white">{{ stop.contact_phone or '-' }}</p>
+                    </div>
+                    <div class="p-4 bg-white/5 rounded-xl">
+                        <p class="text-slate-400 text-xs mb-1">Sequence Order</p>
+                        <p class="text-white">{{ stop.sequence_order or stop.stop_sequence }}</p>
+                    </div>
+                </div>
+
+                {% if stop.notes %}
+                <div class="p-4 bg-white/5 rounded-xl">
+                    <p class="text-slate-400 text-xs mb-2">Notes</p>
+                    <p class="text-white text-sm whitespace-pre-line">{{ stop.notes }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            {% if stop.failure_reason %}
+            <div class="glass-panel rounded-2xl p-6 border border-red-500/30">
+                <h3 class="text-red-400 font-bold mb-3"><i class="fa-solid fa-exclamation-triangle mr-2"></i>Failure Reason</h3>
+                <p class="text-white">{{ stop.failure_reason }}</p>
+            </div>
+            {% endif %}
+
+            {% if stop.receiver_name %}
+            <div class="glass-panel rounded-2xl p-6">
+                <h3 class="text-white font-bold mb-4">Proof of Delivery</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <p class="text-slate-400 text-xs mb-1">Receiver Name</p>
+                        <p class="text-white">{{ stop.receiver_name }}</p>
+                    </div>
+                    {% if stop.proof_of_delivery %}
+                    <div>
+                        <p class="text-slate-400 text-xs mb-1">POD Reference</p>
+                        <p class="text-white">{{ stop.proof_of_delivery }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="space-y-6">
+            <div class="glass-panel rounded-2xl p-6">
+                <h3 class="text-white font-bold mb-4">Timing</h3>
+                <div class="space-y-4">
+                    <div>
+                        <p class="text-slate-400 text-xs mb-1">Planned Arrival</p>
+                        <p class="text-white">{% if stop.planned_arrival %}{{ stop.planned_arrival.strftime('%Y-%m-%d %H:%M') }}{% else %}Not scheduled{% endif %}</p>
+                    </div>
+                    <div>
+                        <p class="text-slate-400 text-xs mb-1">Actual Arrival</p>
+                        <p class="text-white">{% if stop.actual_arrival %}{{ stop.actual_arrival.strftime('%Y-%m-%d %H:%M') }}{% else %}-{% endif %}</p>
+                    </div>
+                    <div>
+                        <p class="text-slate-400 text-xs mb-1">Actual Departure</p>
+                        <p class="text-white">{% if stop.actual_departure %}{{ stop.actual_departure.strftime('%Y-%m-%d %H:%M') }}{% else %}-{% endif %}</p>
+                    </div>
+                </div>
+            </div>
+
+            {% if stop.status in ['pending', 'arrived'] %}
+            <div class="glass-panel rounded-2xl p-6">
+                <h3 class="text-white font-bold mb-4">Actions</h3>
+                <div class="space-y-2">
+                    {% if stop.status == 'pending' %}
+                    <a href="{{ url_for('logistics.stops_checkin', id=stop.id) }}" class="block w-full px-4 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium text-center transition-all">
+                        <i class="fa-solid fa-sign-in-alt mr-2"></i>Check In
+                    </a>
+                    {% endif %}
+                    {% if stop.status == 'arrived' %}
+                    <form action="{{ url_for('logistics.stops_complete', id=stop.id) }}" method="POST" class="contents">
+                        <input type="hidden" name="receiver_name" value="Customer">
+                        <button type="submit" class="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium transition-all">
+                            <i class="fa-solid fa-check mr-2"></i>Mark Completed
+                        </button>
+                    </form>
+                    <a href="{{ url_for('logistics.stops_fail', id=stop.id) }}" class="block w-full px-4 py-3 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-xl text-sm font-medium text-center transition-all">
+                        <i class="fa-solid fa-times mr-2"></i>Mark Failed
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="glass-panel rounded-2xl p-6">
+                <h3 class="text-white font-bold mb-4">Location</h3>
+                {% if stop.latitude and stop.longitude %}
+                <div class="aspect-video bg-slate-800 rounded-xl flex items-center justify-center">
+                    <p class="text-slate-400 text-sm">
+                        <i class="fa-solid fa-map-pin mr-2 text-brand-400"></i>
+                        {{ "%.6f"|format(stop.latitude) }}, {{ "%.6f"|format(stop.longitude) }}
+                    </p>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm">No GPS coordinates available</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

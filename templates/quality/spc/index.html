@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPC / Quality Analytics - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --success: #10B981;
+            --warning: #F59E0B;
+            --danger: #EF4444;
+            --light-bg: #F9FAFB;
+        }
+        body { background: var(--light-bg); font-family: 'Segoe UI', system-ui, sans-serif; }
+        .stat-card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card-header-custom { background: white; border-bottom: 2px solid #E5E7EB; font-weight: 600; padding: 1rem 1.25rem; }
+        .chart-container { position: relative; height: 300px; background: white; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
+        .metric-card { background: white; border-radius: 12px; padding: 1.5rem; text-align: center; }
+        .metric-value { font-size: 2.5rem; font-weight: 700; }
+        .metric-label { font-size: 0.875rem; color: #6B7280; }
+        .trend-up { color: var(--success); }
+        .trend-down { color: var(--danger); }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <!-- Page Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1"><i class="fas fa-chart-line me-2 text-primary"></i>SPC / Quality Analytics</h1>
+                <p class="text-muted mb-0">Statistical Process Control and Quality Trend Analysis</p>
+            </div>
+            <div class="d-flex gap-2">
+                <select class="form-select">
+                    <option>Last 30 Days</option>
+                    <option>Last 90 Days</option>
+                    <option>Last 12 Months</option>
+                </select>
+                <a href="#" class="btn btn-outline-primary">
+                    <i class="fas fa-download me-1"></i> Export
+                </a>
+            </div>
+        </div>
+
+        <!-- Key Metrics -->
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <div class="metric-card">
+                    <div class="metric-value text-success">{{ pass_rate|default('98.5') }}%</div>
+                    <div class="metric-label">Pass Rate</div>
+                    <div class="trend-up"><i class="fas fa-arrow-up me-1"></i>+0.5% vs last period</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metric-card">
+                    <div class="metric-value text-danger">{{ defect_rate|default('1.2') }}%</div>
+                    <div class="metric-label">Defect Rate</div>
+                    <div class="trend-down"><i class="fas fa-arrow-down me-1"></i>-0.3% vs last period</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metric-card">
+                    <div class="metric-value text-primary">{{ sigma_level|default('4.2') }}σ</div>
+                    <div class="metric-label">Sigma Level</div>
+                    <div class="trend-up"><i class="fas fa-arrow-up me-1"></i>+0.1 vs last period</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="metric-card">
+                    <div class="metric-value text-warning">{{ cpk|default('1.45') }}</div>
+                    <div class="metric-label">Process Capability (Cpk)</div>
+                    <div class="text-muted small">Target: 1.33</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row g-4 mb-4">
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <h6 class="mb-3"><i class="fas fa-chart-line me-2"></i>Defect Rate Trend</h6>
+                    <canvas id="defectRateChart"></canvas>
+                    <div class="text-center text-muted mt-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Chart visualization will render with real-time data
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="chart-container">
+                    <h6 class="mb-3"><i class="fas fa-chart-bar me-2"></i>Pass Rate Trend</h6>
+                    <canvas id="passRateChart"></canvas>
+                    <div class="text-center text-muted mt-3">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Chart visualization will render with real-time data
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Control Charts -->
+        <div class="card mb-4">
+            <div class="card-header card-header-custom">
+                <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" data-bs-toggle="tab" href="#control_charts">
+                            <i class="fas fa-chart-line me-2"></i>Control Charts
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="tab" href="#defect_analysis">
+                            <i class="fas fa-chart-pie me-2"></i>Defect Analysis
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="tab" href="#anomaly_review">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Anomaly Review
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="tab" href="#yield_analysis">
+                            <i class="fas fa-percentage me-2"></i>Yield Analysis
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body">
+                <div class="tab-content">
+                    <!-- Control Charts -->
+                    <div class="tab-pane fade show active" id="control_charts">
+                        <div class="row">
+                            <div class="col-lg-4 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <h6 class="text-muted mb-3">X-bar Chart</h6>
+                                        <div class="bg-light rounded p-4 mb-3">
+                                            <i class="fas fa-chart-line fa-3x text-secondary"></i>
+                                        </div>
+                                        <div class="small">
+                                            <div>UCL: <strong>{{ ucl|default('10.5') }}</strong></div>
+                                            <div>Mean: <strong>{{ mean|default('10.0') }}</strong></div>
+                                            <div>LCL: <strong>{{ lcl|default('9.5') }}</strong></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-4 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <h6 class="text-muted mb-3">R Chart</h6>
+                                        <div class="bg-light rounded p-4 mb-3">
+                                            <i class="fas fa-chart-area fa-3x text-secondary"></i>
+                                        </div>
+                                        <div class="small">
+                                            <div>UCL: <strong>{{ r_ucl|default('3.2') }}</strong></div>
+                                            <div>Mean: <strong>{{ r_mean|default('1.8') }}</strong></div>
+                                            <div>LCL: <strong>{{ r_lcl|default('0.4') }}</strong></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-4 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-body text-center">
+                                        <h6 class="text-muted mb-3">Process Capability</h6>
+                                        <div class="bg-light rounded p-4 mb-3">
+                                            <i class="fas fa-chart-bar fa-3x text-secondary"></i>
+                                        </div>
+                                        <div class="small">
+                                            <div>Cp: <strong>{{ cp|default('1.52') }}</strong></div>
+                                            <div>Cpk: <strong>{{ cpk|default('1.45') }}</strong></div>
+                                            <div>Status: <span class="badge bg-success">In Control</span></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SPC Data Table -->
+                        <div class="table-responsive mt-3">
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Sample</th>
+                                        <th>Date</th>
+                                        <th>X-bar</th>
+                                        <th>Range</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if spc_data %}
+                                        {% for row in spc_data %}
+                                        <tr>
+                                            <td>{{ row.sample_no }}</td>
+                                            <td>{{ row.date }}</td>
+                                            <td>{{ row.x_bar }}</td>
+                                            <td>{{ row.range }}</td>
+                                            <td>
+                                                {% if row.status == 'HIGH' %}
+                                                <span class="badge bg-danger">Above UCL</span>
+                                                {% elif row.status == 'LOW' %}
+                                                <span class="badge bg-danger">Below LCL</span>
+                                                {% else %}
+                                                <span class="badge bg-success">In Control</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td>1</td><td>2024-01-01</td><td>10.2</td><td>1.5</td><td><span class="badge bg-success">In Control</span></td>
+                                        </tr>
+                                        <tr>
+                                            <td>2</td><td>2024-01-02</td><td>9.8</td><td>1.2</td><td><span class="badge bg-success">In Control</span></td>
+                                        </tr>
+                                        <tr>
+                                            <td>3</td><td>2024-01-03</td><td>10.5</td><td>2.1</td><td><span class="badge bg-danger">Above UCL</span></td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Defect Analysis -->
+                    <div class="tab-pane fade" id="defect_analysis">
+                        <div class="row">
+                            <div class="col-lg-6">
+                                <h6 class="mb-3"><i class="fas fa-chart-pie me-2"></i>Defect Distribution</h6>
+                                <div class="table-responsive">
+                                    <table class="table table-hover">
+                                        <thead>
+                                            <tr>
+                                                <th>Defect Type</th>
+                                                <th>Count</th>
+                                                <th>Percentage</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% if defect_types %}
+                                                {% for dt in defect_types %}
+                                                <tr>
+                                                    <td>{{ dt.name }}</td>
+                                                    <td>{{ dt.count }}</td>
+                                                    <td>{{ dt.percentage }}%</td>
+                                                </tr>
+                                                {% endfor %}
+                                            {% else %}
+                                                <tr><td>Dimension</td><td>45</td><td>35%</td></tr>
+                                                <tr><td>Surface</td><td>32</td><td>25%</td></tr>
+                                                <tr><td>Color</td><td>26</td><td>20%</td></tr>
+                                                <tr><td>Packaging</td><td>19</td><td>15%</td></tr>
+                                                <tr><td>Other</td><td>7</td><td>5%</td></tr>
+                                            {% endif %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="col-lg-6">
+                                <h6 class="mb-3"><i class="fas fa-chart-bar me-2"></i>Pareto Analysis</h6>
+                                <div class="alert alert-secondary">
+                                    <i class="fas fa-chart-bar me-2"></i>
+                                    Pareto chart showing top defect contributors
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Anomaly Review -->
+                    <div class="tab-pane fade" id="anomaly_review">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Process/Line</th>
+                                        <th>Metric</th>
+                                        <th>Value</th>
+                                        <th>Expected Range</th>
+                                        <th>Deviation</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if anomalies %}
+                                        {% for anomaly in anomalies %}
+                                        <tr>
+                                            <td>{{ anomaly.date }}</td>
+                                            <td>{{ anomaly.process }}</td>
+                                            <td>{{ anomaly.metric }}</td>
+                                            <td>{{ anomaly.value }}</td>
+                                            <td>{{ anomaly.expected }}</td>
+                                            <td class="text-danger">{{ anomaly.deviation }}%</td>
+                                            <td><span class="badge bg-danger">ANOMALY</span></td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td colspan="7" class="text-center text-muted py-4">
+                                                <i class="fas fa-check-circle fa-2x mb-2 d-block text-success"></i>
+                                                No anomalies detected in the current period.
+                                            </td>
+                                        </tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Yield Analysis -->
+                    <div class="tab-pane fade" id="yield_analysis">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="metric-card mb-3">
+                                    <div class="metric-value text-success">{{ first_pass_yield|default('97.2') }}%</div>
+                                    <div class="metric-label">First Pass Yield</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="metric-card mb-3">
+                                    <div class="metric-value text-primary">{{ final_yield|default('99.1') }}%</div>
+                                    <div class="metric-label">Final Yield</div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="metric-card mb-3">
+                                    <div class="metric-value text-warning">{{ rework_rate|default('1.9') }}%</div>
+                                    <div class="metric-label">Rework Rate</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Process/Line</th>
+                                        <th>First Pass Yield</th>
+                                        <th>Final Yield</th>
+                                        <th>Target</th>
+                                        <th>Variance</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% if yield_data %}
+                                        {% for y in yield_data %}
+                                        <tr>
+                                            <td>{{ y.process }}</td>
+                                            <td>{{ y.fpy }}%</td>
+                                            <td>{{ y.final_yield }}%</td>
+                                            <td>{{ y.target }}%</td>
+                                            <td class="{{ 'text-success' if y.variance >= 0 else 'text-danger' }}">{{ y.variance }}%</td>
+                                        </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr><td>Assembly Line A</td><td>98.2%</td><td>99.5%</td><td>98%</td><td class="text-success">+0.5%</td></tr>
+                                        <tr><td>Assembly Line B</td><td>96.8%</td><td>98.9%</td><td>98%</td><td class="text-danger">-1.1%</td></tr>
+                                        <tr><td>Packaging</td><td>99.1%</td><td>99.8%</td><td>99%</td><td class="text-success">+0.8%</td></tr>
+                                    {% endif %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Exception Thresholds -->
+        <div class="card">
+            <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-sliders-h me-2"></i>Exception Thresholds</span>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <label class="form-label">Defect Rate Alert (%)</label>
+                        <input type="number" class="form-control" value="{{ defect_rate_threshold|default('2.0') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Pass Rate Alert (%)</label>
+                        <input type="number" class="form-control" value="{{ pass_rate_threshold|default('95.0') }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Control Limit (σ)</label>
+                        <input type="number" class="form-control" value="{{ control_limit|default('3') }}">
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i> Update Thresholds
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+</html>

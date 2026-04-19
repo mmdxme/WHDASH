@@ -1,0 +1,204 @@
+{% extends "scm/base_scm.html" %}
+
+{% block extra_head %}
+<style>
+    .version-card {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(30, 41, 59, 0.5) 100%);
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .version-status {
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-slate-900/50">
+    <!-- Header -->
+    <div class="scm-header px-6 py-4 mb-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                    <i class="fas fa-code-branch text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white">{{ title }}</h1>
+                    <p class="text-slate-400 text-sm">Manage forecast versions, snapshots, and comparisons</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('scm.demand_versions_compare') }}" class="px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-slate-300 text-sm transition">
+                    <i class="fas fa-balance-scale mr-2"></i>{{ t.compare_versions|default('Compare Versions') }}
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Version Modal Trigger -->
+    <div class="px-6 mb-6">
+        <div class="version-card rounded-xl p-5">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t.create_new_version|default('Create New Version from Forecast Run') }}</h3>
+            <form action="{{ url_for('scm.demand_create_version') }}" method="POST" class="flex items-end gap-4">
+                <div class="flex-1">
+                    <label class="block text-slate-400 text-sm mb-2">{{ t.version_name|default('Version Name') }}</label>
+                    <input type="text" name="version_name" required placeholder="e.g., Q2 2026 Forecast v1"
+                           class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500">
+                </div>
+                <div class="w-48">
+                    <label class="block text-slate-400 text-sm mb-2">{{ t.forecast_run|default('Forecast Run') }}</label>
+                    <select name="forecast_run_id" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500">
+                        {% for run in forecast_runs %}
+                        <option value="{{ run.id }}">{{ run.run_name[:40] }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-center gap-2 mb-2">
+                    <input type="checkbox" name="is_baseline" id="is_baseline" value="1" class="rounded">
+                    <label for="is_baseline" class="text-slate-400 text-sm">{{ t.baseline|default('Baseline') }}</label>
+                </div>
+                <button type="submit" class="px-6 py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium transition">
+                    <i class="fas fa-plus mr-2"></i>{{ t.create|default('Create') }}
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Version List -->
+    <div class="px-6 mb-6">
+        <div class="version-card rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-white">{{ t.all_versions|default('All Forecast Versions') }}</h3>
+                <div class="flex items-center gap-2">
+                    <input type="text" id="versionSearch" placeholder="{{ t.search|default('Search versions') }}"
+                           class="px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500">
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-slate-700">
+                            <th class="text-left py-3 px-4">{{ t.version|default('Version') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.status|default('Status') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.baseline|default('Baseline') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.items|default('Items') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.total_qty|default('Total Qty') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.created_by|default('Created By') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.created|default('Created') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.actions|default('Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-300">
+                        {% for version in versions %}
+                        <tr class="border-b border-slate-800 hover:bg-slate-800/50 version-row">
+                            <td class="py-3 px-4">
+                                <div class="flex items-center gap-2">
+                                    <i class="fas fa-code-branch text-purple-400"></i>
+                                    <span class="font-medium text-white">{{ version.version_name }}</span>
+                                    <span class="text-slate-500 text-xs">v{{ version.version_number }}</span>
+                                </div>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="version-status
+                                    {% if version.status == 'APPROVED' %}bg-green-500/20 text-green-400
+                                    {% elif version.status == 'PUBLISHED' %}bg-blue-500/20 text-blue-400
+                                    {% elif version.status == 'FROZEN' %}bg-slate-500/20 text-slate-400
+                                    {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+                                    {{ version.status }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">
+                                {% if version.is_baseline %}
+                                <i class="fas fa-star text-yellow-400"></i>
+                                {% else %}
+                                <i class="fas fa-minus text-slate-600"></i>
+                                {% endif %}
+                            </td>
+                            <td class="py-3 px-4">{{ version.total_items if version.total_items else 0 }}</td>
+                            <td class="py-3 px-4">{{ "{:,.0f}".format(version.total_quantity) if version.total_quantity else 0 }}</td>
+                            <td class="py-3 px-4">{{ version.created_by_name or 'System' }}</td>
+                            <td class="py-3 px-4 text-slate-500">{{ version.created_at[:10] }}</td>
+                            <td class="py-3 px-4">
+                                <div class="flex items-center gap-2">
+                                    <a href="{{ url_for('scm.demand_versions_detail', version_id=version.id) }}"
+                                       class="px-3 py-1 rounded text-xs bg-sky-500/20 text-sky-400 hover:bg-sky-500/30">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if version.status == 'DRAFT' %}
+                                    <form action="{{ url_for('scm.demand_versions_freeze', version_id=version.id) }}" method="POST" class="inline">
+                                        <button type="submit" class="px-3 py-1 rounded text-xs bg-slate-500/20 text-slate-400 hover:bg-slate-500/30">
+                                            <i class="fas fa-snowflake"></i>
+                                        </button>
+                                    </form>
+                                    <form action="{{ url_for('scm.demand_versions_publish', version_id=version.id) }}" method="POST" class="inline">
+                                        <button type="submit" class="px-3 py-1 rounded text-xs bg-green-500/20 text-green-400 hover:bg-green-500/30">
+                                            <i class="fas fa-paper-plane"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    <form action="{{ url_for('scm.demand_versions_clone', version_id=version.id) }}" method="POST" class="inline">
+                                        <input type="hidden" name="new_name" value="{{ version.version_name }} (Copy)">
+                                        <button type="submit" class="px-3 py-1 rounded text-xs bg-purple-500/20 text-purple-400 hover:bg-purple-500/30">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="py-12 text-center text-slate-500">
+                                <i class="fas fa-code-branch text-5xl mb-3"></i>
+                                <p>{{ t.no_versions|default('No forecast versions yet') }}</p>
+                                <p class="text-sm">{{ t.create_version_hint|default('Create a version from an existing forecast run above') }}</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Version Lifecycle Explanation -->
+    <div class="px-6 mb-6">
+        <div class="version-card rounded-xl p-5">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t.version_lifecycle|default('Version Lifecycle') }}</h3>
+            <div class="flex items-center gap-4 text-sm">
+                <div class="flex items-center gap-2">
+                    <span class="w-4 h-4 rounded-full bg-yellow-500"></span>
+                    <span class="text-slate-300">{{ t.draft|default('DRAFT') }}: {{ t.draft_desc|default('Working version, can be edited') }}</span>
+                </div>
+                <i class="fas fa-arrow-right text-slate-600"></i>
+                <div class="flex items-center gap-2">
+                    <span class="w-4 h-4 rounded-full bg-slate-500"></span>
+                    <span class="text-slate-300">{{ t.frozen|default('FROZEN') }}: {{ t.frozen_desc|default('Immutable, locked for reference') }}</span>
+                </div>
+                <i class="fas fa-arrow-right text-slate-600"></i>
+                <div class="flex items-center gap-2">
+                    <span class="w-4 h-4 rounded-full bg-blue-500"></span>
+                    <span class="text-slate-300">{{ t.published|default('PUBLISHED') }}: {{ t.published_desc|default('Published for replenishment use') }}</span>
+                </div>
+                <i class="fas fa-arrow-right text-slate-600"></i>
+                <div class="flex items-center gap-2">
+                    <span class="w-4 h-4 rounded-full bg-green-500"></span>
+                    <span class="text-slate-300">{{ t.approved|default('APPROVED') }}: {{ t.approved_desc|default('Final approved version') }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('versionSearch').addEventListener('input', function(e) {
+    const search = e.target.value.toLowerCase();
+    document.querySelectorAll('.version-row').forEach(row => {
+        const text = row.textContent.toLowerCase();
+        row.style.display = text.includes(search) ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

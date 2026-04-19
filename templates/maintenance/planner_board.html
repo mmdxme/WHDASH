@@ -1,0 +1,369 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-100">Maintenance Planner Board</h1>
+            <p class="text-slate-400 text-sm mt-1">Schedule and assign work orders to technicians and teams</p>
+        </div>
+        <div class="flex gap-3">
+            <select id="viewFilter" class="bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2">
+                <option value="all">All Work Orders</option>
+                <option value="unassigned">Unassigned</option>
+                <option value="scheduled">Scheduled</option>
+                <option value="overdue">Overdue</option>
+            </select>
+            <select id="priorityFilter" class="bg-slate-700 border border-slate-600 text-white text-sm rounded-lg px-3 py-2">
+                <option value="">All Priorities</option>
+                <option value="Critical">Critical</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+            </select>
+            <a href="{{ url_for('maintenance.work_order_new') }}" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-plus mr-2"></i>New Work Order
+            </a>
+        </div>
+    </div>
+
+    <!-- Capacity Overview Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+        <div class="glass-panel rounded-xl p-4">
+            <p class="text-slate-400 text-xs uppercase tracking-wider">Total Work Orders</p>
+            <p class="text-2xl font-bold text-slate-100 mt-1">{{ stats.total|default(0) }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4">
+            <p class="text-slate-400 text-xs uppercase tracking-wider">Scheduled</p>
+            <p class="text-2xl font-bold text-blue-400 mt-1">{{ stats.scheduled|default(0) }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4">
+            <p class="text-slate-400 text-xs uppercase tracking-wider">Unscheduled</p>
+            <p class="text-2xl font-bold text-orange-400 mt-1">{{ stats.unscheduled|default(0) }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4">
+            <p class="text-slate-400 text-xs uppercase tracking-wider">In Progress</p>
+            <p class="text-2xl font-bold text-yellow-400 mt-1">{{ stats.in_progress|default(0) }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4">
+            <p class="text-slate-400 text-xs uppercase tracking-wider">Overdue</p>
+            <p class="text-2xl font-bold text-red-400 mt-1">{{ stats.overdue|default(0) }}</p>
+        </div>
+        <div class="glass-panel rounded-xl p-4">
+            <p class="text-slate-400 text-xs uppercase tracking-wider">Capacity Used</p>
+            <p class="text-2xl font-bold text-cyan-400 mt-1">{{ stats.capacity_used|default(0) }}%</p>
+        </div>
+    </div>
+
+    <!-- Kanban Board -->
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-4 mb-6">
+        <!-- Unscheduled -->
+        <div class="glass-panel rounded-xl p-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold text-orange-400 flex items-center">
+                    <span class="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
+                    Unscheduled
+                </h3>
+                <span class="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded text-xs">{{ unscheduled|length }}</span>
+            </div>
+            <div class="space-y-3 max-h-96 overflow-y-auto">
+                {% for wo in unscheduled %}
+                <div class="p-3 bg-slate-800/50 rounded-lg border-l-4 
+                    {% if wo.priority == 'Critical' %}border-red-500
+                    {% elif wo.priority == 'High' %}border-orange-500
+                    {% elif wo.priority == 'Medium' %}border-yellow-500
+                    {% else %}border-slate-500{% endif %}
+                    hover:bg-slate-700/50 transition-colors cursor-pointer"
+                    onclick="showWorkOrderDetail({{ wo.id }})">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-slate-200 font-medium text-sm">{{ wo.work_order_number }}</span>
+                        <span class="px-2 py-0.5 rounded text-xs 
+                            {% if wo.priority == 'Critical' %}bg-red-500/20 text-red-400
+                            {% elif wo.priority == 'High' %}bg-orange-500/20 text-orange-400
+                            {% elif wo.priority == 'Medium' %}bg-yellow-500/20 text-yellow-400
+                            {% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                            {{ wo.priority }}
+                        </span>
+                    </div>
+                    <p class="text-slate-400 text-xs truncate">{{ wo.asset_name or wo.asset_code }}</p>
+                    <p class="text-slate-500 text-xs mt-1">{{ wo.scheduled_hours|default(0) }}h est.</p>
+                    <div class="flex items-center justify-between mt-2">
+                        <span class="text-slate-500 text-xs">{{ wo.work_order_type }}</span>
+                        <button onclick="event.stopPropagation(); scheduleWorkOrder({{ wo.id }})" class="text-brand-400 hover:text-brand-300 text-xs">
+                            <i class="fas fa-calendar-plus"></i> Schedule
+                        </button>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-sm text-center py-4">No unscheduled work orders</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Scheduled -->
+        <div class="glass-panel rounded-xl p-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold text-blue-400 flex items-center">
+                    <span class="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
+                    Scheduled
+                </h3>
+                <span class="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-xs">{{ scheduled|length }}</span>
+            </div>
+            <div class="space-y-3 max-h-96 overflow-y-auto">
+                {% for wo in scheduled %}
+                <div class="p-3 bg-slate-800/50 rounded-lg border-l-4 
+                    {% if wo.priority == 'Critical' %}border-red-500
+                    {% elif wo.priority == 'High' %}border-orange-500
+                    {% elif wo.priority == 'Medium' %}border-yellow-500
+                    {% else %}border-slate-500{% endif %}
+                    hover:bg-slate-700/50 transition-colors cursor-pointer"
+                    onclick="showWorkOrderDetail({{ wo.id }})">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-slate-200 font-medium text-sm">{{ wo.work_order_number }}</span>
+                        <span class="px-2 py-0.5 rounded text-xs 
+                            {% if wo.priority == 'Critical' %}bg-red-500/20 text-red-400
+                            {% elif wo.priority == 'High' %}bg-orange-500/20 text-orange-400
+                            {% elif wo.priority == 'Medium' %}bg-yellow-500/20 text-yellow-400
+                            {% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                            {{ wo.priority }}
+                        </span>
+                    </div>
+                    <p class="text-slate-400 text-xs truncate">{{ wo.asset_name or wo.asset_code }}</p>
+                    <div class="mt-2 p-2 bg-slate-700/50 rounded">
+                        <p class="text-slate-300 text-xs">{{ wo.scheduled_start_date }}</p>
+                        <p class="text-slate-500 text-xs">{{ wo.technician_name or 'Unassigned' }}</p>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-sm text-center py-4">No scheduled work orders</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- In Progress -->
+        <div class="glass-panel rounded-xl p-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold text-yellow-400 flex items-center">
+                    <span class="w-2 h-2 bg-yellow-500 rounded-full mr-2 animate-pulse"></span>
+                    In Progress
+                </h3>
+                <span class="bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded text-xs">{{ in_progress|length }}</span>
+            </div>
+            <div class="space-y-3 max-h-96 overflow-y-auto">
+                {% for wo in in_progress %}
+                <div class="p-3 bg-slate-800/50 rounded-lg border-l-4 
+                    {% if wo.priority == 'Critical' %}border-red-500
+                    {% elif wo.priority == 'High' %}border-orange-500
+                    {% elif wo.priority == 'Medium' %}border-yellow-500
+                    {% else %}border-slate-500{% endif %}
+                    hover:bg-slate-700/50 transition-colors cursor-pointer"
+                    onclick="showWorkOrderDetail({{ wo.id }})">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-slate-200 font-medium text-sm">{{ wo.work_order_number }}</span>
+                        <span class="px-2 py-0.5 rounded text-xs 
+                            {% if wo.priority == 'Critical' %}bg-red-500/20 text-red-400
+                            {% elif wo.priority == 'High' %}bg-orange-500/20 text-orange-400
+                            {% elif wo.priority == 'Medium' %}bg-yellow-500/20 text-yellow-400
+                            {% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                            {{ wo.priority }}
+                        </span>
+                    </div>
+                    <p class="text-slate-400 text-xs truncate">{{ wo.asset_name or wo.asset_code }}</p>
+                    <div class="mt-2 flex items-center gap-2">
+                        <div class="flex-1 bg-slate-700 rounded-full h-2">
+                            <div class="bg-yellow-500 h-2 rounded-full" style="width: {{ wo.progress_pct|default(0) }}%"></div>
+                        </div>
+                        <span class="text-slate-400 text-xs">{{ wo.progress_pct|default(0) }}%</span>
+                    </div>
+                    <p class="text-slate-500 text-xs mt-1">{{ wo.technician_name }}</p>
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-sm text-center py-4">No work in progress</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- On Hold -->
+        <div class="glass-panel rounded-xl p-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold text-gray-400 flex items-center">
+                    <span class="w-2 h-2 bg-gray-500 rounded-full mr-2"></span>
+                    On Hold
+                </h3>
+                <span class="bg-gray-500/20 text-gray-400 px-2 py-0.5 rounded text-xs">{{ on_hold|length }}</span>
+            </div>
+            <div class="space-y-3 max-h-96 overflow-y-auto">
+                {% for wo in on_hold %}
+                <div class="p-3 bg-slate-800/50 rounded-lg border-l-4 border-gray-500 hover:bg-slate-700/50 transition-colors cursor-pointer"
+                    onclick="showWorkOrderDetail({{ wo.id }})">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-slate-200 font-medium text-sm">{{ wo.work_order_number }}</span>
+                        <span class="bg-gray-500/20 text-gray-400 px-2 py-0.5 rounded text-xs">{{ wo.hold_reason|default('On Hold') }}</span>
+                    </div>
+                    <p class="text-slate-400 text-xs truncate">{{ wo.asset_name or wo.asset_code }}</p>
+                    <p class="text-slate-500 text-xs mt-1">{{ wo.technician_name or 'Unassigned' }}</p>
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-sm text-center py-4">No work on hold</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Completed Today -->
+        <div class="glass-panel rounded-xl p-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold text-green-400 flex items-center">
+                    <span class="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                    Completed Today
+                </h3>
+                <span class="bg-green-500/20 text-green-400 px-2 py-0.5 rounded text-xs">{{ completed_today|length }}</span>
+            </div>
+            <div class="space-y-3 max-h-96 overflow-y-auto">
+                {% for wo in completed_today %}
+                <div class="p-3 bg-slate-800/50 rounded-lg border-l-4 border-green-500 hover:bg-slate-700/50 transition-colors cursor-pointer"
+                    onclick="showWorkOrderDetail({{ wo.id }})">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-slate-200 font-medium text-sm">{{ wo.work_order_number }}</span>
+                        <i class="fas fa-check-circle text-green-400"></i>
+                    </div>
+                    <p class="text-slate-400 text-xs truncate">{{ wo.asset_name or wo.asset_code }}</p>
+                    <p class="text-slate-500 text-xs mt-1">{{ wo.technician_name }}</p>
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-sm text-center py-4">No completed today</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Technician Capacity Table -->
+    <div class="glass-panel rounded-xl p-5 mb-6">
+        <h2 class="text-lg font-semibold text-white mb-4">Technician Workload & Capacity</h2>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-800/50">
+                    <tr>
+                        <th class="text-left text-slate-400 text-xs font-medium uppercase px-4 py-3">Technician</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Assigned</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">In Progress</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Completed (MTD)</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Capacity %</th>
+                        <th class="text-left text-slate-400 text-xs font-medium uppercase px-4 py-3">Workload</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-700">
+                    {% for tech in technician_workload %}
+                    <tr class="hover:bg-slate-700/30">
+                        <td class="px-4 py-3 text-slate-200">{{ tech.technician_name }}</td>
+                        <td class="px-4 py-3 text-center text-slate-300">{{ tech.assigned|default(0) }}</td>
+                        <td class="px-4 py-3 text-center text-yellow-400">{{ tech.in_progress|default(0) }}</td>
+                        <td class="px-4 py-3 text-center text-green-400">{{ tech.completed_mtd|default(0) }}</td>
+                        <td class="px-4 py-3 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <div class="w-16 bg-slate-700 rounded-full h-2">
+                                    <div class="h-2 rounded-full 
+                                        {% if tech.capacity_pct|default(0) >= 90 %}bg-red-500
+                                        {% elif tech.capacity_pct|default(0) >= 70 %}bg-yellow-500
+                                        {% else %}bg-green-500{% endif %}" 
+                                        style="width: {{ tech.capacity_pct|default(0)|min(100) }}%"></div>
+                                </div>
+                                <span class="text-slate-300 text-xs">{{ tech.capacity_pct|default(0)|round(0) }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3">
+                            {% if tech.capacity_pct|default(0) >= 90 %}
+                            <span class="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs">Overloaded</span>
+                            {% elif tech.capacity_pct|default(0) >= 70 %}
+                            <span class="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded text-xs">Busy</span>
+                            {% else %}
+                            <span class="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs">Available</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="px-4 py-8 text-center text-slate-400">No technician data available</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Schedule Work Order Modal -->
+<div id="scheduleModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="glass-panel rounded-xl p-6 w-full max-w-md">
+        <h3 class="text-lg font-semibold text-white mb-4">Schedule Work Order</h3>
+        <form id="scheduleForm">
+            <input type="hidden" id="scheduleWoId" name="work_order_id">
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Scheduled Date</label>
+                    <input type="date" name="scheduled_date" required class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Assigned Technician</label>
+                    <select name="technician_id" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white">
+                        <option value="">Select Technician</option>
+                        {% for tech in technicians %}
+                        <option value="{{ tech.id }}">{{ tech.first_name }} {{ tech.last_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Estimated Hours</label>
+                    <input type="number" step="0.5" name="estimated_hours" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-xs mb-1">Notes</label>
+                    <textarea name="notes" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="closeScheduleModal()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm">Schedule</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showWorkOrderDetail(woId) {
+    window.location.href = '/maintenance/work-orders/' + woId;
+}
+
+function scheduleWorkOrder(woId) {
+    document.getElementById('scheduleWoId').value = woId;
+    document.getElementById('scheduleModal').classList.remove('hidden');
+}
+
+function closeScheduleModal() {
+    document.getElementById('scheduleModal').classList.add('hidden');
+}
+
+document.getElementById('scheduleForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    fetch('/maintenance/work-orders/' + formData.get('work_order_id') + '/schedule', {
+        method: 'POST',
+        body: JSON.stringify({
+            scheduled_date: formData.get('scheduled_date'),
+            technician_id: formData.get('technician_id'),
+            estimated_hours: formData.get('estimated_hours'),
+            notes: formData.get('notes')
+        }),
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    });
+});
+</script>
+{% endblock %}

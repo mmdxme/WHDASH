@@ -1,0 +1,161 @@
+{% extends "scm/base_scm.html" %}
+
+{% block scm_content %}
+{% set breadcrumb = [{'label': 'Demand Planning'}] %}
+{{ breadcrumb }}
+
+<!-- KPI Summary -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-sky-500/20 flex items-center justify-center">
+                <i class="fas fa-chart-area text-sky-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.demand_30d|default('Demand (30d)') }}</p>
+                <p class="text-white text-xl font-bold">{{ "{:,.0f}".format(total_demand_30d|default(0)) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                <i class="fas fa-chart-line text-emerald-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.demand_90d|default('Demand (90d)') }}</p>
+                <p class="text-white text-xl font-bold">{{ "{:,.0f}".format(total_demand_90d|default(0)) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                <i class="fas fa-calculator text-amber-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.avg_daily_demand|default('Avg Daily Demand') }}</p>
+                <p class="text-white text-xl font-bold">{{ "{:,.1f}".format(avg_daily_demand|default(0)) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <i class="fas fa-boxes text-purple-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.items_with_demand|default('Items w/ Demand') }}</p>
+                <p class="text-white text-xl font-bold">{{ items_with_demand|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Navigation -->
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+    <a href="{{ url_for('scm.demand_forecast_center') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-chart-area text-2xl text-sky-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.forecast_center|default('Forecast Center') }}</p>
+    </a>
+    <a href="{{ url_for('scm.demand_by_item', item_id=0) }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-box text-2xl text-emerald-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.by_item|default('Forecast by Item') }}</p>
+    </a>
+    <a href="{{ url_for('scm.demand_by_warehouse') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-warehouse text-2xl text-amber-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.by_warehouse|default('By Warehouse') }}</p>
+    </a>
+    <a href="{{ url_for('scm.demand_versions') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-code-branch text-2xl text-violet-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.versions|default('Versions') }}</p>
+    </a>
+    <a href="{{ url_for('scm.demand_overrides') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-edit text-2xl text-rose-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.overrides|default('Overrides') }}</p>
+    </a>
+    <a href="{{ url_for('scm.demand_accuracy') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-bullseye text-2xl text-cyan-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.accuracy|default('Accuracy') }}</p>
+    </a>
+</div>
+
+<!-- Forecast Runs Table -->
+<div class="glass-panel rounded-xl p-5">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-white font-semibold flex items-center gap-2">
+            <i class="fas fa-list text-sky-400"></i> {{ t.forecast_runs|default('Forecast Runs') }}
+        </h3>
+        <a href="{{ url_for('scm.demand_forecast_center') }}" class="text-sky-400 text-sm hover:underline">{{ t.view_all|default('View All') }}</a>
+    </div>
+    {% if forecast_runs %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-2 px-3">{{ t.run_name|default('Run Name') }}</th>
+                    <th class="text-center py-2 px-3">{{ t.method|default('Method') }}</th>
+                    <th class="text-right py-2 px-3">{{ t.lines|default('Lines') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.status|default('Status') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.created_by|default('Created By') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.created|default('Created') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in forecast_runs %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30">
+                    <td class="py-2 px-3">
+                        <a href="{{ url_for('scm.demand_forecast_detail', run_id=run.id) }}" class="text-sky-400 hover:underline">{{ run.run_name }}</a>
+                    </td>
+                    <td class="py-2 px-3 text-center text-slate-300">{{ run.method }}</td>
+                    <td class="py-2 px-3 text-right text-slate-300">{{ run.line_count|default(0) }}</td>
+                    <td class="py-2 px-3">
+                        {% if run.status == 'DRAFT' %}
+                        <span class="status-badge status-draft">Draft</span>
+                        {% elif run.status == 'APPROVED' %}
+                        <span class="status-badge status-approved">Approved</span>
+                        {% else %}
+                        <span class="status-badge">{{ run.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-2 px-3 text-slate-300">{{ run.created_by_name|default('-') }}</td>
+                    <td class="py-2 px-3 text-slate-400 text-xs">{{ run.created_at }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-slate-500">
+        <i class="fas fa-chart-area text-4xl mb-2 text-slate-600"></i>
+        <p>{{ t.no_forecasts|default('No forecast runs yet. Go to Forecast Center to generate one.') }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Demand by Category -->
+<div class="glass-panel rounded-xl p-5 mt-6">
+    <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+        <i class="fas fa-chart-bar text-emerald-400"></i> {{ t.demand_by_category|default('Demand by Category (30d)') }}
+    </h3>
+    {% if demand_by_category %}
+    <div class="space-y-3">
+        {% for cat in demand_by_category %}
+        <div class="flex items-center justify-between">
+            <span class="text-slate-300 text-sm">{{ cat.category|default('Uncategorized') }}</span>
+            <div class="flex items-center gap-3">
+                <div class="w-48 bg-slate-700 rounded-full h-2">
+                    <div class="bg-sky-500 h-2 rounded-full" style="width: {{ (cat.total / total_demand_30d * 100)|default(0) }}%"></div>
+                </div>
+                <span class="text-white font-medium w-24 text-right">{{ "{:,.0f}".format(cat.total|default(0)) }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-slate-500">
+        <p>{{ t.no_category_data|default('No category demand data available') }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

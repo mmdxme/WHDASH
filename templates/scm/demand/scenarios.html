@@ -1,0 +1,177 @@
+{% extends "scm/base_scm.html" %}
+
+{% block extra_head %}
+<style>
+    .scenario-card {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(30, 41, 59, 0.5) 100%);
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .scenario-type-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-slate-900/50">
+    <!-- Header -->
+    <div class="scm-header px-6 py-4 mb-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 flex items-center justify-center">
+                    <i class="fas fa-flask text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white">{{ title }}</h1>
+                    <p class="text-slate-400 text-sm">What-if scenario planning and simulation</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('scm.demand_scenarios_compare') }}" class="px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-slate-300 text-sm transition">
+                    <i class="fas fa-balance-scale mr-2"></i>{{ t.compare|default('Compare Scenarios') }}
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Scenario -->
+    <div class="px-6 mb-6">
+        <div class="scenario-card rounded-xl p-5">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t.create_scenario|default('Create What-If Scenario') }}</h3>
+            <form action="{{ url_for('scm.demand_scenarios_create') }}" method="POST" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div>
+                    <label class="block text-slate-400 text-sm mb-2">{{ t.scenario_name|default('Scenario Name') }}</label>
+                    <input type="text" name="scenario_name" required placeholder="e.g., Q2 Promotion Uplift"
+                           class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-sm mb-2">{{ t.scenario_type|default('Scenario Type') }}</label>
+                    <select name="scenario_type" class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500">
+                        <option value="PROMOTION">{{ t.promotion|default('Promotion') }}</option>
+                        <option value="DEMAND_SPIKE">{{ t.demand_spike|default('Demand Spike') }}</option>
+                        <option value="DEMAND_DROP">{{ t.demand_drop|default('Demand Drop') }}</option>
+                        <option value="PRICE_CHANGE">{{ t.price_change|default('Price Change') }}</option>
+                        <option value="SUPPLY_CONSTRAINT">{{ t.supply_constraint|default('Supply Constraint') }}</option>
+                        <option value="SEASON_SHIFT">{{ t.season_shift|default('Season Shift') }}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-sm mb-2">{{ t.uplift_percent|default('Uplift/Drop %') }}</label>
+                    <input type="number" name="uplift_percent" value="10" step="0.1"
+                           class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500">
+                </div>
+                <div>
+                    <label class="block text-slate-400 text-sm mb-2">{{ t.demand_shift|default('Demand Shift %') }}</label>
+                    <input type="number" name="demand_shift" value="5" step="0.1"
+                           class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500">
+                </div>
+                <div class="md:col-span-4">
+                    <label class="block text-slate-400 text-sm mb-2">{{ t.description|default('Description') }}</label>
+                    <input type="text" name="description" placeholder="{{ t.scenario_description|default('Describe the scenario assumptions...') }}"
+                           class="w-full px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm focus:outline-none focus:border-sky-500">
+                </div>
+                <div class="md:col-span-4">
+                    <button type="submit" class="px-6 py-2 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium transition">
+                        <i class="fas fa-plus mr-2"></i>{{ t.create_scenario|default('Create Scenario') }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scenarios List -->
+    <div class="px-6 mb-6">
+        <div class="scenario-card rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-white">{{ t.active_scenarios|default('Active Scenarios') }}</h3>
+            </div>
+
+            {% if scenarios %}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {% for scenario in scenarios %}
+                <div class="p-5 rounded-xl bg-slate-800/50 border border-slate-700 hover:border-orange-500/50 transition">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="scenario-type-badge
+                            {% if scenario.scenario_type == 'PROMOTION' %}bg-green-500/20 text-green-400
+                            {% elif scenario.scenario_type == 'DEMAND_SPIKE' %}bg-orange-500/20 text-orange-400
+                            {% elif scenario.scenario_type == 'DEMAND_DROP' %}bg-red-500/20 text-red-400
+                            {% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                            {{ scenario.scenario_type }}
+                        </span>
+                        {% if scenario.is_active %}
+                        <span class="w-2 h-2 rounded-full bg-green-400"></span>
+                        {% endif %}
+                    </div>
+                    <h4 class="text-white font-semibold mb-1">{{ scenario.name }}</h4>
+                    <p class="text-slate-400 text-sm mb-3">{{ scenario.description[:60] if scenario.description else '' }}</p>
+                    <div class="grid grid-cols-2 gap-2 text-sm mb-4">
+                        <div>
+                            <span class="text-slate-500">{{ t.items|default('Items') }}:</span>
+                            <span class="text-white">{{ scenario.total_impact_items or 0 }}</span>
+                        </div>
+                        <div>
+                            <span class="text-slate-500">{{ t.impact|default('Impact') }}:</span>
+                            <span class="text-orange-400">{{ "{:,.0f}".format(scenario.total_cost_impact or 0) }}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <a href="{{ url_for('scm.demand_scenarios_detail', scenario_id=scenario.id) }}"
+                           class="flex-1 px-3 py-2 rounded-lg bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 text-center text-sm">
+                            <i class="fas fa-eye mr-1"></i>{{ t.view|default('View') }}
+                        </a>
+                        <form action="{{ url_for('scm.demand_scenarios_apply', scenario_id=scenario.id) }}" method="POST" class="flex-1">
+                            <button type="submit" class="w-full px-3 py-2 rounded-lg bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 text-sm">
+                                <i class="fas fa-play mr-1"></i>{{ t.apply|default('Apply') }}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-16 text-slate-400">
+                <i class="fas fa-flask text-5xl mb-3"></i>
+                <p class="text-xl font-medium">{{ t.no_scenarios|default('No scenarios created') }}</p>
+                <p class="text-sm">{{ t.create_scenario_hint|default('Create a what-if scenario to simulate demand changes') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Scenario Types Explanation -->
+    <div class="px-6 mb-6">
+        <div class="scenario-card rounded-xl p-5">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t.scenario_types|default('Scenario Types') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 text-sm">
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <h4 class="text-green-400 font-medium mb-1">{{ t.promotion|default('Promotion') }}</h4>
+                    <p class="text-slate-500 text-xs">{{ t.promotion_desc|default('Simulate promotional uplift') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <h4 class="text-orange-400 font-medium mb-1">{{ t.demand_spike|default('Demand Spike') }}</h4>
+                    <p class="text-slate-500 text-xs">{{ t.spike_desc|default('Sudden demand increase') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <h4 class="text-red-400 font-medium mb-1">{{ t.demand_drop|default('Demand Drop') }}</h4>
+                    <p class="text-slate-500 text-xs">{{ t.drop_desc|default('Demand decrease scenario') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <h4 class="text-purple-400 font-medium mb-1">{{ t.price_change|default('Price Change') }}</h4>
+                    <p class="text-slate-500 text-xs">{{ t.price_desc|default('Price elasticity impact') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <h4 class="text-yellow-400 font-medium mb-1">{{ t.supply_constraint|default('Supply Constraint') }}</h4>
+                    <p class="text-slate-500 text-xs">{{ t.supply_desc|default('Supply limitation effect') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <h4 class="text-blue-400 font-medium mb-1">{{ t.season_shift|default('Season Shift') }}</h4>
+                    <p class="text-slate-500 text-xs">{{ t.season_desc|default('Seasonal pattern change') }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

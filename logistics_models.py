@@ -639,6 +639,388 @@ LOGISTICS_TABLES = [
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (trip_id) REFERENCES delivery_trips(id) ON DELETE CASCADE
     )""",
+
+    # -------------------------------------------------------------------------
+    # 28. Logistics Delivery Schedules - Appointment/schedule management
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_delivery_schedules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        schedule_code TEXT UNIQUE NOT NULL,
+        shipment_id INTEGER,
+        delivery_order_id INTEGER,
+        customer_id INTEGER,
+        scheduled_date DATE NOT NULL,
+        scheduled_time_from TIME,
+        scheduled_time_to TIME,
+        actual_time_from TIME,
+        actual_time_to TIME,
+        dock_door_id INTEGER,
+        gate_id INTEGER,
+        vehicle_id INTEGER,
+        driver_id INTEGER,
+        status TEXT DEFAULT 'scheduled',
+        appointment_type TEXT DEFAULT 'delivery',
+        customer_preference TEXT,
+        is_rescheduled INTEGER DEFAULT 0,
+        original_schedule_id INTEGER,
+        scheduling_notes TEXT,
+        checked_in_at DATETIME,
+        checked_out_at DATETIME,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (shipment_id) REFERENCES logistics_shipments(id) ON DELETE SET NULL,
+        FOREIGN KEY (delivery_order_id) REFERENCES logistics_delivery_orders(id) ON DELETE SET NULL,
+        FOREIGN KEY (customer_id) REFERENCES sdad_customers(id) ON DELETE SET NULL,
+        FOREIGN KEY (dock_door_id) REFERENCES logistics_dock_doors(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 29. Logistics Load Plans - Load planning and consolidation
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_load_plans (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        load_code TEXT UNIQUE NOT NULL,
+        load_name TEXT,
+        load_date DATE NOT NULL,
+        vehicle_id INTEGER,
+        driver_id INTEGER,
+        route_id INTEGER,
+        total_weight REAL DEFAULT 0,
+        total_volume REAL DEFAULT 0,
+        total_pallets INTEGER DEFAULT 0,
+        total_cartons INTEGER DEFAULT 0,
+        total_shipments INTEGER DEFAULT 0,
+        total_stops INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'planned',
+        load_type TEXT DEFAULT 'standard',
+        priority TEXT DEFAULT 'Normal',
+        dispatch_time TIME,
+        estimated_completion TIME,
+        actual_departure DATETIME,
+        actual_return DATETIME,
+        notes TEXT,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (vehicle_id) REFERENCES logistics_vehicles(id) ON DELETE SET NULL,
+        FOREIGN KEY (driver_id) REFERENCES logistics_drivers(id) ON DELETE SET NULL,
+        FOREIGN KEY (route_id) REFERENCES logistics_route_masters(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 30. Logistics Load Plan Shipments - Shipments assigned to loads
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_load_plan_shipments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        load_plan_id INTEGER NOT NULL,
+        shipment_id INTEGER NOT NULL,
+        sequence_order INTEGER DEFAULT 1,
+        stop_number INTEGER DEFAULT 1,
+        estimated_arrival TIME,
+        actual_arrival TIME,
+        status TEXT DEFAULT 'assigned',
+        loading_sequence INTEGER,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (load_plan_id) REFERENCES logistics_load_plans(id) ON DELETE CASCADE,
+        FOREIGN KEY (shipment_id) REFERENCES logistics_shipments(id) ON DELETE CASCADE
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 31. Logistics Dock Doors - Dock/gate scheduling
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_dock_doors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        dock_code TEXT UNIQUE NOT NULL,
+        dock_name TEXT NOT NULL,
+        location TEXT,
+        dock_type TEXT DEFAULT 'receiving',
+        capacity REAL DEFAULT 0,
+        capacity_unit TEXT DEFAULT 'kg',
+        status TEXT DEFAULT 'available',
+        operating_hours_from TIME,
+        operating_hours_to TIME,
+        is_active INTEGER DEFAULT 1,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 32. Logistics Delivery Slots - Time slot definitions
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_delivery_slots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slot_date DATE NOT NULL,
+        slot_time_from TIME NOT NULL,
+        slot_time_to TIME NOT NULL,
+        zone TEXT,
+        slot_type TEXT DEFAULT 'delivery',
+        capacity INTEGER DEFAULT 0,
+        booked INTEGER DEFAULT 0,
+        available INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 33. Logistics Schedule Exceptions - Schedule conflicts/exceptions
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_schedule_exceptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        exception_code TEXT UNIQUE NOT NULL,
+        exception_type TEXT NOT NULL,
+        schedule_id INTEGER,
+        shipment_id INTEGER,
+        exception_date DATE NOT NULL,
+        exception_time_from TIME,
+        exception_time_to TIME,
+        reason TEXT,
+        status TEXT DEFAULT 'open',
+        resolved_by INTEGER,
+        resolved_at DATETIME,
+        resolution_notes TEXT,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (schedule_id) REFERENCES logistics_delivery_schedules(id) ON DELETE SET NULL,
+        FOREIGN KEY (shipment_id) REFERENCES logistics_shipments(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 30. Logistics Trips - Full trip lifecycle management
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_trips (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_code TEXT UNIQUE NOT NULL,
+        trip_name TEXT,
+        status TEXT NOT NULL DEFAULT 'draft',
+        priority TEXT DEFAULT 'Normal',
+        route_id INTEGER,
+        vehicle_id INTEGER,
+        driver_id INTEGER,
+        helper_id INTEGER,
+        planned_departure DATETIME,
+        planned_arrival DATETIME,
+        actual_departure DATETIME,
+        actual_arrival DATETIME,
+        origin_location TEXT,
+        destination_location TEXT,
+        distance_km REAL DEFAULT 0,
+        total_stops INTEGER DEFAULT 0,
+        completed_stops INTEGER DEFAULT 0,
+        failed_stops INTEGER DEFAULT 0,
+        total_weight_kg REAL DEFAULT 0,
+        total_volume_m3 REAL DEFAULT 0,
+        estimated_cost REAL DEFAULT 0,
+        actual_cost REAL DEFAULT 0,
+        fuel_cost REAL DEFAULT 0,
+        tolls_cost REAL DEFAULT 0,
+        driver_allowance REAL DEFAULT 0,
+        notes TEXT,
+        cancellation_reason TEXT,
+        closed_by INTEGER,
+        closed_at DATETIME,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 31. Logistics Trip Stops - Stop sequence for each trip
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_trip_stops (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        trip_id INTEGER NOT NULL,
+        stop_sequence INTEGER NOT NULL,
+        route_stop_id INTEGER,
+        shipment_id INTEGER,
+        customer_id INTEGER,
+        stop_name TEXT NOT NULL,
+        address TEXT,
+        latitude REAL,
+        longitude REAL,
+        contact_person TEXT,
+        contact_phone TEXT,
+        planned_arrival DATETIME,
+        planned_departure DATETIME,
+        actual_arrival DATETIME,
+        actual_departure DATETIME,
+        service_time_minutes INTEGER DEFAULT 15,
+        sequence_order INTEGER DEFAULT 1,
+        status TEXT DEFAULT 'pending',
+        failure_reason TEXT,
+        proof_of_delivery TEXT,
+        receiver_name TEXT,
+        receiver_signature TEXT,
+        photo_path TEXT,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (trip_id) REFERENCES logistics_trips(id) ON DELETE CASCADE
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 32. Logistics Route Templates - Reusable route templates
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_route_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_code TEXT UNIQUE NOT NULL,
+        template_name TEXT NOT NULL,
+        description TEXT,
+        route_type TEXT DEFAULT 'delivery',
+        service_zone TEXT,
+        vehicle_type_required TEXT,
+        distance_km REAL DEFAULT 0,
+        estimated_time_minutes INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        usage_count INTEGER DEFAULT 0,
+        last_used_at DATETIME,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 33. Logistics Service Zones - Geographic service zones
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_service_zones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        zone_code TEXT UNIQUE NOT NULL,
+        zone_name TEXT NOT NULL,
+        zone_type TEXT DEFAULT 'service',
+        description TEXT,
+        city TEXT,
+        state TEXT,
+        country TEXT,
+        postal_code TEXT,
+        boundary_coords TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 34. Logistics Route Optimization Rules
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_route_optimization_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rule_name TEXT NOT NULL,
+        rule_code TEXT UNIQUE NOT NULL,
+        rule_type TEXT NOT NULL,
+        priority INTEGER DEFAULT 0,
+        condition_json TEXT,
+        action_json TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 35. Logistics Stop Checkpoints - Real-time stop tracking
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_stop_checkpoints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        checkpoint_code TEXT UNIQUE NOT NULL,
+        trip_id INTEGER NOT NULL,
+        stop_id INTEGER,
+        shipment_id INTEGER,
+        checkpoint_time DATETIME NOT NULL,
+        checkpoint_type TEXT NOT NULL,
+        latitude REAL,
+        longitude REAL,
+        geofence_status TEXT DEFAULT 'inside',
+        eta_minutes INTEGER,
+        actual_arrival DATETIME,
+        actual_departure DATETIME,
+        dwell_time_minutes INTEGER,
+        status TEXT DEFAULT 'pending',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (trip_id) REFERENCES logistics_trips(id) ON DELETE CASCADE,
+        FOREIGN KEY (stop_id) REFERENCES logistics_trip_stops(id) ON DELETE SET NULL,
+        FOREIGN KEY (shipment_id) REFERENCES logistics_shipments(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 36. Logistics Freight Costs - Detailed freight cost tracking
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_freight_costs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cost_code TEXT UNIQUE NOT NULL,
+        trip_id INTEGER,
+        shipment_id INTEGER,
+        cost_category TEXT NOT NULL,
+        cost_type TEXT NOT NULL,
+        amount REAL NOT NULL DEFAULT 0,
+        currency TEXT DEFAULT 'AED',
+        vendor_id INTEGER,
+        vendor_name TEXT,
+        invoice_number TEXT,
+        invoice_date DATE,
+        notes TEXT,
+        is_approved INTEGER DEFAULT 0,
+        approved_by INTEGER,
+        approved_at DATETIME,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (trip_id) REFERENCES logistics_trips(id) ON DELETE SET NULL,
+        FOREIGN KEY (shipment_id) REFERENCES logistics_shipments(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 37. Logistics Fleet KPIs - Vehicle/Driver performance metrics
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_fleet_kpis (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kpi_date DATE NOT NULL,
+        vehicle_id INTEGER,
+        driver_id INTEGER,
+        total_km REAL DEFAULT 0,
+        fuel_liters REAL DEFAULT 0,
+        fuel_cost REAL DEFAULT 0,
+        trips_completed INTEGER DEFAULT 0,
+        deliveries_completed INTEGER DEFAULT 0,
+        on_time_count INTEGER DEFAULT 0,
+        late_count INTEGER DEFAULT 0,
+        failed_count INTEGER DEFAULT 0,
+        on_time_rate REAL DEFAULT 0,
+        idle_time_minutes INTEGER DEFAULT 0,
+        driving_time_minutes INTEGER DEFAULT 0,
+        exception_count INTEGER DEFAULT 0,
+        carbon_kg REAL DEFAULT 0,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (vehicle_id) REFERENCES logistics_vehicles(id) ON DELETE SET NULL,
+        FOREIGN KEY (driver_id) REFERENCES logistics_drivers(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 38. Logistics Transport Documents - Document management
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS logistics_transport_documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        doc_code TEXT UNIQUE NOT NULL,
+        doc_type TEXT NOT NULL,
+        trip_id INTEGER,
+        shipment_id INTEGER,
+        vehicle_id INTEGER,
+        driver_id INTEGER,
+        file_path TEXT,
+        file_name TEXT,
+        file_size INTEGER,
+        mime_type TEXT,
+        uploaded_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (trip_id) REFERENCES logistics_trips(id) ON DELETE SET NULL,
+        FOREIGN KEY (shipment_id) REFERENCES logistics_shipments(id) ON DELETE SET NULL,
+        FOREIGN KEY (vehicle_id) REFERENCES logistics_vehicles(id) ON DELETE SET NULL,
+        FOREIGN KEY (driver_id) REFERENCES logistics_drivers(id) ON DELETE SET NULL
+    )""",
 ]
 
 
@@ -663,6 +1045,130 @@ def run_logistics_migrations():
     except Exception as e:
         conn.rollback()
         return False, f"Logistics migration error: {str(e)}"
+    finally:
+        conn.close()
+
+
+# =============================================================================
+# TMS TABLE MIGRATIONS
+# =============================================================================
+
+TMS_TABLES = [
+    # Stop Checkpoints
+    """CREATE TABLE IF NOT EXISTS logistics_stop_checkpoints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        checkpoint_code TEXT UNIQUE NOT NULL,
+        trip_id INTEGER NOT NULL,
+        stop_id INTEGER,
+        shipment_id INTEGER,
+        checkpoint_time DATETIME NOT NULL,
+        checkpoint_type TEXT NOT NULL,
+        latitude REAL,
+        longitude REAL,
+        geofence_status TEXT DEFAULT 'inside',
+        eta_minutes INTEGER,
+        actual_arrival DATETIME,
+        actual_departure DATETIME,
+        dwell_time_minutes INTEGER,
+        status TEXT DEFAULT 'pending',
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (trip_id) REFERENCES logistics_trips(id) ON DELETE CASCADE,
+        FOREIGN KEY (stop_id) REFERENCES logistics_trip_stops(id) ON DELETE SET NULL,
+        FOREIGN KEY (shipment_id) REFERENCES logistics_shipments(id) ON DELETE SET NULL
+    )""",
+
+    # Freight Costs
+    """CREATE TABLE IF NOT EXISTS logistics_freight_costs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        cost_code TEXT UNIQUE NOT NULL,
+        trip_id INTEGER,
+        shipment_id INTEGER,
+        cost_category TEXT NOT NULL,
+        cost_type TEXT NOT NULL,
+        amount REAL NOT NULL DEFAULT 0,
+        currency TEXT DEFAULT 'AED',
+        vendor_id INTEGER,
+        vendor_name TEXT,
+        invoice_number TEXT,
+        invoice_date DATE,
+        notes TEXT,
+        is_approved INTEGER DEFAULT 0,
+        approved_by INTEGER,
+        approved_at DATETIME,
+        created_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (trip_id) REFERENCES logistics_trips(id) ON DELETE SET NULL,
+        FOREIGN KEY (shipment_id) REFERENCES logistics_shipments(id) ON DELETE SET NULL
+    )""",
+
+    # Fleet KPIs
+    """CREATE TABLE IF NOT EXISTS logistics_fleet_kpis (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kpi_date DATE NOT NULL,
+        vehicle_id INTEGER,
+        driver_id INTEGER,
+        total_km REAL DEFAULT 0,
+        fuel_liters REAL DEFAULT 0,
+        fuel_cost REAL DEFAULT 0,
+        trips_completed INTEGER DEFAULT 0,
+        deliveries_completed INTEGER DEFAULT 0,
+        on_time_count INTEGER DEFAULT 0,
+        late_count INTEGER DEFAULT 0,
+        failed_count INTEGER DEFAULT 0,
+        on_time_rate REAL DEFAULT 0,
+        idle_time_minutes INTEGER DEFAULT 0,
+        driving_time_minutes INTEGER DEFAULT 0,
+        exception_count INTEGER DEFAULT 0,
+        carbon_kg REAL DEFAULT 0,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (vehicle_id) REFERENCES logistics_vehicles(id) ON DELETE SET NULL,
+        FOREIGN KEY (driver_id) REFERENCES logistics_drivers(id) ON DELETE SET NULL
+    )""",
+
+    # Transport Documents
+    """CREATE TABLE IF NOT EXISTS logistics_transport_documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        doc_code TEXT UNIQUE NOT NULL,
+        doc_type TEXT NOT NULL,
+        trip_id INTEGER,
+        shipment_id INTEGER,
+        vehicle_id INTEGER,
+        driver_id INTEGER,
+        file_path TEXT,
+        file_name TEXT,
+        file_size INTEGER,
+        mime_type TEXT,
+        uploaded_by INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (trip_id) REFERENCES logistics_trips(id) ON DELETE SET NULL,
+        FOREIGN KEY (shipment_id) REFERENCES logistics_shipments(id) ON DELETE SET NULL,
+        FOREIGN KEY (vehicle_id) REFERENCES logistics_vehicles(id) ON DELETE SET NULL,
+        FOREIGN KEY (driver_id) REFERENCES logistics_drivers(id) ON DELETE SET NULL
+    )""",
+]
+
+
+def ensure_tms_tables():
+    """
+    Run TMS table migrations.
+    Creates TMS-specific tables if they don't exist.
+    These include: stop_checkpoints, freight_costs, fleet_kpis, transport_documents.
+    """
+    conn = get_db()
+    try:
+        for table_sql in TMS_TABLES:
+            conn.executescript(table_sql)
+
+        conn.commit()
+        return True, "TMS tables created successfully"
+    except Exception as e:
+        conn.rollback()
+        return False, f"TMS table migration error: {str(e)}"
     finally:
         conn.close()
 
@@ -904,6 +1410,119 @@ def get_next_incident_number():
         conn.close()
 
 
+def get_next_trip_code():
+    """Generate next trip code."""
+    conn = get_db()
+    try:
+        today = datetime.now().strftime('%Y%m%d')
+        result = conn.execute(
+            "SELECT trip_code FROM logistics_trips WHERE trip_code LIKE ? ORDER BY id DESC LIMIT 1",
+            (f'TRP{today}%',)
+        ).fetchone()
+        if result:
+            last_num = int(result['trip_code'].replace(f'TRP{today}', ''))
+            return f"TRP{today}{(last_num + 1):04d}"
+        return f"TRP{today}0001"
+    finally:
+        conn.close()
+
+
+def get_next_route_code():
+    """Generate next route code."""
+    conn = get_db()
+    try:
+        today = datetime.now().strftime('%Y%m%d')
+        result = conn.execute(
+            "SELECT route_code FROM logistics_route_masters WHERE route_code LIKE ? ORDER BY id DESC LIMIT 1",
+            (f'RTE{today}%',)
+        ).fetchone()
+        if result:
+            last_num = int(result['route_code'].replace(f'RTE{today}', ''))
+            return f"RTE{today}{(last_num + 1):04d}"
+        return f"RTE{today}0001"
+    finally:
+        conn.close()
+
+
+def get_trip_stats(status=None, date_from=None, date_to=None):
+    """Get trip statistics."""
+    conn = get_db()
+    try:
+        where = ["1=1"]
+        params = []
+
+        if status:
+            where.append("status = ?")
+            params.append(status)
+        if date_from:
+            where.append("date(planned_departure) >= ?")
+            params.append(date_from)
+        if date_to:
+            where.append("date(planned_departure) <= ?")
+            params.append(date_to)
+
+        where_clause = " AND ".join(where)
+
+        stats = {
+            'total': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause}", params).fetchone()['cnt'],
+            'draft': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause} AND status = 'draft'", params).fetchone()['cnt'],
+            'planned': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause} AND status = 'planned'", params).fetchone()['cnt'],
+            'ready_for_dispatch': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause} AND status = 'ready_for_dispatch'", params).fetchone()['cnt'],
+            'dispatched': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause} AND status = 'dispatched'", params).fetchone()['cnt'],
+            'en_route': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause} AND status = 'en_route'", params).fetchone()['cnt'],
+            'arrived': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause} AND status = 'arrived'", params).fetchone()['cnt'],
+            'completed': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause} AND status = 'completed'", params).fetchone()['cnt'],
+            'partially_completed': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause} AND status = 'partially_completed'", params).fetchone()['cnt'],
+            'failed': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause} AND status = 'failed'", params).fetchone()['cnt'],
+            'cancelled': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause} AND status = 'cancelled'", params).fetchone()['cnt'],
+            'closed': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trips WHERE {where_clause} AND status = 'closed'", params).fetchone()['cnt'],
+        }
+        return stats
+    finally:
+        conn.close()
+
+
+def get_route_stats():
+    """Get route statistics."""
+    conn = get_db()
+    try:
+        return {
+            'total': conn.execute("SELECT COUNT(*) as cnt FROM logistics_route_masters WHERE is_active = 1").fetchone()['cnt'],
+            'delivery': conn.execute("SELECT COUNT(*) as cnt FROM logistics_route_masters WHERE is_active = 1 AND route_type = 'delivery'").fetchone()['cnt'],
+            'pickup': conn.execute("SELECT COUNT(*) as cnt FROM logistics_route_masters WHERE is_active = 1 AND route_type = 'pickup'").fetchone()['cnt'],
+            'transfer': conn.execute("SELECT COUNT(*) as cnt FROM logistics_route_masters WHERE is_active = 1 AND route_type = 'transfer'").fetchone()['cnt'],
+            'return': conn.execute("SELECT COUNT(*) as cnt FROM logistics_route_masters WHERE is_active = 1 AND route_type = 'return'").fetchone()['cnt'],
+        }
+    finally:
+        conn.close()
+
+
+def get_stop_stats(status=None):
+    """Get stop statistics."""
+    conn = get_db()
+    try:
+        where = ["1=1"]
+        params = []
+
+        if status:
+            where.append("status = ?")
+            params.append(status)
+
+        where_clause = " AND ".join(where)
+
+        stats = {
+            'total': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trip_stops WHERE {where_clause}", params).fetchone()['cnt'],
+            'pending': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trip_stops WHERE {where_clause} AND status = 'pending'", params).fetchone()['cnt'],
+            'arrived': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trip_stops WHERE {where_clause} AND status = 'arrived'", params).fetchone()['cnt'],
+            'completed': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trip_stops WHERE {where_clause} AND status = 'completed'", params).fetchone()['cnt'],
+            'failed': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trip_stops WHERE {where_clause} AND status = 'failed'", params).fetchone()['cnt'],
+            'skipped': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_trip_stops WHERE {where_clause} AND status = 'skipped'", params).fetchone()['cnt'],
+        }
+        return stats
+    finally:
+        conn.close()
+
+
 def get_shipment_stats(company_id=None, date_from=None, date_to=None):
     """Get shipment statistics for dashboard."""
     conn = get_db()
@@ -1022,6 +1641,160 @@ def get_pod_pending_count():
             WHERE status IN ('delivered', 'partially_delivered')
             AND id NOT IN (SELECT shipment_id FROM logistics_pod_records WHERE shipment_id IS NOT NULL)
         """).fetchone()['cnt']
+    finally:
+        conn.close()
+
+
+def get_next_schedule_code():
+    """Generate next schedule code."""
+    conn = get_db()
+    try:
+        today = datetime.now().strftime('%Y%m%d')
+        result = conn.execute(
+            "SELECT schedule_code FROM logistics_delivery_schedules WHERE schedule_code LIKE ? ORDER BY id DESC LIMIT 1",
+            (f'SCH{today}%',)
+        ).fetchone()
+        if result:
+            last_num = int(result['schedule_code'].replace(f'SCH{today}', ''))
+            return f"SCH{today}{(last_num + 1):04d}"
+        return f"SCH{today}0001"
+    finally:
+        conn.close()
+
+
+def get_next_load_code():
+    """Generate next load plan code."""
+    conn = get_db()
+    try:
+        today = datetime.now().strftime('%Y%m%d')
+        result = conn.execute(
+            "SELECT load_code FROM logistics_load_plans WHERE load_code LIKE ? ORDER BY id DESC LIMIT 1",
+            (f'LOAD{today}%',)
+        ).fetchone()
+        if result:
+            last_num = int(result['load_code'].replace(f'LOAD{today}', ''))
+            return f"LOAD{today}{(last_num + 1):04d}"
+        return f"LOAD{today}0001"
+    finally:
+        conn.close()
+
+
+def get_next_exception_code():
+    """Generate next exception code."""
+    conn = get_db()
+    try:
+        year = datetime.now().year
+        result = conn.execute(
+            "SELECT exception_code FROM logistics_schedule_exceptions WHERE exception_code LIKE ? ORDER BY id DESC LIMIT 1",
+            (f'EXC{year}%',)
+        ).fetchone()
+        if result:
+            last_num = int(result['exception_code'].replace(f'EXC{year}', ''))
+            return f"EXC{year}{(last_num + 1):04d}"
+        return f"EXC{year}0001"
+    finally:
+        conn.close()
+
+
+def get_scheduling_stats(date_from=None, date_to=None):
+    """Get scheduling statistics."""
+    conn = get_db()
+    try:
+        where = ["1=1"]
+        params = []
+
+        if date_from:
+            where.append("date(scheduled_date) >= ?")
+            params.append(date_from)
+        if date_to:
+            where.append("date(scheduled_date) <= ?")
+            params.append(date_to)
+
+        where_clause = " AND ".join(where)
+
+        stats = {
+            'total': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_delivery_schedules s WHERE {where_clause}", params).fetchone()['cnt'],
+            'scheduled': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_delivery_schedules s WHERE {where_clause} AND s.status = 'scheduled'", params).fetchone()['cnt'],
+            'checked_in': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_delivery_schedules s WHERE {where_clause} AND s.status = 'checked_in'", params).fetchone()['cnt'],
+            'completed': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_delivery_schedules s WHERE {where_clause} AND s.status = 'completed'", params).fetchone()['cnt'],
+            'cancelled': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_delivery_schedules s WHERE {where_clause} AND s.status = 'cancelled'", params).fetchone()['cnt'],
+            'rescheduled': conn.execute(f"SELECT COUNT(*) as cnt FROM logistics_delivery_schedules s WHERE {where_clause} AND s.is_rescheduled = 1", params).fetchone()['cnt'],
+        }
+
+        return stats
+    finally:
+        conn.close()
+
+
+def get_load_planning_stats():
+    """Get load planning statistics."""
+    conn = get_db()
+    try:
+        today = datetime.now().date().strftime('%Y-%m-%d')
+        return {
+            'total_loads': conn.execute("SELECT COUNT(*) as cnt FROM logistics_load_plans").fetchone()['cnt'],
+            'planned': conn.execute("SELECT COUNT(*) as cnt FROM logistics_load_plans WHERE status = 'planned'").fetchone()['cnt'],
+            'assigned': conn.execute("SELECT COUNT(*) as cnt FROM logistics_load_plans WHERE status = 'assigned'").fetchone()['cnt'],
+            'ready': conn.execute("SELECT COUNT(*) as cnt FROM logistics_load_plans WHERE status = 'ready'").fetchone()['cnt'],
+            'dispatched': conn.execute("SELECT COUNT(*) as cnt FROM logistics_load_plans WHERE status = 'dispatched'").fetchone()['cnt'],
+            'today_loads': conn.execute("SELECT COUNT(*) as cnt FROM logistics_load_plans WHERE load_date = ?", (today,)).fetchone()['cnt'],
+        }
+    finally:
+        conn.close()
+
+
+def check_load_capacity(load_plan_id):
+    """Check vehicle capacity against load plan."""
+    conn = get_db()
+    try:
+        # Get load plan details
+        load = conn.execute("SELECT * FROM logistics_load_plans WHERE id = ?", (load_plan_id,)).fetchone()
+        if not load:
+            return {'error': 'Load plan not found'}
+
+        # Get vehicle capacity
+        vehicle = conn.execute("SELECT * FROM logistics_vehicles WHERE id = ?", (load['vehicle_id'],)).fetchone()
+        if not vehicle:
+            return {'error': 'Vehicle not assigned'}
+
+        # Get load plan shipments totals
+        totals = conn.execute("""
+            SELECT 
+                COALESCE(SUM(sl.weight), 0) as total_weight,
+                COALESCE(SUM(sl.volume), 0) as total_volume,
+                COALESCE(SUM(sl.pallets), 0) as total_pallets,
+                COALESCE(SUM(sl.cartons), 0) as total_cartons,
+                COUNT(*) as shipment_count
+            FROM logistics_load_plan_shipments lps
+            JOIN logistics_shipments s ON lps.shipment_id = s.id
+            LEFT JOIN logistics_shipment_lines sl ON s.id = sl.shipment_id
+            WHERE lps.load_plan_id = ?
+        """, (load_plan_id,)).fetchone()
+
+        weight_ok = totals['total_weight'] <= vehicle['load_capacity_kg'] if vehicle['load_capacity_kg'] else True
+        volume_ok = totals['total_volume'] <= vehicle['load_capacity_volume'] if vehicle['load_capacity_volume'] else True
+        pallets_ok = totals['total_pallets'] <= vehicle['pallet_capacity'] if vehicle['pallet_capacity'] else True
+
+        return {
+            'load_plan_id': load_plan_id,
+            'vehicle_id': vehicle['id'],
+            'vehicle_code': vehicle['vehicle_code'],
+            'max_weight_kg': vehicle['load_capacity_kg'],
+            'max_volume': vehicle['load_capacity_volume'],
+            'max_pallets': vehicle['pallet_capacity'],
+            'max_cartons': vehicle['carton_capacity'],
+            'total_weight_kg': totals['total_weight'],
+            'total_volume': totals['total_volume'],
+            'total_pallets': totals['total_pallets'],
+            'total_cartons': totals['total_cartons'],
+            'shipment_count': totals['shipment_count'],
+            'weight_ok': weight_ok,
+            'volume_ok': volume_ok,
+            'pallets_ok': pallets_ok,
+            'capacity_ok': weight_ok and volume_ok and pallets_ok,
+            'weight_utilization': round((totals['total_weight'] / vehicle['load_capacity_kg'] * 100) if vehicle['load_capacity_kg'] else 0, 1),
+            'volume_utilization': round((totals['total_volume'] / vehicle['load_capacity_volume'] * 100) if vehicle['load_capacity_volume'] else 0, 1),
+        }
     finally:
         conn.close()
 

@@ -1,0 +1,142 @@
+{% extends "scm/base_scm.html" %}
+
+{% block scm_content %}
+{% set breadcrumb = [{'label': 'MRP / Purchase Suggestions'}] %}
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">{{ t.mrp_purchase|default('MRP / Purchase Suggestions') }}</h2>
+        <p class="text-slate-400 text-sm">{{ t.mrp_desc|default('Material Requirements Planning and purchase recommendations') }}</p>
+    </div>
+    <form action="{{ url_for('scm.mrp_run') }}" method="POST" class="flex gap-3">
+        <input type="number" name="horizon_days" value="30" min="7" max="365"
+               class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm w-24">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+            <i class="fas fa-play mr-2"></i>{{ t.run_mrp|default('Run MRP') }}
+        </button>
+    </form>
+</div>
+
+<!-- Quick Navigation -->
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+    <a href="{{ url_for('scm.mrp_exceptions') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-exclamation-triangle text-2xl text-red-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.exceptions|default('MRP Exceptions') }}</p>
+    </a>
+    <a href="{{ url_for('scm.mrp_suggestions') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-lightbulb text-2xl text-amber-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.suggestions|default('Suggestions') }}</p>
+    </a>
+    <a href="{{ url_for('scm.mrp_reschedule') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-calendar-alt text-2xl text-violet-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.reschedule|default('Reschedule') }}</p>
+    </a>
+    <a href="{{ url_for('scm.mrp_shortage') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-arrow-down text-2xl text-red-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.shortage|default('Shortage') }}</p>
+    </a>
+    <a href="{{ url_for('scm.mrp_excess') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-arrow-up text-2xl text-purple-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.excess|default('Excess') }}</p>
+    </a>
+    <a href="{{ url_for('scm.mrp_planner_queue') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center">
+        <i class="fas fa-tasks text-2xl text-sky-400 mb-2"></i>
+        <p class="text-white text-sm font-medium">{{ t.planner_queue|default('Planner Queue') }}</p>
+    </a>
+</div>
+
+<!-- MRP Exceptions -->
+<div class="glass-panel rounded-xl p-5 mb-6">
+    <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+        <i class="fas fa-exclamation-triangle text-red-400"></i> {{ t.mrp_exceptions|default('MRP Exceptions') }}
+    </h3>
+    {% if exceptions %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-2 px-3">{{ t.severity|default('Severity') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.type|default('Type') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.item|default('Item') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.message|default('Message') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.created|default('Created') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for exc in exceptions %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30">
+                    <td class="py-2 px-3">
+                        {% if exc.severity == 'CRITICAL' %}
+                        <span class="severity-critical"><i class="fas fa-circle text-xs mr-1"></i>CRITICAL</span>
+                        {% elif exc.severity == 'HIGH' %}
+                        <span class="severity-high"><i class="fas fa-circle text-xs mr-1"></i>HIGH</span>
+                        {% else %}
+                        <span class="severity-medium"><i class="fas fa-circle text-xs mr-1"></i>{{ exc.severity }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-2 px-3 text-slate-300">{{ exc.alert_type|replace('_', ' ') }}</td>
+                    <td class="py-2 px-3 text-white">{{ exc.item_code|default('-') }}</td>
+                    <td class="py-2 px-3 text-slate-300">{{ exc.title }}</td>
+                    <td class="py-2 px-3 text-slate-400 text-xs">{{ exc.created_at }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-slate-500">
+        <i class="fas fa-check-circle text-4xl mb-2 text-green-500"></i>
+        <p>{{ t.no_exceptions|default('No MRP exceptions') }}</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Purchase Suggestions -->
+<div class="glass-panel rounded-xl p-5">
+    <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+        <i class="fas fa-shopping-cart text-sky-400"></i> {{ t.purchase_suggestions|default('Purchase Suggestions') }}
+    </h3>
+    {% if purchase_suggestions %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-2 px-3">{{ t.item|default('Item') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.supplier|default('Supplier') }}</th>
+                    <th class="text-right py-2 px-3">{{ t.current|default('Current') }}</th>
+                    <th class="text-right py-2 px-3">{{ t.forecast|default('Forecast') }}</th>
+                    <th class="text-right py-2 px-3">{{ t.rec_qty|default('Rec Qty') }}</th>
+                    <th class="text-right py-2 px-3">{{ t.est_cost|default('Est Cost') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.order_date|default('Order Date') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.status|default('Status') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sug in purchase_suggestions %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30">
+                    <td class="py-2 px-3">
+                        <div class="text-white font-medium">{{ sug.item_code }}</div>
+                        <div class="text-slate-400 text-xs">{{ sug.item_name }}</div>
+                    </td>
+                    <td class="py-2 px-3 text-slate-300">{{ sug.supplier_name|default('-') }}</td>
+                    <td class="py-2 px-3 text-right text-slate-300">{{ sug.current_stock|default(0)|int }}</td>
+                    <td class="py-2 px-3 text-right text-sky-400">{{ "{:.0f}".format(sug.forecasted_demand|default(0)) }}</td>
+                    <td class="py-2 px-3 text-right text-emerald-400 font-bold">{{ sug.recommended_quantity|default(0)|int }}</td>
+                    <td class="py-2 px-3 text-right text-amber-400">${{ "{:,.0f}".format(sug.estimated_total_cost|default(0)) }}</td>
+                    <td class="py-2 px-3 text-slate-300 text-sm">{{ sug.suggested_order_date|default('-') }}</td>
+                    <td class="py-2 px-3">
+                        <span class="status-badge status-open">Open</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-slate-500">
+        <i class="fas fa-shopping-cart text-4xl mb-2 text-slate-600"></i>
+        <p>{{ t.no_suggestions|default('No purchase suggestions. Run MRP to generate.') }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

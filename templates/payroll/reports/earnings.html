@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="{{ session.get('language', 'en') }}" dir="{{ 'rtl' if session.get('direction') == 'rtl' else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --primary: #4F46E5; --success: #059669; --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB; --gray-600: #4B5563; --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); --radius: 0.5rem; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--gray-50); }
+        .page-header { background: linear-gradient(135deg, var(--primary) 0%, #4338CA 100%); color: white; padding: 2rem; }
+        .page-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+        .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 1.5rem; overflow: hidden; }
+        .card-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-200); font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .card-header i { color: var(--primary); }
+        .filters { padding: 1rem 1.5rem; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); display: flex; gap: 1rem; flex-wrap: wrap; }
+        .filters select, .filters input { padding: 0.5rem 0.75rem; border: 1px solid var(--gray-300); border-radius: var(--radius); font-size: 0.875rem; }
+        .filters button { padding: 0.5rem 1rem; background: var(--primary); color: white; border: none; border-radius: var(--radius); cursor: pointer; font-weight: 500; }
+        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; padding: 1.5rem; }
+        .stat-box { background: var(--gray-50); padding: 1.25rem; border-radius: var(--radius); text-align: center; }
+        .stat-box .value { font-size: 1.5rem; font-weight: 700; color: var(--success); }
+        .stat-box .label { font-size: 0.75rem; color: var(--gray-600); text-transform: uppercase; margin-top: 0.25rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.875rem 1.5rem; font-size: 0.75rem; text-transform: uppercase; color: var(--gray-600); border-bottom: 2px solid var(--gray-200); background: var(--gray-50); }
+        td { padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-100); font-size: 0.9rem; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: var(--radius); font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; text-decoration: none; }
+        .btn-primary { background: var(--primary); color: white; }
+        .back-link { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--primary); text-decoration: none; font-weight: 500; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <h1><i class="fas fa-chart-line"></i> {{ title }}</h1>
+        <p>Earnings breakdown and analysis by period and employee</p>
+    </div>
+    <div class="container">
+        <a href="{{ url_for('payroll.reports_menu') }}" class="back-link"><i class="fas fa-arrow-left"></i> Back to Reports Menu</a>
+
+        <div class="card">
+            <div class="filters">
+                <form method="get" style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <select name="period_id">
+                        <option value="">All Periods</option>
+                        {% for p in periods %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="department_id">
+                        <option value="">All Departments</option>
+                        {% for d in departments %}
+                        <option value="{{ d.id }}">{{ d.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select name="component_type">
+                        <option value="">All Components</option>
+                        <option value="earning">Earnings Only</option>
+                        <option value="deduction">Deductions Only</option>
+                    </select>
+                    <button type="submit"><i class="fas fa-filter"></i> Apply Filters</button>
+                </form>
+            </div>
+
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="value">AED {{ "{:,.0f}".format(stats.total_earnings) }}</div>
+                    <div class="label">Total Earnings</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">AED {{ "{:,.0f}".format(stats.total_deductions) }}</div>
+                    <div class="label">Total Deductions</div>
+                </div>
+                <div class="stat-box">
+                    <div class="value">{{ stats.employee_count }}</div>
+                    <div class="label">Employees</div>
+                </div>
+            </div>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Department</th>
+                        <th>Basic Salary</th>
+                        <th>Allowances</th>
+                        <th>Overtime</th>
+                        <th>Bonuses</th>
+                        <th>Other</th>
+                        <th>Gross</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in data %}
+                    <tr>
+                        <td><strong>{{ row.employee_name }}</strong><br><small style="color: var(--gray-600);">{{ row.employee_code }}</small></td>
+                        <td>{{ row.department_name }}</td>
+                        <td>AED {{ "{:,.2f}".format(row.basic) }}</td>
+                        <td style="color: var(--success);">AED {{ "{:,.2f}".format(row.allowances) }}</td>
+                        <td style="color: var(--success);">AED {{ "{:,.2f}".format(row.overtime) }}</td>
+                        <td style="color: var(--success);">AED {{ "{:,.2f}".format(row.bonuses) }}</td>
+                        <td style="color: var(--success);">AED {{ "{:,.2f}".format(row.other) }}</td>
+                        <td><strong>AED {{ "{:,.2f}".format(row.gross) }}</strong></td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" style="text-align: center; color: var(--gray-600);">No data found for selected filters.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

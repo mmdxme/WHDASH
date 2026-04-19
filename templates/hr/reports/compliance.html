@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ t('compliance_report', 'Compliance Report') }}</h1>
+            <p class="text-slate-400 mt-1">{{ t('compliance_report_desc', 'Document and certification expiry tracking') }}</p>
+        </div>
+        <div class="flex gap-3">
+            <a href="{{ url_for('hr.certifications_list') }}" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-semibold text-sm">
+                <i class="fa-solid fa-arrow-left mr-2"></i>{{ t('back_to_certifications', 'Back to Certifications') }}
+            </a>
+            <button onclick="window.print()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-semibold text-sm">
+                <i class="fa-solid fa-print mr-2"></i>{{ t('print', 'Print') }}
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('expiring_soon', 'Documents Expiring (30 days)') }}</p>
+                    <p class="text-3xl font-bold text-amber-400 mt-1">{{ stats.expiring_soon }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-file-exclamation text-amber-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('certs_expiring', 'Certifications Expiring (30 days)') }}</p>
+                    <p class="text-3xl font-bold text-orange-400 mt-1">{{ stats.certs_expiring }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-certificate text-orange-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('overdue', 'Overdue Renewals') }}</p>
+                    <p class="text-3xl font-bold text-red-400 mt-1">{{ stats.overdue }}</p>
+                </div>
+                <div class="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-exclamation-triangle text-red-400 text-xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Documents Expiring Soon -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-6 border-b border-white/10">
+            <h3 class="text-lg font-bold text-white">{{ t('documents_expiring_soon', 'Documents Expiring Soon') }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-800/50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t('employee', 'Employee') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t('document_type', 'Type') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t('document_name', 'Document') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t('expiry_date', 'Expiry Date') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t('days_remaining', 'Days Left') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for doc in expiring_documents %}
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-white">{{ doc.first_name }} {{ doc.last_name }}</span>
+                            <span class="text-slate-500 text-sm ml-2 font-mono">{{ doc.employee_code }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-slate-300">{{ doc.document_type_name or 'General' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-slate-300">{{ doc.document_name or 'N/A' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-amber-400 font-medium">{{ doc.expiry_date[:10] if doc.expiry_date else 'N/A' }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% set days_left = ((doc.expiry_date[:10]|string - today|string).days if doc.expiry_date else 0) %}
+                            {% if days_left <= 7 %}
+                            <span class="px-2 py-1 bg-red-500/10 text-red-400 rounded-full text-xs font-medium">{{ days_left }} days</span>
+                            {% elif days_left <= 14 %}
+                            <span class="px-2 py-1 bg-orange-500/10 text-orange-400 rounded-full text-xs font-medium">{{ days_left }} days</span>
+                            {% else %}
+                            <span class="px-2 py-1 bg-amber-500/10 text-amber-400 rounded-full text-xs font-medium">{{ days_left }} days</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-check-circle text-4xl mb-3 block text-emerald-500"></i>
+                            {{ t('no_expiring_docs', 'No documents expiring in the next 30 days') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Certifications Expiring Soon -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-6 border-b border-white/10">
+            <h3 class="text-lg font-bold text-white">{{ t('certifications_expiring_soon', 'Certifications Expiring Soon') }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-800/50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t('employee', 'Employee') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t('certification', 'Certification') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t('issue_date', 'Issue Date') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t('expiry_date', 'Expiry Date') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t('status', 'Status') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for cert in expiring_certs %}
+                    <tr class="hover:bg-white/5 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-white">{{ cert.first_name }} {{ cert.last_name }}</span>
+                            <span class="text-slate-500 text-sm ml-2 font-mono">{{ cert.employee_code }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-slate-300">{{ cert.certification_type_name or cert.name or 'N/A' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-slate-400 text-sm">{{ cert.issue_date[:10] if cert.issue_date else 'N/A' }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="text-amber-400 font-medium">{{ cert.expiry_date[:10] if cert.expiry_date else 'N/A' }}</span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if cert.expiry_date and cert.expiry_date[:10] < today %}
+                            <span class="px-2 py-1 bg-red-500/10 text-red-400 rounded-full text-xs font-medium">Expired</span>
+                            {% else %}
+                            <span class="px-2 py-1 bg-amber-500/10 text-amber-400 rounded-full text-xs font-medium">Expiring Soon</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="px-6 py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-check-circle text-4xl mb-3 block text-emerald-500"></i>
+                            {{ t('no_expiring_certs', 'No certifications expiring in the next 30 days') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

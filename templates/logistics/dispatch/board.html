@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 mt-1">Real-time dispatch operations</p>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <input type="date" id="dateFilter" value="{{ date_filter }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <select id="branchFilter" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                <option value="">All Branches</option>
+                {% for b in branches %}
+                <option value="{{ b.id }}" {% if branch_id == b.id|string %}selected{% endif %}>{{ b.name }}</option>
+                {% endfor %}
+            </select>
+            <select id="vehicleFilter" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                <option value="">All Vehicles</option>
+                {% for v in all_vehicles %}
+                <option value="{{ v.id }}" {% if vehicle_id == v.id|string %}selected{% endif %}>{{ v.plate_number }} - {{ v.vehicle_type }}</option>
+                {% endfor %}
+            </select>
+            <select id="driverFilter" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                <option value="">All Drivers</option>
+                {% for d in all_drivers %}
+                <option value="{{ d.id }}" {% if driver_id == d.id|string %}selected{% endif %}>{{ d.full_name }}</option>
+                {% endfor %}
+            </select>
+            <button onclick="applyFilters()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-filter mr-2"></i>Filter
+            </button>
+            <button onclick="location.reload()" class="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-refresh mr-2"></i>Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Dispatch Grid -->
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <!-- Unassigned Loads Panel -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-boxes-stacked text-amber-400"></i>
+                    Unassigned Loads
+                </h2>
+                <span class="px-2 py-1 bg-amber-500/10 text-amber-400 text-xs font-bold rounded-full">{{ unassigned_loads|length }}</span>
+            </div>
+            {% if unassigned_loads %}
+            <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                {% for load in unassigned_loads %}
+                <div class="p-4 bg-white/5 border border-white/5 rounded-xl hover:border-amber-500/30 transition-all cursor-pointer"
+                     onclick="showAssignModal({{ load.id }}, '{{ load.shipment_code }}', {{ load.total_weight|default(0) }})">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-brand-400 font-medium text-sm">{{ load.shipment_code }}</span>
+                        <span class="px-2 py-0.5 rounded text-xs font-medium
+                            {% if load.priority == 'Urgent' %}bg-red-500/10 text-red-400
+                            {% elif load.priority == 'High' %}bg-amber-500/10 text-amber-400
+                            {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                            {{ load.priority }}
+                        </span>
+                    </div>
+                    <p class="text-slate-300 text-sm">{{ load.customer_name or load.consignee_name or '-' }}</p>
+                    <p class="text-slate-500 text-xs mt-1">
+                        <i class="fa-solid fa-weight-hanging mr-1"></i>{{ "%.0f"|format(load.total_weight|default(0)) }} kg
+                        {% if load.total_volume %}<span class="ml-2"><i class="fa-solid fa-cube mr-1"></i>{{ "%.1f"|format(load.total_volume) }} m³</span>{% endif %}
+                    </p>
+                    <p class="text-slate-500 text-xs">
+                        <i class="fa-solid fa-calendar mr-1"></i>{{ load.planned_date or load.pickup_date or 'Not set' }}
+                    </p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-slate-500">
+                <i class="fa-solid fa-check-circle text-3xl text-emerald-400 mb-2"></i>
+                <p class="text-sm">No unassigned loads</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Available Drivers Panel -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-user text-emerald-400"></i>
+                    Available Drivers
+                </h2>
+                <span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ available_drivers|length }}</span>
+            </div>
+            {% if available_drivers %}
+            <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                {% for driver in available_drivers %}
+                <div class="p-4 bg-white/5 border border-white/5 rounded-xl hover:border-emerald-500/30 transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-white font-medium text-sm">{{ driver.full_name }}</span>
+                        <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-xs rounded">Available</span>
+                    </div>
+                    <p class="text-slate-400 text-xs">
+                        <i class="fa-solid fa-truck mr-1"></i>{{ driver.plate_number or 'No vehicle' }}
+                        {% if driver.vehicle_type %}<span class="ml-2">| {{ driver.vehicle_type }}</span>{% endif %}
+                    </p>
+                    <p class="text-slate-500 text-xs mt-1">
+                        {% if driver.load_capacity_kg %}<i class="fa-solid fa-weight-hanging mr-1"></i>{{ "%.0f"|format(driver.load_capacity_kg) }} kg{% endif %}
+                        {% if driver.mobile %}<span class="ml-2"><i class="fa-solid fa-phone mr-1"></i>{{ driver.mobile }}</span>{% endif %}
+                    </p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-slate-500">
+                <i class="fa-solid fa-users-slash text-3xl mb-2"></i>
+                <p class="text-sm">No available drivers</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Available Vehicles Panel -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                    <i class="fa-solid fa-shuttle-van text-cyan-400"></i>
+                    Available Vehicles
+                </h2>
+                <span class="px-2 py-1 bg-cyan-500/10 text-cyan-400 text-xs font-bold rounded-full">{{ available_vehicles|length }}</span>
+            </div>
+            {% if available_vehicles %}
+            <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
+                {% for vehicle in available_vehicles %}
+                <div class="p-4 bg-white/5 border border-white/5 rounded-xl hover:border-cyan-500/30 transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-white font-medium text-sm">{{ vehicle.plate_number }}</span>
+                        <span class="px-2 py-0.5 bg-cyan-500/10 text-cyan-400 text-xs rounded">Ready</span>
+                    </div>
+                    <p class="text-slate-400 text-xs">
+                        <i class="fa-solid fa-tag mr-1"></i>{{ vehicle.vehicle_type }}
+                        {% if vehicle.load_capacity_kg %}<span class="ml-2"><i class="fa-solid fa-weight-hanging mr-1"></i>{{ "%.0f"|format(vehicle.load_capacity_kg) }} kg</span>{% endif %}
+                    </p>
+                    <p class="text-slate-500 text-xs mt-1">
+                        {% if vehicle.driver_name %}<i class="fa-solid fa-user mr-1"></i>{{ vehicle.driver_name }}{% endif %}
+                        {% if vehicle.next_service_date %}<span class="ml-2 text-amber-400"><i class="fa-solid fa-wrench mr-1"></i>Service: {{ vehicle.next_service_date }}</span>{% endif %}
+                    </p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-slate-500">
+                <i class="fa-solid fa-truck text-3xl mb-2"></i>
+                <p class="text-sm">No available vehicles</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Today's Dispatches & Delayed Trips Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Today's Dispatches -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white">
+                    <i class="fa-solid fa-paper-plane text-blue-400 mr-2"></i>Today's Dispatches
+                </h2>
+                <span class="px-2 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full">{{ todays_dispatches|length }}</span>
+            </div>
+            {% if todays_dispatches %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-white/5">
+                            <th class="text-left py-3 px-2 font-medium">Shipment</th>
+                            <th class="text-left py-3 px-2 font-medium">Driver</th>
+                            <th class="text-left py-3 px-2 font-medium">Vehicle</th>
+                            <th class="text-left py-3 px-2 font-medium">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for dispatch in todays_dispatches %}
+                        <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td class="py-3 px-2">
+                                <a href="{{ url_for('logistics.shipments_view', id=dispatch.id) }}" class="text-brand-400 hover:text-brand-300">{{ dispatch.shipment_code }}</a>
+                                <p class="text-slate-500 text-xs">{{ dispatch.customer_name or '-' }}</p>
+                            </td>
+                            <td class="py-3 px-2 text-white">{{ dispatch.driver_name or '-' }}</td>
+                            <td class="py-3 px-2 text-slate-300">{{ dispatch.plate_number or '-' }}</td>
+                            <td class="py-3 px-2">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium
+                                    {% if dispatch.status == 'in_transit' %}bg-blue-500/10 text-blue-400
+                                    {% elif dispatch.status == 'assigned' %}bg-amber-500/10 text-amber-400
+                                    {% elif dispatch.status == 'delivered' %}bg-emerald-500/10 text-emerald-400
+                                    {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                    {{ dispatch.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-slate-500">
+                <i class="fa-solid fa-paper-plane text-3xl mb-2"></i>
+                <p class="text-sm">No dispatches for today</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Delayed Trips -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white">
+                    <i class="fa-solid fa-exclamation-circle text-red-400 mr-2"></i>Delayed Trips
+                </h2>
+                <span class="px-2 py-1 bg-red-500/10 text-red-400 text-xs font-bold rounded-full">{{ delayed_trips|length }}</span>
+            </div>
+            {% if delayed_trips %}
+            <div class="space-y-3">
+                {% for trip in delayed_trips %}
+                <div class="p-4 bg-red-500/5 border border-red-500/20 rounded-xl">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <a href="{{ url_for('logistics.shipments_view', id=trip.id) }}" class="text-brand-400 hover:text-brand-300 font-medium">{{ trip.shipment_code }}</a>
+                            <p class="text-slate-400 text-xs mt-1">
+                                {{ trip.customer_name or trip.consignee_name or '-' }}
+                                {% if trip.driver_name %} | Driver: {{ trip.driver_name }}{% endif %}
+                            </p>
+                        </div>
+                        <div class="text-right">
+                            <span class="px-2 py-1 bg-red-500/10 text-red-400 text-xs font-bold rounded">{{ trip.delay_status }}</span>
+                            <p class="text-red-400 text-xs mt-1">{{ trip.hours_overdue }}h overdue</p>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-slate-500">
+                <i class="fa-solid fa-check-circle text-3xl text-emerald-400 mb-2"></i>
+                <p class="text-sm">No delayed trips</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Dispatch Exceptions & Queue Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Dispatch Exceptions -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white">
+                    <i class="fa-solid fa-triangle-exclamation text-orange-400 mr-2"></i>Dispatch Exceptions
+                </h2>
+                <span class="px-2 py-1 bg-orange-500/10 text-orange-400 text-xs font-bold rounded-full">{{ dispatch_exceptions|length }}</span>
+            </div>
+            {% if dispatch_exceptions %}
+            <div class="space-y-3">
+                {% for exc in dispatch_exceptions %}
+                <div class="p-4 bg-orange-500/5 border border-orange-500/20 rounded-xl">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <p class="text-white font-medium text-sm">{{ exc.incident_type }}</p>
+                            <p class="text-slate-400 text-xs mt-1">
+                                {% if exc.shipment_code %}Shipment: {{ exc.shipment_code }}{% endif %}
+                                {% if exc.driver_name %} | Driver: {{ exc.driver_name }}{% endif %}
+                                {% if exc.plate_number %} | Vehicle: {{ exc.plate_number }}{% endif %}
+                            </p>
+                        </div>
+                        <span class="px-2 py-1 rounded text-xs font-medium
+                            {% if exc.severity == 'high' %}bg-red-500/10 text-red-400
+                            {% elif exc.severity == 'medium' %}bg-amber-500/10 text-amber-400
+                            {% else %}bg-blue-500/10 text-blue-400{% endif %}">
+                            {{ exc.severity }}
+                        </span>
+                    </div>
+                    {% if exc.description %}
+                    <p class="text-slate-500 text-xs mt-2">{{ exc.description[:100] }}{% if exc.description|length > 100 %}...{% endif %}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-slate-500">
+                <i class="fa-solid fa-check-circle text-3xl text-emerald-400 mb-2"></i>
+                <p class="text-sm">No dispatch exceptions</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Dispatcher Queue -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-white">
+                    <i class="fa-solid fa-list-check text-purple-400 mr-2"></i>Dispatcher Queue
+                </h2>
+                <span class="px-2 py-1 bg-purple-500/10 text-purple-400 text-xs font-bold rounded-full">{{ dispatcher_queue|length }}</span>
+            </div>
+            {% if dispatcher_queue %}
+            <div class="overflow-x-auto max-h-80 overflow-y-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-white/5 sticky top-0 bg-slate-900/95">
+                            <th class="text-left py-3 px-2 font-medium">Shipment</th>
+                            <th class="text-left py-3 px-2 font-medium">Customer</th>
+                            <th class="text-left py-3 px-2 font-medium">Weight</th>
+                            <th class="text-left py-3 px-2 font-medium">Route</th>
+                            <th class="text-left py-3 px-2 font-medium">Priority</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in dispatcher_queue %}
+                        <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td class="py-3 px-2">
+                                <a href="{{ url_for('logistics.shipments_view', id=item.id) }}" class="text-brand-400 hover:text-brand-300">{{ item.shipment_code }}</a>
+                            </td>
+                            <td class="py-3 px-2 text-slate-300">{{ item.customer_name or '-' }}</td>
+                            <td class="py-3 px-2 text-slate-300">{{ "%.0f"|format(item.total_weight|default(0)) }} kg</td>
+                            <td class="py-3 px-2 text-slate-300">{{ item.route_name or '-' }}</td>
+                            <td class="py-3 px-2">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium
+                                    {% if item.priority == 'Urgent' %}bg-red-500/10 text-red-400
+                                    {% elif item.priority == 'High' %}bg-amber-500/10 text-amber-400
+                                    {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                    {{ item.priority }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-slate-500">
+                <i class="fa-solid fa-inbox text-3xl mb-2"></i>
+                <p class="text-sm">Queue is empty</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Assignment Modal -->
+<div id="assignModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden z-50 flex items-center justify-center">
+    <div class="glass-panel rounded-2xl p-6 w-full max-w-md mx-4">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-xl font-bold text-white">Assign Dispatch</h3>
+            <button onclick="closeAssignModal()" class="text-slate-400 hover:text-white">
+                <i class="fa-solid fa-times text-xl"></i>
+            </button>
+        </div>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-slate-400 text-sm mb-2">Shipment</label>
+                <p id="modalShipmentCode" class="text-brand-400 font-medium"></p>
+                <p id="modalShipmentWeight" class="text-slate-500 text-sm"></p>
+            </div>
+
+            <div>
+                <label class="block text-slate-400 text-sm mb-2">Select Driver</label>
+                <select id="driverSelect" class="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                    <option value="">-- Select Driver --</option>
+                    {% for driver in available_drivers %}
+                    <option value="{{ driver.id }}" data-vehicle="{{ driver.assigned_vehicle_id }}" data-capacity="{{ driver.load_capacity_kg|default(0) }}">
+                        {{ driver.full_name }} {% if driver.plate_number %}({{ driver.plate_number }}){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-slate-400 text-sm mb-2">Select Vehicle</label>
+                <select id="vehicleSelect" class="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                    <option value="">-- Select Vehicle --</option>
+                    {% for vehicle in available_vehicles %}
+                    <option value="{{ vehicle.id }}" data-capacity="{{ vehicle.load_capacity_kg|default(0) }}">
+                        {{ vehicle.plate_number }} - {{ vehicle.vehicle_type }} ({{ "%.0f"|format(vehicle.load_capacity_kg|default(0)) }} kg)
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-slate-400 text-sm mb-2">Dispatch Notes</label>
+                <textarea id="dispatchNotes" rows="3" class="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm" placeholder="Add any notes for this dispatch..."></textarea>
+            </div>
+
+            <div class="flex gap-3 pt-4">
+                <button onclick="closeAssignModal()" class="flex-1 px-4 py-2 bg-white/5 border border-white/10 text-white rounded-xl text-sm font-medium hover:bg-white/10 transition-all">
+                    Cancel
+                </button>
+                <button onclick="submitAssignment()" class="flex-1 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                    <i class="fa-solid fa-check mr-2"></i>Assign
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let selectedShipmentId = null;
+
+function applyFilters() {
+    const date = document.getElementById('dateFilter').value;
+    const branch = document.getElementById('branchFilter').value;
+    const vehicle = document.getElementById('vehicleFilter').value;
+    const driver = document.getElementById('driverFilter').value;
+
+    let params = new URLSearchParams();
+    if (date) params.set('date', date);
+    if (branch) params.set('branch_id', branch);
+    if (vehicle) params.set('vehicle_id', vehicle);
+    if (driver) params.set('driver_id', driver);
+
+    window.location.href = '{{ url_for("logistics.dispatch_board") }}?' + params.toString();
+}
+
+function showAssignModal(shipmentId, code, weight) {
+    selectedShipmentId = shipmentId;
+    document.getElementById('modalShipmentCode').textContent = code;
+    document.getElementById('modalShipmentWeight').textContent = 'Weight: ' + weight + ' kg';
+    document.getElementById('assignModal').classList.remove('hidden');
+}
+
+function closeAssignModal() {
+    selectedShipmentId = null;
+    document.getElementById('assignModal').classList.add('hidden');
+    document.getElementById('driverSelect').value = '';
+    document.getElementById('vehicleSelect').value = '';
+    document.getElementById('dispatchNotes').value = '';
+}
+
+async function submitAssignment() {
+    if (!selectedShipmentId) return;
+
+    const driverId = document.getElementById('driverSelect').value;
+    const vehicleId = document.getElementById('vehicleSelect').value;
+    const notes = document.getElementById('dispatchNotes').value;
+
+    try {
+        const response = await fetch('{{ url_for("logistics.dispatch_board_assign") }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                shipment_id: selectedShipmentId,
+                driver_id: driverId || null,
+                vehicle_id: vehicleId || null,
+                notes: notes
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            flash('Assignment successful!', 'success');
+            closeAssignModal();
+            location.reload();
+        } else {
+            flash(result.error || 'Assignment failed', 'error');
+        }
+    } catch (e) {
+        flash('Error: ' + e.message, 'error');
+    }
+}
+
+// Auto-refresh every 30 seconds
+setInterval(function() {
+    if (!document.getElementById('assignModal').classList.contains('hidden')) return;
+    if (!document.activeElement.matches('input, select')) {
+        location.reload();
+    }
+}, 30000);
+</script>
+{% endblock %}

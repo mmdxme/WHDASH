@@ -1,0 +1,88 @@
+{% extends "scm/base_scm.html" %}
+
+{% block scm_content %}
+{% set breadcrumb = [{'label': 'Demand Planning', 'url': url_for('scm.demand_planning')}, {'label': 'Forecast Center'}] %}
+
+<!-- Header Actions -->
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">{{ t.forecast_center|default('Forecast Center') }}</h2>
+        <p class="text-slate-400 text-sm">{{ t.forecast_center_desc|default('Generate and manage demand forecasts') }}</p>
+    </div>
+    <form action="{{ url_for('scm.demand_generate_forecast') }}" method="POST" class="flex gap-3">
+        <input type="text" name="run_name" placeholder="{{ t.forecast_name|default('Forecast name...') }}" 
+               class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm" required>
+        <select name="method" class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+            <option value="MOVING_AVERAGE">{{ t.moving_average|default('Moving Average') }}</option>
+            <option value="WEIGHTED_MOVING_AVERAGE">{{ t.weighted_ma|default('Weighted Moving Average') }}</option>
+            <option value="EXPONENTIAL_SMOOTHING">{{ t.exp_smoothing|default('Exponential Smoothing') }}</option>
+        </select>
+        <input type="number" name="horizon_days" value="30" min="7" max="365"
+               class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm w-24">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+            <i class="fas fa-play mr-2"></i>{{ t.generate|default('Generate') }}
+        </button>
+    </form>
+</div>
+
+<!-- Forecast Runs Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <table class="w-full text-sm" id="forecastTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">{{ t.run_name|default('Run Name') }}</th>
+                    <th class="text-center py-3 px-3">{{ t.type|default('Type') }}</th>
+                    <th class="text-center py-3 px-3">{{ t.method|default('Method') }}</th>
+                    <th class="text-right py-3 px-3">{{ t.horizon|default('Horizon') }}</th>
+                    <th class="text-right py-3 px-3">{{ t.items|default('Items') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.status|default('Status') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.created_by|default('Created By') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.created|default('Created') }}</th>
+                    <th class="text-center py-3 px-3">{{ t.actions|default('Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for run in forecast_runs %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                    <td class="py-3 px-4">
+                        <a href="{{ url_for('scm.demand_forecast_detail', run_id=run.id) }}" class="text-sky-400 hover:underline font-medium">{{ run.run_name }}</a>
+                    </td>
+                    <td class="py-3 px-3 text-center text-slate-300">{{ run.forecast_type }}</td>
+                    <td class="py-3 px-3 text-center text-slate-300">{{ run.method }}</td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ run.horizon_days }} days</td>
+                    <td class="py-3 px-3 text-right text-slate-300">{{ run.line_count|default(0) }}</td>
+                    <td class="py-3 px-3">
+                        {% if run.status == 'DRAFT' %}
+                        <span class="status-badge status-draft">Draft</span>
+                        {% elif run.status == 'APPROVED' %}
+                        <span class="status-badge status-approved">Approved</span>
+                        {% else %}
+                        <span class="status-badge">{{ run.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-3 text-slate-300">{{ run.created_by_name|default('-') }}</td>
+                    <td class="py-3 px-3 text-slate-400 text-xs">{{ run.created_at }}</td>
+                    <td class="py-3 px-3 text-center">
+                        <div class="flex gap-1 justify-center">
+                            <a href="{{ url_for('scm.demand_forecast_detail', run_id=run.id) }}" 
+                               class="px-2 py-1 rounded bg-sky-500/20 text-sky-400 text-xs hover:bg-sky-500/30">
+                                <i class="fas fa-eye"></i>
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not forecast_runs %}
+                <tr>
+                    <td colspan="9" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-chart-area text-4xl mb-3 text-slate-600"></i>
+                        <p>{{ t.no_forecasts|default('No forecast runs yet. Create one above.') }}</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

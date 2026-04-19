@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="{{ session.get('language', 'en') }}" dir="{{ 'rtl' if session.get('direction') == 'rtl' else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --primary: #4F46E5; --primary-dark: #4338CA; --success: #059669; --warning: #D97706; --danger: #DC2626; --info: #0891B2; --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB; --gray-300: #D1D5DB; --gray-400: #9CA3AF; --gray-500: #6B7280; --gray-600: #4B5563; --gray-700: #374151; --gray-800: #1F2937; --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); --radius: 0.5rem; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--gray-50); color: var(--gray-900); }
+        .page-header { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; padding: 2rem; }
+        .page-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .page-header p { opacity: 0.9; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+        .filters { background: white; border-radius: var(--radius); padding: 1rem 1.5rem; margin-bottom: 1.5rem; box-shadow: var(--shadow); display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+        .filters select { padding: 0.5rem 0.75rem; border: 1px solid var(--gray-300); border-radius: var(--radius); font-size: 0.875rem; min-width: 200px; }
+        .filters button { padding: 0.5rem 1rem; border: none; border-radius: var(--radius); font-size: 0.875rem; cursor: pointer; }
+        .filters .btn-primary { background: var(--primary); color: white; }
+        .filters .btn-secondary { background: var(--gray-100); color: var(--gray-700); }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .summary-card { background: white; border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+        .summary-card .label { font-size: 0.8rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+        .summary-card .value { font-size: 1.5rem; font-weight: 700; color: var(--gray-900); }
+        .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem; }
+        .card-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; }
+        .card-header h2 { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+        .card-header h2 i { color: var(--primary); }
+        .card-body { padding: 0; }
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th { text-align: left; padding: 0.875rem 1.5rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-500); border-bottom: 2px solid var(--gray-200); background: var(--gray-50); }
+        .data-table td { padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-100); font-size: 0.9rem; }
+        .data-table tr:hover { background: var(--gray-50); }
+        .data-table tr:last-child td { border-bottom: none; }
+        .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: var(--radius); font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; text-decoration: none; transition: all 0.2s; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-secondary { background: var(--gray-100); color: var(--gray-700); }
+        .btn-sm { padding: 0.375rem 0.75rem; font-size: 0.8rem; }
+        .back-link { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--primary); text-decoration: none; font-weight: 500; margin-bottom: 1rem; }
+        .empty-state { text-align: center; padding: 3rem; color: var(--gray-500); }
+        .empty-state i { font-size: 3rem; color: var(--gray-300); margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <h1><i class="fas fa-file-contract"></i> {{ title }}</h1>
+        <p>Comprehensive payroll summary with department and component breakdown</p>
+    </div>
+
+    <div class="container">
+        <a href="{{ url_for('payroll.reports_menu') }}" class="back-link">
+            <i class="fas fa-arrow-left"></i> Back to Reports Menu
+        </a>
+
+        <form method="get" class="filters">
+            <select name="period_id">
+                <option value="">Select Period</option>
+                {% for p in periods %}
+                <option value="{{ p.id }}" {% if selected_period == p.id %}selected{% endif %}>{{ p.name }} ({{ p.year }})</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> Filter</button>
+        </form>
+
+        {% if summary %}
+        <div class="summary-cards">
+            <div class="summary-card">
+                <div class="label">Total Employees</div>
+                <div class="value">{{ summary.total_employees or 0 }}</div>
+            </div>
+            <div class="summary-card">
+                <div class="label">Total Gross</div>
+                <div class="value">AED {{ "{:,.2f}".format(summary.total_gross or 0) }}</div>
+            </div>
+            <div class="summary-card">
+                <div class="label">Total Deductions</div>
+                <div class="value">AED {{ "{:,.2f}".format(summary.total_deductions or 0) }}</div>
+            </div>
+            <div class="summary-card">
+                <div class="label">Total Net</div>
+                <div class="value">AED {{ "{:,.2f}".format(summary.total_net or 0) }}</div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-building"></i> By Department</h2>
+            </div>
+            <div class="card-body">
+                {% if by_department %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Department</th>
+                            <th class="num">Employees</th>
+                            <th class="num">Gross</th>
+                            <th class="num">Deductions</th>
+                            <th class="num">Net</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in by_department %}
+                        <tr>
+                            <td><strong>{{ row.department or 'Unassigned' }}</strong></td>
+                            <td class="num">{{ row.employees }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(row.gross or 0) }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(row.deductions or 0) }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(row.net or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-building"></i>
+                    <p>No department data available.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-list"></i> By Component</h2>
+            </div>
+            <div class="card-body">
+                {% if by_component %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th class="num">Total Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in by_component %}
+                        <tr>
+                            <td><strong>{{ row.component }}</strong></td>
+                            <td class="num">AED {{ "{:,.2f}".format(row.total or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-list"></i>
+                    <p>No component data available.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="card">
+            <div class="card-body">
+                <div class="empty-state">
+                    <i class="fas fa-file-contract"></i>
+                    <p>Select a period to view the payroll summary report.</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

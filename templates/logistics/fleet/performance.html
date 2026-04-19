@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div><h1 class="text-3xl font-bold text-white">{{ title }}</h1><p class="text-slate-400 mt-1">Fleet performance metrics and KPIs</p></div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <select id="branchFilter" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                <option value="">All Branches</option>
+                {% for b in branches %}
+                <option value="{{ b.id }}" {% if branch_id == b.id|string %}selected{% endif %}>{{ b.name }}</option>
+                {% endfor %}
+            </select>
+            <input type="date" id="dateFrom" value="{{ date_from }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <span class="text-slate-500">to</span>
+            <input type="date" id="dateTo" value="{{ date_to }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <button onclick="applyFilters()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-filter mr-2"></i>Apply
+            </button>
+            <a href="{{ url_for('logistics.fleet_reports') }}" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-file-alt mr-2"></i>Reports
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Avg On-Time %</span>
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-clock text-emerald-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-emerald-400">{{ kpis.avg_on_time_rate|default(0)|round(1) }}%</div>
+            <p class="text-xs text-slate-500 mt-1">Delivery success</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Trips</span>
+                <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-route text-blue-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white">{{ kpis.total_trips|default(0) }}</div>
+            <p class="text-xs text-slate-500 mt-1">Completed trips</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total KM</span>
+                <div class="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-road text-cyan-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white">{{ kpis.total_km|default(0)|round(0) }}</div>
+            <p class="text-xs text-slate-500 mt-1">Kilometers traveled</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Cost/KM</span>
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-coins text-amber-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-amber-400">{{ cost_per_km }} AED</div>
+            <p class="text-xs text-slate-500 mt-1">Average cost</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Carbon</span>
+                <div class="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-leaf text-green-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-green-400">{{ kpis.total_carbon|default(0)|round(0) }} kg</div>
+            <p class="text-xs text-slate-500 mt-1">CO2 emissions</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Deliveries</span>
+                <div class="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-box text-purple-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white">{{ kpis.total_deliveries|default(0) }}</div>
+            <p class="text-xs text-slate-500 mt-1">Total completed</p>
+        </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        <a href="{{ url_for('logistics.fleet_utilization') }}" class="glass-panel rounded-xl p-4 hover:bg-white/5 transition-all text-center">
+            <i class="fa-solid fa-gauge-high text-2xl text-blue-400 mb-2"></i>
+            <p class="text-sm font-medium text-white">Utilization</p>
+        </a>
+        <a href="{{ url_for('logistics.fleet_driver_productivity') }}" class="glass-panel rounded-xl p-4 hover:bg-white/5 transition-all text-center">
+            <i class="fa-solid fa-user text-2xl text-green-400 mb-2"></i>
+            <p class="text-sm font-medium text-white">Driver Productivity</p>
+        </a>
+        <a href="{{ url_for('logistics.fleet_on_time_delivery') }}" class="glass-panel rounded-xl p-4 hover:bg-white/5 transition-all text-center">
+            <i class="fa-solid fa-check-circle text-2xl text-emerald-400 mb-2"></i>
+            <p class="text-sm font-medium text-white">On-Time Delivery</p>
+        </a>
+        <a href="{{ url_for('logistics.fleet_fuel_efficiency') }}" class="glass-panel rounded-xl p-4 hover:bg-white/5 transition-all text-center">
+            <i class="fa-solid fa-gas-pump text-2xl text-amber-400 mb-2"></i>
+            <p class="text-sm font-medium text-white">Fuel Efficiency</p>
+        </a>
+        <a href="{{ url_for('logistics.fleet_carbon') }}" class="glass-panel rounded-xl p-4 hover:bg-white/5 transition-all text-center">
+            <i class="fa-solid fa-cloud text-2xl text-teal-400 mb-2"></i>
+            <p class="text-sm font-medium text-white">Carbon/Emissions</p>
+        </a>
+    </div>
+
+    <!-- Vehicle Performance Table -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Vehicle Performance</h2>
+        {% if vehicles %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Vehicle</th>
+                        <th class="text-left py-3 px-3 font-medium">Plate</th>
+                        <th class="text-left py-3 px-3 font-medium">Type</th>
+                        <th class="text-right py-3 px-3 font-medium">Trips</th>
+                        <th class="text-right py-3 px-3 font-medium">Total KM</th>
+                        <th class="text-right py-3 px-3 font-medium">Total Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in vehicles %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-white">{{ v.vehicle_code }}</td>
+                        <td class="py-3 px-3 text-slate-300">{{ v.plate_number }}</td>
+                        <td class="py-3 px-3 text-slate-400">{{ v.vehicle_type or '-' }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ v.trip_count or 0 }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ v.total_km|default(0)|round(0) }}</td>
+                        <td class="py-3 px-3 text-right text-amber-400">{{ v.total_cost|default(0)|round(2) }} AED</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-12">
+            <i class="fa-solid fa-truck text-4xl text-slate-600 mb-3"></i>
+            <p class="text-slate-400">No vehicle data available</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Driver Performance Table -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Driver Performance</h2>
+        {% if drivers %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Driver</th>
+                        <th class="text-left py-3 px-3 font-medium">Code</th>
+                        <th class="text-right py-3 px-3 font-medium">Trips</th>
+                        <th class="text-right py-3 px-3 font-medium">Deliveries</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in drivers %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-white">{{ d.full_name }}</td>
+                        <td class="py-3 px-3 text-slate-400">{{ d.driver_code }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ d.trip_count or 0 }}</td>
+                        <td class="py-3 px-3 text-right text-emerald-400">{{ d.deliveries|default(0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-12">
+            <i class="fa-solid fa-users text-4xl text-slate-600 mb-3"></i>
+            <p class="text-slate-400">No driver data available</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function applyFilters() {
+    const branch = document.getElementById('branchFilter').value;
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    let url = `{{ url_for('logistics.fleet_performance') }}?date_from=${dateFrom}&date_to=${dateTo}`;
+    if (branch) url += `&branch_id=${branch}`;
+    window.location.href = url;
+}
+</script>
+{% endblock %}

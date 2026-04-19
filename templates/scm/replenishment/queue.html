@@ -1,0 +1,137 @@
+{% extends "scm/base_scm.html" %}
+
+{% block scm_content %}
+{% set breadcrumb = [{'label': 'Replenishment', 'url': url_for('scm.replenishment')}, {'label': 'Queue'}] %}
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">{{ t.replenishment_queue|default('Replenishment Queue') }}</h2>
+        <p class="text-slate-400 text-sm">{{ t.queue_desc|default('Items requiring replenishment orders') }}</p>
+    </div>
+    <div class="flex items-center gap-3">
+        <button class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm transition">
+            <i class="fas fa-check mr-2"></i>{{ t.approve_selected|default('Approve Selected') }}
+        </button>
+        <button onclick="exportTable('queueTable')" class="px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-slate-300 text-sm transition">
+            <i class="fas fa-download mr-2"></i>{{ t.export|default('Export') }}
+        </button>
+    </div>
+</div>
+
+<!-- Queue KPIs -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <i class="fas fa-fire text-red-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.critical|default('Critical') }}</p>
+                <p class="text-white text-xl font-bold">{{ queue_stats.critical|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                <i class="fas fa-exclamation text-amber-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.high_priority|default('High Priority') }}</p>
+                <p class="text-white text-xl font-bold">{{ queue_stats.high|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-sky-500/20 flex items-center justify-center">
+                <i class="fas fa-clock text-sky-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.pending|default('Pending') }}</p>
+                <p class="text-white text-xl font-bold">{{ queue_stats.pending|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <i class="fas fa-dollar-sign text-purple-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.total_value|default('Total Value') }}</p>
+                <p class="text-white text-xl font-bold">${{ "{:,.0f}".format(queue_stats.total_value|default(0)) }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Queue Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <table class="w-full text-sm" id="queueTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">
+                        <input type="checkbox" class="rounded bg-slate-700 border-slate-600">
+                    </th>
+                    <th class="text-left py-3 px-3">{{ t.priority|default('Priority') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.item|default('Item') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.description|default('Description') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.warehouse|default('Warehouse') }}</th>
+                    <th class="text-right py-3 px-3">{{ t.current|default('Current') }}</th>
+                    <th class="text-right py-3 px-3">{{ t.reorder_point|default('ROP') }}</th>
+                    <th class="text-right py-3 px-3">{{ t.suggested_qty|default('Suggested Qty') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.source|default('Source') }}</th>
+                    <th class="text-center py-3 px-3">{{ t.actions|default('Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in queue_items %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                    <td class="py-3 px-4">
+                        <input type="checkbox" class="rounded bg-slate-700 border-slate-600">
+                    </td>
+                    <td class="py-3 px-3">
+                        {% if item.priority == 'CRITICAL' %}
+                        <span class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs font-bold">CRITICAL</span>
+                        {% elif item.priority == 'HIGH' %}
+                        <span class="px-2 py-1 rounded bg-amber-500/20 text-amber-400 text-xs font-bold">HIGH</span>
+                        {% elif item.priority == 'NORMAL' %}
+                        <span class="px-2 py-1 rounded bg-sky-500/20 text-sky-400 text-xs font-bold">NORMAL</span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded bg-slate-500/20 text-slate-400 text-xs font-bold">LOW</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-3 text-white font-medium">{{ item.item_code }}</td>
+                    <td class="py-3 px-3 text-slate-300">{{ item.description }}</td>
+                    <td class="py-3 px-3 text-slate-300">{{ item.warehouse_name }}</td>
+                    <td class="py-3 px-3 text-right text-red-400">{{ item.current_qty|int }}</td>
+                    <td class="py-3 px-3 text-right text-amber-400">{{ item.reorder_point|int }}</td>
+                    <td class="py-3 px-3 text-right text-emerald-400 font-bold">{{ item.suggested_qty|int }}</td>
+                    <td class="py-3 px-3 text-slate-300">{{ item.source|default('Auto') }}</td>
+                    <td class="py-3 px-3 text-center">
+                        <div class="flex items-center justify-center gap-2">
+                            <button class="px-3 py-1 rounded bg-emerald-500/20 text-emerald-400 text-xs hover:bg-emerald-500/30">
+                                <i class="fas fa-check mr-1"></i>{{ t.approve|default('Approve') }}
+                            </button>
+                            <button class="px-3 py-1 rounded bg-slate-500/20 text-slate-300 text-xs hover:bg-slate-500/30">
+                                <i class="fas fa-edit mr-1"></i>{{ t.edit|default('Edit') }}
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not queue_items %}
+                <tr>
+                    <td colspan="10" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-check-circle text-4xl mb-3 text-green-500"></i>
+                        <p>{{ t.queue_empty|default('Replenishment queue is empty. All items are above reorder points.') }}</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

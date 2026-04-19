@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('idoc_detail', 'IDoc Detail') }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ title }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('wms_edi_outbound') if is_outbound else url_for('wms_edi_inbound') }}" class="px-4 py-2 bg-brand-500/10 border border-brand-500/20 rounded-xl text-brand-400 hover:bg-brand-500/20 transition-all text-sm font-medium">
+                <i class="fa-solid fa-arrow-left mr-2"></i>{{ t('back', 'Back') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- IDoc Info -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Basic Info -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('basic_information', 'Basic Information') }}</h3>
+            <dl class="space-y-3">
+                <div class="flex justify-between">
+                    <dt class="text-slate-400 text-sm">{{ t('idoc_number', 'IDoc Number') }}</dt>
+                    <dd class="text-white text-sm font-mono">{{ idoc.idoc_number or idoc.id }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-slate-400 text-sm">{{ t('message_type', 'Message Type') }}</dt>
+                    <dd class="text-white text-sm">{{ idoc.message_type }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-slate-400 text-sm">{{ t('partner', 'Partner') }}</dt>
+                    <dd class="text-white text-sm">{{ partner.partner_name if partner else 'N/A' }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-slate-400 text-sm">{{ t('status', 'Status') }}</dt>
+                    <dd class="text-sm">
+                        {% if idoc.status == 'PENDING' %}
+                        <span class="px-3 py-1 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-400">{{ t('pending', 'Pending') }}</span>
+                        {% elif idoc.status == 'SENT' %}
+                        <span class="px-3 py-1 rounded-lg text-xs font-bold bg-brand-500/10 text-brand-400">{{ t('sent', 'Sent') }}</span>
+                        {% elif idoc.status == 'ACKNOWLEDGED' %}
+                        <span class="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400">{{ t('acknowledged', 'Acknowledged') }}</span>
+                        {% elif idoc.status == 'RECEIVED' %}
+                        <span class="px-3 py-1 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-400">{{ t('received', 'Received') }}</span>
+                        {% elif idoc.status == 'PROCESSED' %}
+                        <span class="px-3 py-1 rounded-lg text-xs font-bold bg-emerald-500/10 text-emerald-400">{{ t('processed', 'Processed') }}</span>
+                        {% else %}
+                        <span class="px-3 py-1 rounded-lg text-xs font-bold bg-red-500/10 text-red-400">{{ t('error', 'Error') }}</span>
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-slate-400 text-sm">{{ t('created', 'Created') }}</dt>
+                    <dd class="text-white text-sm">{{ idoc.created_at }}</dd>
+                </div>
+                {% if is_outbound %}
+                <div class="flex justify-between">
+                    <dt class="text-slate-400 text-sm">{{ t('sent_at', 'Sent At') }}</dt>
+                    <dd class="text-white text-sm">{{ idoc.sent_at or '-' }}</dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt class="text-slate-400 text-sm">{{ t('acknowledged_at', 'Acknowledged At') }}</dt>
+                    <dd class="text-white text-sm">{{ idoc.acknowledged_at or '-' }}</dd>
+                </div>
+                {% else %}
+                <div class="flex justify-between">
+                    <dt class="text-slate-400 text-sm">{{ t('processed_at', 'Processed At') }}</dt>
+                    <dd class="text-white text-sm">{{ idoc.processed_at or '-' }}</dd>
+                </div>
+                {% endif %}
+            </dl>
+        </div>
+
+        <!-- Error Info (if applicable) -->
+        {% if idoc.error_message %}
+        <div class="glass-panel rounded-2xl p-6 border border-red-500/20">
+            <h3 class="text-lg font-bold text-red-400 mb-4">{{ t('error_details', 'Error Details') }}</h3>
+            <p class="text-red-300 text-sm font-mono bg-red-500/10 rounded-xl p-4">{{ idoc.error_message }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- IDoc Content -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('idoc_content', 'IDoc Content') }}</h3>
+        <div class="bg-slate-900/50 rounded-xl p-4 overflow-auto max-h-96">
+            <pre class="text-slate-300 text-xs font-mono whitespace-pre-wrap">{{ idoc.content_xml or idoc.content_json or 'No content available' }}</pre>
+        </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="flex justify-end gap-3">
+        {% if is_outbound and idoc.status == 'PENDING' %}
+        <form method="POST" action="{{ url_for('wms_edi_resend', idoc_id=idoc.id) }}">
+            <button type="submit" class="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-paper-plane mr-2"></i>{{ t('resend', 'Resend') }}
+            </button>
+        </form>
+        {% endif %}
+        {% if not is_outbound and idoc.status == 'RECEIVED' %}
+        <form method="POST" action="{{ url_for('wms_edi_process', idoc_id=idoc.id) }}">
+            <button type="submit" class="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-cog mr-2"></i>{{ t('process', 'Process') }}
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

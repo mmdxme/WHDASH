@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 mt-1">Company/entity aggregate metrics</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('logistics.reports') }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm hover:bg-white/10 transition-all">
+                <i class="fa-solid fa-arrow-left mr-2"></i>Reports Menu
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-4">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-slate-400 text-sm mb-1">Date From</label>
+                <input type="date" name="date_from" value="{{ date_from }}" class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            </div>
+            <div>
+                <label class="block text-slate-400 text-sm mb-1">Date To</label>
+                <input type="date" name="date_to" value="{{ date_to }}" class="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                    <i class="fa-solid fa-filter mr-2"></i>Apply
+                </button>
+                <a href="{{ url_for('logistics.report_entity_tms') }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm hover:bg-white/10 transition-all">
+                    <i class="fa-solid fa-rotate-left"></i>
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-slate-400 text-sm">Total Shipments</span>
+                <i class="fa-solid fa-box text-blue-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-white">{{ summary.total_shipments }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-slate-400 text-sm">Delivered</span>
+                <i class="fa-solid fa-check-circle text-emerald-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-emerald-400">{{ summary.delivered }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-slate-400 text-sm">On-Time Rate</span>
+                <i class="fa-solid fa-clock text-purple-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-white">{{ summary.on_time_rate }}%</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-slate-400 text-sm">Total Cost</span>
+                <i class="fa-solid fa-coins text-amber-400"></i>
+            </div>
+            <div class="text-3xl font-bold text-amber-400">{{ "%.2f"|format(summary.total_cost) }}</div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Additional KPIs -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-5">Additional Metrics</h2>
+            <div class="space-y-4">
+                <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+                    <div>
+                        <p class="text-slate-400 text-sm">Total Trips</p>
+                        <p class="text-2xl font-bold text-white">{{ summary.total_trips }}</p>
+                    </div>
+                    <i class="fa-solid fa-route text-blue-400 text-2xl"></i>
+                </div>
+                <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+                    <div>
+                        <p class="text-slate-400 text-sm">Active Vehicles</p>
+                        <p class="text-2xl font-bold text-white">{{ summary.active_vehicles }}</p>
+                    </div>
+                    <i class="fa-solid fa-truck text-orange-400 text-2xl"></i>
+                </div>
+                <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+                    <div>
+                        <p class="text-slate-400 text-sm">Active Drivers</p>
+                        <p class="text-2xl font-bold text-white">{{ summary.active_drivers }}</p>
+                    </div>
+                    <i class="fa-solid fa-users text-teal-400 text-2xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Branch Breakdown -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-5">Branch Breakdown</h2>
+            {% if branch_breakdown %}
+            <div class="space-y-3">
+                {% for b in branch_breakdown %}
+                <div class="p-3 bg-white/5 rounded-xl">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-white font-medium">{{ b.branch_name }}</span>
+                        <span class="text-slate-400 text-sm">{{ b.total_deliveries }} deliveries</span>
+                    </div>
+                    <div class="flex items-center gap-4 text-sm">
+                        <span class="text-emerald-400">{{ b.delivered }} delivered</span>
+                        <span class="text-amber-400">{{ "%.2f"|format(b.total_cost) }} cost</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-slate-500">
+                <p>No branch data available</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Entity Summary Table -->
+    <div class="glass-panel rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-5">
+            <h2 class="text-lg font-bold text-white">Entity Summary</h2>
+            <button onclick="window.print()" class="px-3 py-1.5 bg-slate-500/10 text-slate-400 rounded-lg text-sm hover:bg-slate-500/20 transition-all">
+                <i class="fa-solid fa-print mr-1"></i>Print
+            </button>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="text-center p-4 bg-white/5 rounded-xl">
+                <p class="text-slate-400 text-sm">Shipments</p>
+                <p class="text-2xl font-bold text-white">{{ summary.total_shipments }}</p>
+            </div>
+            <div class="text-center p-4 bg-white/5 rounded-xl">
+                <p class="text-slate-400 text-sm">Trips</p>
+                <p class="text-2xl font-bold text-white">{{ summary.total_trips }}</p>
+            </div>
+            <div class="text-center p-4 bg-white/5 rounded-xl">
+                <p class="text-slate-400 text-sm">On-Time</p>
+                <p class="text-2xl font-bold text-emerald-400">{{ summary.on_time }}</p>
+            </div>
+            <div class="text-center p-4 bg-white/5 rounded-xl">
+                <p class="text-slate-400 text-sm">Cost</p>
+                <p class="text-2xl font-bold text-amber-400">{{ "%.2f"|format(summary.total_cost) }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-100">PM Compliance Dashboard</h1>
+            <p class="text-slate-400 text-sm mt-1">Monitor Preventive Maintenance schedule adherence and compliance</p>
+        </div>
+        <div class="flex gap-3">
+            <a href="{{ url_for('maintenance.pm_generate_work_orders') }}" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-calendar-check mr-2"></i>Generate PM Work Orders
+            </a>
+            <a href="{{ url_for('maintenance.report_pm') }}" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-sm font-medium transition-colors">
+                <i class="fas fa-chart-bar mr-2"></i>PM Report
+            </a>
+        </div>
+    </div>
+
+    <!-- Compliance KPIs -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <!-- Overall Compliance Rate -->
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-xs uppercase tracking-wider">Overall Compliance</span>
+                <span class="w-10 h-10 bg-green-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-check-circle text-green-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-bold text-green-400">{{ compliance.compliance_rate|default(0)|round(1) }}%</p>
+            <div class="mt-3">
+                <div class="w-full bg-slate-700 rounded-full h-3">
+                    <div class="bg-green-500 h-3 rounded-full" style="width: {{ compliance.compliance_rate|default(0) }}%"></div>
+                </div>
+            </div>
+            <p class="text-slate-500 text-xs mt-2">{{ compliance.compliant_count|default(0) }} of {{ compliance.total_schedules|default(0) }} on schedule</p>
+        </div>
+
+        <!-- Due This Week -->
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-xs uppercase tracking-wider">Due This Week</span>
+                <span class="w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-calendar-week text-yellow-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-bold text-yellow-400">{{ stats.due_this_week|default(0) }}</p>
+            <p class="text-slate-500 text-xs mt-2">
+                <span class="text-green-400">{{ stats.on_track|default(0) }}</span> on track,
+                <span class="text-orange-400">{{ stats.at_risk|default(0) }}</span> at risk
+            </p>
+        </div>
+
+        <!-- Overdue PM -->
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-xs uppercase tracking-wider">Overdue PM</span>
+                <span class="w-10 h-10 bg-red-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-exclamation-triangle text-red-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-bold text-red-400">{{ stats.overdue|default(0) }}</p>
+            <p class="text-slate-500 text-xs mt-2">
+                {% for priority in stats.overdue_by_priority %}
+                <span class="text-red-400">{{ priority.count }} {{ priority.priority }}</span>
+                {% endfor %}
+            </p>
+        </div>
+
+        <!-- Generated WOs -->
+        <div class="glass-panel rounded-xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-slate-400 text-xs uppercase tracking-wider">Generated (MTD)</span>
+                <span class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-clipboard-check text-blue-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-bold text-blue-400">{{ stats.generated_wos|default(0) }}</p>
+            <p class="text-slate-500 text-xs mt-2">{{ stats.completed_wos|default(0) }} completed this month</p>
+        </div>
+    </div>
+
+    <!-- Secondary Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <!-- Compliance by Priority -->
+        <div class="glass-panel rounded-xl p-5">
+            <h3 class="text-slate-400 text-xs uppercase tracking-wider mb-4">Compliance by Priority</h3>
+            <div class="space-y-3">
+                {% for item in compliance_by_priority %}
+                <div class="flex items-center justify-between p-2 bg-slate-800/50 rounded">
+                    <span class="text-slate-300">{{ item.priority }}</span>
+                    <div class="flex items-center gap-2">
+                        <div class="w-20 bg-slate-700 rounded-full h-2">
+                            <div class="h-2 rounded-full 
+                                {% if item.compliance_rate >= 90 %}bg-green-500
+                                {% elif item.compliance_rate >= 70 %}bg-yellow-500
+                                {% else %}bg-red-500{% endif %}" 
+                                style="width: {{ item.compliance_rate }}%"></div>
+                        </div>
+                        <span class="text-slate-400 text-xs w-10 text-right">{{ item.compliance_rate|default(0)|round(0) }}%</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- PM by Type -->
+        <div class="glass-panel rounded-xl p-5">
+            <h3 class="text-slate-400 text-xs uppercase tracking-wider mb-4">PM by Maintenance Type</h3>
+            <div class="space-y-3">
+                {% for item in pm_by_type %}
+                <div class="flex items-center justify-between p-2 bg-slate-800/50 rounded">
+                    <span class="text-slate-300">{{ item.maintenance_type }}</span>
+                    <span class="text-blue-400 font-medium">{{ item.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Upcoming PM Calendar -->
+        <div class="glass-panel rounded-xl p-5">
+            <h3 class="text-slate-400 text-xs uppercase tracking-wider mb-4">Upcoming (Next 14 Days)</h3>
+            <div class="space-y-2">
+                {% for item in upcoming_pm %}
+                <div class="p-2 bg-slate-800/50 rounded flex items-center justify-between">
+                    <div>
+                        <p class="text-slate-200 text-sm">{{ item.asset_name }}</p>
+                        <p class="text-slate-500 text-xs">{{ item.schedule_name }}</p>
+                    </div>
+                    <span class="text-yellow-400 text-xs">{{ item.next_due_date }}</span>
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-sm text-center">No upcoming PM</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Overdue PM List -->
+    <div class="glass-panel rounded-xl p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-white">Overdue Preventive Maintenance</h2>
+            <a href="{{ url_for('maintenance.pm_missed') }}" class="text-brand-400 hover:text-brand-300 text-sm">View All</a>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-800/50">
+                    <tr>
+                        <th class="text-left text-slate-400 text-xs font-medium uppercase px-4 py-3">Equipment</th>
+                        <th class="text-left text-slate-400 text-xs font-medium uppercase px-4 py-3">PM Schedule</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Type</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Priority</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Due Date</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Days Overdue</th>
+                        <th class="text-center text-slate-400 text-xs font-medium uppercase px-4 py-3">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-700">
+                    {% for pm in overdue_pm %}
+                    <tr class="hover:bg-slate-700/30">
+                        <td class="px-4 py-3">
+                            <p class="text-slate-200 font-medium">{{ pm.asset_name }}</p>
+                            <p class="text-slate-500 text-xs">{{ pm.asset_code }}</p>
+                        </td>
+                        <td class="px-4 py-3 text-slate-300">{{ pm.schedule_name }}</td>
+                        <td class="px-4 py-3 text-center text-slate-400">{{ pm.maintenance_type }}</td>
+                        <td class="px-4 py-3 text-center">
+                            <span class="px-2 py-1 rounded text-xs 
+                                {% if pm.priority == 'Critical' %}bg-red-500/20 text-red-400
+                                {% elif pm.priority == 'High' %}bg-orange-500/20 text-orange-400
+                                {% elif pm.priority == 'Medium' %}bg-yellow-500/20 text-yellow-400
+                                {% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                                {{ pm.priority }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-center text-slate-400">{{ pm.next_due_date }}</td>
+                        <td class="px-4 py-3 text-center">
+                            <span class="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs">{{ pm.days_overdue }}</span>
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            <button onclick="generateWorkOrder({{ pm.id }})" class="px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded text-xs">
+                                Generate WO
+                            </button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-slate-400">No overdue PM schedules</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- PM Forecast -->
+    <div class="glass-panel rounded-xl p-5 mb-6">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-white">PM Forecast (Next 12 Months)</h2>
+            <a href="{{ url_for('maintenance.pm_forecast') }}" class="text-brand-400 hover:text-brand-300 text-sm">View Forecast</a>
+        </div>
+        <div class="grid grid-cols-12 gap-2">
+            {% for month in forecast %}
+            <div class="text-center p-2 bg-slate-800/50 rounded">
+                <p class="text-slate-500 text-xs">{{ month.month }}</p>
+                <p class="text-cyan-400 font-bold">{{ month.count }}</p>
+                <p class="text-slate-500 text-xs">PMs</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <a href="{{ url_for('maintenance.pm_plans') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/50 transition-colors text-center">
+            <i class="fas fa-clipboard-list text-brand-400 text-2xl mb-2"></i>
+            <p class="text-slate-200 text-sm font-medium">PM Plans</p>
+        </a>
+        <a href="{{ url_for('maintenance.pm_schedules') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/50 transition-colors text-center">
+            <i class="fas fa-calendar-alt text-green-400 text-2xl mb-2"></i>
+            <p class="text-slate-200 text-sm font-medium">PM Schedules</p>
+        </a>
+        <a href="{{ url_for('maintenance.pm_calendar') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/50 transition-colors text-center">
+            <i class="fas fa-calendar text-yellow-400 text-2xl mb-2"></i>
+            <p class="text-slate-200 text-sm font-medium">PM Calendar</p>
+        </a>
+        <a href="{{ url_for('maintenance.pm_settings') }}" class="glass-panel rounded-xl p-4 hover:bg-slate-700/50 transition-colors text-center">
+            <i class="fas fa-cog text-slate-400 text-2xl mb-2"></i>
+            <p class="text-slate-200 text-sm font-medium">PM Settings</p>
+        </a>
+    </div>
+</div>
+
+<script>
+function generateWorkOrder(scheduleId) {
+    fetch('/maintenance/pm-schedules/' + scheduleId + '/generate-wo', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to generate work order'));
+        }
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-1">
+                        <li class="breadcrumb-item"><a href="{{ url_for('spc.gage_rr_list') }}">Gage R&R Studies</a></li>
+                        <li class="breadcrumb-item active">{{ study.study_number }}</li>
+                    </ol>
+                </nav>
+                <h1 class="h3 mb-1"><i class="fas fa-chart-pie me-2" style="color: #7C3AED;"></i>{{ study.study_name or study.study_number }}</h1>
+                <p class="text-muted mb-0">{{ study.equipment_name }} | {{ study.study_date }}</p>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">GRR %</div>
+                        <div class="display-4 fw-bold {% if study.percent_study_variation <= 10 %}text-success{% elif study.percent_study_variation <= 30 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ "%.1f"|format(study.percent_study_variation) }}%
+                        </div>
+                        <small class="text-muted">Gage Repeatability & Reproducibility</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">NDCH</div>
+                        <div class="display-4 fw-bold {% if study.ndch >= 5 %}text-success{% elif study.ndch >= 4 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ "%.1f"|format(study.ndch) if study.ndch else '-' }}
+                        </div>
+                        <small class="text-muted">Number of Distinct Categories</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">%Tolerance</div>
+                        <div class="display-4 fw-bold">{{ "%.1f"|format(study.percent_tolerance) }}%</div>
+                        <small class="text-muted">Contribution to Tolerance</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Assessment</div>
+                        <div class="mt-2">
+                            <span class="badge bg-{% if study.assessment == 'ACCEPTABLE' %}success{% elif study.assessment == 'MARGINAL' %}warning{% else %}danger{% endif %} fs-6">
+                                {{ study.assessment }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-{% if study.assessment == 'ACCEPTABLE' %}success{% elif study.assessment == 'MARGINAL' %}warning{% else %}danger{% endif %}">
+            <i class="fas {% if study.assessment == 'ACCEPTABLE' %}fa-check-circle{% elif study.assessment == 'MARGINAL' %}fa-exclamation-circle{% else %}fa-times-circle{% endif %} me-2"></i>
+            <strong>Gage R&R Assessment:</strong> {{ study.assessment }}
+            {% if study.assessment == 'ACCEPTABLE' %}
+            The measurement system is acceptable for production use.
+            {% elif study.assessment == 'MARGINAL' %}
+            The measurement system may be acceptable depending on application criticality.
+            {% else %}
+            The measurement system needs improvement before production use.
+            {% endif %}
+        </div>
+
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-sliders-h me-2"></i>Variation Components</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr>
+                                <th>Repeatability (EV)</th>
+                                <td>{{ "%.4f"|format(study.repeatability_ev) if study.repeatability_ev else '-' }}</td>
+                                <td class="text-muted">Equipment Variation</td>
+                            </tr>
+                            <tr>
+                                <th>Reproducibility (AV)</th>
+                                <td>{{ "%.4f"|format(study.reproducibility_av) if study.reproducibility_av else '-' }}</td>
+                                <td class="text-muted">Appraiser Variation</td>
+                            </tr>
+                            <tr>
+                                <th>GRR</th>
+                                <td class="fw-bold">{{ "%.4f"|format(study.grr) if study.grr else '-' }}</td>
+                                <td class="text-muted">Total Measurement Variation</td>
+                            </tr>
+                            <tr>
+                                <th>Part Variation (PV)</th>
+                                <td>{{ "%.4f"|format(study.part_variation) if study.part_variation else '-' }}</td>
+                                <td class="text-muted">Actual Part Variation</td>
+                            </tr>
+                            <tr>
+                                <th>Total Variation (TV)</th>
+                                <td>{{ "%.4f"|format(study.tolerance_tv) if study.tolerance_tv else '-' }}</td>
+                                <td class="text-muted">Total Observed Variation</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Study Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr><th>Study Number:</th><td>{{ study.study_number }}</td></tr>
+                            <tr><th>Gage:</th><td>{{ study.equipment_name }} ({{ study.equipment_code }})</td></tr>
+                            <tr><th>Study Type:</th><td>{{ study.study_type }}</td></tr>
+                            <tr><th>Parts Measured:</th><td>{{ study.part_count }}</td></tr>
+                            <tr><th>Operators:</th><td>{{ study.operator_count }}</td></tr>
+                            <tr><th>Replicates:</th><td>{{ study.replicate_count }}</td></tr>
+                            <tr><th>Study Date:</th><td>{{ study.study_date }}</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="{{ session.get('language', 'en') }}" dir="{{ 'rtl' if session.get('direction') == 'rtl' else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payslip {{ payslip.payslip_number }} - WHDASH</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --primary: #4F46E5; --success: #059669; --warning: #D97706; --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB; --gray-300: #D1D5DB; --gray-600: #4B5563; --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); --radius: 0.5rem; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--gray-50); }
+        .payslip-container { max-width: 800px; margin: 2rem auto; background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+        .payslip-header { background: linear-gradient(135deg, var(--primary) 0%, #4338CA 100%); color: white; padding: 2rem; text-align: center; }
+        .payslip-header h1 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.25rem; }
+        .payslip-header p { opacity: 0.9; font-size: 0.9rem; }
+        .payslip-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; padding: 1.5rem; background: var(--gray-50); border-bottom: 1px solid var(--gray-200); }
+        .meta-box .label { font-size: 0.7rem; text-transform: uppercase; color: var(--gray-600); }
+        .meta-box .value { font-weight: 600; font-size: 1rem; margin-top: 0.125rem; }
+        .payslip-section { padding: 1.5rem; border-bottom: 1px solid var(--gray-200); }
+        .payslip-section h3 { font-size: 0.875rem; font-weight: 600; color: var(--gray-600); text-transform: uppercase; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .payslip-section h3 i { color: var(--primary); }
+        .line-items { display: grid; grid-template-columns: 1fr auto auto; gap: 0.5rem 2rem; padding: 0.5rem 0; border-bottom: 1px dashed var(--gray-100); }
+        .line-items .label { color: var(--gray-600); }
+        .line-items .amount { text-align: right; font-weight: 500; }
+        .line-items.total { border-top: 2px solid var(--gray-200); border-bottom: none; font-weight: 700; font-size: 1.1rem; margin-top: 0.5rem; padding-top: 1rem; }
+        .payslip-footer { padding: 1.5rem; text-align: center; background: var(--gray-50); }
+        .actions { display: flex; justify-content: center; gap: 1rem; margin-top: 1rem; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: var(--radius); font-size: 0.9rem; font-weight: 500; cursor: pointer; border: none; text-decoration: none; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-secondary { background: var(--gray-100); color: var(--gray-600); }
+        .back-link { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--primary); text-decoration: none; font-weight: 500; margin: 1.5rem 0 0 1.5rem; }
+    </style>
+</head>
+<body>
+    <a href="{{ url_for('payroll.payslips_list') }}" class="back-link"><i class="fas fa-arrow-left"></i> Back to Payslips</a>
+
+    <div class="payslip-container">
+        <div class="payslip-header">
+            <h1>PAYSLIP</h1>
+            <p>{{ payslip.payslip_number }}</p>
+        </div>
+
+        <div class="payslip-meta">
+            <div class="meta-box">
+                <div class="label">Employee</div>
+                <div class="value">{{ payslip.employee_name }}</div>
+            </div>
+            <div class="meta-box">
+                <div class="label">Period</div>
+                <div class="value">{{ payslip.period_name }}</div>
+            </div>
+            <div class="meta-box">
+                <div class="label">Pay Date</div>
+                <div class="value">{{ payslip.pay_date[:10] if payslip.pay_date else 'N/A' }}</div>
+            </div>
+        </div>
+
+        <div class="payslip-section">
+            <h3><i class="fas fa-plus-circle"></i> Earnings</h3>
+            {% for e in earnings %}
+            <div class="line-items">
+                <span class="label">{{ e.component_name }}</span>
+                <span class="amount">{{ "%.2f"|format(e.amount) }}</span>
+            </div>
+            {% endfor %}
+            <div class="line-items total">
+                <span class="label">Gross Pay</span>
+                <span class="amount" style="color: var(--success);">AED {{ "%.2f"|format(payslip.gross_pay) }}</span>
+            </div>
+        </div>
+
+        <div class="payslip-section">
+            <h3><i class="fas fa-minus-circle"></i> Deductions</h3>
+            {% for d in deductions %}
+            <div class="line-items">
+                <span class="label">{{ d.component_name }}</span>
+                <span class="amount" style="color: var(--warning);">{{ "%.2f"|format(d.amount) }}</span>
+            </div>
+            {% endfor %}
+            <div class="line-items total">
+                <span class="label">Total Deductions</span>
+                <span class="amount" style="color: var(--warning);">AED {{ "%.2f"|format(payslip.total_deductions) }}</span>
+            </div>
+        </div>
+
+        <div class="payslip-section" style="background: var(--gray-50); margin: 0; padding: 1.5rem;">
+            <div class="line-items" style="font-size: 1.25rem;">
+                <span class="label"><strong>NET PAY</strong></span>
+                <span class="amount" style="color: var(--primary); font-size: 1.5rem;"><strong>AED {{ "%.2f"|format(payslip.net_pay) }}</strong></span>
+            </div>
+        </div>
+
+        <div class="payslip-footer">
+            <p style="color: var(--gray-600); font-size: 0.8rem;">This is a system-generated document. For queries contact HR.</p>
+            <div class="actions">
+                <a href="{{ url_for('payroll.payslip_download', payslip_id=payslip.id) }}" class="btn btn-primary"><i class="fas fa-download"></i> Download PDF</a>
+                <a href="{{ url_for('payroll.payslips_list') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

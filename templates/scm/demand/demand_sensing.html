@@ -1,0 +1,256 @@
+{% extends "scm/base_scm.html" %}
+
+{% block extra_head %}
+<style>
+    .signal-card {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(30, 41, 59, 0.5) 100%);
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .signal-up { color: #22c55e; }
+    .signal-down { color: #ef4444; }
+    .signal-stable { color: #60a5fa; }
+    .volatility-high { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); }
+    .volatility-medium { background: rgba(249, 115, 22, 0.1); border-color: rgba(249, 115, 22, 0.3); }
+    .volatility-low { background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.3); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-slate-900/50">
+    <!-- Header -->
+    <div class="scm-header px-6 py-4 mb-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-orange-500 flex items-center justify-center">
+                    <i class="fas fa-satellite text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white">{{ title }}</h1>
+                    <p class="text-slate-400 text-sm">Short-term demand signals and anomaly detection</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <form action="{{ url_for('scm.demand_sensing_detect') }}" method="POST" class="flex items-center gap-2">
+                    <select name="item_ids" multiple class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                        {% for item in items[:10] %}
+                        <option value="{{ item.id }}">{{ item.item_code }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-red-500 hover:bg-red-600 text-white text-sm transition">
+                        <i class="fas fa-radar mr-2"></i>{{ t.run_detection|default('Run Detection') }}
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="px-6 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="signal-card rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-slate-400 text-sm">{{ t.total_signals|default('Total Signals') }}</span>
+                    <i class="fas fa-broadcast-tower text-sky-400"></i>
+                </div>
+                <div class="text-3xl font-bold text-white">{{ signals|length if signals else 0 }}</div>
+            </div>
+
+            <div class="signal-card rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-slate-400 text-sm">{{ t.spike_alerts|default('Spike Alerts') }}</span>
+                    <i class="fas fa-arrow-up text-green-400"></i>
+                </div>
+                <div class="text-3xl font-bold text-green-400">
+                    {{ signals|selectattr('signal_direction', 'equalto', 'UP')|list|length if signals else 0 }}
+                </div>
+            </div>
+
+            <div class="signal-card rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-slate-400 text-sm">{{ t.drop_alerts|default('Drop Alerts') }}</span>
+                    <i class="fas fa-arrow-down text-red-400"></i>
+                </div>
+                <div class="text-3xl font-bold text-red-400">
+                    {{ signals|selectattr('signal_direction', 'equalto', 'DOWN')|list|length if signals else 0 }}
+                </div>
+            </div>
+
+            <div class="signal-card rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-slate-400 text-sm">{{ t.volatility_alerts|default('Volatility Alerts') }}</span>
+                    <i class="fas fa-exclamation text-yellow-400"></i>
+                </div>
+                <div class="text-3xl font-bold text-yellow-400">{{ volatility_alerts|length if volatility_alerts else 0 }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Volatility Alerts -->
+    <div class="px-6 mb-6">
+        <div class="signal-card rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-white">
+                    <i class="fas fa-exclamation-triangle text-yellow-400 mr-2"></i>
+                    {{ t.volatility_alerts|default('Volatility Alerts') }}
+                </h3>
+            </div>
+
+            {% if volatility_alerts %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-slate-700">
+                            <th class="text-left py-3 px-4">{{ t.item|default('Item') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.alert_type|default('Alert Type') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.severity|default('Severity') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.threshold|default('Threshold') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.actual_value|default('Actual') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.z_score|default('Z-Score') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.cv|default('CV') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.actions|default('Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-300">
+                        {% for alert in volatility_alerts %}
+                        <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+                            <td class="py-3 px-4">
+                                <div class="font-medium">{{ alert.item_code }}</div>
+                                <div class="text-xs text-slate-500">{{ alert.item_name[:30] if alert.item_name else '' }}</div>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-1 rounded text-xs font-medium
+                                    {% if alert.alert_type == 'DEMAND_SPIKE' %}bg-green-500/20 text-green-400
+                                    {% elif alert.alert_type == 'DEMAND_DROP' %}bg-red-500/20 text-red-400
+                                    {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+                                    {{ alert.alert_type }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="status-badge
+                                    {% if alert.severity == 'HIGH' %}status-high{% elif alert.severity == 'CRITICAL' %}status-critical{% else %}status-medium{% endif %}">
+                                    {{ alert.severity }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">{{ "%.2f"|format(alert.threshold_value) if alert.threshold_value else '-' }}</td>
+                            <td class="py-3 px-4">{{ "%.2f"|format(alert.actual_value) if alert.actual_value else '-' }}</td>
+                            <td class="py-3 px-4 {% if alert.z_score and alert.z_score|abs > 2 %}text-red-400 font-semibold{% endif %}">
+                                {{ "%.2f"|format(alert.z_score) if alert.z_score else '-' }}
+                            </td>
+                            <td class="py-3 px-4">{{ "%.2f"|format(alert.cv_value) if alert.cv_value else '-' }}</td>
+                            <td class="py-3 px-4">
+                                <form action="{{ url_for('scm.demand_sensing_acknowledge', alert_id=alert.id) }}" method="POST" class="inline">
+                                    <input type="text" name="resolution_notes" placeholder="{{ t.resolution_notes|default('Notes') }}" class="px-2 py-1 rounded text-xs bg-slate-700 border border-slate-600 text-slate-300 w-24">
+                                    <button type="submit" class="px-3 py-1 rounded text-xs bg-green-500/20 text-green-400 hover:bg-green-500/30">
+                                        {{ t.ack|default('Ack') }}
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-slate-400">
+                <i class="fas fa-check-circle text-green-400 text-5xl mb-3"></i>
+                <p class="text-lg font-medium">{{ t.no_volatility_alerts|default('No volatility alerts') }}</p>
+                <p class="text-sm">{{ t.all_items_stable|default('All items within normal volatility thresholds') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent Demand Signals -->
+    <div class="px-6 mb-6">
+        <div class="signal-card rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-white">
+                    <i class="fas fa-broadcast-tower text-sky-400 mr-2"></i>
+                    {{ t.recent_signals|default('Recent Demand Signals') }}
+                </h3>
+            </div>
+
+            {% if signals %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-slate-700">
+                            <th class="text-left py-3 px-4">{{ t.item|default('Item') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.signal_type|default('Signal Type') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.direction|default('Direction') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.value|default('Value') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.confidence|default('Confidence') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.date|default('Date') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.reviewed|default('Reviewed') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-300">
+                        {% for signal in signals[:30] %}
+                        <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+                            <td class="py-3 px-4">
+                                <div class="font-medium">{{ signal.item_code }}</div>
+                                <div class="text-xs text-slate-500">{{ signal.item_name[:30] if signal.item_name else '' }}</div>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-1 rounded text-xs bg-slate-700 text-slate-300">
+                                    {{ signal.signal_type }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="flex items-center gap-1 {% if signal.signal_direction == 'UP' %}signal-up{% elif signal.signal_direction == 'DOWN' %}signal-down{% else %}signal-stable{% endif %}">
+                                    {% if signal.signal_direction == 'UP' %}
+                                    <i class="fas fa-arrow-up"></i> UP
+                                    {% elif signal.signal_direction == 'DOWN' %}
+                                    <i class="fas fa-arrow-down"></i> DOWN
+                                    {% else %}
+                                    <i class="fas fa-minus"></i> STABLE
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">{{ "%.2f"|format(signal.signal_value) if signal.signal_value else '-' }}</td>
+                            <td class="py-3 px-4">
+                                <div class="w-16 h-2 rounded bg-slate-700">
+                                    <div class="h-2 rounded bg-sky-400" style="width: {{ (signal.confidence * 100)|round|int if signal.confidence else 50 }}%;"></div>
+                                </div>
+                            </td>
+                            <td class="py-3 px-4 text-slate-500">{{ signal.signal_date }}</td>
+                            <td class="py-3 px-4">
+                                {% if signal.is_reviewed %}
+                                <span class="text-green-400"><i class="fas fa-check-circle"></i></span>
+                                {% else %}
+                                <span class="text-yellow-400"><i class="fas fa-clock"></i></span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-slate-400">
+                <i class="fas fa-signal text-slate-500 text-5xl mb-3"></i>
+                <p class="text-lg font-medium">{{ t.no_signals|default('No demand signals recorded') }}</p>
+                <p class="text-sm">{{ t.signals_appear_here|default('Signals will appear here when demand anomalies are detected') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Detection Explanation -->
+    <div class="px-6 mb-6">
+        <div class="signal-card rounded-xl p-5">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t.how_detection_works|default('How Detection Works') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div class="p-4 rounded-lg bg-slate-800/50">
+                    <h4 class="text-sky-400 font-semibold mb-2"><i class="fas fa-chart-line mr-2"></i>{{ t.volatility_cv|default('Volatility Detection (CV)') }}</h4>
+                    <p class="text-slate-400">{{ t.volatility_desc|default('Items with coefficient of variation (std_dev/mean) > 0.5 are flagged as volatile. High volatility items may need different forecasting approaches.') }}</p>
+                </div>
+                <div class="p-4 rounded-lg bg-slate-800/50">
+                    <h4 class="text-purple-400 font-semibold mb-2"><i class="fas fa-search mr-2"></i>{{ t.z_score|default('Z-Score Analysis') }}</h4>
+                    <p class="text-slate-400">{{ t.zscore_desc|default('Recent demand compared to historical baseline. Z-score > 2.0 or < -2.0 indicates statistically significant deviation from normal patterns.') }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

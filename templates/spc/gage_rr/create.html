@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-1">
+                        <li class="breadcrumb-item"><a href="{{ url_for('spc.gage_rr_list') }}">Gage R&R Studies</a></li>
+                        <li class="breadcrumb-item active">Create</li>
+                    </ol>
+                </nav>
+                <h1 class="h3 mb-1"><i class="fas fa-plus me-2" style="color: #7C3AED;"></i>{{ page_title }}</h1>
+                <p class="text-muted mb-0">Create a new Gage R&R study</p>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Study Configuration</h5>
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Gage / Equipment <span class="text-danger">*</span></label>
+                                    <select name="gage_id" class="form-select" required>
+                                        <option value="">Select Gage</option>
+                                        {% for eq in equipment %}
+                                        <option value="{{ eq.id }}">{{ eq.equipment_code }} - {{ eq.equipment_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Study Date</label>
+                                    <input type="date" name="study_date" class="form-control" value="{{ now().strftime('%Y-%m-%d') }}" required>
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Number of Parts</label>
+                                    <input type="number" name="part_count" class="form-control" value="10" min="5" required>
+                                    <small class="text-muted">Recommended: 10 parts covering process range</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Number of Operators</label>
+                                    <input type="number" name="operator_count" class="form-control" value="3" min="2" required>
+                                    <small class="text-muted">Recommended: 3 operators</small>
+                                </div>
+                            </div>
+
+                            <hr>
+                            <h5>Measurement Data</h5>
+                            <p class="text-muted small">Enter measurements in format: Part#, Operator1, Operator2, Operator3 (one row per part, values separated by commas, rows separated by pipes)</p>
+
+                            <div class="mb-3">
+                                <label class="form-label">Measurements (format: value,value,value|value,value,value|...)</label>
+                                <textarea name="measurements" class="form-control font-monospace" rows="8"
+                                    placeholder="10.2,10.3,10.1|9.8,9.9,9.7|10.1,10.2,10.0|10.3,10.4,10.2|9.9,10.0,9.8|10.0,10.1,9.9|10.2,10.3,10.1|9.7,9.8,9.6|10.1,10.2,10.0|10.4,10.5,10.3"
+                                    required></textarea>
+                                <small class="text-muted">Each row = one part, values = measurements by each operator</small>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Part Numbers</label>
+                                <input type="text" name="part_numbers" class="form-control" placeholder="Part numbers (one per line or comma-separated)">
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label">Operator Numbers</label>
+                                <input type="text" name="operator_numbers" class="form-control" placeholder="Operator identifiers">
+                            </div>
+
+                            <div class="d-flex justify-content-end gap-2 mt-4">
+                                <a href="{{ url_for('spc.gage_rr_list') }}" class="btn btn-secondary">Cancel</a>
+                                <button type="submit" class="btn" style="background: #7C3AED; color: white;">
+                                    <i class="fas fa-calculator me-1"></i> Calculate GRR
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Assessment Guide</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <span class="badge bg-success w-100 mb-1">GRR ≤ 10%</span>
+                            <small class="text-muted">Excellent - Gage is acceptable</small>
+                        </div>
+                        <div class="mb-3">
+                            <span class="badge bg-warning w-100 mb-1">10% < GRR ≤ 30%</span>
+                            <small class="text-muted">Marginal - May be acceptable based on application</small>
+                        </div>
+                        <div class="mb-3">
+                            <span class="badge bg-danger w-100 mb-1">GRR > 30%</span>
+                            <small class="text-muted">Unacceptable - Gage needs improvement</small>
+                        </div>
+                        <hr>
+                        <h6>NDCH (Number of Distinct Categories)</h6>
+                        <ul class="small mb-0">
+                            <li>NDCH ≥ 5: Acceptable</li>
+                            <li>NDCH 4: Marginal</li>
+                            <li>NDCH < 4: Unacceptable</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('voice_picking', 'Voice Picking') }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ t('voice_picking_desc', 'Hands-free guided picking with voice commands') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('wms_voice_picking_report') }}" class="px-4 py-2 bg-brand-500/10 border border-brand-500/20 rounded-xl text-brand-400 hover:bg-brand-500/20 transition-all text-sm font-medium">
+                <i class="fa-solid fa-chart-bar mr-2"></i>{{ t('report', 'Report') }}
+            </a>
+            <a href="{{ url_for('wms_voice_picking_config') }}" class="px-4 py-2 bg-slate-500/10 border border-slate-500/20 rounded-xl text-slate-400 hover:bg-slate-500/20 transition-all text-sm font-medium">
+                <i class="fa-solid fa-gear mr-2"></i>{{ t('config', 'Config') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Voice Status Card -->
+    <div class="glass-panel rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-4">
+                <div id="voice-indicator" class="w-16 h-16 rounded-full bg-slate-700 flex items-center justify-center">
+                    <i class="fa-solid fa-microphone text-3xl text-slate-400" id="mic-icon"></i>
+                </div>
+                <div>
+                    <h3 class="text-xl font-bold text-white">{{ t('voice_system', 'Voice System') }}</h3>
+                    <p class="text-slate-400 text-sm" id="voice-status">{{ t('ready_to_start', 'Ready to start') }}</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <p class="text-slate-400 text-sm">{{ t('operator', 'Operator') }}:</p>
+                <p class="text-white font-medium">{{ session.get('username', 'Unknown') }}</p>
+            </div>
+        </div>
+
+        <!-- Current Task Card -->
+        <div id="task-card" class="bg-slate-800/50 rounded-xl p-6 mb-6 {% if not active_task %}opacity-50{% endif %}">
+            {% if active_task %}
+            <div class="flex items-start justify-between mb-4">
+                <div>
+                    <span class="px-3 py-1 rounded-lg text-xs font-bold bg-cyan-500/10 text-cyan-400 mb-2 inline-block">
+                        {{ t('task_active', 'ACTIVE TASK') }}
+                    </span>
+                    <h3 class="text-lg font-bold text-white">{{ t('pick_task', 'Pick Task') }} #{{ active_task.id }}</h3>
+                    <p class="text-slate-400 text-sm mt-1">{{ active_task.warehouse_name }}</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-amber-400 font-bold text-2xl">{{ active_task.quantity|int }}</p>
+                    <p class="text-slate-400 text-xs">{{ t('units_to_pick', 'units to pick') }}</p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bg-slate-700/30 rounded-lg p-3">
+                    <p class="text-slate-400 text-xs mb-1">{{ t('item', 'Item') }}</p>
+                    <p class="text-white font-bold">{{ active_task.item_code }}</p>
+                    <p class="text-slate-400 text-sm">{{ active_task.item_name[:30] }}</p>
+                </div>
+                <div class="bg-slate-700/30 rounded-lg p-3">
+                    <p class="text-slate-400 text-xs mb-1">{{ t('location', 'Location') }}</p>
+                    <p class="text-white font-bold text-xl">{{ active_task.source_location or 'N/A' }}</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+                <button onclick="startVoicePicking({{ active_task.id }})" id="start-btn"
+                        class="flex-1 px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-lg transition-all">
+                    <i class="fa-solid fa-play mr-2"></i>{{ t('start_picking', 'Start Picking') }}
+                </button>
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fa-solid fa-headset text-5xl text-slate-600 mb-4"></i>
+                <p class="text-slate-400 text-lg">{{ t('no_task_assigned', 'No task assigned') }}</p>
+                <p class="text-slate-500 text-sm mt-1">{{ t('pick_task_from_queue', 'Pick a task from the picking queue') }}</p>
+                <a href="{{ url_for('wms_pickup_queue') }}" class="inline-block mt-4 px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium">
+                    {{ t('go_to_queue', 'Go to Queue') }}
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Voice Instruction Display -->
+        <div id="instruction-display" class="bg-brand-500/10 border border-brand-500/30 rounded-xl p-6 mb-6 hidden">
+            <p class="text-slate-400 text-sm mb-2">{{ t('instruction', 'Instruction') }}:</p>
+            <p class="text-white text-xl font-medium" id="instruction-text"></p>
+        </div>
+
+        <!-- Voice Controls -->
+        <div id="voice-controls" class="hidden">
+            <div class="grid grid-cols-3 gap-3 mb-4">
+                <button onclick="confirmPick('YES')" class="px-6 py-4 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-lg transition-all">
+                    <i class="fa-solid fa-check mr-2"></i>{{ t('yes', 'Yes') }}
+                </button>
+                <button onclick="confirmPick('NO')" class="px-6 py-4 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-lg transition-all">
+                    <i class="fa-solid fa-xmark mr-2"></i>{{ t('no', 'No') }}
+                </button>
+                <button onclick="confirmPick('SKIP')" class="px-6 py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-lg transition-all">
+                    <i class="fa-solid fa-forward mr-2"></i>{{ t('skip', 'Skip') }}
+                </button>
+            </div>
+            <button onclick="stopVoicePicking()" class="w-full px-6 py-3 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-xl font-medium transition-all">
+                {{ t('stop_session', 'Stop Session') }}
+            </button>
+        </div>
+
+        <!-- Error Display -->
+        <div id="error-display" class="bg-red-500/10 border border-red-500/30 rounded-xl p-4 mb-6 hidden">
+            <div class="flex items-center gap-3">
+                <i class="fa-solid fa-exclamation-triangle text-red-400 text-xl"></i>
+                <div>
+                    <p class="text-red-400 font-medium" id="error-title">{{ t('error', 'Error') }}</p>
+                    <p class="text-red-300 text-sm" id="error-message"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase">{{ t('today_picks', 'Today Picks') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-brand-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-hand text-brand-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-white" id="today-picks">0</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase">{{ t('accuracy', 'Accuracy') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-bullseye text-emerald-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-emerald-400" id="accuracy">100%</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase">{{ t('avg_time', 'Avg Time') }}</span>
+                <span class="w-9 h-9 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-clock text-cyan-400"></i>
+                </span>
+            </div>
+            <p class="text-3xl font-extrabold text-cyan-400" id="avg-time">0s</p>
+        </div>
+    </div>
+</div>
+
+<script>
+// Web Speech API variables
+let recognition = null;
+let synthesis = window.speechSynthesis;
+let currentTaskId = null;
+let isListening = false;
+
+function initVoice() {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = '{{ user_preferences.language|default('en') }}';
+
+        recognition.onresult = function(event) {
+            const result = event.results[event.results.length - 1];
+            if (result.isFinal) {
+                processVoiceCommand(result[0].transcript);
+            }
+        };
+
+        recognition.onerror = function(event) {
+            console.log('Speech recognition error:', event.error);
+            if (event.error === 'no-speech') {
+                isListening = false;
+            }
+        };
+    }
+}
+
+function speak(text) {
+    if (synthesis) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = '{{ user_preferences.language|default('en') }}';
+        utterance.rate = 1.0;
+        synthesis.speak(utterance);
+    }
+}
+
+async function startVoicePicking(taskId) {
+    currentTaskId = taskId;
+    const startBtn = document.getElementById('start-btn');
+    startBtn.disabled = true;
+    startBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>{{ t("starting", "Starting...") }}';
+
+    try {
+        const response = await fetch('/wms/voice-picking/start/' + taskId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            document.getElementById('instruction-text').textContent = data.instruction;
+            document.getElementById('instruction-display').classList.remove('hidden');
+            document.getElementById('voice-controls').classList.remove('hidden');
+            document.getElementById('voice-status').textContent = '{{ t("in_progress", "In Progress") }}';
+            document.getElementById('voice-indicator').classList.remove('bg-slate-700');
+            document.getElementById('voice-indicator').classList.add('bg-emerald-500');
+            document.getElementById('mic-icon').classList.remove('text-slate-400');
+            document.getElementById('mic-icon').classList.add('text-white');
+
+            speak(data.instruction);
+
+            startBtn.textContent = '{{ t("in_progress", "In Progress") }}';
+        } else {
+            showError('{{ t("error", "Error") }}', data.error || 'Failed to start');
+            startBtn.disabled = false;
+        }
+    } catch (e) {
+        showError('{{ t("error", "Error") }}', e.message);
+        startBtn.disabled = false;
+    }
+}
+
+async function confirmPick(answer) {
+    if (!currentTaskId) return;
+
+    try {
+        const response = await fetch('/wms/voice-picking/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                task_id: currentTaskId,
+                recognized_command: answer,
+                is_correct: answer === 'YES' ? 1 : 0,
+                error_type: answer === 'NO' ? 'WRONG_ITEM' : (answer === 'SKIP' ? 'SKIPPED' : null)
+            })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            if (answer === 'YES') {
+                speak('{{ t("pick_confirmed", "Pick confirmed. Proceed to next task.") }}');
+                setTimeout(() => location.reload(), 1500);
+            } else if (answer === 'NO') {
+                speak('{{ t("try_again", "Please try again.") }}');
+            } else if (answer === 'SKIP') {
+                speak('{{ t("task_skipped", "Task skipped.") }}');
+                setTimeout(() => location.reload(), 1500);
+            }
+        }
+    } catch (e) {
+        showError('{{ t("error", "Error") }}', e.message);
+    }
+}
+
+function stopVoicePicking() {
+    if (recognition && isListening) {
+        recognition.stop();
+        isListening = false;
+    }
+    synthesis.cancel();
+    location.reload();
+}
+
+function showError(title, message) {
+    document.getElementById('error-title').textContent = title;
+    document.getElementById('error-message').textContent = message;
+    document.getElementById('error-display').classList.remove('hidden');
+    setTimeout(() => {
+        document.getElementById('error-display').classList.add('hidden');
+    }, 5000);
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', initVoice);
+</script>
+{% endblock %}

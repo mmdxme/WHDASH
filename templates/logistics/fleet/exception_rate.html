@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div><h1 class="text-3xl font-bold text-white">{{ title }}</h1><p class="text-slate-400 mt-1">Exception rate tracking and analysis</p></div>
+        <div class="flex items-center gap-3">
+            <input type="date" id="dateFrom" value="{{ date_from }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <span class="text-slate-500">to</span>
+            <input type="date" id="dateTo" value="{{ date_to }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <button onclick="applyFilters()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-filter mr-2"></i>Apply
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Deliveries</span>
+                <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-truck text-blue-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white">{{ exc_stats.total_deliveries|default(0) }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Exceptions</span>
+                <div class="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-exclamation text-red-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-red-400">{{ exc_stats.total_exceptions|default(0) }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Exception Rate</span>
+                <div class="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-percent text-amber-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-amber-400">{{ exc_stats.exception_rate|default(0)|round(2) }}%</div>
+        </div>
+    </div>
+
+    <!-- By Vehicle -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Exception Rate by Vehicle</h2>
+        {% if by_vehicle %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Vehicle</th>
+                        <th class="text-left py-3 px-3 font-medium">Plate</th>
+                        <th class="text-right py-3 px-3 font-medium">Shipments</th>
+                        <th class="text-right py-3 px-3 font-medium">Exceptions</th>
+                        <th class="text-right py-3 px-3 font-medium">Rate</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in by_vehicle %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-white">{{ v.vehicle_code }}</td>
+                        <td class="py-3 px-3 text-slate-300">{{ v.plate_number }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ v.total_shipments }}</td>
+                        <td class="py-3 px-3 text-right text-red-400">{{ v.exceptions }}</td>
+                        <td class="py-3 px-3 text-right">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium {% if v.exception_rate > 10 %}bg-red-500/10 text-red-400{% elif v.exception_rate > 5 %}bg-amber-500/10 text-amber-400{% else %}bg-emerald-500/10 text-emerald-400{% endif %}">
+                                {{ v.exception_rate|round(2) }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-400 text-center py-8">No vehicle exception data</p>
+        {% endif %}
+    </div>
+
+    <!-- By Driver -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Exception Rate by Driver</h2>
+        {% if by_driver %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Driver</th>
+                        <th class="text-left py-3 px-3 font-medium">Code</th>
+                        <th class="text-right py-3 px-3 font-medium">Shipments</th>
+                        <th class="text-right py-3 px-3 font-medium">Exceptions</th>
+                        <th class="text-right py-3 px-3 font-medium">Rate</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in by_driver %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-white">{{ d.full_name }}</td>
+                        <td class="py-3 px-3 text-slate-400">{{ d.driver_code }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ d.total_shipments }}</td>
+                        <td class="py-3 px-3 text-right text-red-400">{{ d.exceptions }}</td>
+                        <td class="py-3 px-3 text-right">
+                            <span class="px-2 py-1 rounded-full text-xs font-medium {% if d.exception_rate > 10 %}bg-red-500/10 text-red-400{% elif d.exception_rate > 5 %}bg-amber-500/10 text-amber-400{% else %}bg-emerald-500/10 text-emerald-400{% endif %}">
+                                {{ d.exception_rate|round(2) }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-400 text-center py-8">No driver exception data</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function applyFilters() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    window.location.href = `{{ url_for('logistics.fleet_exception_rate') }}?date_from=${dateFrom}&date_to=${dateTo}`;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-1">
+                        <li class="breadcrumb-item"><a href="{{ url_for('spc.equipment_list') }}">Equipment</a></li>
+                        <li class="breadcrumb-item active">{{ equipment.equipment_name }}</li>
+                    </ol>
+                </nav>
+                <h1 class="h3 mb-1"><i class="fas fa-tools me-2 text-warning"></i>{{ equipment.equipment_name }}</h1>
+                <p class="text-muted mb-0">{{ equipment.equipment_code }} | {{ equipment.equipment_type }}</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('spc.equipment_calibrate', equipment_id=equipment.id) }}" class="btn btn-success">
+                    <i class="fas fa-calendar-check me-1"></i> Record Calibration
+                </a>
+            </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Calibration Status</div>
+                        <div class="my-2">
+                            <span class="badge bg-{% if equipment.calibration_status == 'CURRENT' %}success{% elif equipment.calibration_status == 'DUE' %}warning{% elif equipment.calibration_status == 'OVERDUE' %}danger{% else %}secondary{% endif %} fs-6">
+                                {{ equipment.calibration_status }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Last Calibration</div>
+                        <div class="fs-5 fw-bold">{{ equipment.last_calibration_date or 'Never' }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Next Due</div>
+                        <div class="fs-5 fw-bold text-{% if equipment.calibration_status == 'OVERDUE' %}danger{% elif equipment.calibration_status == 'DUE' %}warning{% else %}success{% endif %}">
+                            {{ equipment.next_calibration_date or 'Not Set' }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center h-100">
+                    <div class="card-body">
+                        <div class="text-muted small">Interval</div>
+                        <div class="fs-5 fw-bold">{{ equipment.calibration_interval_days }} days</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-4">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Equipment Details</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr><th>Manufacturer:</th><td>{{ equipment.manufacturer or '-' }}</td></tr>
+                            <tr><th>Model:</th><td>{{ equipment.model_number or '-' }}</td></tr>
+                            <tr><th>Serial #:</th><td>{{ equipment.serial_number or '-' }}</td></tr>
+                            <tr><th>Location:</th><td>{{ equipment.location or '-' }}</td></tr>
+                            <tr><th>Range:</th><td>{{ equipment.measurement_range_min or '0' }} - {{ equipment.measurement_range_max or '?' }}</td></tr>
+                            <tr><th>Resolution:</th><td>{{ equipment.resolution or '-' }}</td></tr>
+                            <tr><th>Accuracy:</th><td>{{ equipment.accuracy or '-' }}</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-history me-2"></i>Calibration History</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Cal #</th>
+                                    <th>Date</th>
+                                    <th>Result</th>
+                                    <th>As Found</th>
+                                    <th>Certificate</th>
+                                    <th>Next Due</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for cal in calibrations %}
+                                <tr>
+                                    <td>{{ cal.calibration_number }}</td>
+                                    <td>{{ cal.calibration_date }}</td>
+                                    <td><span class="badge bg-{% if cal.result == 'PASSED' %}success{% else %}danger{% endif %}">{{ cal.result }}</span></td>
+                                    <td>{{ cal.as_found_min }} - {{ cal.as_found_max }}</td>
+                                    <td>{{ cal.certificate_number or '-' }}</td>
+                                    <td>{{ cal.next_calibration_date or '-' }}</td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="6" class="text-center py-3 text-muted">No calibration records</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gage R&R Studies -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Gage R&R Studies</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Study #</th>
+                            <th>Type</th>
+                            <th>GRR %</th>
+                            <th>NDCH</th>
+                            <th>Assessment</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for grr in grr_studies %}
+                        <tr>
+                            <td>{{ grr.study_number }}</td>
+                            <td>{{ grr.study_type }}</td>
+                            <td>{{ "%.1f"|format(grr.percent_study_variation) }}%</td>
+                            <td>{{ "%.1f"|format(grr.ndch) }}</td>
+                            <td><span class="badge bg-{% if grr.assessment == 'ACCEPTABLE' %}success{% elif grr.assessment == 'MARGINAL' %}warning{% else %}danger{% endif %}">{{ grr.assessment }}</span></td>
+                            <td>{{ grr.study_date }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="6" class="text-center py-3 text-muted">No Gage R&R studies</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

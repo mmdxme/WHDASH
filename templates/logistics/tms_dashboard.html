@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-8">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 mt-1">Executive Transport Management Dashboard</p>
+        </div>
+        <div class="flex items-center gap-3 flex-wrap">
+            <select id="branchFilter" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                <option value="">All Branches</option>
+                {% for b in branches %}
+                <option value="{{ b.id }}" {% if branch_id == b.id|string %}selected{% endif %}>{{ b.name }}</option>
+                {% endfor %}
+            </select>
+            <select id="vehicleTypeFilter" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+                <option value="">All Vehicle Types</option>
+                {% for vt in vehicle_types %}
+                <option value="{{ vt.vehicle_type }}" {% if vehicle_type == vt.vehicle_type %}selected{% endif %}>{{ vt.vehicle_type }}</option>
+                {% endfor %}
+            </select>
+            <input type="date" id="dateFrom" value="{{ date_from }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <span class="text-slate-500">to</span>
+            <input type="date" id="dateTo" value="{{ date_to }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <button onclick="applyFilters()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-filter mr-2"></i>Apply
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Cards Row -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <!-- Open Trips -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Open Trips</span>
+                <div class="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-route text-blue-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white">{{ kpis.open_trips }}</div>
+            <p class="text-xs text-slate-500 mt-1">Active shipments</p>
+        </div>
+
+        <!-- In Transit -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">In Transit</span>
+                <div class="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-truck-fast text-cyan-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-cyan-400">{{ kpis.in_transit }}</div>
+            <p class="text-xs text-slate-500 mt-1">Currently moving</p>
+        </div>
+
+        <!-- Delayed -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Delayed</span>
+                <div class="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-clock text-red-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-red-400">{{ kpis.delayed }}</div>
+            <p class="text-xs text-slate-500 mt-1">Needs attention</p>
+        </div>
+
+        <!-- On-Time % -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">On-Time %</span>
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-check-circle text-emerald-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-emerald-400">{{ kpis.on_time_pct }}%</div>
+            <p class="text-xs text-slate-500 mt-1">Delivery success</p>
+        </div>
+
+        <!-- Failed Deliveries -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Failed</span>
+                <div class="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-triangle-exclamation text-orange-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-orange-400">{{ kpis.failed_deliveries }}</div>
+            <p class="text-xs text-slate-500 mt-1">Failed deliveries</p>
+        </div>
+
+        <!-- Available Vehicles -->
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Available</span>
+                <div class="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                    <i class="fa-solid fa-shuttle-van text-purple-400"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-purple-400">{{ kpis.available_vehicles }}</div>
+            <p class="text-xs text-slate-500 mt-1">Fleet ready</p>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Active Trips Table -->
+        <div class="lg:col-span-2 glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="text-lg font-bold text-white">Active Trips</h2>
+                <a href="{{ url_for('logistics.shipments_list', status='in_transit') }}" class="text-brand-400 text-sm hover:text-brand-300">View All <i class="fa-solid fa-arrow-right ml-1"></i></a>
+            </div>
+            {% if active_trips %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-white/5">
+                            <th class="text-left py-3 px-2 font-medium">Shipment</th>
+                            <th class="text-left py-3 px-2 font-medium">Driver</th>
+                            <th class="text-left py-3 px-2 font-medium">Vehicle</th>
+                            <th class="text-left py-3 px-2 font-medium">Status</th>
+                            <th class="text-left py-3 px-2 font-medium">Progress</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for trip in active_trips %}
+                        <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                            <td class="py-3 px-2">
+                                <a href="{{ url_for('logistics.shipments_view', id=trip.id) }}" class="text-brand-400 hover:text-brand-300">{{ trip.shipment_code }}</a>
+                                <p class="text-slate-500 text-xs">{{ trip.customer_name or trip.consignee_name or '-' }}</p>
+                            </td>
+                            <td class="py-3 px-2 text-white">{{ trip.driver_name or '<span class="text-slate-500">Unassigned</span>' }}</td>
+                            <td class="py-3 px-2 text-slate-300">{{ trip.plate_number or '-' }}</td>
+                            <td class="py-3 px-2">
+                                <span class="px-2 py-1 rounded-full text-xs font-medium
+                                    {% if trip.status == 'in_transit' %}bg-blue-500/10 text-blue-400
+                                    {% elif trip.status == 'loaded' %}bg-amber-500/10 text-amber-400
+                                    {% elif trip.status == 'departed' %}bg-cyan-500/10 text-cyan-400
+                                    {% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                    {{ trip.trip_status }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-2">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-16 h-2 bg-white/10 rounded-full overflow-hidden">
+                                        <div class="h-full bg-brand-500 rounded-full" style="width: {% if trip.hours_elapsed and trip.hours_elapsed > 0 and trip.hours_elapsed < 100 %}{{ 100 - trip.hours_elapsed }}{% else %}50{% endif %}%"></div>
+                                    </div>
+                                    <span class="text-xs text-slate-400">{{ trip.hours_elapsed }}h</span>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-slate-500">
+                <i class="fa-solid fa-route text-4xl mb-3"></i>
+                <p>No active trips at the moment</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Dispatch Board Summary -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="text-lg font-bold text-white">Dispatch Summary</h2>
+                <a href="{{ url_for('logistics.dispatch_board') }}" class="text-brand-400 text-sm hover:text-brand-300">Live Board <i class="fa-solid fa-arrow-right ml-1"></i></a>
+            </div>
+            <div class="space-y-4">
+                <div class="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-amber-400 font-medium">Pending Dispatches</p>
+                            <p class="text-slate-400 text-xs">Ready to assign</p>
+                        </div>
+                        <span class="text-3xl font-extrabold text-amber-400">{{ dispatch_summary.pending }}</span>
+                    </div>
+                </div>
+                <div class="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-emerald-400 font-medium">Completed Today</p>
+                            <p class="text-slate-400 text-xs">Successful deliveries</p>
+                        </div>
+                        <span class="text-3xl font-extrabold text-emerald-400">{{ dispatch_summary.completed_today }}</span>
+                    </div>
+                </div>
+                <div class="p-4 bg-red-500/5 border border-red-500/20 rounded-xl">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-red-400 font-medium">Exceptions</p>
+                            <p class="text-slate-400 text-xs">Today's incidents</p>
+                        </div>
+                        <span class="text-3xl font-extrabold text-red-400">{{ dispatch_summary.exceptions }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Fleet & Driver Status -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Fleet Status -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="text-lg font-bold text-white">Fleet Status</h2>
+                <a href="{{ url_for('logistics.vehicles_list') }}" class="text-brand-400 text-sm hover:text-brand-300">View Fleet <i class="fa-solid fa-arrow-right ml-1"></i></a>
+            </div>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-center">
+                    <div class="text-3xl font-extrabold text-emerald-400">{{ fleet_status.available }}</div>
+                    <p class="text-slate-400 text-sm mt-1">Available</p>
+                </div>
+                <div class="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl text-center">
+                    <div class="text-3xl font-extrabold text-blue-400">{{ fleet_status.on_trip }}</div>
+                    <p class="text-slate-400 text-sm mt-1">On Trip</p>
+                </div>
+                <div class="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl text-center">
+                    <div class="text-3xl font-extrabold text-amber-400">{{ fleet_status.maintenance }}</div>
+                    <p class="text-slate-400 text-sm mt-1">Maintenance</p>
+                </div>
+                <div class="p-4 bg-slate-500/5 border border-slate-500/20 rounded-xl text-center">
+                    <div class="text-3xl font-extrabold text-slate-400">{{ fleet_status.unavailable }}</div>
+                    <p class="text-slate-400 text-sm mt-1">Unavailable</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Driver Status -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="text-lg font-bold text-white">Driver Status</h2>
+                <a href="{{ url_for('logistics.drivers_list') }}" class="text-brand-400 text-sm hover:text-brand-300">View Drivers <i class="fa-solid fa-arrow-right ml-1"></i></a>
+            </div>
+            <div class="grid grid-cols-3 gap-4">
+                <div class="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-center">
+                    <div class="text-3xl font-extrabold text-emerald-400">{{ driver_status.available }}</div>
+                    <p class="text-slate-400 text-sm mt-1">Available</p>
+                </div>
+                <div class="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl text-center">
+                    <div class="text-3xl font-extrabold text-blue-400">{{ driver_status.on_trip }}</div>
+                    <p class="text-slate-400 text-sm mt-1">On Trip</p>
+                </div>
+                <div class="p-4 bg-slate-500/5 border border-slate-500/20 rounded-xl text-center">
+                    <div class="text-3xl font-extrabold text-slate-400">{{ driver_status.off_duty }}</div>
+                    <p class="text-slate-400 text-sm mt-1">Off Duty</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts & Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Alerts/Exceptions Panel -->
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center justify-between mb-5">
+                <h2 class="text-lg font-bold text-white">Alerts & Exceptions</h2>
+                <span class="px-2 py-1 bg-red-500/10 text-red-400 text-xs font-bold rounded-full">{{ alerts|length }} Open</span>
+            </div>
+            {% if alerts %}
+            <div class="space-y-3">
+                {% for alert in alerts[:8] %}
+                <div class="p-4 bg-white/5 border border-white/5 rounded-xl hover:border-white/10 transition-all">
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-start gap-3">
+                            <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5
+                                {% if alert.severity == 'high' %}bg-red-500/10
+                                {% elif alert.severity == 'medium' %}bg-amber-500/10
+                                {% else %}bg-blue-500/10{% endif %}">
+                                <i class="fa-solid fa-exclamation text-sm
+                                    {% if alert.severity == 'high' %}text-red-400
+                                    {% elif alert.severity == 'medium' %}text-amber-400
+                                    {% else %}text-blue-400{% endif %}"></i>
+                            </div>
+                            <div>
+                                <p class="text-white text-sm font-medium">{{ alert.incident_type }}</p>
+                                <p class="text-slate-400 text-xs mt-1">
+                                    {% if alert.shipment_code %}Shipment: {{ alert.shipment_code }}{% endif %}
+                                    {% if alert.driver_name %} | Driver: {{ alert.driver_name }}{% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        <span class="px-2 py-1 rounded text-xs font-medium
+                            {% if alert.severity == 'high' %}bg-red-500/10 text-red-400
+                            {% elif alert.severity == 'medium' %}bg-amber-500/10 text-amber-400
+                            {% else %}bg-blue-500/10 text-blue-400{% endif %}">
+                            {{ alert.severity }}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-slate-500">
+                <i class="fa-solid fa-check-circle text-4xl text-emerald-400 mb-3"></i>
+                <p>No open alerts</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Shipment Status Distribution -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-5">Shipment Status Distribution</h2>
+            {% if status_dist %}
+            <div class="space-y-3">
+                {% for item in status_dist %}
+                <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-3 h-3 rounded-full
+                            {% if item.status == 'delivered' %}bg-emerald-400
+                            {% elif item.status == 'in_transit' %}bg-blue-400
+                            {% elif item.status == 'failed_delivery' %}bg-red-400
+                            {% elif item.status in ['draft', 'created'] %}bg-slate-400
+                            {% else %}bg-amber-400{% endif %}"></div>
+                        <span class="text-slate-300 capitalize">{{ item.status|replace('_', ' ') }}</span>
+                    </div>
+                    <span class="text-white font-bold">{{ item.cnt }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-slate-500">
+                <p>No data available</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Delivery Performance & Top Routes -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Delivery Performance -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-5">Delivery Performance</h2>
+            {% if delivery_perf.total > 0 %}
+            <div class="flex items-center justify-center gap-8 py-6">
+                <div class="text-center">
+                    <div class="relative w-32 h-32">
+                        <svg class="w-32 h-32 transform -rotate-90">
+                            <circle cx="64" cy="64" r="56" stroke-width="12" fill="none" class="stroke-slate-700"/>
+                            <circle cx="64" cy="64" r="56" stroke-width="12" fill="none" class="stroke-emerald-400"
+                                stroke-dasharray="{{ 352 * delivery_perf.on_time / delivery_perf.total }} 352"
+                                stroke-linecap="round"/>
+                        </svg>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <span class="text-3xl font-extrabold text-emerald-400">{{ ((delivery_perf.on_time / delivery_perf.total * 100) if delivery_perf.total > 0 else 0)|round }}%</span>
+                        </div>
+                    </div>
+                    <p class="text-slate-400 text-sm mt-2">On-Time</p>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-4 h-4 rounded bg-emerald-400"></div>
+                        <span class="text-slate-300">On-Time</span>
+                        <span class="text-white font-bold ml-auto">{{ delivery_perf.on_time }}</span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-4 h-4 rounded bg-red-400"></div>
+                        <span class="text-slate-300">Late</span>
+                        <span class="text-white font-bold ml-auto">{{ delivery_perf.late }}</span>
+                    </div>
+                    <div class="flex items-center gap-3 pt-3 border-t border-white/10">
+                        <span class="text-slate-400">Total</span>
+                        <span class="text-white font-bold ml-auto">{{ delivery_perf.total }}</span>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-slate-500">
+                <p>No delivery data available</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Top Routes by Volume -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h2 class="text-lg font-bold text-white mb-5">Top Routes by Volume</h2>
+            {% if top_routes %}
+            <div class="space-y-3">
+                {% for route in top_routes[:8] %}
+                <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                    <div>
+                        <p class="text-white text-sm font-medium">{{ route.route_name or route.route_code }}</p>
+                        <p class="text-slate-500 text-xs">{{ "%.0f"|format(route.total_weight|default(0)) }} kg</p>
+                    </div>
+                    <span class="text-brand-400 font-bold">{{ route.shipment_count }} shipments</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12 text-slate-500">
+                <p>No route data available</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Cost Summary -->
+    {% if cost_summary %}
+    <div class="glass-panel rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-5">
+            <h2 class="text-lg font-bold text-white">Cost Summary</h2>
+            <span class="text-2xl font-extrabold text-brand-400">{{ "%.2f"|format(total_cost) }} AED</span>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {% for cost in cost_summary[:5] %}
+            <div class="p-4 bg-white/5 rounded-xl text-center">
+                <p class="text-slate-400 text-xs uppercase tracking-wider">{{ cost.cost_type|replace('_', ' ') }}</p>
+                <p class="text-xl font-bold text-white mt-2">{{ "%.2f"|format(cost.total_cost|default(0)) }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function applyFilters() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    const branch = document.getElementById('branchFilter').value;
+    const vehicleType = document.getElementById('vehicleTypeFilter').value;
+
+    let params = new URLSearchParams();
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    if (branch) params.set('branch_id', branch);
+    if (vehicleType) params.set('vehicle_type', vehicleType);
+
+    window.location.href = '{{ url_for("logistics.tms_dashboard") }}?' + params.toString();
+}
+
+// Auto-refresh every 60 seconds
+setInterval(function() {
+    // Only refresh if no inputs are focused
+    if (!document.activeElement.matches('input, select')) {
+        location.reload();
+    }
+}, 60000);
+</script>
+{% endblock %}

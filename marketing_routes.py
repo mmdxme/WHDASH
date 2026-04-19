@@ -2998,6 +2998,14 @@ def roles_list():
             (role['id'],)
         ).fetchone()['cnt']
         role_dict['user_count'] = user_count
+        # Parse permissions_json for template use
+        if role_dict.get('permissions_json'):
+            try:
+                role_dict['permissions'] = json.loads(role_dict['permissions_json'])
+            except (json.JSONDecodeError, TypeError):
+                role_dict['permissions'] = []
+        else:
+            role_dict['permissions'] = []
         roles_data.append(role_dict)
 
     db.close()

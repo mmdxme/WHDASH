@@ -1,0 +1,205 @@
+{% extends "scm/base_scm.html" %}
+
+{% block extra_head %}
+<style>
+    .override-card {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(30, 41, 59, 0.5) 100%);
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .override-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .override-change {
+        font-weight: 700;
+    }
+    .change-positive { color: #22c55e; }
+    .change-negative { color: #ef4444; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-slate-900/50">
+    <!-- Header -->
+    <div class="scm-header px-6 py-4 mb-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center">
+                    <i class="fas fa-edit text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white">{{ title }}</h1>
+                    <p class="text-slate-400 text-sm">Manual forecast overrides and approval workflow</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('scm.demand_overrides_bulk') }}" class="px-4 py-2 rounded-lg bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 text-sm transition">
+                    <i class="fas fa-layer-group mr-2"></i>{{ t.bulk_override|default('Bulk Override') }}
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="px-6 mb-6">
+        <div class="override-card rounded-xl p-4">
+            <form method="GET" class="flex items-center gap-4">
+                <div>
+                    <label class="block text-slate-400 text-sm mb-1">{{ t.status|default('Status') }}</label>
+                    <select name="status" class="px-4 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                        <option value="">{{ t.all_statuses|default('All Statuses') }}</option>
+                        <option value="PENDING" {% if current_status == 'PENDING' %}selected{% endif %}>{{ t.pending|default('Pending') }}</option>
+                        <option value="APPROVED" {% if current_status == 'APPROVED' %}selected{% endif %}>{{ t.approved|default('Approved') }}</option>
+                        <option value="REJECTED" {% if current_status == 'REJECTED' %}selected{% endif %}>{{ t.rejected|default('Rejected') }}</option>
+                    </select>
+                </div>
+                <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm transition mt-5">
+                    <i class="fas fa-filter mr-2"></i>{{ t.filter|default('Filter') }}
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Overrides Table -->
+    <div class="px-6 mb-6">
+        <div class="override-card rounded-xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-white">{{ t.all_overrides|default('All Overrides') }}</h3>
+                <span class="text-slate-400 text-sm">{{ overrides|length if overrides else 0 }} {{ t.records|default('records') }}</span>
+            </div>
+
+            {% if overrides %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-slate-400 border-b border-slate-700">
+                            <th class="text-left py-3 px-4">{{ t.item|default('Item') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.period|default('Period') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.original|default('Original') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.override|default('Override') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.change|default('Change') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.reason|default('Reason') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.type|default('Type') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.status|default('Status') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.requested_by|default('Requested By') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.date|default('Date') }}</th>
+                            <th class="text-left py-3 px-4">{{ t.actions|default('Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-slate-300">
+                        {% for override in overrides %}
+                        {% set change_pct = ((override.override_quantity - override.original_quantity) / override.original_quantity * 100) if override.original_quantity != 0 else 0 %}
+                        <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+                            <td class="py-3 px-4">
+                                <div class="font-medium text-white">{{ override.item_code }}</div>
+                                <div class="text-xs text-slate-500">{{ override.item_name[:30] }}</div>
+                            </td>
+                            <td class="py-3 px-4">{{ override.period_start }}</td>
+                            <td class="py-3 px-4">{{ "{:,.1f}".format(override.original_quantity) }}</td>
+                            <td class="py-3 px-4">{{ "{:,.1f}".format(override.override_quantity) }}</td>
+                            <td class="py-3 px-4">
+                                <span class="override-change {% if change_pct > 0 %}change-positive{% else %}change-negative{% endif %}">
+                                    {{ "%+0.1f%%"|format(change_pct) }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="text-xs" title="{{ override.override_reason }}">
+                                    {{ override.override_reason[:30] if override.override_reason else '-' }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-1 rounded text-xs
+                                    {% if override.override_type == 'BULK' %}bg-purple-500/20 text-purple-400
+                                    {% elif override.override_type == 'MANUAL' %}bg-sky-500/20 text-sky-400
+                                    {% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                                    {{ override.override_type }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="override-badge
+                                    {% if override.status == 'APPROVED' %}bg-green-500/20 text-green-400
+                                    {% elif override.status == 'REJECTED' %}bg-red-500/20 text-red-400
+                                    {% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+                                    {{ override.status }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">{{ override.created_by_name or 'System' }}</td>
+                            <td class="py-3 px-4 text-slate-500">{{ override.created_at[:10] }}</td>
+                            <td class="py-3 px-4">
+                                {% if override.status == 'PENDING' %}
+                                <div class="flex items-center gap-1">
+                                    <form action="{{ url_for('scm.demand_overrides_approve', override_id=override.id) }}" method="POST" class="inline">
+                                        <input type="text" name="review_notes" placeholder="{{ t.notes|default('Notes') }}" class="px-2 py-1 rounded text-xs bg-slate-700 border border-slate-600 text-slate-300 w-20">
+                                        <button type="submit" class="px-3 py-1 rounded text-xs bg-green-500/20 text-green-400 hover:bg-green-500/30">
+                                            <i class="fas fa-check"></i>
+                                        </button>
+                                    </form>
+                                    <form action="{{ url_for('scm.demand_overrides_reject', override_id=override.id) }}" method="POST" class="inline">
+                                        <button type="submit" class="px-3 py-1 rounded text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                                {% else %}
+                                <span class="text-slate-500">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-16 text-slate-400">
+                <i class="fas fa-edit text-5xl mb-3"></i>
+                <p class="text-xl font-medium">{{ t.no_overrides|default('No overrides found') }}</p>
+                <p class="text-sm">{{ t.overrides_appear|default('Overrides will appear here when planners adjust forecasts') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Override Reason Codes -->
+    <div class="px-6 mb-6">
+        <div class="override-card rounded-xl p-5">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t.override_reasons|default('Override Reason Codes') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <span class="text-sky-400 font-medium">SALES_INPUT</span>
+                    <p class="text-slate-500 text-xs">{{ t.sales_input_desc|default('Based on sales team input') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <span class="text-purple-400 font-medium">MARKETING</span>
+                    <p class="text-slate-500 text-xs">{{ t.marketing_desc|default('Marketing campaign impact') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <span class="text-green-400 font-medium">PROMOTION</span>
+                    <p class="text-slate-500 text-xs">{{ t.promotion_desc|default('Promotional activity') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <span class="text-yellow-400 font-medium">EVENT</span>
+                    <p class="text-slate-500 text-xs">{{ t.event_desc|default('Special event or holiday') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <span class="text-red-400 font-medium">STOCKOUT</span>
+                    <p class="text-slate-500 text-xs">{{ t.stockout_desc|default('Historical stockout correction') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <span class="text-orange-400 font-medium">SEASONALITY</span>
+                    <p class="text-slate-500 text-xs">{{ t.seasonality_desc|default('Seasonal adjustment') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <span class="text-teal-400 font-medium">COMPETITOR</span>
+                    <p class="text-slate-500 text-xs">{{ t.competitor_desc|default('Competitor action') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <span class="text-pink-400 font-medium">OTHER</span>
+                    <p class="text-slate-500 text-xs">{{ t.other_desc|default('Other documented reason') }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

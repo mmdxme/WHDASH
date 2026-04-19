@@ -1,0 +1,203 @@
+{% extends "maintenance/base_maintenance.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <!-- Header -->
+    <div class="flex justify-between items-start mb-6">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <h1 class="text-2xl font-bold text-gray-800">{{ location.name }}</h1>
+                <span class="px-2 py-1 text-xs rounded-full
+                    {% if location.location_type == 'Site' %}bg-purple-100 text-purple-800
+                    {% elif location.location_type == 'Plant' %}bg-blue-100 text-blue-800
+                    {% elif location.location_type == 'Building' %}bg-green-100 text-green-800
+                    {% else %}bg-gray-100 text-gray-800{% endif %}">
+                    {{ location.location_type }}
+                </span>
+            </div>
+            <p class="text-gray-600">
+                <span class="font-mono">{{ location.location_code }}</span>
+                {% if location.hierarchy_path %}
+                <span class="text-gray-400 mx-2">|</span>
+                {{ location.hierarchy_path }}
+                {% endif %}
+            </p>
+        </div>
+        <div class="flex gap-2">
+            <a href="{{ url_for('maintenance.functional_location_edit', loc_id=location.id) }}"
+               class="px-4 py-2 border rounded-lg hover:bg-gray-50">
+                <i class="fas fa-edit mr-1"></i> {{ t('common.edit', 'Edit') }}
+            </a>
+            <a href="{{ url_for('maintenance.functional_locations_list') }}"
+               class="px-4 py-2 border rounded-lg hover:bg-gray-50">
+                <i class="fas fa-arrow-left mr-1"></i> {{ t('common.back', 'Back') }}
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Info -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Details Card -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4">{{ t('maintenance.location_details', 'Location Details') }}</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="text-sm text-gray-500">{{ t('maintenance.address', 'Address') }}</label>
+                        <p class="font-medium">{{ location.address or '-' }}</p>
+                    </div>
+                    <div>
+                        <label class="text-sm text-gray-500">{{ t('maintenance.cost_center', 'Cost Center') }}</label>
+                        <p class="font-medium">{{ location.cost_center or '-' }}</p>
+                    </div>
+                    <div>
+                        <label class="text-sm text-gray-500">{{ t('maintenance.hierarchy_level', 'Hierarchy Level') }}</label>
+                        <p class="font-medium">Level {{ location.hierarchy_level }}</p>
+                    </div>
+                    <div>
+                        <label class="text-sm text-gray-500">{{ t('maintenance.status', 'Status') }}</label>
+                        <p class="font-medium">
+                            {% if location.is_active %}
+                            <span class="text-green-600"><i class="fas fa-check-circle"></i> Active</span>
+                            {% else %}
+                            <span class="text-red-600"><i class="fas fa-times-circle"></i> Inactive</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div>
+                        <label class="text-sm text-gray-500">{{ t('maintenance.gps_coordinates', 'GPS') }}</label>
+                        <p class="font-medium">
+                            {% if location.latitude and location.longitude %}
+                            {{ location.latitude }}, {{ location.longitude }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </p>
+                    </div>
+                    <div>
+                        <label class="text-sm text-gray-500">{{ t('maintenance.critical', 'Critical') }}</label>
+                        <p class="font-medium">
+                            {% if location.is_critical %}
+                            <i class="fas fa-exclamation-triangle text-red-500"></i> Critical
+                            {% else %}
+                            <i class="fas fa-check text-gray-300"></i> Normal
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+                {% if location.description %}
+                <div class="mt-4 pt-4 border-t">
+                    <label class="text-sm text-gray-500">{{ t('maintenance.description', 'Description') }}</label>
+                    <p class="mt-1">{{ location.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Hierarchy Breadcrumb -->
+            {% if hierarchy %}
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4">{{ t('maintenance.location_hierarchy', 'Location Hierarchy') }}</h2>
+                <div class="flex items-center flex-wrap gap-2">
+                    {% for ancestor in hierarchy %}
+                    <a href="{{ url_for('maintenance.functional_location_detail', loc_id=ancestor.id) }}"
+                       class="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200 text-sm">
+                        {{ ancestor.location_code }}
+                    </a>
+                    <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+                    {% endfor %}
+                    <span class="px-3 py-1 bg-blue-100 rounded text-blue-800 font-medium text-sm">
+                        {{ location.location_code }}
+                    </span>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Equipment at Location -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4">
+                    {{ t('maintenance.equipment_at_location', 'Equipment at this Location') }}
+                    <span class="text-gray-400 font-normal">({{ equipment|length }})</span>
+                </h2>
+                {% if equipment %}
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">{{ t('maintenance.asset_code', 'Code') }}</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">{{ t('maintenance.asset_name', 'Name') }}</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">{{ t('maintenance.status', 'Status') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for asset in equipment %}
+                        <tr>
+                            <td class="px-4 py-2 font-mono text-sm">{{ asset.asset_code }}</td>
+                            <td class="px-4 py-2">{{ asset.name }}</td>
+                            <td class="px-4 py-2">
+                                <span class="px-2 py-1 text-xs rounded-full bg-gray-100">{{ asset.status }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="text-gray-500 text-center py-4">{{ t('maintenance.no_equipment', 'No equipment at this location') }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <!-- Child Locations -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4">
+                    {{ t('maintenance.child_locations', 'Child Locations') }}
+                    <span class="text-gray-400 font-normal">({{ children|length }})</span>
+                </h2>
+                {% if children %}
+                <ul class="space-y-2">
+                    {% for child in children %}
+                    <li>
+                        <a href="{{ url_for('maintenance.functional_location_detail', loc_id=child.id) }}"
+                           class="flex items-center justify-between p-2 rounded hover:bg-gray-50">
+                            <div>
+                                <span class="font-mono text-sm">{{ child.location_code }}</span>
+                                <span class="text-gray-500 text-sm ml-2">{{ child.name }}</span>
+                            </div>
+                            <i class="fas fa-chevron-right text-gray-400 text-xs"></i>
+                        </a>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-gray-500 text-center py-2">{{ t('maintenance.no_children', 'No child locations') }}</p>
+                {% endif %}
+                <a href="{{ url_for('maintenance.functional_location_new') }}?parent_id={{ location.id }}"
+                   class="mt-4 block text-center text-blue-600 hover:text-blue-800 text-sm">
+                    <i class="fas fa-plus mr-1"></i> {{ t('maintenance.add_child', 'Add Child Location') }}
+                </a>
+            </div>
+
+            <!-- Quick Info -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4">{{ t('maintenance.quick_info', 'Quick Info') }}</h2>
+                <dl class="space-y-3">
+                    <div>
+                        <dt class="text-sm text-gray-500">{{ t('maintenance.company', 'Company') }}</dt>
+                        <dd class="font-medium">{{ location.company_name or '-' }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm text-gray-500">{{ t('maintenance.branch', 'Branch') }}</dt>
+                        <dd class="font-medium">{{ location.branch_name or '-' }}</dd>
+                    </div>
+                    {% if location.parent_name %}
+                    <div>
+                        <dt class="text-sm text-gray-500">{{ t('maintenance.parent', 'Parent') }}</dt>
+                        <dd class="font-medium">{{ location.parent_code }} - {{ location.parent_name }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,407 @@
+{% extends "scm/base_scm.html" %}
+
+{% block scm_content %}
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-sky-500/20 flex items-center justify-center">
+                <i class="fas fa-boxes text-sky-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.active_items|default('Active Items') }}</p>
+                <p class="text-white text-xl font-bold">{{ total_items|default(0)|int }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <i class="fas fa-exclamation-triangle text-red-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.active_alerts|default('Active Alerts') }}</p>
+                <p class="text-white text-xl font-bold">{{ active_alerts|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                <i class="fas fa-arrow-down text-orange-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.below_safety|default('Below Safety') }}</p>
+                <p class="text-white text-xl font-bold">{{ below_safety|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-yellow-500/20 flex items-center justify-center">
+                <i class="fas fa-sync text-yellow-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.below_rop|default('Below ROP') }}</p>
+                <p class="text-white text-xl font-bold">{{ below_rop|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-red-600/20 flex items-center justify-center">
+                <i class="fas fa-times-circle text-red-500"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.zero_stock|default('Zero Stock') }}</p>
+                <p class="text-white text-xl font-bold">{{ zero_stock|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <i class="fas fa-cubes text-purple-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.excess_stock|default('Excess Stock') }}</p>
+                <p class="text-white text-xl font-bold">{{ excess_stock|default(0) }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Supply Chain Control Tower Main View -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+    <!-- Stock Health Summary -->
+    <div class="glass-panel rounded-xl p-5">
+        <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+            <i class="fas fa-heartbeat text-rose-400"></i> {{ t.stock_health|default('Stock Health Summary') }}
+        </h3>
+        <div class="space-y-3">
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">{{ t.stockout_risk|default('Stockout Risk') }}</span>
+                <span class="text-red-400 font-bold">{{ critical_shortages|default(0) }} {{ t.items|default('items') }}</span>
+            </div>
+            <div class="w-full bg-slate-700 rounded-full h-2">
+                <div class="bg-red-500 h-2 rounded-full" style="width: {{ (critical_shortages / total_items * 100)|default(0) if total_items > 0 else 0 }}%"></div>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">{{ t.below_safety|default('Below Safety Stock') }}</span>
+                <span class="text-orange-400 font-bold">{{ below_safety|default(0) }} {{ t.items|default('items') }}</span>
+            </div>
+            <div class="w-full bg-slate-700 rounded-full h-2">
+                <div class="bg-orange-500 h-2 rounded-full" style="width: {{ (below_safety / total_items * 100)|default(0) if total_items > 0 else 0 }}%"></div>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">{{ t.below_rop|default('Below Reorder Point') }}</span>
+                <span class="text-yellow-400 font-bold">{{ below_rop|default(0) }} {{ t.items|default('items') }}</span>
+            </div>
+            <div class="w-full bg-slate-700 rounded-full h-2">
+                <div class="bg-yellow-500 h-2 rounded-full" style="width: {{ (below_rop / total_items * 100)|default(0) if total_items > 0 else 0 }}%"></div>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">{{ t.healthy_stock|default('Healthy Stock') }}</span>
+                <span class="text-green-400 font-bold">{{ (total_items - below_safety - below_rop - zero_stock)|default(0) }} {{ t.items|default('items') }}</span>
+            </div>
+            <div class="w-full bg-slate-700 rounded-full h-2">
+                <div class="bg-green-500 h-2 rounded-full" style="width: {{ ((total_items - below_safety - below_rop - zero_stock) / total_items * 100)|default(0) if total_items > 0 else 0 }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendations Summary -->
+    <div class="glass-panel rounded-xl p-5">
+        <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+            <i class="fas fa-clipboard-check text-emerald-400"></i> {{ t.open_recommendations|default('Open Recommendations') }}
+        </h3>
+        <div class="space-y-4">
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-sky-500/20 flex items-center justify-center">
+                        <i class="fas fa-shopping-cart text-sky-400 text-sm"></i>
+                    </div>
+                    <span class="text-slate-300 text-sm">{{ t.purchase_suggestions|default('Purchase Suggestions') }}</span>
+                </div>
+                <span class="text-white font-bold">{{ open_purchase_recs|default(0) }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <i class="fas fa-sync text-purple-400 text-sm"></i>
+                    </div>
+                    <span class="text-slate-300 text-sm">{{ t.replenishment|default('Replenishments') }}</span>
+                </div>
+                <span class="text-white font-bold">{{ open_replenishment|default(0) }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                        <i class="fas fa-arrows-alt-h text-amber-400 text-sm"></i>
+                    </div>
+                    <span class="text-slate-300 text-sm">{{ t.transfers|default('Transfers') }}</span>
+                </div>
+                <span class="text-white font-bold">{{ open_transfer_recs|default(0) }}</span>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-rose-500/20 flex items-center justify-center">
+                        <i class="fas fa-skull text-rose-400 text-sm"></i>
+                    </div>
+                    <span class="text-slate-300 text-sm">{{ t.dead_stock|default('Dead Stock Items') }}</span>
+                </div>
+                <span class="text-white font-bold">{{ zero_stock|default(0) }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Demand & Supply Summary -->
+    <div class="glass-panel rounded-xl p-5">
+        <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+            <i class="fas fa-chart-line text-sky-400"></i> {{ t.demand_supply_summary|default('Demand & Supply Summary') }}
+        </h3>
+        <div class="space-y-3">
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">{{ t.recent_demand_30d|default('Recent Demand (30d)') }}</span>
+                <span class="text-white font-bold">{{ "{:,.0f}".format(recent_demand|default(0)) }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">{{ t.in_transit_value|default('In-Transit Value') }}</span>
+                <span class="text-sky-300 font-bold">${{ "{:,.0f}".format(in_transit_value|default(0)) }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">{{ t.fill_rate|default('Fill Rate') }}</span>
+                <span class="text-emerald-400 font-bold">{{ "%.1f"|format(fill_rate|default(95)) }}%</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">{{ t.pending_forecasts|default('Pending Forecasts') }}</span>
+                <span class="text-amber-400 font-bold">{{ pending_forecasts|default(0) }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">{{ t.active_scenarios|default('Active Scenarios') }}</span>
+                <span class="text-purple-400 font-bold">{{ active_scenarios|default(0) }}</span>
+            </div>
+            <div class="flex items-center justify-between">
+                <span class="text-slate-400 text-sm">{{ t.delayed_supply|default('Delayed Supply') }}</span>
+                <span class="text-red-400 font-bold">{{ critical_delays|default(0) }}</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Navigation Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+    <a href="{{ url_for('scm.demand_planning') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-chart-area text-2xl text-sky-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.demand_planning|default('Demand Planning') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.forecast_demand|default('Forecast & demand') }}</p>
+    </a>
+    <a href="{{ url_for('scm.supply_planning') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-truck text-2xl text-emerald-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.supply_planning|default('Supply Planning') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.inbound_pipeline|default('Inbound pipeline') }}</p>
+    </a>
+    <a href="{{ url_for('scm.replenishment_planning') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-sync text-2xl text-amber-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.replenishment|default('Replenishment') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.stock_replenishment|default('Stock replenishment') }}</p>
+    </a>
+    <a href="{{ url_for('scm.mrp_planning') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-calculator text-2xl text-violet-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.mrp|default('MRP') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.purchase_suggestions|default('Purchase suggestions') }}</p>
+    </a>
+    <a href="{{ url_for('scm.inventory_optimization') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-boxes text-2xl text-rose-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.inventory_optimization|default('Inventory Opt.') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.stock_health|default('Stock health') }}</p>
+    </a>
+    <a href="{{ url_for('scm.multi_echelon_planning') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-network-wired text-2xl text-cyan-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.multi_echelon|default('Multi-Echelon') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.network_planning|default('Network planning') }}</p>
+    </a>
+    <a href="{{ url_for('scm.service_level_planning') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-percentage text-2xl text-teal-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.service_level|default('Service Level') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.fill_rate_otf|default('Fill rate & OTIF') }}</p>
+    </a>
+    <a href="{{ url_for('scm.scenario_planning') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-magic text-2xl text-pink-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.scenarios|default('Scenarios') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.what_if|default('What-if analysis') }}</p>
+    </a>
+    <a href="{{ url_for('scm.scm_alerts') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-bell text-2xl text-red-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.alerts|default('Alerts') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.exceptions|default('Exceptions') }}</p>
+    </a>
+    <a href="{{ url_for('scm.supplier_linkage') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-handshake text-2xl text-orange-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.supplier|default('Supplier') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.procurement_link|default('Procurement link') }}</p>
+    </a>
+    <a href="{{ url_for('scm.warehouse_linkage') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-warehouse text-2xl text-yellow-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.warehouse|default('Warehouse') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.logistics_link|default('Logistics link') }}</p>
+    </a>
+    <a href="{{ url_for('scm.reports_center') }}" class="nav-card glass-panel rounded-xl p-4 hover:bg-slate-700/30 transition text-center group">
+        <i class="fas fa-chart-pie text-2xl text-indigo-400 mb-2 group-hover:scale-110 transition"></i>
+        <p class="text-white text-sm font-medium">{{ t.reports|default('Reports') }}</p>
+        <p class="text-slate-400 text-xs">{{ t.analytics|default('Analytics & export') }}</p>
+    </a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Top Shortage Items -->
+    <div class="glass-panel rounded-xl p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-white font-semibold flex items-center gap-2">
+                <i class="fas fa-arrow-up text-red-400"></i> {{ t.top_shortage_items|default('Top Shortage Items') }}
+            </h3>
+            <a href="{{ url_for('scm.alerts_shortage') }}" class="text-sky-400 text-sm hover:underline">{{ t.view_all|default('View All') }}</a>
+        </div>
+        {% if top_shortage_items %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-slate-700">
+                        <th class="text-left py-2 px-2">{{ t.item|default('Item') }}</th>
+                        <th class="text-right py-2 px-2">{{ t.current|default('Current') }}</th>
+                        <th class="text-right py-2 px-2">{{ t.rop|default('ROP') }}</th>
+                        <th class="text-right py-2 px-2">{{ t.shortage|default('Shortage') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in top_shortage_items %}
+                    <tr class="border-b border-slate-800 searchable-row hover:bg-slate-800/30">
+                        <td class="py-2 px-2">
+                            <div class="text-white font-medium">{{ item.item_code }}</div>
+                            <div class="text-slate-400 text-xs">{{ item.name }}</div>
+                        </td>
+                        <td class="py-2 px-2 text-right text-red-400 font-bold">{{ item.qty|default(0)|int }}</td>
+                        <td class="py-2 px-2 text-right text-slate-300">{{ item.rop|default(0)|int }}</td>
+                        <td class="py-2 px-2 text-right text-red-500 font-bold">{{ ((item.rop|default(0)) - (item.qty|default(0)))|abs|int }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-slate-500">
+            <i class="fas fa-check-circle text-3xl mb-2 text-green-500"></i>
+            <p>{{ t.no_shortage_items|default('No shortage items found') }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Top Overstock Items -->
+    <div class="glass-panel rounded-xl p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-white font-semibold flex items-center gap-2">
+                <i class="fas fa-arrow-down text-purple-400"></i> {{ t.top_overstock_items|default('Top Overstock Items') }}
+            </h3>
+            <a href="{{ url_for('scm.inventory_excess_slow_dead') }}" class="text-sky-400 text-sm hover:underline">{{ t.view_all|default('View All') }}</a>
+        </div>
+        {% if top_overstock_items %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-slate-700">
+                        <th class="text-left py-2 px-2">{{ t.item|default('Item') }}</th>
+                        <th class="text-right py-2 px-2">{{ t.current|default('Current') }}</th>
+                        <th class="text-right py-2 px-2">{{ t.max|default('Max') }}</th>
+                        <th class="text-right py-2 px-2">{{ t.excess|default('Excess') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in top_overstock_items %}
+                    <tr class="border-b border-slate-800 searchable-row hover:bg-slate-800/30">
+                        <td class="py-2 px-2">
+                            <div class="text-white font-medium">{{ item.item_code }}</div>
+                            <div class="text-slate-400 text-xs">{{ item.name }}</div>
+                        </td>
+                        <td class="py-2 px-2 text-right text-purple-400 font-bold">{{ item.qty|default(0)|int }}</td>
+                        <td class="py-2 px-2 text-right text-slate-300">{{ item.max_stock|default(0)|int }}</td>
+                        <td class="py-2 px-2 text-right text-purple-500 font-bold">{{ ((item.qty|default(0)) - (item.max_stock|default(0)))|abs|int }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-slate-500">
+            <i class="fas fa-check-circle text-3xl mb-2 text-green-500"></i>
+            <p>{{ t.no_overstock_items|default('No overstock items found') }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Recent Alerts -->
+<div class="glass-panel rounded-xl p-5 mt-6">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-white font-semibold flex items-center gap-2">
+            <i class="fas fa-bell text-amber-400"></i> {{ t.recent_scm_alerts|default('Recent SCM Alerts') }}
+        </h3>
+        <div class="flex gap-2">
+            <a href="{{ url_for('scm.scm_alerts') }}" class="text-sky-400 text-sm hover:underline mr-4">{{ t.view_all|default('View All') }}</a>
+            <form action="{{ url_for('scm.alerts_generate') }}" method="POST" class="inline">
+                <button type="submit" class="px-3 py-1 rounded bg-sky-500/20 text-sky-400 text-xs hover:bg-sky-500/30">
+                    <i class="fas fa-sync mr-1"></i>{{ t.refresh_alerts|default('Refresh Alerts') }}
+                </button>
+            </form>
+        </div>
+    </div>
+    {% if recent_alerts %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-2 px-3">{{ t.severity|default('Severity') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.type|default('Type') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.alert|default('Alert') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.item|default('Item') }}</th>
+                    <th class="text-left py-2 px-3">{{ t.created|default('Created') }}</th>
+                    <th class="text-center py-2 px-3">{{ t.actions|default('Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in recent_alerts %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30">
+                    <td class="py-2 px-3">
+                        {% if alert.severity == 'CRITICAL' %}
+                        <span class="severity-critical"><i class="fas fa-circle text-xs mr-1"></i>CRITICAL</span>
+                        {% elif alert.severity == 'HIGH' %}
+                        <span class="severity-high"><i class="fas fa-circle text-xs mr-1"></i>HIGH</span>
+                        {% elif alert.severity == 'MEDIUM' %}
+                        <span class="severity-medium"><i class="fas fa-circle text-xs mr-1"></i>MEDIUM</span>
+                        {% else %}
+                        <span class="severity-low"><i class="fas fa-circle text-xs mr-1"></i>LOW</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-2 px-3 text-slate-300">{{ alert.alert_type|replace('_', ' ') }}</td>
+                    <td class="py-2 px-3 text-white">{{ alert.title }}</td>
+                    <td class="py-2 px-3 text-slate-400">{{ alert.item_code|default('-') }}</td>
+                    <td class="py-2 px-3 text-slate-400 text-xs">{{ alert.created_at }}</td>
+                    <td class="py-2 px-3 text-center">
+                        <form action="{{ url_for('scm.alert_acknowledge', alert_id=alert.id) }}" method="POST" class="inline">
+                            <button type="submit" class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs hover:bg-green-500/30">
+                                <i class="fas fa-check"></i>
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center py-8 text-slate-500">
+        <i class="fas fa-check-circle text-3xl mb-2 text-green-500"></i>
+        <p>{{ t.no_active_alerts|default('No active alerts') }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

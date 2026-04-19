@@ -1,0 +1,246 @@
+{% extends "scm/base_scm.html" %}
+
+{% block extra_head %}
+<style>
+    .accuracy-card {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9) 0%, rgba(30, 41, 59, 0.5) 100%);
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .accuracy-good { color: #22c55e; }
+    .accuracy-warning { color: #eab308; }
+    .accuracy-bad { color: #ef4444; }
+    .bias-over { color: #f97316; }
+    .bias-under { color: #3b82f6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-slate-900/50">
+    <!-- Header -->
+    <div class="scm-header px-6 py-4 mb-6">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-500 flex items-center justify-center">
+                    <i class="fas fa-bullseye text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-white">{{ title }}</h1>
+                    <p class="text-slate-400 text-sm">Forecast accuracy, bias, and error metrics</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <form action="{{ url_for('scm.demand_calculate_accuracy') }}" method="POST" class="flex items-center gap-2">
+                    <select name="item_ids" multiple class="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm">
+                        {% for item in items[:10] %}
+                        <option value="{{ item.id }}">{{ item.item_code }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white text-sm transition">
+                        <i class="fas fa-calculator mr-2"></i>{{ t.calculate|default('Calculate') }}
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accuracy Summary KPIs -->
+    <div class="px-6 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="accuracy-card rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-slate-400 text-sm">{{ t.items_measured|default('Items Measured') }}</span>
+                    <i class="fas fa-chart-bar text-green-400"></i>
+                </div>
+                <div class="text-3xl font-bold text-white mb-1">{{ accuracy_summary.items_measured if accuracy_summary else 0 }}</div>
+            </div>
+
+            <div class="accuracy-card rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-slate-400 text-sm">{{ t.avg_mape|default('Avg MAPE') }}</span>
+                    <i class="fas fa-percentage text-sky-400"></i>
+                </div>
+                <div class="text-3xl font-bold mb-1 {% if accuracy_summary and accuracy_summary.avg_mape > 30 %}accuracy-bad{% elif accuracy_summary and accuracy_summary.avg_mape > 15 %}accuracy-warning{% else %}accuracy-good{% endif %}">
+                    {{ "%.1f%%"|format(accuracy_summary.avg_mape if accuracy_summary and accuracy_summary.avg_mape else 0) }}
+                </div>
+            </div>
+
+            <div class="accuracy-card rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-slate-400 text-sm">{{ t.over_forecast|default('Over Forecast') }}</span>
+                    <i class="fas fa-arrow-up text-orange-400"></i>
+                </div>
+                <div class="text-3xl font-bold text-orange-400 mb-1">{{ accuracy_summary.over_forecast_count if accuracy_summary else 0 }}</div>
+            </div>
+
+            <div class="accuracy-card rounded-xl p-5">
+                <div class="flex items-center justify-between mb-3">
+                    <span class="text-slate-400 text-sm">{{ t.under_forecast|default('Under Forecast') }}</span>
+                    <i class="fas fa-arrow-down text-blue-400"></i>
+                </div>
+                <div class="text-3xl font-bold text-blue-400 mb-1">{{ accuracy_summary.under_forecast_count if accuracy_summary else 0 }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accuracy Interpretation Guide -->
+    <div class="px-6 mb-6">
+        <div class="accuracy-card rounded-xl p-4">
+            <div class="flex items-center gap-4 text-sm">
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-green-500"></span>
+                    <span class="text-slate-300">{{ t.map_below_15|default('MAPE < 15%: Good accuracy') }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+                    <span class="text-slate-300">{{ t.map_15_30|default('MAPE 15-30%: Acceptable') }}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full bg-red-500"></span>
+                    <span class="text-slate-300">{{ t.map_above_30|default('MAPE > 30%: Needs improvement') }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- High Error Items & Bias by Planner -->
+    <div class="px-6 mb-6">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- High Error Items -->
+            <div class="accuracy-card rounded-xl p-5">
+                <h3 class="text-lg font-semibold text-white mb-4">
+                    <i class="fas fa-exclamation-triangle text-red-400 mr-2"></i>
+                    {{ t.high_error_items|default('High Error Items') }} (MAPE > 20%)
+                </h3>
+
+                {% if high_error_items %}
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-slate-400 border-b border-slate-700">
+                                <th class="text-left py-2 px-3">{{ t.item|default('Item') }}</th>
+                                <th class="text-left py-2 px-3">{{ t.mape|default('MAPE') }}</th>
+                                <th class="text-left py-2 px-3">{{ t.bias|default('Bias') }}</th>
+                                <th class="text-left py-2 px-3">{{ t.period|default('Period') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-slate-300">
+                            {% for item in high_error_items %}
+                            <tr class="border-b border-slate-800 hover:bg-slate-800/50">
+                                <td class="py-2 px-3">
+                                    <div class="font-medium">{{ item.item_code }}</div>
+                                    <div class="text-xs text-slate-500">{{ item.item_name[:30] }}</div>
+                                </td>
+                                <td class="py-2 px-3">
+                                    <span class="px-2 py-1 rounded text-xs font-bold {% if item.mape > 50 %}bg-red-500/20 text-red-400{% elif item.mape > 30 %}bg-orange-500/20 text-orange-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+                                        {{ "%.1f%%"|format(item.mape) }}
+                                    </span>
+                                </td>
+                                <td class="py-2 px-3">
+                                    <span class="{% if item.bias > 0 %}bias-over{% else %}bias-under{% endif %}">
+                                        {{ "%+0.1f%%"|format(item.bias) if item.bias else '0%' }}
+                                    </span>
+                                </td>
+                                <td class="py-2 px-3 text-slate-500">{{ item.period_start }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-8 text-slate-400">
+                    <i class="fas fa-check-circle text-green-400 text-4xl mb-2"></i>
+                    <p>{{ t.no_high_error|default('No high error items') }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Bias by Planner -->
+            <div class="accuracy-card rounded-xl p-5">
+                <h3 class="text-lg font-semibold text-white mb-4">
+                    <i class="fas fa-user-tie text-purple-400 mr-2"></i>
+                    {{ t.bias_by_planner|default('Bias by Planner') }}
+                </h3>
+
+                {% if bias_by_planner %}
+                <div class="space-y-3">
+                    {% for planner in bias_by_planner %}
+                    <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center">
+                                <i class="fas fa-user text-purple-400 text-sm"></i>
+                            </div>
+                            <span class="text-white">{{ planner.username }}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="{% if planner.avg_bias > 10 %}bias-over{% elif planner.avg_bias < -10 %}bias-under{% else %}text-slate-300{% endif %} font-semibold">
+                                {{ "%+0.1f%%"|format(planner.avg_bias) if planner.avg_bias else '0%' }}
+                            </span>
+                            <span class="text-slate-500 text-xs ml-2">avg bias</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8 text-slate-400">
+                    <i class="fas fa-users text-slate-500 text-4xl mb-2"></i>
+                    <p>{{ t.no_planner_data|default('No planner data') }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Accuracy Trend Chart -->
+    <div class="px-6 mb-6">
+        <div class="accuracy-card rounded-xl p-5">
+            <h3 class="text-lg font-semibold text-white mb-4">
+                <i class="fas fa-chart-line text-sky-400 mr-2"></i>
+                {{ t.accuracy_trend|default('Accuracy Trend (30 Days)') }}
+            </h3>
+
+            {% if accuracy_trend %}
+            <div class="h-64 flex items-end gap-1">
+                {% for day in accuracy_trend %}
+                <div class="flex-1 flex flex-col items-center justify-end">
+                    <div class="w-full rounded-t transition hover:opacity-80"
+                         style="height: {{ [day.daily_mape, 100]|min }}%; background: linear-gradient(to top, rgba(56, 189, 248, 0.8), rgba(56, 189, 248, 0.3));">
+                    </div>
+                    <span class="text-xs text-slate-500 mt-1 transform -rotate-45 origin-center">{{ day.date[5:] }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="h-32 flex items-center justify-center text-slate-500">
+                <i class="fas fa-chart-area text-4xl mb-2"></i>
+                <p>{{ t.no_trend_data|default('No trend data available') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Metrics Explanation -->
+    <div class="px-6 mb-6">
+        <div class="accuracy-card rounded-xl p-5">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t.metrics_explained|default('Metrics Explained') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <h4 class="text-sky-400 font-semibold mb-1">{{ t.mape|default('MAPE') }}</h4>
+                    <p class="text-slate-400">{{ t.mape_desc|default('Mean Absolute Percentage Error. Lower is better. <15% is good, >30% needs work.') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <h4 class="text-green-400 font-semibold mb-1">{{ t.wape|default('WAPE') }}</h4>
+                    <p class="text-slate-400">{{ t.wape_desc|default('Weighted Absolute Percentage Error. Good for comparing overall forecast performance.') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <h4 class="text-purple-400 font-semibold mb-1">{{ t.bias|default('Bias') }}</h4>
+                    <p class="text-slate-400">{{ t.bias_desc|default('Positive = over-forecast, Negative = under-forecast. Near 0% is ideal.') }}</p>
+                </div>
+                <div class="p-3 rounded-lg bg-slate-800/50">
+                    <h4 class="text-orange-400 font-semibold mb-1">{{ t.tracking_signal|default('Tracking Signal') }}</h4>
+                    <p class="text-slate-400">{{ t.ts_desc|default('Cumulative forecast error / MAD. |TS| < 4 is acceptable. >4 indicates bias.') }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

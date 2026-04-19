@@ -78,32 +78,193 @@ MODULE_PERMISSIONS = {
         }
     },
     'maintenance': {
-        'label': 'Maintenance Management',
+        'label': 'Maintenance Management (EAM/PM)',
         'resources': {
+            # Dashboards
             'dashboard': ['view'],
+            'executive_dashboard': ['view'],
+            'workspace': ['view'],
+
+            # Equipment & Technical Objects
             'equipment': ['view', 'create', 'edit'],
             'equipment_detail': ['view'],
             'equipment_downtime': ['view'],
             'facilities': ['view', 'create', 'edit', 'delete'],
-            'facility_requests': ['view', 'create', 'edit', 'complete'],
+            'facility_requests': ['view', 'create', 'edit', 'complete', 'delete'],
+
+            # Preventive Maintenance
             'pm_plans': ['view', 'create', 'edit', 'delete'],
             'pm_schedules': ['view', 'create', 'edit', 'delete'],
+            'pm_calendar': ['view'],
+            'pm_forecast': ['view'],
+            'pm_compliance': ['view'],
+            'pm_missed': ['view'],
+            'pm_templates': ['view', 'create', 'edit', 'delete'],
+
+            # Corrective & Breakdown
             'corrective': ['view', 'create', 'edit'],
             'breakdown': ['view', 'create', 'edit'],
-            'work_orders': ['view', 'create', 'edit', 'complete', 'assign'],
+            'emergency': ['view', 'create', 'edit'],
+            'incident': ['view', 'create', 'edit'],
+            'root_cause': ['view', 'create', 'edit'],
+            'recurring_failure': ['view', 'create', 'edit'],
+
+            # Work Orders
+            'work_orders': ['view', 'create', 'edit', 'complete', 'assign', 'delete'],
             'work_order_tasks': ['view', 'create', 'edit', 'complete'],
+            'my_work_orders': ['view', 'edit', 'complete'],
+
+            # Planning & Scheduling
+            'planner_board': ['view', 'edit'],
+            'backlog': ['view', 'edit'],
+            'labor_capacity': ['view'],
+            'shift_scheduling': ['view', 'create', 'edit'],
+            'overdue_queue': ['view', 'edit'],
+            'reschedule': ['view', 'edit'],
+
+            # Resources & Labor
             'technicians': ['view', 'create', 'edit'],
             'teams': ['view', 'create', 'edit'],
-            'parts_usage': ['view', 'create', 'edit'],
+            'skills': ['view', 'create', 'edit'],
+            'availability': ['view', 'edit'],
+            'utilization': ['view'],
+            'productivity': ['view'],
             'labor_logs': ['view', 'create', 'edit'],
+
+            # Parts & Materials
+            'parts_usage': ['view', 'create', 'edit'],
+            'parts_reserved': ['view', 'create', 'edit'],
+            'parts_shortage': ['view', 'edit'],
+            'spare_watchlist': ['view', 'create', 'edit'],
+            'maintenance_bom': ['view', 'create', 'edit'],
+
+            # Downtime & Reliability
             'downtime': ['view', 'create', 'edit'],
+            'failure_modes': ['view', 'create', 'edit'],
+            'mtbf': ['view'],
+            'availability_trends': ['view'],
+            'reliability_heatmap': ['view'],
+            'reliability_reports': ['view', 'export'],
+
+            # Shutdown & Turnaround
+            'shutdown': ['view', 'create', 'edit'],
+            'major_maintenance': ['view', 'create', 'edit'],
+            'shutdown_risk': ['view', 'create', 'edit'],
+            'milestones': ['view', 'create', 'edit'],
+            'resource_bundles': ['view', 'create', 'edit'],
+
+            # Inspections & Checklists
             'inspections': ['view', 'create', 'edit'],
-            'checklists': ['view', 'create', 'edit'],
-            'calendar': ['view'],
+            'checklists': ['view', 'create', 'edit', 'delete'],
+            'defect_findings': ['view', 'create', 'edit'],
+            'inspection_history': ['view'],
+
+            # Predictive Maintenance
+            'predictive': ['view'],
+            'condition_indicators': ['view', 'create', 'edit'],
+            'early_warning': ['view', 'edit'],
+            'failure_risk': ['view'],
+            'sensor_telemetry': ['view', 'create', 'edit'],
+            'predictive_rules': ['view', 'create', 'edit'],
+
+            # Documents & Technical Records
+            'documents': ['view', 'create', 'edit', 'delete'],
+            'attachments': ['view', 'create', 'edit', 'delete'],
+            'service_history': ['view'],
+
+            # Costing & Performance
+            'cost_view': ['view'],
+            'pm_cm_cost': ['view'],
+            'cost_variance': ['view'],
+            'labor_cost': ['view'],
+            'parts_cost': ['view'],
+            'downtime_cost': ['view'],
+            'kpis': ['view'],
+
+            # Workflow & Approvals
+            'approvals': ['view', 'approve', 'reject'],
+            'sla_policies': ['view', 'create', 'edit'],
+            'escalations': ['view', 'edit'],
+            'delegations': ['view', 'create', 'edit'],
+            'approval_history': ['view'],
+
+            # Reports & Analytics
             'reports': ['view', 'export'],
+            'report_work_orders': ['view', 'export'],
+            'report_pm': ['view', 'export'],
+            'report_breakdown': ['view', 'export'],
+            'report_downtime': ['view', 'export'],
+            'report_reliability': ['view', 'export'],
+            'report_technician': ['view', 'export'],
+            'report_parts': ['view', 'export'],
+            'report_costs': ['view', 'export'],
+            'report_asset_history': ['view', 'export'],
+            'report_inspection': ['view', 'export'],
+            'report_shutdown': ['view', 'export'],
+            'export': ['view', 'export'],
+
+            # Calendar
+            'calendar': ['view'],
+
+            # Settings
             'settings': ['view', 'edit'],
+            'work_order_settings': ['view', 'edit'],
+            'pm_settings': ['view', 'edit'],
+            'scheduling_rules': ['view', 'create', 'edit'],
+            'reliability_settings': ['view', 'edit'],
+            'branch_settings': ['view', 'edit'],
+            'notification_settings': ['view', 'edit'],
             'audit_logs': ['view', 'export'],
-            'my_work_orders': ['view', 'edit', 'complete'],
+
+            # Output Files
+            'output_files': ['view', 'create', 'download'],
+
+            # === ENHANCED EAM/PM PERMISSIONS ===
+            # Functional Locations & Technical Objects
+            'functional_locations': ['view', 'create', 'edit', 'delete'],
+            'equipment_boms': ['view', 'create', 'edit', 'delete'],
+            'equipment_structures': ['view', 'create', 'edit', 'delete'],
+
+            # Work Centers & Capacity
+            'work_centers': ['view', 'create', 'edit', 'delete'],
+            'capacity_planning': ['view', 'create', 'edit'],
+
+            # Maintenance Strategies & Counters
+            'maintenance_strategies': ['view', 'create', 'edit', 'delete'],
+            'counters': ['view', 'create', 'edit', 'delete'],
+            'measurement_points': ['view', 'create', 'edit', 'delete'],
+
+            # Shift & Skills Planning
+            'shift_planning': ['view', 'create', 'edit'],
+            'skill_catalog': ['view', 'create', 'edit', 'delete'],
+            'skill_matching': ['view', 'create', 'edit'],
+
+            # Costing & Settlement
+            'cost_planning': ['view', 'create', 'edit'],
+            'wip': ['view', 'create', 'edit'],
+            'settlements': ['view', 'create', 'edit'],
+
+            # Service Management
+            'service_agreements': ['view', 'create', 'edit', 'delete'],
+            'warranty_management': ['view', 'create', 'edit', 'delete'],
+
+            # Notifications & Problem Management
+            'notifications': ['view', 'create', 'edit', 'delete'],
+            'problem_management': ['view', 'create', 'edit', 'delete'],
+
+            # IoT & Predictive Maintenance
+            'iot_devices': ['view', 'create', 'edit', 'delete'],
+            'iot_alerts': ['view', 'create', 'edit', 'delete'],
+
+            # Work Order Operations & Components
+            'work_order_operations': ['view', 'create', 'edit', 'delete'],
+            'work_order_components': ['view', 'create', 'edit', 'delete'],
+            'work_order_confirmations': ['view', 'create', 'edit', 'delete'],
+            'work_order_tools': ['view', 'create', 'edit', 'delete'],
+
+            # Field Authorization & Data Scopes
+            'field_authorization': ['view', 'create', 'edit', 'delete'],
+            'data_scopes': ['view', 'create', 'edit', 'delete'],
         }
     },
     'finance': {
@@ -175,6 +336,84 @@ MODULE_PERMISSIONS = {
             'settings': ['view', 'edit'],
         }
     },
+    'payroll': {
+        'label': 'Enterprise Payroll',
+        'resources': {
+            # Dashboard & Overview
+            'dashboard': ['view'],
+            'executive_dashboard': ['view'],
+            'processing_dashboard': ['view'],
+            'variance_dashboard': ['view'],
+            'overtime_dashboard': ['view'],
+            'loan_dashboard': ['view'],
+            'compliance_dashboard': ['view'],
+            # Setup
+            'setup': ['view', 'edit'],
+            'components': ['view', 'create', 'edit', 'delete'],
+            'groups': ['view', 'create', 'edit', 'delete'],
+            'profiles': ['view', 'create', 'edit', 'delete'],
+            'calendar': ['view', 'create', 'edit', 'delete'],
+            # Periods
+            'periods': ['view', 'create', 'edit', 'delete', 'lock', 'unlock', 'close'],
+            # Processing
+            'processing': ['view', 'create', 'calculate', 'validate'],
+            'runs': ['view', 'create', 'edit', 'delete'],
+            'add_employees': ['add_employees'],
+            # Review & Approval
+            'review': ['view', 'approve', 'reject', 'return'],
+            'approval': ['view', 'approve', 'reject'],
+            # Payslips
+            'payslips': ['view', 'generate', 'approve', 'release'],
+            'payslip_download': ['download'],
+            'payslip_email': ['email'],
+            # Loans & Advances
+            'loans': ['view', 'create', 'edit', 'delete', 'approve', 'suspend'],
+            'advances': ['view', 'create', 'edit', 'delete', 'approve'],
+            # Retro & Arrears
+            'retro': ['view', 'create', 'edit', 'delete', 'approve'],
+            'arrears': ['view', 'create', 'edit', 'delete', 'approve'],
+            # Compliance & Controls
+            'compliance': ['view', 'create', 'edit', 'delete', 'audit'],
+            'exceptions': ['view', 'resolve', 'ignore', 'escalate'],
+            'audit': ['view', 'export'],
+            'controls': ['view', 'create', 'edit', 'delete'],
+            # Finance Integration
+            'finance': ['view', 'create', 'post', 'approve', 'reject'],
+            'posting': ['view', 'create', 'post'],
+            # HR Integration
+            'hr_integration': ['view', 'manage'],
+            # Reports
+            'reports': ['view', 'export', 'create', 'edit', 'delete'],
+            'summary_report': ['view', 'export'],
+            'earnings_report': ['view', 'export'],
+            'deductions_report': ['view', 'export'],
+            'overtime_report': ['view', 'export'],
+            'loan_report': ['view', 'export'],
+            'variance_report': ['view', 'export'],
+            'compliance_report': ['view', 'export'],
+            'audit_report': ['view', 'export'],
+            'export': ['view', 'export', 'configure', 'delete'],
+            # Workflow
+            'approvals': ['view', 'approve', 'reject', 'delegate'],
+            'approval_rules': ['view', 'create', 'edit', 'delete'],
+            'delegations': ['view', 'create', 'edit', 'delete'],
+            'sla': ['view', 'create', 'edit', 'delete'],
+            'escalations': ['view', 'manage'],
+            # Settings
+            'settings': ['view', 'edit'],
+            'notification_settings': ['view', 'edit'],
+            'integration_settings': ['view', 'edit'],
+            # Special permissions
+            'lock': ['lock'],
+            'unlock': ['unlock'],
+            'close': ['close'],
+            'recalculate': ['recalculate'],
+            'bulk_approve': ['bulk_approve'],
+            'sensitive_data': ['view'],  # For salary totals, bank details
+            'export_bank_file': ['export'],
+            'view_audit_trail': ['view'],
+        }
+    },
     'wms': {
         'label': 'Warehouse Management',
         'resources': {
@@ -198,14 +437,60 @@ MODULE_PERMISSIONS = {
         'label': 'Logistics & Delivery',
         'resources': {
             'dashboard': ['view'],
-            'trips': ['view', 'create', 'edit', 'delete', 'start', 'complete'],
+            'trips': ['view', 'create', 'edit', 'delete', 'start', 'complete', 'cancel', 'assign'],
             'routes': ['view', 'create', 'edit', 'delete', 'optimize'],
-            'dispatch': ['view', 'create', 'edit', 'assign', 'execute'],
-            'vehicles': ['view', 'create', 'edit', 'delete', 'assign'],
-            'drivers': ['view', 'create', 'edit', 'delete', 'assign'],
+            'dispatch': ['view', 'create', 'edit', 'assign', 'execute', 'reassign'],
+            'vehicles': ['view', 'create', 'edit', 'delete', 'assign', 'maintenance'],
+            'drivers': ['view', 'create', 'edit', 'delete', 'assign', 'availability'],
             'stops': ['view', 'create', 'edit', 'delete', 'checkin', 'complete'],
             'delivery_reports': ['view', 'export'],
             'alerts': ['view', 'create', 'edit', 'delete', 'resolve'],
+            'settings': ['view', 'edit'],
+            'audit_logs': ['view', 'export'],
+            'costs': ['view', 'create', 'edit', 'approve'],
+            'pod': ['view', 'create', 'edit', 'approve', 'reject'],
+            'flow_integration': ['view', 'create', 'edit', 'delete', 'publish'],
+            'tms_admin': ['view', 'create', 'edit', 'delete'],
+        }
+    },
+    'tms': {
+        'label': 'TMS - Transport Management',
+        'resources': {
+            'dashboard': ['view'],
+            'trips': ['view', 'create', 'edit', 'delete', 'start', 'complete', 'cancel', 'assign'],
+            'routes': ['view', 'create', 'edit', 'delete', 'optimize'],
+            'dispatch_board': ['view', 'create', 'edit', 'assign', 'execute', 'reassign'],
+            'vehicles': ['view', 'create', 'edit', 'delete', 'assign', 'maintenance'],
+            'drivers': ['view', 'create', 'edit', 'delete', 'assign', 'availability'],
+            'stops': ['view', 'create', 'edit', 'delete', 'checkin', 'complete'],
+            'shipments': ['view', 'create', 'edit', 'delete'],
+            'pod': ['view', 'create', 'edit', 'approve', 'reject'],
+            'incidents': ['view', 'create', 'edit', 'resolve'],
+            'costs': ['view', 'create', 'edit', 'approve', 'view_sensitive'],
+            'reports': ['view', 'export'],
+            'settings': ['view', 'edit'],
+            'audit_logs': ['view', 'export'],
+            'notifications': ['view', 'create', 'edit', 'delete', 'manage'],
+            'flow_integration': ['view', 'create', 'edit', 'delete', 'publish'],
+        }
+    },
+    'scm': {
+        'label': 'Supply Chain Management',
+        'resources': {
+            'dashboard': ['view'],
+            'demand': ['view', 'create', 'edit', 'delete', 'approve', 'override'],
+            'supply': ['view', 'create', 'edit', 'delete'],
+            'replenishment': ['view', 'create', 'edit', 'delete', 'approve', 'execute'],
+            'mrp': ['view', 'create', 'edit', 'delete', 'approve', 'execute'],
+            'inventory': ['view', 'create', 'edit', 'delete'],
+            'network': ['view', 'create', 'edit', 'delete'],
+            'service': ['view', 'create', 'edit', 'delete'],
+            'scenarios': ['view', 'create', 'edit', 'delete', 'approve', 'run'],
+            'alerts': ['view', 'create', 'edit', 'delete', 'resolve', 'acknowledge'],
+            'supplier': ['view', 'create', 'edit', 'delete'],
+            'warehouse': ['view', 'create', 'edit', 'delete'],
+            'workflow': ['view', 'create', 'edit', 'delete', 'approve'],
+            'reports': ['view', 'export', 'create', 'edit', 'delete'],
             'settings': ['view', 'edit'],
         }
     },
@@ -217,10 +502,27 @@ MODULE_PERMISSIONS = {
             'demand': ['view', 'create', 'edit', 'delete'],
             'replenishment': ['view', 'create', 'edit', 'delete', 'approve', 'execute'],
             'policies': ['view', 'create', 'edit', 'delete'],
-            'scenarios': ['view', 'create', 'edit', 'delete', 'approve'],
-            'alerts': ['view', 'create', 'edit', 'delete', 'resolve'],
-            'reports': ['view', 'export'],
+            'scenarios': ['view', 'create', 'edit', 'delete', 'approve', 'run'],
+            'alerts': ['view', 'create', 'edit', 'delete', 'resolve', 'acknowledge', 'escalate'],
+            'reports': ['view', 'export', 'create', 'edit', 'delete'],
             'settings': ['view', 'edit'],
+            # Enterprise Demand Planning
+            'control_tower': ['view'],
+            'statistical_forecasting': ['view', 'create', 'edit', 'delete', 'run'],
+            'forecast_versions': ['view', 'create', 'edit', 'delete', 'freeze', 'publish', 'clone', 'compare'],
+            'forecast_overrides': ['view', 'create', 'edit', 'delete', 'approve', 'reject', 'bulk_override'],
+            'demand_drivers': ['view', 'create', 'edit', 'delete'],
+            'promotions': ['view', 'create', 'edit', 'delete'],
+            'seasonality': ['view', 'create', 'edit', 'delete'],
+            'consensus': ['view', 'create', 'edit', 'delete', 'approve', 'input'],
+            'forecast_accuracy': ['view', 'create', 'calculate'],
+            'demand_sensing': ['view', 'create', 'detect', 'acknowledge'],
+            'scenario_planning': ['view', 'create', 'edit', 'delete', 'run', 'compare'],
+            'workflow': ['view', 'create', 'edit', 'delete', 'approve', 'reject'],
+            'supply_linkage': ['view'],
+            'sales_linkage': ['view'],
+            'branch_entity': ['view', 'create', 'edit', 'delete'],
+            'export': ['view', 'export', 'configure'],
         }
     },
     'crm': {
@@ -391,15 +693,115 @@ MODULE_PERMISSIONS = {
     'quality': {
         'label': 'Quality Management',
         'resources': {
+            # Main areas
             'dashboard': ['view'],
-            'inspections': ['view', 'create', 'edit', 'delete', 'approve', 'execute'],
-            'ncr': ['view', 'create', 'edit', 'delete', 'approve', 'resolve', 'close'],
-            'capa': ['view', 'create', 'edit', 'delete', 'approve', 'verify', 'close'],
-            'audits': ['view', 'create', 'edit', 'delete', 'approve', 'execute', 'close'],
-            'reports': ['view', 'export'],
-            'settings': ['view', 'edit'],
+            'executive_dashboard': ['view'],
+            'workspace': ['view'],
+            # Inspections
+            'inspections': ['view', 'create', 'edit', 'delete', 'approve', 'execute', 'hold_release'],
+            'inspection_plans': ['view', 'create', 'edit', 'delete', 'approve', 'execute'],
+            'inspection_templates': ['view', 'create', 'edit', 'delete', 'manage'],
+            'inspection_results': ['view', 'create', 'edit', 'delete'],
+            're_inspection': ['view', 'create', 'execute'],
+            # NCR / Non-Conformance
+            'ncr': ['view', 'create', 'edit', 'delete', 'approve', 'resolve', 'close', 'escalate'],
+            'ncr_containment': ['view', 'create', 'edit', 'delete', 'verify'],
+            'ncr_disposition': ['view', 'create', 'edit', 'approve', 'execute'],
+            # CAPA
+            'capa': ['view', 'create', 'edit', 'delete', 'approve', 'verify', 'close', 'reopen'],
+            'capa_actions': ['view', 'create', 'edit', 'delete', 'complete', 'verify'],
+            'capa_effectiveness': ['view', 'create', 'edit', 'approve', 'close'],
+            # Audits
+            'audits': ['view', 'create', 'edit', 'delete', 'approve', 'execute', 'close', 'cancel'],
+            'audit_programs': ['view', 'create', 'edit', 'delete', 'manage'],
+            'audit_checklists': ['view', 'create', 'edit', 'delete', 'manage'],
+            'audit_findings': ['view', 'create', 'edit', 'delete', 'verify', 'close'],
+            'audit_finding_actions': ['view', 'create', 'edit', 'delete', 'complete'],
+            # Supplier Quality
+            'supplier_quality': ['view', 'create', 'edit', 'approve', 'block', 'unblock'],
+            'supplier_scorecards': ['view', 'create', 'edit', 'delete', 'export'],
+            'supplier_ncr': ['view', 'create', 'edit', 'resolve'],
+            'supplier_capa': ['view', 'create', 'edit', 'resolve'],
+            # Quality Holds & Disposition
+            'quality_holds': ['view', 'create', 'release', 'reject', 'rework', 'scrap'],
+            'disposition': ['view', 'create', 'edit', 'approve', 'execute'],
+            'quarantine': ['view', 'create', 'edit', 'release', 'approve'],
+            # Defects & Scrap
+            'defects': ['view', 'create', 'edit', 'analyze', 'export'],
+            'scrap': ['view', 'create', 'edit', 'approve', 'export'],
+            'rework': ['view', 'create', 'edit', 'approve', 'complete'],
+            'cost_of_quality': ['view', 'export', 'analyze'],
+            # SPC & Analytics
+            'spc': ['view', 'create', 'edit', 'configure', 'export'],
+            'control_charts': ['view', 'create', 'edit', 'delete', 'configure'],
+            'quality_trends': ['view', 'export', 'analyze'],
+            'anomaly_review': ['view', 'create', 'edit', 'resolve', 'export'],
+            # Documents & Compliance
+            'quality_documents': ['view', 'create', 'edit', 'delete', 'approve', 'publish'],
+            'controlled_docs': ['view', 'create', 'edit', 'delete', 'approve', 'release'],
+            'compliance': ['view', 'create', 'edit', 'approve', 'export', 'manage'],
+            'certifications': ['view', 'create', 'edit', 'delete', 'approve', 'manage'],
+            # Risk Management
+            'quality_risks': ['view', 'create', 'edit', 'mitigate', 'close', 'manage'],
+            'risk_assessment': ['view', 'create', 'edit', 'approve', 'manage'],
+            'critical_control_points': ['view', 'create', 'edit', 'delete', 'manage'],
+            'escalation_rules': ['view', 'create', 'edit', 'delete', 'manage'],
+            # Workflow & Approvals
+            'approvals': ['view', 'approve', 'reject', 'delegate', 'escalate'],
+            'approval_matrix': ['view', 'create', 'edit', 'delete', 'manage'],
+            'sla_policies': ['view', 'create', 'edit', 'delete', 'manage'],
+            # Settings & Configuration
+            'settings': ['view', 'edit', 'manage'],
+            'inspection_settings': ['view', 'edit', 'manage'],
+            'ncr_settings': ['view', 'edit', 'manage'],
+            'capa_settings': ['view', 'edit', 'manage'],
+            'audit_settings': ['view', 'edit', 'manage'],
+            'supplier_quality_settings': ['view', 'edit', 'manage'],
+            'compliance_settings': ['view', 'edit', 'manage'],
+            'notification_settings': ['view', 'edit', 'manage'],
+            # Reports & Analytics
+            'reports': ['view', 'export', 'generate', 'schedule'],
+            'inspection_reports': ['view', 'export'],
+            'ncr_reports': ['view', 'export'],
+            'capa_reports': ['view', 'export'],
+            'audit_reports': ['view', 'export'],
+            'supplier_quality_reports': ['view', 'export'],
+            'defect_reports': ['view', 'export'],
+            'compliance_reports': ['view', 'export'],
+            'custom_reports': ['view', 'create', 'edit', 'delete', 'export', 'generate'],
+            'export_center': ['view', 'create', 'edit', 'delete', 'export', 'manage'],
+            # Audit Trail
             'audit_log': ['view', 'export'],
+            # Quality Planning
+            'quality_plans': ['view', 'create', 'edit', 'delete', 'approve', 'execute'],
+            'sampling_rules': ['view', 'create', 'edit', 'delete', 'manage'],
+            'test_methods': ['view', 'create', 'edit', 'delete', 'manage'],
+            'specifications': ['view', 'create', 'edit', 'delete', 'manage', 'approve'],
+            # Generic fallback
             'quality': ['view', 'create', 'edit', 'delete', 'approve', 'execute', 'verify', 'export', 'manage'],
+        }
+    },
+    'spc': {
+        'label': 'SPC / Quality Analytics',
+        'resources': {
+            # SPC Core
+            'dashboard': ['view'],
+            'charts': ['view', 'create', 'edit', 'delete', 'manage'],
+            'measurements': ['view', 'create', 'edit', 'delete'],
+            'capability': ['view', 'create', 'edit', 'delete', 'analyze'],
+            'sampling': ['view', 'create', 'edit', 'delete', 'manage'],
+            'alerts': ['view', 'create', 'edit', 'delete', 'acknowledge', 'resolve'],
+            # Equipment
+            'equipment': ['view', 'create', 'edit', 'delete', 'manage'],
+            'calibration': ['view', 'create', 'edit', 'delete', 'manage'],
+            'gage_rr': ['view', 'create', 'edit', 'delete', 'manage'],
+            # Analytics
+            'analytics': ['view', 'export', 'analyze'],
+            'reports': ['view', 'export'],
+            # Settings
+            'settings': ['view', 'edit', 'manage'],
+            # Generic fallback
+            'spc': ['view', 'create', 'edit', 'delete', 'manage', 'export', 'analyze'],
         }
     },
     'workflow': {
@@ -1014,6 +1416,202 @@ def _role_is_global_admin(role_id: int) -> bool:
 
 
 # ============================================================================
+# TMS SCOPE-BASED PERMISSIONS
+# ============================================================================
+
+def check_tms_branch_access(user_id: int, branch_id: int, require_write: bool = False) -> bool:
+    """
+    Check if user has access to a specific TMS branch.
+
+    Args:
+        user_id: User ID
+        branch_id: Branch ID
+        require_write: If True, requires write access
+
+    Returns:
+        True if user has branch access, False otherwise
+    """
+    with get_db_context() as db:
+        user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            return False
+
+        if user.get('is_admin') or _role_is_global_admin(user.get('role_id', 0)):
+            return True
+
+        role = get_role_by_id(user['role_id']) if user.get('role_id') else None
+        if role:
+            role_name = role.get('role_name', '').lower()
+            if 'tms admin' in role_name or 'global admin' in role_name:
+                return True
+
+        access = db.execute("""
+            SELECT 1 FROM user_branch_access
+            WHERE user_id = ? AND branch_id = ?
+        """, (user_id, branch_id)).fetchone()
+
+        return access is not None
+
+
+def check_tms_route_scope(user_id: int, route_id: int) -> bool:
+    """
+    Check if user can access a specific route.
+
+    Args:
+        user_id: User ID
+        route_id: Route ID
+
+    Returns:
+        True if user has route access, False otherwise
+    """
+    with get_db_context() as db:
+        user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            return False
+
+        if user.get('is_admin') or _role_is_global_admin(user.get('role_id', 0)):
+            return True
+
+        role = get_role_by_id(user['role_id']) if user.get('role_id') else None
+        if role:
+            role_name = role.get('role_name', '').lower()
+            if role_name in ['dispatcher', 'auditor', 'executive viewer']:
+                route = db.execute("SELECT branch_id FROM logistics_routes WHERE id = ?", (route_id,)).fetchone()
+                if route:
+                    return check_tms_branch_access(user_id, route['branch_id'])
+                return False
+
+        return True
+
+
+def check_tms_vehicle_scope(user_id: int, vehicle_id: int) -> bool:
+    """
+    Check if user can access a specific vehicle.
+
+    Args:
+        user_id: User ID
+        vehicle_id: Vehicle ID
+
+    Returns:
+        True if user has vehicle access, False otherwise
+    """
+    with get_db_context() as db:
+        user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            return False
+
+        if user.get('is_admin') or _role_is_global_admin(user.get('role_id', 0)):
+            return True
+
+        role = get_role_by_id(user['role_id']) if user.get('role_id') else None
+        if role:
+            role_name = role.get('role_name', '').lower()
+            if role_name in ['dispatcher', 'auditor', 'executive viewer']:
+                vehicle = db.execute("SELECT branch_id FROM logistics_vehicles WHERE id = ?", (vehicle_id,)).fetchone()
+                if vehicle:
+                    return check_tms_branch_access(user_id, vehicle['branch_id'])
+                return False
+
+        return True
+
+
+def check_tms_driver_scope(user_id: int, driver_id: int) -> bool:
+    """
+    Check if user can access a specific driver.
+
+    Args:
+        user_id: User ID
+        driver_id: Driver ID
+
+    Returns:
+        True if user has driver access, False otherwise
+    """
+    with get_db_context() as db:
+        user = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not user:
+            return False
+
+        if user.get('is_admin') or _role_is_global_admin(user.get('role_id', 0)):
+            return True
+
+        role = get_role_by_id(user['role_id']) if user.get('role_id') else None
+        if role:
+            role_name = role.get('role_name', '').lower()
+            if role_name in ['dispatcher', 'auditor', 'executive viewer']:
+                driver = db.execute("SELECT branch_id FROM logistics_drivers WHERE id = ?", (driver_id,)).fetchone()
+                if driver:
+                    return check_tms_branch_access(user_id, driver['branch_id'])
+                return False
+
+        return True
+
+
+def user_can_view_tms_cost(user_id: int, cost_amount: float = None) -> bool:
+    """
+    Check if a user can view TMS cost information.
+
+    Args:
+        user_id: User ID
+        cost_amount: Optional cost amount to check against threshold
+
+    Returns:
+        True if user can view costs, False otherwise
+    """
+    perms = get_user_permissions(user_id)
+
+    if 'tms.costs.view_sensitive' in perms or 'tms.*' in perms:
+        return True
+
+    if 'tms.costs.view' not in perms and 'logistics.costs.view' not in perms:
+        return False
+
+    if cost_amount:
+        threshold = 10000
+        if cost_amount > threshold:
+            return 'tms.costs.approve' in perms or 'logistics.costs.approve' in perms
+
+    return True
+
+
+def user_can_approve_tms_cost(user_id: int, cost_amount: float, role_id: int = None) -> bool:
+    """
+    Check if a user can approve a TMS cost.
+
+    Args:
+        user_id: User ID
+        cost_amount: Cost amount to approve
+        role_id: Optional role_id (will fetch from user if not provided)
+
+    Returns:
+        True if user can approve, False otherwise
+    """
+    perms = get_user_permissions(user_id)
+
+    if 'tms.costs.approve' not in perms and 'logistics.costs.approve' not in perms:
+        return False
+
+    approval_thresholds = {
+        'tms admin': float('inf'),
+        'logistics manager': 50000,
+        'cost reviewer': 25000,
+        'dispatch supervisor': 5000,
+    }
+
+    if role_id is None:
+        user = get_one("SELECT role_id FROM users WHERE id = ?", (user_id,))
+        role_id = user['role_id'] if user else None
+
+    role = get_role_by_id(role_id) if role_id else None
+    if role:
+        role_name = role.get('role_name', '').lower()
+        for key, threshold in approval_thresholds.items():
+            if key in role_name:
+                return cost_amount <= threshold
+
+    return cost_amount <= 5000
+
+
+# ============================================================================
 # PERMISSION CACHE (for performance)
 # ============================================================================
 
@@ -1266,6 +1864,119 @@ def _create_default_roles():
             ]
         },
         {
+            'name': 'QA Manager',
+            'description': 'Senior Quality Assurance Manager with full quality control oversight',
+            'permissions': [
+                ('quality', '*', '*'),
+                ('reports', 'executive', 'view'),
+                ('reports', 'operational', 'view'),
+                ('tasks', 'tasks', 'view'),
+            ]
+        },
+        {
+            'name': 'QC Inspector',
+            'description': 'Quality Control Inspector for inspections and testing',
+            'permissions': [
+                ('quality', 'dashboard', 'view'),
+                ('quality', 'inspections', ['view', 'create', 'edit', 'execute']),
+                ('quality', 'inspection_plans', ['view', 'create', 'edit']),
+                ('quality', 'inspection_templates', 'view'),
+                ('quality', 're_inspection', ['view', 'create']),
+                ('quality', 'ncr', ['view', 'create']),
+                ('quality', 'inspection_reports', ['view', 'export']),
+            ]
+        },
+        {
+            'name': 'NCR Coordinator',
+            'description': 'Non-Conformance Record management specialist',
+            'permissions': [
+                ('quality', 'dashboard', 'view'),
+                ('quality', 'ncr', ['view', 'create', 'edit', 'approve', 'resolve', 'close']),
+                ('quality', 'ncr_containment', ['view', 'create', 'edit', 'verify']),
+                ('quality', 'ncr_disposition', ['view', 'create', 'edit', 'approve', 'execute']),
+                ('quality', 'quality_holds', ['view', 'create']),
+                ('quality', 'ncr_reports', ['view', 'export']),
+            ]
+        },
+        {
+            'name': 'CAPA Owner',
+            'description': 'CAPA management and implementation',
+            'permissions': [
+                ('quality', 'dashboard', 'view'),
+                ('quality', 'capa', ['view', 'create', 'edit', 'verify', 'close']),
+                ('quality', 'capa_actions', ['view', 'create', 'edit', 'complete']),
+                ('quality', 'capa_effectiveness', ['view', 'create', 'edit', 'approve', 'close']),
+                ('quality', 'capa_reports', ['view', 'export']),
+            ]
+        },
+        {
+            'name': 'Audit Manager',
+            'description': 'Audit program and finding management',
+            'permissions': [
+                ('quality', 'dashboard', 'view'),
+                ('quality', 'audits', ['view', 'create', 'edit', 'approve', 'execute', 'close', 'cancel']),
+                ('quality', 'audit_programs', ['view', 'create', 'edit', 'manage']),
+                ('quality', 'audit_checklists', ['view', 'create', 'edit', 'manage']),
+                ('quality', 'audit_findings', ['view', 'create', 'edit', 'verify', 'close']),
+                ('quality', 'audit_finding_actions', ['view', 'create', 'edit', 'complete']),
+                ('quality', 'audit_reports', ['view', 'export']),
+            ]
+        },
+        {
+            'name': 'Supplier Quality Reviewer',
+            'description': 'Supplier quality management and scorecards',
+            'permissions': [
+                ('quality', 'dashboard', 'view'),
+                ('quality', 'supplier_quality', ['view', 'create', 'edit', 'approve', 'block', 'unblock']),
+                ('quality', 'supplier_scorecards', ['view', 'create', 'edit', 'export']),
+                ('quality', 'supplier_ncr', ['view', 'create', 'edit', 'resolve']),
+                ('quality', 'supplier_capa', ['view', 'create', 'edit', 'resolve']),
+                ('quality', 'supplier_quality_reports', ['view', 'export']),
+            ]
+        },
+        {
+            'name': 'Compliance Reviewer',
+            'description': 'Quality compliance and regulatory management',
+            'permissions': [
+                ('quality', 'dashboard', 'view'),
+                ('quality', 'compliance', ['view', 'create', 'edit', 'approve', 'export', 'manage']),
+                ('quality', 'quality_documents', ['view', 'create', 'edit', 'approve', 'publish']),
+                ('quality', 'controlled_docs', ['view', 'create', 'edit', 'approve', 'release']),
+                ('quality', 'certifications', ['view', 'create', 'edit', 'approve', 'manage']),
+                ('quality', 'quality_risks', ['view', 'create', 'edit', 'mitigate', 'manage']),
+                ('quality', 'risk_assessment', ['view', 'create', 'edit', 'approve', 'manage']),
+                ('quality', 'critical_control_points', ['view', 'create', 'edit', 'manage']),
+                ('quality', 'escalation_rules', ['view', 'create', 'edit', 'manage']),
+                ('quality', 'compliance_reports', ['view', 'export']),
+            ]
+        },
+        {
+            'name': 'Operations Viewer',
+            'description': 'Read-only quality operations access',
+            'permissions': [
+                ('quality', 'dashboard', 'view'),
+                ('quality', 'inspections', 'view'),
+                ('quality', 'ncr', 'view'),
+                ('quality', 'audits', 'view'),
+                ('quality', 'audit_findings', 'view'),
+                ('quality', 'reports', 'view'),
+            ]
+        },
+        {
+            'name': 'Executive Viewer',
+            'description': 'Executive quality dashboard and KPI access',
+            'permissions': [
+                ('quality', 'dashboard', 'view'),
+                ('quality', 'executive_dashboard', 'view'),
+                ('quality', 'reports', 'view'),
+                ('quality', 'inspection_reports', 'view'),
+                ('quality', 'ncr_reports', 'view'),
+                ('quality', 'capa_reports', 'view'),
+                ('quality', 'supplier_quality_reports', 'view'),
+                ('quality', 'compliance_reports', 'view'),
+            ]
+        },
+        {
             'name': 'Sales Manager',
             'description': 'Sales, CRM, and customer access',
             'permissions': [
@@ -1284,10 +1995,124 @@ def _create_default_roles():
             'description': 'Logistics and delivery operations',
             'permissions': [
                 ('logistics', '*', '*'),
+                ('tms', '*', '*'),
                 ('wms', 'shipments', 'view'),
                 ('wms', 'shipments', 'ship'),
                 ('wms', 'returns', 'view'),
                 ('tasks', 'tasks', 'view'),
+            ]
+        },
+        {
+            'name': 'TMS Admin',
+            'description': 'Full TMS administrator access',
+            'permissions': [
+                ('tms', '*', '*'),
+                ('logistics', '*', '*'),
+                ('reports', 'logistics', 'view'),
+                ('reports', 'logistics', 'export'),
+            ]
+        },
+        {
+            'name': 'Dispatch Supervisor',
+            'description': 'Manage dispatch board and assignments',
+            'permissions': [
+                ('tms', 'dashboard', 'view'),
+                ('tms', 'dispatch_board', ['view', 'create', 'edit', 'assign', 'execute', 'reassign']),
+                ('tms', 'trips', ['view', 'create', 'edit']),
+                ('tms', 'routes', 'view'),
+                ('tms', 'vehicles', 'view'),
+                ('tms', 'drivers', 'view'),
+                ('tms', 'stops', ['view', 'create', 'edit', 'complete']),
+                ('tms', 'shipments', ['view', 'create', 'edit']),
+                ('tms', 'incidents', ['view', 'create']),
+                ('tms', 'pod', 'view'),
+                ('tms', 'reports', 'view'),
+            ]
+        },
+        {
+            'name': 'Dispatcher',
+            'description': 'View dispatch and assign loads',
+            'permissions': [
+                ('tms', 'dashboard', 'view'),
+                ('tms', 'dispatch_board', ['view', 'assign']),
+                ('tms', 'trips', 'view'),
+                ('tms', 'routes', 'view'),
+                ('tms', 'vehicles', 'view'),
+                ('tms', 'drivers', 'view'),
+                ('tms', 'shipments', 'view'),
+                ('tms', 'pod', 'view'),
+            ]
+        },
+        {
+            'name': 'Fleet Manager',
+            'description': 'Manage vehicles and drivers',
+            'permissions': [
+                ('tms', 'dashboard', 'view'),
+                ('tms', 'vehicles', ['view', 'create', 'edit', 'maintenance']),
+                ('tms', 'drivers', ['view', 'create', 'edit', 'availability']),
+                ('tms', 'trips', 'view'),
+                ('tms', 'routes', 'view'),
+                ('tms', 'reports', ['view', 'export']),
+                ('tms', 'settings', 'view'),
+            ]
+        },
+        {
+            'name': 'Driver Coordinator',
+            'description': 'Manage driver availability and assignments',
+            'permissions': [
+                ('tms', 'dashboard', 'view'),
+                ('tms', 'drivers', ['view', 'create', 'edit', 'availability', 'assign']),
+                ('tms', 'trips', 'view'),
+                ('tms', 'dispatch_board', 'view'),
+                ('tms', 'vehicles', 'view'),
+            ]
+        },
+        {
+            'name': 'POD Reviewer',
+            'description': 'Review and approve Proof of Delivery',
+            'permissions': [
+                ('tms', 'dashboard', 'view'),
+                ('tms', 'pod', ['view', 'edit', 'approve', 'reject']),
+                ('tms', 'trips', 'view'),
+                ('tms', 'reports', 'view'),
+            ]
+        },
+        {
+            'name': 'Cost Reviewer',
+            'description': 'View cost reports and approve high-cost trips',
+            'permissions': [
+                ('tms', 'dashboard', 'view'),
+                ('tms', 'trips', 'view'),
+                ('tms', 'costs', ['view', 'approve']),
+                ('tms', 'reports', ['view', 'export']),
+                ('tms', 'shipments', 'view'),
+            ]
+        },
+        {
+            'name': 'Auditor',
+            'description': 'Read-only access with audit log viewing',
+            'permissions': [
+                ('tms', 'dashboard', 'view'),
+                ('tms', 'trips', 'view'),
+                ('tms', 'routes', 'view'),
+                ('tms', 'dispatch_board', 'view'),
+                ('tms', 'vehicles', 'view'),
+                ('tms', 'drivers', 'view'),
+                ('tms', 'shipments', 'view'),
+                ('tms', 'pod', 'view'),
+                ('tms', 'incidents', 'view'),
+                ('tms', 'costs', 'view'),
+                ('tms', 'reports', 'view'),
+                ('tms', 'audit_logs', ['view', 'export']),
+            ]
+        },
+        {
+            'name': 'Executive Viewer',
+            'description': 'Executive dashboards only - read only',
+            'permissions': [
+                ('tms', 'dashboard', 'view'),
+                ('tms', 'reports', 'view'),
+                ('reports', 'executive', 'view'),
             ]
         },
         {
@@ -1378,6 +2203,10 @@ def _create_default_roles():
                 elif action == '*':
                     # Resource-level wildcard
                     add_wildcard_permission(role_id, module, resource)
+                elif isinstance(action, list):
+                    # Multiple actions for this resource
+                    for a in action:
+                        add_permission_to_role(role_id, module, resource, a)
                 else:
                     add_permission_to_role(role_id, module, resource, action)
 

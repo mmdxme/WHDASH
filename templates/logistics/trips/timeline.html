@@ -1,0 +1,211 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('logistics.trips_view', id=trip.id) }}" class="p-2 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-all">
+                <i class="fa-solid fa-arrow-left"></i>
+            </a>
+            <div>
+                <h1 class="text-2xl font-bold text-white">{{ title }}</h1>
+                <p class="text-slate-400 text-sm mt-1">Track trip progress and stop status</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="px-3 py-1 rounded-full text-xs font-medium {% if trip.status == 'completed' %}bg-emerald-500/10 text-emerald-400{% elif trip.status == 'en_route' %}bg-blue-500/10 text-blue-400{% elif trip.status == 'dispatched' %}bg-amber-500/10 text-amber-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                {{ trip.status|upper }}
+            </span>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-route text-brand-400"></i>
+                </div>
+                <div>
+                    <p class="text-slate-400 text-xs">Total Stops</p>
+                    <p class="text-white font-bold text-xl">{{ total_stops }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-check text-emerald-400"></i>
+                </div>
+                <div>
+                    <p class="text-slate-400 text-xs">Completed</p>
+                    <p class="text-white font-bold text-xl">{{ completed_stops }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-times text-red-400"></i>
+                </div>
+                <div>
+                    <p class="text-slate-400 text-xs">Failed</p>
+                    <p class="text-white font-bold text-xl">{{ failed_stops }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="glass-panel rounded-2xl p-6">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-clock text-amber-400"></i>
+                </div>
+                <div>
+                    <p class="text-slate-400 text-xs">Pending</p>
+                    <p class="text-white font-bold text-xl">{{ pending_stops }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="glass-panel rounded-2xl p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-lg font-bold text-white">Trip Progress</h2>
+            <span class="text-brand-400 font-bold">{{ progress }}%</span>
+        </div>
+        <div class="w-full bg-white/10 rounded-full h-3 mb-6">
+            <div class="bg-gradient-to-r from-brand-500 to-emerald-500 h-3 rounded-full transition-all duration-500" style="width: {{ progress }}%"></div>
+        </div>
+
+        {% if trip.driver_name %}
+        <div class="flex items-center gap-4 text-sm text-slate-400 mb-4">
+            <span><i class="fa-solid fa-user mr-2"></i>{{ trip.driver_name }}</span>
+            <span><i class="fa-solid fa-truck ml-4 mr-2"></i>{{ trip.plate_number }} {{ trip.vehicle_type }}</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-6 border-b border-white/5">
+            <h2 class="text-lg font-bold text-white">Stop Timeline</h2>
+        </div>
+        <div class="divide-y divide-white/5">
+            {% for stop in stops %}
+            <div class="p-5 hover:bg-white/5 transition-colors">
+                <div class="flex items-start gap-4">
+                    <div class="flex flex-col items-center">
+                        <div class="w-10 h-10 rounded-full flex items-center justify-center {% if stop.status == 'completed' %}bg-emerald-500/20 text-emerald-400{% elif stop.status == 'failed' %}bg-red-500/20 text-red-400{% elif stop.status == 'arrived' %}bg-blue-500/20 text-blue-400{% else %}bg-slate-500/20 text-slate-400{% endif %}">
+                            {% if stop.status == 'completed' %}
+                            <i class="fa-solid fa-check"></i>
+                            {% elif stop.status == 'failed' %}
+                            <i class="fa-solid fa-times"></i>
+                            {% elif stop.status == 'arrived' %}
+                            <i class="fa-solid fa-location-dot"></i>
+                            {% else %}
+                            <span class="text-sm font-bold">{{ loop.index }}</span>
+                            {% endif %}
+                        </div>
+                        {% if not loop.last %}
+                        <div class="w-0.5 h-12 bg-white/10 mt-2"></div>
+                        {% endif %}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-start justify-between gap-4">
+                            <div>
+                                <h3 class="text-white font-medium">{{ stop.stop_name }}</h3>
+                                <p class="text-slate-400 text-sm">{{ stop.address or 'No address' }}</p>
+                                {% if stop.customer_name %}
+                                <p class="text-slate-500 text-xs mt-1"><i class="fa-solid fa-building mr-1"></i>{{ stop.customer_name }}</p>
+                                {% endif %}
+                            </div>
+                            <div class="text-right">
+                                <span class="inline-block px-2 py-1 rounded-full text-xs font-medium {% if stop.status == 'completed' %}bg-emerald-500/10 text-emerald-400{% elif stop.status == 'failed' %}bg-red-500/10 text-red-400{% elif stop.status == 'arrived' %}bg-blue-500/10 text-blue-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                                    {{ stop.status }}
+                                </span>
+                                {% if stop.actual_arrival %}
+                                <p class="text-slate-500 text-xs mt-2">
+                                    <i class="fa-solid fa-sign-in-alt mr-1"></i>{{ stop.actual_arrival.strftime('%H:%M') if stop.actual_arrival else '-' }}
+                                </p>
+                                {% endif %}
+                                {% if stop.actual_departure %}
+                                <p class="text-slate-500 text-xs">
+                                    <i class="fa-solid fa-sign-out-alt mr-1"></i>{{ stop.actual_departure.strftime('%H:%M') if stop.actual_departure else '-' }}
+                                </p>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if stop.failure_reason %}
+                        <div class="mt-3 p-3 bg-red-500/10 rounded-xl border border-red-500/20">
+                            <p class="text-red-400 text-xs"><i class="fa-solid fa-exclamation-triangle mr-1"></i>Failed: {{ stop.failure_reason }}</p>
+                        </div>
+                        {% endif %}
+
+                        {% if stop.status in ['pending', 'arrived'] %}
+                        <div class="flex items-center gap-2 mt-3">
+                            {% if stop.status == 'pending' %}
+                            <button onclick="checkinStop({{ stop.id }})" class="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-lg text-xs font-medium transition-all">
+                                <i class="fa-solid fa-sign-in-alt mr-1"></i>Check In
+                            </button>
+                            {% endif %}
+                            {% if stop.status == 'arrived' %}
+                            <button onclick="completeStop({{ stop.id }})" class="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 rounded-lg text-xs font-medium transition-all">
+                                <i class="fa-solid fa-check mr-1"></i>Complete
+                            </button>
+                            <button onclick="failStop({{ stop.id }})" class="px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 rounded-lg text-xs font-medium transition-all">
+                                <i class="fa-solid fa-times mr-1"></i>Fail
+                            </button>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="p-12 text-center">
+                <div class="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                    <i class="fa-solid fa-map-pin text-3xl text-slate-600"></i>
+                </div>
+                <h3 class="text-lg font-bold text-white mb-2">No stops defined</h3>
+                <p class="text-slate-400">Add stops to this trip to track delivery progress</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+function checkinStop(stopId) {
+    fetch(`/logistics/stops/${stopId}/checkin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'notes=Checked in via timeline'
+    }).then(r => r.json()).then(data => {
+        if (data.success) location.reload();
+        else alert(data.error || 'Error checking in');
+    }).catch(() => location.reload());
+}
+
+function completeStop(stopId) {
+    fetch(`/logistics/stops/${stopId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ receiver_name: 'Customer' })
+    }).then(r => r.json()).then(data => {
+        if (data.success) location.reload();
+        else alert(data.error || 'Error completing stop');
+    }).catch(() => location.reload());
+}
+
+function failStop(stopId) {
+    const reason = prompt('Enter failure reason:');
+    if (reason) {
+        fetch(`/logistics/stops/${stopId}/fail`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `failure_reason=${encodeURIComponent(reason)}`
+        }).then(r => r.json()).then(data => {
+            if (data.success) location.reload();
+            else alert(data.error || 'Error marking stop as failed');
+        }).catch(() => location.reload());
+    }
+}
+</script>
+{% endblock %}

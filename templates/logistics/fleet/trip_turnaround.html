@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div><h1 class="text-3xl font-bold text-white">{{ title }}</h1><p class="text-slate-400 mt-1">Trip turnaround time analysis</p></div>
+        <div class="flex items-center gap-3">
+            <input type="date" id="dateFrom" value="{{ date_from }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <span class="text-slate-500">to</span>
+            <input type="date" id="dateTo" value="{{ date_to }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <button onclick="applyFilters()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-filter mr-2"></i>Apply
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Card -->
+    <div class="glass-panel rounded-2xl p-6">
+        <div class="flex items-center gap-6">
+            <div class="w-16 h-16 rounded-2xl bg-blue-500/10 flex items-center justify-center">
+                <i class="fa-solid fa-clock text-3xl text-blue-400"></i>
+            </div>
+            <div>
+                <p class="text-sm font-bold text-slate-400 uppercase tracking-wider">Average Turnaround</p>
+                <p class="text-4xl font-extrabold text-white">{{ avg_hours }} <span class="text-lg text-slate-400">hours</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- By Vehicle -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Turnaround by Vehicle</h2>
+        {% if by_vehicle %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Vehicle</th>
+                        <th class="text-left py-3 px-3 font-medium">Plate</th>
+                        <th class="text-right py-3 px-3 font-medium">Trips</th>
+                        <th class="text-right py-3 px-3 font-medium">Avg Hours</th>
+                        <th class="text-right py-3 px-3 font-medium">Min Hours</th>
+                        <th class="text-right py-3 px-3 font-medium">Max Hours</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for v in by_vehicle %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-white">{{ v.vehicle_code }}</td>
+                        <td class="py-3 px-3 text-slate-300">{{ v.plate_number }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ v.trip_count }}</td>
+                        <td class="py-3 px-3 text-right text-emerald-400">{{ v.avg_hours|default(0)|round(1) }}</td>
+                        <td class="py-3 px-3 text-right text-white">{{ v.min_hours|default(0)|round(1) }}</td>
+                        <td class="py-3 px-3 text-right text-amber-400">{{ v.max_hours|default(0)|round(1) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-400 text-center py-8">No data available</p>
+        {% endif %}
+    </div>
+
+    <!-- Recent Trips -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h2 class="text-lg font-bold text-white mb-5">Recent Trips</h2>
+        {% if recent %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-3 px-3 font-medium">Trip</th>
+                        <th class="text-left py-3 px-3 font-medium">Driver</th>
+                        <th class="text-left py-3 px-3 font-medium">Vehicle</th>
+                        <th class="text-left py-3 px-3 font-medium">Status</th>
+                        <th class="text-right py-3 px-3 font-medium">Turnaround (hrs)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in recent %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-3 px-3 text-brand-400">{{ r.trip_code }}</td>
+                        <td class="py-3 px-3 text-slate-300">{{ r.driver_name or '-' }}</td>
+                        <td class="py-3 px-3 text-slate-400">{{ r.plate_number or '-' }}</td>
+                        <td class="py-3 px-3"><span class="px-2 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400">{{ r.status }}</span></td>
+                        <td class="py-3 px-3 text-right text-white">{{ r.turnaround_hours|default(0)|round(1) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-slate-400 text-center py-8">No recent trips</p>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function applyFilters() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    window.location.href = `{{ url_for('logistics.fleet_trip_turnaround') }}?date_from=${dateFrom}&date_to=${dateTo}`;
+}
+</script>
+{% endblock %}

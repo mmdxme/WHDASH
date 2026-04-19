@@ -1,0 +1,92 @@
+{% extends "scm/base_scm.html" %}
+
+{% block scm_content %}
+{% set breadcrumb = [{'label': 'SCM Alerts'}] %}
+
+<div class="flex items-center justify-between mb-6">
+    <div>
+        <h2 class="text-lg font-semibold text-white">{{ t.scm_alerts|default('SCM Alerts & Exceptions') }}</h2>
+        <p class="text-slate-400 text-sm">{{ t.alerts_desc|default('Monitor and manage supply chain exceptions') }}</p>
+    </div>
+    <form action="{{ url_for('scm.alerts_generate') }}" method="POST" class="inline">
+        <button type="submit" class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm font-medium transition">
+            <i class="fas fa-sync mr-2"></i>{{ t.refresh_alerts|default('Refresh Alerts') }}
+        </button>
+    </form>
+</div>
+
+<!-- Alert Summary -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    {% for type, count in [('SHORTAGE', alerts_shortage_count), ('OVERSTOCK', alerts_overstock_count), ('FORECAST', alerts_forecast_count), ('SUPPLIER', alerts_supplier_count)] %}
+    {% if count > 0 %}
+    <div class="stat-card glass-panel rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                <i class="fas fa-bell text-red-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ type }}</p>
+                <p class="text-white text-xl font-bold">{{ count }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endfor %}
+</div>
+
+<!-- Alerts Table -->
+<div class="glass-panel rounded-xl overflow-hidden">
+    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <table class="w-full text-sm" id="alertsTable">
+            <thead>
+                <tr class="text-slate-400 border-b border-slate-700">
+                    <th class="text-left py-3 px-4">{{ t.severity|default('Severity') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.type|default('Type') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.alert|default('Alert') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.item|default('Item') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.warehouse|default('Warehouse') }}</th>
+                    <th class="text-left py-3 px-3">{{ t.created|default('Created') }}</th>
+                    <th class="text-center py-3 px-3">{{ t.actions|default('Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in alerts %}
+                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                    <td class="py-3 px-4">
+                        {% if alert.severity == 'CRITICAL' %}
+                        <span class="px-2 py-1 rounded bg-red-500/20 text-red-400 text-xs font-bold">CRITICAL</span>
+                        {% elif alert.severity == 'HIGH' %}
+                        <span class="px-2 py-1 rounded bg-orange-500/20 text-orange-400 text-xs font-bold">HIGH</span>
+                        {% elif alert.severity == 'MEDIUM' %}
+                        <span class="px-2 py-1 rounded bg-yellow-500/20 text-yellow-400 text-xs font-bold">MEDIUM</span>
+                        {% else %}
+                        <span class="px-2 py-1 rounded bg-green-500/20 text-green-400 text-xs font-bold">LOW</span>
+                        {% endif %}
+                    </td>
+                    <td class="py-3 px-3 text-slate-300">{{ alert.alert_type|replace('_', ' ') }}</td>
+                    <td class="py-3 px-3 text-white">{{ alert.title }}</td>
+                    <td class="py-3 px-3 text-slate-300">{{ alert.item_code|default('-') }}</td>
+                    <td class="py-3 px-3 text-slate-300">{{ alert.warehouse_name|default('-') }}</td>
+                    <td class="py-3 px-3 text-slate-400 text-xs">{{ alert.created_at }}</td>
+                    <td class="py-3 px-3 text-center">
+                        <form action="{{ url_for('scm.alert_acknowledge', alert_id=alert.id) }}" method="POST" class="inline">
+                            <button type="submit" class="px-3 py-1 rounded bg-green-500/20 text-green-400 text-xs hover:bg-green-500/30">
+                                <i class="fas fa-check mr-1"></i>{{ t.ack|default('Ack') }}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not alerts %}
+                <tr>
+                    <td colspan="7" class="py-12 text-center text-slate-500">
+                        <i class="fas fa-check-circle text-4xl mb-3 text-green-500"></i>
+                        <p>{{ t.no_alerts|default('No active alerts. Great job!') }}</p>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

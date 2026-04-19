@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div><h1 class="text-3xl font-bold text-white">{{ title }}</h1><p class="text-slate-400 mt-1">Fuel cost anomaly detection</p></div>
+        <div class="flex items-center gap-3">
+            <input type="date" id="dateFrom" value="{{ date_from }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <span class="text-slate-500">to</span>
+            <input type="date" id="dateTo" value="{{ date_to }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white text-sm">
+            <button onclick="applyFilters()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-filter mr-2"></i>Apply
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4">
+        <div class="flex items-center gap-3">
+            <i class="fa-solid fa-exclamation-triangle text-2xl text-amber-400"></i>
+            <p class="text-amber-400">Showing trips with fuel costs exceeding 150% of average rate per 100km</p>
+        </div>
+    </div>
+
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        {% if anomalies %}
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-slate-400 border-b border-white/5">
+                        <th class="text-left py-4 px-5 font-medium">Trip</th>
+                        <th class="text-left py-4 px-5 font-medium">Vehicle</th>
+                        <th class="text-left py-4 px-5 font-medium">Plate</th>
+                        <th class="text-left py-4 px-5 font-medium">Driver</th>
+                        <th class="text-right py-4 px-5 font-medium">Distance</th>
+                        <th class="text-right py-4 px-5 font-medium">Fuel Cost</th>
+                        <th class="text-right py-4 px-5 font-medium">Cost/100km</th>
+                        <th class="text-right py-4 px-5 font-medium">Avg Cost</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in anomalies %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td class="py-4 px-5 text-brand-400">{{ a.trip_code }}</td>
+                        <td class="py-4 px-5 text-white">{{ a.vehicle_code or '-' }}</td>
+                        <td class="py-4 px-5 text-slate-300">{{ a.plate_number or '-' }}</td>
+                        <td class="py-4 px-5 text-slate-300">{{ a.driver_name or '-' }}</td>
+                        <td class="py-4 px-5 text-right text-white">{{ a.distance_km|default(0)|round(0) }} km</td>
+                        <td class="py-4 px-5 text-right text-red-400">{{ a.fuel_cost|default(0)|round(2) }} AED</td>
+                        <td class="py-4 px-5 text-right text-red-400">{{ a.cost_per_100km|default(0)|round(2) }} AED</td>
+                        <td class="py-4 px-5 text-right text-slate-400">{{ a.avg_cost_per_100km|default(0)|round(2) }} AED</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-16 text-center">
+            <div class="w-16 h-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
+                <i class="fa-solid fa-check-circle text-3xl text-emerald-400"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white mb-2">No anomalies detected</h3>
+            <p class="text-slate-400">All fuel costs are within normal range</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function applyFilters() {
+    const dateFrom = document.getElementById('dateFrom').value;
+    const dateTo = document.getElementById('dateTo').value;
+    window.location.href = `{{ url_for('logistics.exceptions_fuel_anomalies') }}?date_from=${dateFrom}&date_to=${dateTo}`;
+}
+</script>
+{% endblock %}

@@ -51,6 +51,155 @@ quality_bp = Blueprint('quality', __name__, url_prefix='/quality')
 
 
 # =============================================================================
+# QUALITY FLOW INTEGRATION HELPERS
+# =============================================================================
+
+def send_quality_notification(notification_type, title, message, user_ids=None, severity='MEDIUM', related_id=None, related_type=None):
+    """
+    Send quality notifications via Flow integration.
+    
+    Args:
+        notification_type: Type of notification (e.g., 'INSPECTION_FAILED', 'NCR_CREATED')
+        title: Notification title
+        message: Notification message
+        user_ids: List of user IDs to notify, or None for quality team
+        severity: Notification severity (LOW, MEDIUM, HIGH, CRITICAL)
+        related_id: Related record ID
+        related_type: Related record type (inspection, ncr, capa, audit)
+    """
+    try:
+        # Get quality team users if not specified
+        if user_ids is None:
+            user_ids = get_quality_team_users()
+        
+        # Create notification for each user
+        for user_id in user_ids:
+            create_notification(
+                title=f"[Quality] {title}",
+                message=message,
+                notification_type=notification_type,
+                user_id=user_id,
+                severity=severity,
+                module='quality',
+                related_id=related_id,
+                related_type=related_type
+            )
+        
+        return True
+    except Exception as e:
+        print(f"Error sending quality notification: {e}")
+        return False
+
+
+def get_quality_team_users():
+    """Get list of quality team user IDs for notifications."""
+    try:
+        from permissions import get_users_with_permission
+        # Get users with quality.view permission
+        quality_users = get_users_with_permission('quality', 'quality', 'view')
+        return quality_users if quality_users else []
+    except:
+        return []
+
+
+def notify_inspection_failed(inspection_id, inspection_number, item_name, result):
+    """Send notification when inspection fails."""
+    send_quality_notification(
+        notification_type='INSPECTION_FAILED',
+        title=f'Inspection Failed: {inspection_number}',
+        message=f'Inspection {inspection_number} for item {item_name} has failed with result: {result}',
+        severity='HIGH',
+        related_id=inspection_id,
+        related_type='inspection'
+    )
+
+
+def notify_ncr_created(ncr_id, ncr_number, severity, item_name):
+    """Send notification when NCR is created."""
+    sev = 'CRITICAL' if severity == 'CRITICAL' else 'HIGH' if severity == 'MAJOR' else 'MEDIUM'
+    send_quality_notification(
+        notification_type='NCR_CREATED',
+        title=f'NCR Created: {ncr_number}',
+        message=f'New NCR {ncr_number} created for {item_name} with severity {severity}',
+        severity=sev,
+        related_id=ncr_id,
+        related_type='ncr'
+    )
+
+
+def notify_ncr_overdue(ncr_id, ncr_number, days_overdue):
+    """Send notification when NCR is overdue."""
+    send_quality_notification(
+        notification_type='NCR_OVERDUE',
+        title=f'NCR Overdue: {ncr_number}',
+        message=f'NCR {ncr_number} is {days_overdue} days overdue and requires immediate attention',
+        severity='CRITICAL',
+        related_id=ncr_id,
+        related_type='ncr'
+    )
+
+
+def notify_capa_created(capa_id, capa_number, title, severity):
+    """Send notification when CAPA is created."""
+    sev = 'CRITICAL' if severity == 'CRITICAL' else 'HIGH' if severity == 'MAJOR' else 'MEDIUM'
+    send_quality_notification(
+        notification_type='CAPA_CREATED',
+        title=f'CAPA Created: {capa_number}',
+        message=f'New CAPA {capa_number} created: {title[:100]}',
+        severity=sev,
+        related_id=capa_id,
+        related_type='capa'
+    )
+
+
+def notify_capa_overdue(capa_id, capa_number, days_overdue):
+    """Send notification when CAPA is overdue."""
+    send_quality_notification(
+        notification_type='CAPA_OVERDUE',
+        title=f'CAPA Overdue: {capa_number}',
+        message=f'CAPA {capa_number} is {days_overdue} days overdue and requires immediate attention',
+        severity='CRITICAL',
+        related_id=capa_id,
+        related_type='capa'
+    )
+
+
+def notify_audit_finding_created(finding_id, finding_number, severity, audit_title):
+    """Send notification when audit finding is created."""
+    sev = 'CRITICAL' if severity == 'CRITICAL' else 'HIGH' if severity == 'MAJOR' else 'MEDIUM'
+    send_quality_notification(
+        notification_type='AUDIT_FINDING_CREATED',
+        title=f'Audit Finding: {finding_number}',
+        message=f'New {severity} finding {finding_number} in audit: {audit_title[:80]}',
+        severity=sev,
+        related_id=finding_id,
+        related_type='audit_finding'
+    )
+
+
+def notify_quality_hold(item_name, lot_number, reason):
+    """Send notification when item is placed on quality hold."""
+    send_quality_notification(
+        notification_type='QUALITY_HOLD',
+        title=f'Quality Hold: {item_name}',
+        message=f'Item {item_name} (Lot: {lot_number}) has been placed on quality hold. Reason: {reason}',
+        severity='HIGH',
+        related_type='hold'
+    )
+
+
+def notify_disposition_required(item_name, lot_number, ncr_number):
+    """Send notification when disposition decision is required."""
+    send_quality_notification(
+        notification_type='DISPOSITION_REQUIRED',
+        title=f'Disposition Required: {item_name}',
+        message=f'Disposition decision required for {item_name} (Lot: {lot_number}) from NCR {ncr_number}',
+        severity='HIGH',
+        related_type='disposition'
+    )
+
+
+# =============================================================================
 # ROUTE REGISTRATION
 # =============================================================================
 

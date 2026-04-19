@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in max-w-4xl mx-auto">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ title }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ t('putaway_rule_form_desc', 'Configure rule parameters for automatic storage determination') }}</p>
+        </div>
+        <a href="{{ url_for('wms_putaway_rules') }}" class="px-4 py-2 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-xl text-sm font-medium transition-all">
+            <i class="fa-solid fa-arrow-left mr-2"></i>{{ t('back', 'Back') }}
+        </a>
+    </div>
+
+    <!-- Form -->
+    <form method="POST" class="glass-panel rounded-2xl p-6 space-y-6">
+        <!-- Basic Info -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('rule_name', 'Rule Name') }} *</label>
+                <input type="text" name="rule_name" required
+                       value="{{ rule.rule_name if rule else '' }}"
+                       class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-brand-500"
+                       placeholder="{{ t('enter_rule_name', 'Enter rule name') }}">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('rule_type', 'Rule Type') }} *</label>
+                <select name="rule_type" required
+                        class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:border-brand-500">
+                    <option value="ZONE" {% if rule and rule.rule_type == 'ZONE' %}selected{% endif %}>{{ t('zone_based', 'Zone Based') }}</option>
+                    <option value="AISLE" {% if rule and rule.rule_type == 'AISLE' %}selected{% endif %}>{{ t('aisle_based', 'Aisle Based') }}</option>
+                    <option value="RACK" {% if rule and rule.rule_type == 'RACK' %}selected{% endif %}>{{ t('rack_based', 'Rack Based') }}</option>
+                    <option value="LEVEL" {% if rule and rule.rule_type == 'LEVEL' %}selected{% endif %}>{{ t('level_based', 'Level Based') }}</option>
+                    <option value="BIN" {% if rule and rule.rule_type == 'BIN' %}selected{% endif %}>{{ t('bin_based', 'Bin Based') }}</option>
+                </select>
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('description', 'Description') }}</label>
+            <textarea name="description" rows="3"
+                      class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white placeholder-slate-400 focus:outline-none focus:border-brand-500"
+                      placeholder="{{ t('describe_rule', 'Describe this rule') }}">{{ rule.description if rule else '' }}</textarea>
+        </div>
+
+        <!-- Priority & Status -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('priority', 'Priority') }} (1-10)</label>
+                <input type="number" name="priority" min="1" max="10"
+                       value="{{ rule.priority if rule else 5 }}"
+                       class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:border-brand-500">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('action_type', 'Action Type') }} *</label>
+                <select name="action_type" required
+                        class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:border-brand-500">
+                    <option value="FIXED" {% if rule and rule.action_type == 'FIXED' %}selected{% endif %}>{{ t('fixed_location', 'Fixed Location') }}</option>
+                    <option value="NEAREST" {% if rule and rule.action_type == 'NEAREST' %}selected{% endif %}>{{ t('nearest_empty', 'Nearest Empty') }}</option>
+                    <option value="CONSOLIDATE" {% if rule and rule.action_type == 'CONSOLIDATE' %}selected{% endif %}>{{ t('consolidate_sku', 'Consolidate SKU') }}</option>
+                    <option value="SEPARATE" {% if rule and rule.action_type == 'SEPARATE' %}selected{% endif %}>{{ t('separate_batch', 'Separate Batch') }}</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('status', 'Status') }}</label>
+                <label class="flex items-center gap-3 mt-3 cursor-pointer">
+                    <input type="checkbox" name="is_active" value="1"
+                           {% if not rule or rule.is_active %}checked{% endif %}
+                           class="w-5 h-5 rounded bg-slate-700 border-slate-600 text-brand-500 focus:ring-brand-500">
+                    <span class="text-white">{{ t('active', 'Active') }}</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- Target Configuration -->
+        <div class="border-t border-white/5 pt-6">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t('target_configuration', 'Target Configuration') }}</h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('warehouse', 'Warehouse') }}</label>
+                    <select name="target_warehouse_id"
+                            class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:border-brand-500">
+                        <option value="">{{ t('any_warehouse', 'Any Warehouse') }}</option>
+                        {% for wh in warehouses %}
+                        <option value="{{ wh.id }}" {% if rule and rule.target_warehouse_id == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('target_zone', 'Target Zone') }}</label>
+                    <select name="target_zone_id"
+                            class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:border-brand-500">
+                        <option value="">{{ t('any_zone', 'Any Zone') }}</option>
+                        {% for zone in zones %}
+                        <option value="{{ zone.id }}" {% if rule and rule.target_zone_id == zone.id %}selected{% endif %}>{{ zone.name }} ({{ zone.code }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('location_type', 'Location Type') }}</label>
+                    <select name="target_location_type"
+                            class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:border-brand-500">
+                        <option value="">{{ t('any_type', 'Any Type') }}</option>
+                        <option value="BULK" {% if rule and rule.target_location_type == 'BULK' %}selected{% endif %}>{{ t('bulk', 'Bulk') }}</option>
+                        <option value="PICK" {% if rule and rule.target_location_type == 'PICK' %}selected{% endif %}>{{ t('pick', 'Pick') }}</option>
+                        <option value="RESERVE" {% if rule and rule.target_location_type == 'RESERVE' %}selected{% endif %}>{{ t('reserve', 'Reserve') }}</option>
+                        <option value="STAGE" {% if rule and rule.target_location_type == 'STAGE' %}selected{% endif %}>{{ t('stage', 'Stage') }}</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Conditions JSON -->
+        <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('conditions_json', 'Conditions (JSON)') }}</label>
+            <textarea name="conditions_json" rows="4"
+                      class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white font-mono text-sm focus:outline-none focus:border-brand-500"
+                      placeholder='{"item_category": "HAZMAT", "weight_kg": ">100"}'>{{ rule.conditions_json if rule else '{}' }}</textarea>
+            <p class="text-xs text-slate-500 mt-1">{{ t('conditions_help', 'Define conditions in JSON format') }}</p>
+        </div>
+
+        <!-- Velocity & Hazmat -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('velocity_class', 'Velocity Class') }}</label>
+                <select name="velocity_class"
+                        class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:border-brand-500">
+                    <option value="">{{ t('any_velocity', 'Any Velocity') }}</option>
+                    <option value="A" {% if rule and rule.velocity_class == 'A' %}selected{% endif %}>{{ t('fast_mover', 'Fast Mover (A)') }}</option>
+                    <option value="B" {% if rule and rule.velocity_class == 'B' %}selected{% endif %}>{{ t('medium_mover', 'Medium Mover (B)') }}</option>
+                    <option value="C" {% if rule and rule.velocity_class == 'C' %}selected{% endif %}>{{ t('slow_mover', 'Slow Mover (C)') }}</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('hazmat_class', 'Hazmat Class') }}</label>
+                <select name="hazmat_class"
+                        class="w-full px-4 py-3 bg-slate-700/50 border border-slate-600 rounded-xl text-white focus:outline-none focus:border-brand-500">
+                    <option value="">{{ t('non_hazmat', 'Non-Hazmat') }}</option>
+                    <option value="1" {% if rule and rule.hazmat_class == '1' %}selected{% endif %}>{{ t('hazmat_1', 'Class 1 - Explosives') }}</option>
+                    <option value="2" {% if rule and rule.hazmat_class == '2' %}selected{% endif %}>{{ t('hazmat_2', 'Class 2 - Gases') }}</option>
+                    <option value="3" {% if rule and rule.hazmat_class == '3' %}selected{% endif %}>{{ t('hazmat_3', 'Class 3 - Flammable Liquids') }}</option>
+                    <option value="4" {% if rule and rule.hazmat_class == '4' %}selected{% endif %}>{{ t('hazmat_4', 'Class 4 - Flammable Solids') }}</option>
+                    <option value="5" {% if rule and rule.hazmat_class == '5' %}selected{% endif %}>{{ t('hazmat_5', 'Class 5 - Oxidizers') }}</option>
+                    <option value="6" {% if rule and rule.hazmat_class == '6' %}selected{% endif %}>{{ t('hazmat_6', 'Class 6 - Toxics') }}</option>
+                    <option value="7" {% if rule and rule.hazmat_class == '7' %}selected{% endif %}>{{ t('hazmat_7', 'Class 7 - Radioactive') }}</option>
+                    <option value="8" {% if rule and rule.hazmat_class == '8' %}selected{% endif %}>{{ t('hazmat_8', 'Class 8 - Corrosives') }}</option>
+                    <option value="9" {% if rule and rule.hazmat_class == '9' %}selected{% endif %}>{{ t('hazmat_9', 'Class 9 - Miscellaneous') }}</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex items-center justify-end gap-4 pt-4 border-t border-white/5">
+            <a href="{{ url_for('wms_putaway_rules') }}"
+               class="px-6 py-3 bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 rounded-xl font-medium transition-all">
+                {{ t('cancel', 'Cancel') }}
+            </a>
+            <button type="submit"
+                    class="px-6 py-3 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-medium transition-all">
+                <i class="fa-solid fa-save mr-2"></i>{{ t('save_rule', 'Save Rule') }}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

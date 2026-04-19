@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="{{ session.get('language', 'en') }}" dir="{{ 'rtl' if session.get('direction') == 'rtl' else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #4F46E5; --primary-dark: #4338CA; --primary-light: #818CF8;
+            --success: #059669; --success-light: #10B981; --warning: #D97706; --warning-light: #F59E0B;
+            --danger: #DC2626; --danger-light: #EF4444; --info: #0891B2; --info-light: #06B6D4;
+            --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB; --gray-300: #D1D5DB;
+            --gray-400: #9CA3AF; --gray-500: #6B7280; --gray-600: #4B5563; --gray-700: #374151;
+            --gray-800: #1F2937; --gray-900: #111827;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05); --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1); --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            --radius: 0.5rem;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--gray-50); color: var(--gray-900); line-height: 1.5; }
+        .page-header { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; padding: 2rem; }
+        .page-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .page-header p { opacity: 0.9; }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; padding: 1.5rem; }
+        .summary-card { background: white; border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); text-align: center; }
+        .summary-card .icon { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; font-size: 1.5rem; }
+        .summary-card .icon.green { background: #ECFDF5; color: var(--success); }
+        .summary-card .icon.blue { background: #EEF2FF; color: var(--primary); }
+        .summary-card .icon.orange { background: #FFF7ED; color: var(--warning); }
+        .summary-card .icon.red { background: #FEF2F2; color: var(--danger); }
+        .summary-card h3 { font-size: 0.8rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+        .summary-card .value { font-size: 1.75rem; font-weight: 700; color: var(--gray-900); }
+        .summary-card .sub { font-size: 0.85rem; color: var(--gray-500); margin-top: 0.25rem; }
+        .content-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem; padding: 0 1.5rem 1.5rem; }
+        .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+        .card-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; }
+        .card-header h2 { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+        .card-header h2 i { color: var(--primary); }
+        .card-body { padding: 1rem 1.5rem; }
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th { text-align: left; padding: 0.75rem 0.5rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-500); border-bottom: 2px solid var(--gray-200); }
+        .data-table td { padding: 0.75rem 0.5rem; border-bottom: 1px solid var(--gray-100); font-size: 0.9rem; }
+        .data-table tr:last-child td { border-bottom: none; }
+        .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+        .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; }
+        .badge-success { background: #ECFDF5; color: var(--success); }
+        .badge-warning { background: #FEF3C7; color: var(--warning); }
+        .badge-danger { background: #FEF2F2; color: var(--danger); }
+        .badge-info { background: #EEF2FF; color: var(--primary); }
+        .variance { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.85rem; font-weight: 500; }
+        .variance.up { color: var(--success); }
+        .variance.down { color: var(--danger); }
+        .empty-state { text-align: center; padding: 2rem; color: var(--gray-500); }
+        .empty-state i { font-size: 2.5rem; color: var(--gray-300); margin-bottom: 0.75rem; }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: var(--radius); font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; text-decoration: none; transition: all 0.2s; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-secondary { background: var(--gray-100); color: var(--gray-700); }
+        .btn-secondary:hover { background: var(--gray-200); }
+        .btn-sm { padding: 0.375rem 0.75rem; font-size: 0.8rem; }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <h1><i class="fas fa-chart-line"></i> {{ title }}</h1>
+        <p>Executive payroll overview with year-to-date metrics and trends</p>
+    </div>
+
+    <!-- YTD Summary -->
+    <div class="summary-cards">
+        <div class="summary-card">
+            <div class="icon green"><i class="fas fa-coins"></i></div>
+            <h3>YTD Total Net Payroll</h3>
+            <div class="value">AED {{ "{:,.0f}".format(ytd_payroll.total_net or 0) }}</div>
+            <div class="sub">Year {{ datetime.now().year }}</div>
+        </div>
+        <div class="summary-card">
+            <div class="icon blue"><i class="fas fa-money-bill-wave"></i></div>
+            <h3>YTD Total Gross</h3>
+            <div class="value">AED {{ "{:,.0f}".format(ytd_payroll.total_gross or 0) }}</div>
+            <div class="sub">Before deductions</div>
+        </div>
+        <div class="summary-card">
+            <div class="icon orange"><i class="fas fa-minus-circle"></i></div>
+            <h3>YTD Total Deductions</h3>
+            <div class="value">AED {{ "{:,.0f}".format(ytd_payroll.total_deductions or 0) }}</div>
+            <div class="sub">Taxes & deductions</div>
+        </div>
+        <div class="summary-card">
+            <div class="icon red"><i class="fas fa-receipt"></i></div>
+            <h3>YTD Total Tax</h3>
+            <div class="value">AED {{ "{:,.0f}".format(ytd_payroll.total_tax or 0) }}</div>
+            <div class="sub">Income tax withheld</div>
+        </div>
+    </div>
+
+    <div class="content-grid">
+        <!-- Monthly Trend -->
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-chart-area"></i> Monthly Payroll Trend</h2>
+                <a href="{{ url_for('payroll.reports_summary') }}" class="btn btn-secondary btn-sm">Details</a>
+            </div>
+            <div class="card-body">
+                {% if monthly_trend %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Period</th>
+                            <th class="num">Employees</th>
+                            <th class="num">Gross</th>
+                            <th class="num">Net</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in monthly_trend %}
+                        <tr>
+                            <td>{{ row.month }}/{{ row.year }}</td>
+                            <td class="num">{{ row.employee_count or 0 }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(row.total_gross or 0) }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(row.total_net or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-chart-line"></i>
+                    <p>No monthly trend data available.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Variance Analysis -->
+        {% if prior_variance %}
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-exchange-alt"></i> Variance to Prior Period</h2>
+            </div>
+            <div class="card-body">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th class="num">Prior Period</th>
+                            <th class="num">Current</th>
+                            <th class="num">Variance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Total Net</td>
+                            <td class="num">AED {{ "{:,.2f}".format(prior_variance.prior.total_net or 0) }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(prior_variance.current.total_net or 0) }}</td>
+                            <td class="num">
+                                <span class="variance {% if prior_variance.variance_pct > 0 %}up{% else %}down{% endif %}">
+                                    <i class="fas fa{% if prior_variance.variance_pct > 0 %}fa-arrow-up{% else %}fa-arrow-down{% endif %}"></i>
+                                    {{ "%.1f"|format(prior_variance.variance_pct) }}%
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>Employees</td>
+                            <td class="num">{{ prior_variance.prior.total_employees or 0 }}</td>
+                            <td class="num">{{ prior_variance.current.total_employees or 0 }}</td>
+                            <td class="num">{{ (prior_variance.current.total_employees or 0) - (prior_variance.prior.total_employees or 0) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Top Earnings -->
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-arrow-up"></i> Top Earnings Components</h2>
+            </div>
+            <div class="card-body">
+                {% if earnings_breakdown %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th class="num">Records</th>
+                            <th class="num">Total Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in earnings_breakdown %}
+                        <tr>
+                            <td>{{ row.component_name }}</td>
+                            <td class="num">{{ row.record_count }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(row.total_amount or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>No earnings data available.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Top Deductions -->
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-arrow-down"></i> Top Deductions Components</h2>
+            </div>
+            <div class="card-body">
+                {% if deduction_breakdown %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Component</th>
+                            <th class="num">Records</th>
+                            <th class="num">Total Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in deduction_breakdown %}
+                        <tr>
+                            <td>{{ row.component_name }}</td>
+                            <td class="num">{{ row.record_count }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(row.total_amount or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-inbox"></i>
+                    <p>No deductions data available.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Branch Distribution -->
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-building"></i> Branch Payroll Distribution</h2>
+            </div>
+            <div class="card-body">
+                {% if branch_payroll %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Branch</th>
+                            <th class="num">Employees</th>
+                            <th class="num">Total Gross</th>
+                            <th class="num">Total Net</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in branch_payroll %}
+                        <tr>
+                            <td>{{ row.branch_name or 'Unassigned' }}</td>
+                            <td class="num">{{ row.employee_count or 0 }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(row.total_gross or 0) }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(row.total_net or 0) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-building"></i>
+                    <p>No branch data available.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>

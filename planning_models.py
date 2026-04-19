@@ -1,5 +1,5 @@
 """
-Planning Models - Demand Forecasting & Inventory Planning System
+Planning Models - Enterprise Demand Forecasting & Inventory Planning System
 
 This module defines all database tables, helper functions, and constants
 required for the enterprise Demand Forecasting and Inventory Planning System.
@@ -22,10 +22,27 @@ Tables:
 - planning_kpi_records: Historical KPI snapshots
 - planning_audit_log: Full audit trail for planning actions
 - planning_settings: Global and per-company planning configuration
+
+ENTERPRISE EXTENSIONS:
+- planning_forecast_versions: Version control for forecast snapshots
+- planning_forecast_version_lines: Lines within each version snapshot
+- planning_consensus_forecasts: Collaborative/consensus forecast entries
+- planning_consensus_comments: Discussion notes on consensus forecasts
+- planning_demand_drivers: Causal factors and demand drivers
+- planning_promotion_impact: Promotion and campaign impact records
+- planning_seasonality_profiles: Seasonality patterns and indices
+- planning_forecast_accuracy: Per-item/period accuracy metrics
+- planning_forecast_bias: Bias tracking per item/planner
+- planning_demand_signals: Short-term demand signal records
+- planning_override_approvals: Override approval workflow records
+- planning_sla_policies: SLA and approval routing policies
+- planning_approval_matrix: Role-based approval routing
+- planning_flow_notifications: Flow integration notification records
 """
 
 import sqlite3
 import json
+import math
 from datetime import datetime, timedelta
 from collections import defaultdict
 
@@ -561,6 +578,408 @@ PLANNING_TABLES_SQL = [
         granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         granted_by INTEGER,
         UNIQUE(user_id, permission_key)
+    )
+    """,
+    # ============================================================
+    # ENTERPRISE FORECAST VERSIONS & SNAPSHOTS
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS planning_forecast_versions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        version_name TEXT NOT NULL,
+        version_number INTEGER NOT NULL DEFAULT 1,
+        description TEXT,
+        status TEXT NOT NULL DEFAULT 'DRAFT',
+        forecast_run_id INTEGER,
+        parent_version_id INTEGER,
+        is_baseline INTEGER DEFAULT 0,
+        is_frozen INTEGER DEFAULT 0,
+        published_at TIMESTAMP,
+        published_by INTEGER,
+        total_items INTEGER DEFAULT 0,
+        total_quantity REAL DEFAULT 0,
+        notes TEXT,
+        created_by INTEGER,
+        company_id INTEGER,
+        branch_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (forecast_run_id) REFERENCES planning_forecast_runs(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_forecast_version_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        version_id INTEGER NOT NULL,
+        item_id INTEGER NOT NULL,
+        warehouse_id INTEGER,
+        company_id INTEGER,
+        branch_id INTEGER,
+        period_start DATE NOT NULL,
+        period_type TEXT DEFAULT 'daily',
+        baseline_quantity REAL DEFAULT 0,
+        override_quantity REAL DEFAULT 0,
+        consensus_quantity REAL DEFAULT 0,
+        approved_quantity REAL DEFAULT 0,
+        final_quantity REAL DEFAULT 0,
+        confidence_level REAL DEFAULT 0.5,
+        source TEXT DEFAULT 'BASELINE',
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (version_id) REFERENCES planning_forecast_versions(id)
+    )
+    """,
+    # ============================================================
+    # CONSENSUS PLANNING
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS planning_consensus_forecasts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        version_id INTEGER NOT NULL,
+        item_id INTEGER NOT NULL,
+        warehouse_id INTEGER,
+        company_id INTEGER,
+        branch_id INTEGER,
+        customer_segment TEXT,
+        channel TEXT,
+        period_start DATE NOT NULL,
+        period_type TEXT DEFAULT 'daily',
+        sales_input REAL,
+        sales_confidence REAL DEFAULT 0.5,
+        planner_input REAL,
+        planner_confidence REAL DEFAULT 0.5,
+        marketing_input REAL,
+        marketing_confidence REAL DEFAULT 0.5,
+        consensus_value REAL,
+        final_approved_value REAL,
+        status TEXT DEFAULT 'DRAFT',
+        disagreement_level TEXT DEFAULT 'LOW',
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (version_id) REFERENCES planning_forecast_versions(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_consensus_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        consensus_id INTEGER NOT NULL,
+        user_id INTEGER NOT NULL,
+        user_role TEXT,
+        comment_text TEXT NOT NULL,
+        is_internal INTEGER DEFAULT 1,
+        parent_comment_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (consensus_id) REFERENCES planning_consensus_forecasts(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_consensus_meetings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        meeting_title TEXT NOT NULL,
+        meeting_date DATE NOT NULL,
+        version_id INTEGER,
+        status TEXT DEFAULT 'SCHEDULED',
+        attendees TEXT,
+        notes TEXT,
+        decisions TEXT,
+        action_items TEXT,
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # ============================================================
+    # DEMAND DRIVERS & CAUSAL FACTORS
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS planning_demand_drivers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        driver_name TEXT NOT NULL,
+        driver_type TEXT NOT NULL,
+        description TEXT,
+        impact_factor REAL DEFAULT 1.0,
+        start_date DATE,
+        end_date DATE,
+        is_active INTEGER DEFAULT 1,
+        item_id INTEGER,
+        brand_id INTEGER,
+        category_id INTEGER,
+        company_id INTEGER,
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_promotion_impact (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        promotion_name TEXT NOT NULL,
+        promotion_type TEXT NOT NULL,
+        item_id INTEGER,
+        brand_id INTEGER,
+        category_id INTEGER,
+        warehouse_id INTEGER,
+        company_id INTEGER,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        expected_uplift_percent REAL DEFAULT 0,
+        actual_uplift_percent REAL,
+        expected_additional_demand REAL DEFAULT 0,
+        actual_additional_demand REAL,
+        budget_allocated REAL,
+        budget_spent REAL,
+        status TEXT DEFAULT 'PLANNED',
+        notes TEXT,
+        created_by INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_seasonality_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        profile_name TEXT NOT NULL,
+        item_id INTEGER,
+        brand_id INTEGER,
+        category_id INTEGER,
+        company_id INTEGER,
+        period_type TEXT DEFAULT 'monthly',
+        jan_factor REAL DEFAULT 1.0,
+        feb_factor REAL DEFAULT 1.0,
+        mar_factor REAL DEFAULT 1.0,
+        apr_factor REAL DEFAULT 1.0,
+        may_factor REAL DEFAULT 1.0,
+        jun_factor REAL DEFAULT 1.0,
+        jul_factor REAL DEFAULT 1.0,
+        aug_factor REAL DEFAULT 1.0,
+        sep_factor REAL DEFAULT 1.0,
+        oct_factor REAL DEFAULT 1.0,
+        nov_factor REAL DEFAULT 1.0,
+        dec_factor REAL DEFAULT 1.0,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_holiday_calendar (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        holiday_name TEXT NOT NULL,
+        holiday_date DATE NOT NULL,
+        holiday_type TEXT DEFAULT 'NATIONAL',
+        region TEXT,
+        impact_factor REAL DEFAULT 1.0,
+        affected_days INTEGER DEFAULT 1,
+        is_active INTEGER DEFAULT 1,
+        company_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # ============================================================
+    # FORECAST ACCURACY & BIAS TRACKING
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS planning_forecast_accuracy (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL,
+        warehouse_id INTEGER,
+        company_id INTEGER,
+        branch_id INTEGER,
+        version_id INTEGER,
+        period_start DATE NOT NULL,
+        period_type TEXT DEFAULT 'daily',
+        forecast_quantity REAL DEFAULT 0,
+        actual_quantity REAL DEFAULT 0,
+        error_quantity REAL DEFAULT 0,
+        absolute_error REAL DEFAULT 0,
+        percent_error REAL,
+        absolute_percent_error REAL,
+        squared_error REAL DEFAULT 0,
+        mape REAL,
+        wape REAL,
+        bias REAL DEFAULT 0,
+        tracking_signal REAL,
+        calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (version_id) REFERENCES planning_forecast_versions(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_forecast_bias (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL,
+        warehouse_id INTEGER,
+        company_id INTEGER,
+        branch_id INTEGER,
+        planner_id INTEGER,
+        period_type TEXT DEFAULT 'monthly',
+        period_start DATE NOT NULL,
+        total_forecast REAL DEFAULT 0,
+        total_actual REAL DEFAULT 0,
+        bias_amount REAL DEFAULT 0,
+        bias_percent REAL DEFAULT 0,
+        forecast_count INTEGER DEFAULT 0,
+        over_forecast_count INTEGER DEFAULT 0,
+        under_forecast_count INTEGER DEFAULT 0,
+        calculated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_model_performance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER,
+        model_name TEXT NOT NULL,
+        period_start DATE NOT NULL,
+        period_end DATE NOT NULL,
+        mape REAL,
+        wape REAL,
+        mae REAL,
+        bias REAL,
+        rmse REAL,
+        theil_u REAL,
+        is_best_fit INTEGER DEFAULT 0,
+        parameters_json TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # ============================================================
+    # DEMAND SIGNALS (DEMAND SENSING SCAFFOLD)
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS planning_demand_signals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL,
+        warehouse_id INTEGER,
+        company_id INTEGER,
+        signal_type TEXT NOT NULL,
+        signal_source TEXT,
+        signal_value REAL,
+        signal_direction TEXT,
+        volatility_score REAL DEFAULT 0,
+        anomaly_score REAL DEFAULT 0,
+        signal_date DATE NOT NULL,
+        period_start DATE,
+        period_end DATE,
+        confidence REAL DEFAULT 0.5,
+        is_reviewed INTEGER DEFAULT 0,
+        reviewed_by INTEGER,
+        reviewed_at TIMESTAMP,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_volatility_alerts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL,
+        warehouse_id INTEGER,
+        company_id INTEGER,
+        alert_type TEXT NOT NULL,
+        severity TEXT DEFAULT 'MEDIUM',
+        threshold_value REAL,
+        actual_value REAL,
+        cv_value REAL,
+        z_score REAL,
+        is_acknowledged INTEGER DEFAULT 0,
+        acknowledged_by INTEGER,
+        acknowledged_at TIMESTAMP,
+        resolution_notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # ============================================================
+    # OVERRIDE APPROVAL WORKFLOW
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS planning_override_approvals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        override_id INTEGER NOT NULL,
+        approval_status TEXT DEFAULT 'PENDING',
+        requested_by INTEGER NOT NULL,
+        requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        reviewed_by INTEGER,
+        reviewed_at TIMESTAMP,
+        review_notes TEXT,
+        approval_level INTEGER DEFAULT 1,
+        escalation_reason TEXT,
+        FOREIGN KEY (override_id) REFERENCES planning_forecast_overrides(id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_sla_policies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        policy_name TEXT NOT NULL,
+        policy_type TEXT NOT NULL,
+        priority_level TEXT DEFAULT 'MEDIUM',
+        response_hours INTEGER DEFAULT 24,
+        resolution_hours INTEGER DEFAULT 48,
+        escalation_hours INTEGER DEFAULT 8,
+        auto_escalate INTEGER DEFAULT 1,
+        notify_users TEXT,
+        is_active INTEGER DEFAULT 1,
+        company_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_approval_matrix (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_type TEXT NOT NULL,
+        action_type TEXT NOT NULL,
+        threshold_value REAL,
+        threshold_operator TEXT DEFAULT 'GREATER',
+        requires_approval_level INTEGER DEFAULT 1,
+        approver_role TEXT,
+        approver_user_id INTEGER,
+        bypass_role TEXT,
+        is_active INTEGER DEFAULT 1,
+        company_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # ============================================================
+    # FLOW INTEGRATION
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS planning_flow_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        notification_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT,
+        entity_type TEXT,
+        entity_id INTEGER,
+        priority TEXT DEFAULT 'NORMAL',
+        is_read INTEGER DEFAULT 0,
+        read_at TIMESTAMP,
+        read_by INTEGER,
+        action_url TEXT,
+        flow_thread_id TEXT,
+        created_by INTEGER,
+        company_id INTEGER,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    # ============================================================
+    # FORECAST ATTRIBUTES & TAGS
+    # ============================================================
+    """
+    CREATE TABLE IF NOT EXISTS planning_forecast_attributes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        attribute_name TEXT NOT NULL UNIQUE,
+        attribute_type TEXT DEFAULT 'STRING',
+        possible_values TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS planning_forecast_line_attributes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        forecast_line_id INTEGER NOT NULL,
+        attribute_id INTEGER NOT NULL,
+        attribute_value TEXT,
+        FOREIGN KEY (forecast_line_id) REFERENCES planning_forecast_lines(id),
+        FOREIGN KEY (attribute_id) REFERENCES planning_forecast_attributes(id)
     )
     """,
 ]
@@ -1448,5 +1867,1286 @@ def snapshot_kpis(db, period_type='DAILY', company_id=None, warehouse_id=None):
             ON CONFLICT(kpi_name, period_type, period_start, company_id, warehouse_id, item_id)
             DO UPDATE SET value = excluded.value
         """, (kpi_name, period_type, today, company_id, warehouse_id, value))
+
+    db.commit()
+
+
+# ============================================================
+# ENTERPRISE STATISTICAL FORECASTING ENGINE
+# ============================================================
+
+def calculate_exponential_smoothing(demand_values, alpha=0.3):
+    """
+    Simple exponential smoothing.
+    S_t = alpha * Y_t + (1 - alpha) * S_{t-1}
+    """
+    if not demand_values:
+        return 0
+    forecast = demand_values[0]
+    for value in demand_values[1:]:
+        forecast = alpha * value + (1 - alpha) * forecast
+    return forecast
+
+
+def calculate_double_exponential_smoothing(demand_values, alpha=0.3, beta=0.1):
+    """
+    Double exponential smoothing (Holt's method) for trend data.
+    Level: S_t = alpha * Y_t + (1 - alpha) * (S_{t-1} + b_{t-1})
+    Trend: b_t = beta * (S_t - S_{t-1}) + (1 - beta) * b_{t-1}
+    Forecast: F_t+h = S_t + h * b_t
+    """
+    if not demand_values:
+        return 0, 0
+    if len(demand_values) < 2:
+        return demand_values[0], 0
+
+    n = len(demand_values)
+    s = [0] * n
+    b = [0] * n
+
+    s[0] = demand_values[0]
+    b[0] = demand_values[1] - demand_values[0] if n > 1 else 0
+
+    for t in range(1, n):
+        s[t] = alpha * demand_values[t] + (1 - alpha) * (s[t-1] + b[t-1])
+        b[t] = beta * (s[t] - s[t-1]) + (1 - beta) * b[t-1]
+
+    final_level = s[-1]
+    final_trend = b[-1]
+    return final_level, final_trend
+
+
+def calculate_triple_exponential_smoothing(demand_values, alpha=0.3, beta=0.1, gamma=0.1, period=12):
+    """
+    Triple exponential smoothing (Holt-Winters) for seasonal data.
+    Requires at least 2 complete seasonal periods.
+    Returns (forecast, seasonal_indices)
+    """
+    if not demand_values or len(demand_values) < period * 2:
+        return calculate_exponential_smoothing(demand_values, alpha), None
+
+    n = len(demand_values)
+    s = [0] * n
+    b = [0] * n
+    c = [0] * n
+
+    avg_period = sum(demand_values[:period]) / period
+    for j in range(period):
+        c[j] = demand_values[j] / avg_period if avg_period > 0 else 1
+
+    b[0] = sum([demand_values[period + i] - demand_values[i] for i in range(period)]) / (period * period)
+    s[0] = demand_values[0] / c[0] if c[0] != 0 else demand_values[0]
+
+    for t in range(1, n):
+        s[t] = alpha * (demand_values[t] / c[t - period]) + (1 - alpha) * (s[t-1] + b[t-1])
+        b[t] = beta * (s[t] - s[t-1]) + (1 - beta) * b[t-1]
+        c[t] = gamma * (demand_values[t] / s[t]) + (1 - gamma) * c[t - period] if t >= period else c[t % period]
+
+    final_level = s[-1]
+    final_trend = b[-1]
+    seasonal_indices = c[-(period):]
+
+    forecast = final_level + final_trend
+    avg_seasonal = sum(seasonal_indices) / len(seasonal_indices) if seasonal_indices else 1
+    forecast = forecast * (avg_seasonal if avg_seasonal > 0 else 1)
+
+    return forecast, seasonal_indices
+
+
+def calculate_forecast_with_seasonality(demand_values, seasonal_indices, horizon=30):
+    """
+    Generate forecasts incorporating seasonal indices.
+    """
+    if not demand_values or not seasonal_indices:
+        return [calculate_moving_average(demand_values) for _ in range(horizon)]
+
+    forecasts = []
+    base_forecast, trend = calculate_double_exponential_smoothing(demand_values)
+
+    for h in range(horizon):
+        period_idx = h % len(seasonal_indices)
+        seasonal_factor = seasonal_indices[period_idx]
+        forecasts.append(base_forecast + trend * h * seasonal_factor)
+
+    return forecasts
+
+
+def calculate_weighted_moving_average_v2(demand_values, weights):
+    """
+    Weighted moving average with configurable weights.
+    Weights should sum to 1.0.
+    """
+    if not demand_values:
+        return 0
+    n = min(len(demand_values), len(weights))
+    if n == 0:
+        return 0
+    relevant_demand = demand_values[-n:]
+    relevant_weights = weights[-n:]
+    total_weight = sum(relevant_weights)
+    if total_weight == 0:
+        return 0
+    return sum(v * w for v, w in zip(relevant_demand, relevant_weights)) / total_weight
+
+
+def calculate_regression_forecast(demand_values):
+    """
+    Simple linear regression forecast.
+    Returns (slope, intercept, forecast_value).
+    """
+    if len(demand_values) < 2:
+        return 0, sum(demand_values) / len(demand_values) if demand_values else 0, sum(demand_values) / len(demand_values) if demand_values else 0
+
+    n = len(demand_values)
+    x = list(range(n))
+    x_mean = sum(x) / n
+    y_mean = sum(demand_values) / n
+
+    numerator = sum((x[i] - x_mean) * (demand_values[i] - y_mean) for i in range(n))
+    denominator = sum((x[i] - x_mean) ** 2 for i in range(n))
+
+    slope = numerator / denominator if denominator != 0 else 0
+    intercept = y_mean - slope * x_mean
+
+    next_x = n
+    forecast = slope * next_x + intercept
+
+    return slope, intercept, forecast
+
+
+def auto_select_forecast_method(demand_values):
+    """
+    Automatically select the best forecasting method based on data characteristics.
+    Returns the method name and parameters.
+    """
+    if not demand_values or len(demand_values) < 3:
+        return 'MOVING_AVERAGE', {'window': 3}
+
+    pattern = classify_demand_pattern(demand_values)
+
+    if pattern == 'INTERMITTENT' or pattern == 'SPORADIC':
+        return 'MOVING_AVERAGE', {'window': min(6, len(demand_values))}
+
+    if pattern == 'SEASONAL':
+        return 'HOLT_WINTERS', {'period': 12}
+
+    if pattern == 'TREND_UP' or pattern == 'TREND_DOWN':
+        return 'DOUBLE_EXPONENTIAL', {'alpha': 0.3, 'beta': 0.1}
+
+    if pattern == 'VOLATILE':
+        return 'WEIGHTED_MOVING_AVERAGE', {'weights': [0.5, 0.3, 0.2]}
+
+    cv = 0
+    mean = sum(demand_values) / len(demand_values)
+    if mean > 0:
+        variance = sum((x - mean) ** 2 for x in demand_values) / len(demand_values)
+        std_dev = math.sqrt(variance)
+        cv = std_dev / mean
+
+    if cv < 0.2:
+        return 'EXPONENTIAL_SMOOTHING', {'alpha': 0.3}
+
+    return 'MOVING_AVERAGE', {'window': min(3, len(demand_values))}
+
+
+# ============================================================
+# ENTERPRISE FORECAST ACCURACY CALCULATION ENGINE
+# ============================================================
+
+def calculate_mape(actual, forecast):
+    """Mean Absolute Percentage Error."""
+    if not actual or actual == 0:
+        return None
+    return abs((actual - forecast) / actual) * 100
+
+
+def calculate_wape(actual_values, forecast_values):
+    """
+    Weighted Absolute Percentage Error.
+    WAPE = sum(|actual - forecast|) / sum(|actual|)
+    """
+    total_actual = sum(abs(a) for a in actual_values)
+    if total_actual == 0:
+        return None
+    total_error = sum(abs(a - f) for a, f in zip(actual_values, forecast_values))
+    return (total_error / total_actual) * 100
+
+
+def calculate_mae(actual_values, forecast_values):
+    """Mean Absolute Error."""
+    if not actual_values:
+        return None
+    return sum(abs(a - f) for a, f in zip(actual_values, forecast_values)) / len(actual_values)
+
+
+def calculate_rmse(actual_values, forecast_values):
+    """Root Mean Square Error."""
+    if not actual_values:
+        return None
+    mse = sum((a - f) ** 2 for a, f in zip(actual_values, forecast_values)) / len(actual_values)
+    return math.sqrt(mse)
+
+
+def calculate_bias(actual_values, forecast_values):
+    """
+    Forecast bias: positive = over-forecast, negative = under-forecast.
+    Bias = sum(forecast - actual) / sum(actual) * 100
+    """
+    total_actual = sum(actual_values)
+    if total_actual == 0:
+        return None
+    total_bias = sum(f - a for a, f in zip(actual_values, forecast_values))
+    return (total_bias / total_actual) * 100
+
+
+def calculate_tracking_signal(actual_values, forecast_values):
+    """
+    Tracking Signal = sum(forecast - actual) / MAD
+    where MAD = Mean Absolute Deviation.
+    """
+    if not actual_values:
+        return None
+
+    errors = [f - a for a, f in zip(actual_values, forecast_values)]
+    cumulative_error = sum(errors)
+    mad = sum(abs(e) for e in errors) / len(errors)
+
+    if mad == 0:
+        return None
+
+    return cumulative_error / mad
+
+
+def calculate_theil_u(actual_values, forecast_values):
+    """
+    Theil's U statistic for forecast accuracy comparison.
+    U < 1: Forecast is better than naive.
+    U = 1: Forecast is equal to naive.
+    U > 1: Forecast is worse than naive.
+    """
+    if not actual_values or len(actual_values) < 2:
+        return None
+
+    n = len(actual_values)
+    forecast_error_sum = sum((actual_values[t] - forecast_values[t]) ** 2 for t in range(n))
+    naive_error_sum = sum((actual_values[t] - actual_values[t-1]) ** 2 for t in range(1, n))
+
+    if naive_error_sum == 0:
+        return None
+
+    return math.sqrt(forecast_error_sum / naive_error_sum)
+
+
+def calculate_forecast_accuracy_metrics(db, item_id, version_id=None, warehouse_id=None,
+                                         start_date=None, end_date=None):
+    """
+    Calculate comprehensive accuracy metrics for an item's forecast vs actual.
+    Returns dict with MAPE, WAPE, MAE, RMSE, Bias, Tracking Signal, Theil U.
+    """
+    if not start_date:
+        start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+    if not end_date:
+        end_date = datetime.now().strftime('%Y-%m-%d')
+
+    query = """
+        SELECT
+            fl.period_start,
+            fl.final_quantity as forecast_qty,
+            COALESCE(dh.sales_quantity + dh.consumption_quantity, 0) as actual_qty
+        FROM planning_forecast_lines fl
+        LEFT JOIN planning_demand_history dh
+            ON fl.item_id = dh.item_id
+            AND fl.period_start = dh.period_start
+            AND fl.warehouse_id = dh.warehouse_id
+        WHERE fl.item_id = ?
+          AND fl.period_start BETWEEN ? AND ?
+    """
+    params = [item_id, start_date, end_date]
+
+    if version_id:
+        query += " AND fl.run_id = ?"
+        params.append(version_id)
+
+    if warehouse_id:
+        query += " AND fl.warehouse_id = ?"
+        params.append(warehouse_id)
+
+    query += " ORDER BY fl.period_start"
+
+    rows = db.execute(query, params).fetchall()
+
+    if not rows:
+        return None
+
+    actual_values = [r['actual_qty'] for r in rows]
+    forecast_values = [r['forecast_qty'] for r in rows]
+
+    metrics = {
+        'mape': calculate_mape(sum(actual_values), sum(forecast_values)),
+        'wape': calculate_wape(actual_values, forecast_values),
+        'mae': calculate_mae(actual_values, forecast_values),
+        'rmse': calculate_rmse(actual_values, forecast_values),
+        'bias': calculate_bias(actual_values, forecast_values),
+        'tracking_signal': calculate_tracking_signal(actual_values, forecast_values),
+        'theil_u': calculate_theil_u(actual_values, forecast_values),
+        'data_points': len(rows)
+    }
+
+    return metrics
+
+
+def calculate_item_forecast_accuracy(db, item_id, company_id=None, warehouse_id=None):
+    """
+    Calculate forecast accuracy for an item across all recent periods.
+    Stores results in planning_forecast_accuracy table.
+    """
+    today = datetime.now().date()
+    start_date = (today - timedelta(days=90)).strftime('%Y-%m-%d')
+
+    rows = db.execute("""
+        SELECT
+            fl.period_start,
+            fl.warehouse_id,
+            fl.final_quantity as forecast_qty,
+            COALESCE(dh.sales_quantity + dh.consumption_quantity, 0) as actual_qty
+        FROM planning_forecast_lines fl
+        LEFT JOIN planning_demand_history dh
+            ON fl.item_id = dh.item_id
+            AND fl.period_start = dh.period_start
+            AND fl.warehouse_id = dh.warehouse_id
+        WHERE fl.item_id = ?
+          AND fl.period_start BETWEEN ? AND ?
+          AND fl.is_frozen = 0
+        ORDER BY fl.period_start
+    """, (item_id, start_date, today.strftime('%Y-%m-%d'))).fetchall()
+
+    for row in rows:
+        actual = row['actual_qty']
+        forecast = row['forecast_qty']
+        error = forecast - actual
+        abs_error = abs(error)
+
+        mape = None
+        if actual != 0:
+            mape = (abs_error / actual) * 100
+
+        db.execute("""
+            INSERT INTO planning_forecast_accuracy
+            (item_id, warehouse_id, company_id, period_start, period_type,
+             forecast_quantity, actual_quantity, error_quantity, absolute_error,
+             percent_error, absolute_percent_error, mape)
+            VALUES (?, ?, ?, ?, 'daily', ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT DO NOTHING
+        """, (item_id, row['warehouse_id'], company_id, row['period_start'],
+              forecast, actual, error, abs_error, error/actual*100 if actual != 0 else None,
+              mape, mape))
+
+
+def calculate_forecast_bias_by_planner(db, planner_id=None, company_id=None, period_start=None):
+    """
+    Calculate forecast bias grouped by planner or overall.
+    """
+    if not period_start:
+        period_start = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+
+    query = """
+        SELECT
+            fl.item_id,
+            fl.warehouse_id,
+            r.created_by as planner_id,
+            SUM(fl.final_quantity) as total_forecast,
+            COALESCE(SUM(dh.sales_quantity + dh.consumption_quantity), 0) as total_actual
+        FROM planning_forecast_lines fl
+        JOIN planning_forecast_runs r ON fl.run_id = r.id
+        LEFT JOIN planning_demand_history dh
+            ON fl.item_id = dh.item_id
+            AND fl.period_start = dh.period_start
+        WHERE fl.period_start >= ?
+    """
+    params = [period_start]
+
+    if planner_id:
+        query += " AND r.created_by = ?"
+        params.append(planner_id)
+
+    if company_id:
+        query += " AND fl.company_id = ?"
+        params.append(company_id)
+
+    query += " GROUP BY fl.item_id, fl.warehouse_id, r.created_by"
+
+    rows = db.execute(query, params).fetchall()
+
+    for row in rows:
+        forecast = row['total_forecast']
+        actual = row['total_actual']
+        bias_amount = forecast - actual
+        bias_percent = (bias_amount / actual * 100) if actual != 0 else 0
+
+        db.execute("""
+            INSERT INTO planning_forecast_bias
+            (item_id, warehouse_id, planner_id, period_type, period_start,
+             total_forecast, total_actual, bias_amount, bias_percent)
+            VALUES (?, ?, ?, 'monthly', ?, ?, ?, ?, ?)
+        """, (row['item_id'], row['warehouse_id'], row['planner_id'],
+              period_start, forecast, actual, bias_amount, bias_percent))
+
+    db.commit()
+
+
+# ============================================================
+# ENTERPRISE FORECAST VERSION MANAGEMENT
+# ============================================================
+
+def create_forecast_version(db, version_name, forecast_run_id=None, created_by=None,
+                            company_id=None, branch_id=None, description=None,
+                            is_baseline=False, parent_version_id=None):
+    """
+    Create a new forecast version snapshot.
+    """
+    existing_count = db.execute("""
+        SELECT COUNT(*) as cnt FROM planning_forecast_versions
+        WHERE forecast_run_id = ?
+    """, (forecast_run_id,)).fetchone()['cnt']
+
+    version_number = existing_count + 1
+
+    cursor = db.execute("""
+        INSERT INTO planning_forecast_versions
+        (version_name, version_number, description, status, forecast_run_id,
+         is_baseline, parent_version_id, created_by, company_id, branch_id)
+        VALUES (?, ?, ?, 'DRAFT', ?, ?, ?, ?, ?, ?)
+    """, (version_name, version_number, description, forecast_run_id,
+          1 if is_baseline else 0, parent_version_id, created_by, company_id, branch_id))
+
+    version_id = cursor.lastrowid
+
+    if forecast_run_id:
+        db.execute("""
+            INSERT INTO planning_forecast_version_lines
+            (version_id, item_id, warehouse_id, company_id, branch_id,
+             period_start, period_type, baseline_quantity, final_quantity)
+            SELECT ?, item_id, warehouse_id, company_id, branch_id,
+                   period_start, period_type, base_quantity, final_quantity
+            FROM planning_forecast_lines
+            WHERE run_id = ?
+        """, (version_id, forecast_run_id))
+
+        db.execute("""
+            UPDATE planning_forecast_versions
+            SET total_items = (SELECT COUNT(DISTINCT item_id) FROM planning_forecast_version_lines WHERE version_id = ?),
+                total_quantity = (SELECT SUM(final_quantity) FROM planning_forecast_version_lines WHERE version_id = ?)
+            WHERE id = ?
+        """, (version_id, version_id, version_id))
+
+    db.commit()
+    return version_id
+
+
+def clone_forecast_version(db, version_id, new_name, created_by=None):
+    """
+    Clone an existing forecast version.
+    """
+    original = db.execute("SELECT * FROM planning_forecast_versions WHERE id = ?",
+                          (version_id,)).fetchone()
+    if not original:
+        return None
+
+    new_version_id = create_forecast_version(
+        db, new_name, original['forecast_run_id'], created_by,
+        original['company_id'], original['branch_id'],
+        f"Cloned from version {original['version_name']} (v{original['version_number']})",
+        parent_version_id=version_id
+    )
+
+    return new_version_id
+
+
+def freeze_forecast_version(db, version_id, user_id=None):
+    """
+    Freeze a forecast version (make it immutable).
+    """
+    db.execute("""
+        UPDATE planning_forecast_versions
+        SET status = 'FROZEN',
+            is_frozen = 1,
+            published_at = CURRENT_TIMESTAMP,
+            published_by = ?
+        WHERE id = ?
+    """, (user_id, version_id))
+
+    db.execute("""
+        UPDATE planning_forecast_version_lines
+        SET is_frozen = 1
+        WHERE version_id = ?
+    """, (version_id,))
+
+    db.commit()
+
+
+def publish_forecast_version(db, version_id, user_id=None):
+    """
+    Publish a forecast version for wider use.
+    """
+    db.execute("""
+        UPDATE planning_forecast_versions
+        SET status = 'PUBLISHED',
+            published_at = CURRENT_TIMESTAMP,
+            published_by = ?
+        WHERE id = ?
+    """, (user_id, version_id))
+    db.commit()
+
+
+def compare_forecast_versions(db, version_id_1, version_id_2):
+    """
+    Compare two forecast versions and return differences.
+    """
+    comparison = db.execute("""
+        SELECT
+            v1.item_id,
+            i.item_code,
+            i.name as item_name,
+            v1.warehouse_id,
+            v1.period_start,
+            v1.final_quantity as quantity_v1,
+            v2.final_quantity as quantity_v2,
+            v2.final_quantity - v1.final_quantity as difference,
+            CASE WHEN v1.final_quantity != 0
+                 THEN ((v2.final_quantity - v1.final_quantity) / v1.final_quantity * 100)
+                 ELSE NULL END as pct_difference
+        FROM planning_forecast_version_lines v1
+        JOIN planning_forecast_version_lines v2
+            ON v1.item_id = v2.item_id
+            AND v1.warehouse_id = v2.warehouse_id
+            AND v1.period_start = v2.period_start
+            AND v2.version_id = ?
+        JOIN wms_items i ON v1.item_id = i.id
+        WHERE v1.version_id = ?
+        ORDER BY ABS(v2.final_quantity - v1.final_quantity) DESC
+    """, (version_id_2, version_id_1)).fetchall()
+
+    return comparison
+
+
+# ============================================================
+# ENTERPRISE CONSENSUS PLANNING
+# ============================================================
+
+def create_consensus_forecast(db, version_id, item_id, period_start,
+                               sales_input=None, planner_input=None, marketing_input=None,
+                               created_by=None, company_id=None, branch_id=None):
+    """
+    Create or update a consensus forecast entry with multiple inputs.
+    """
+    consensus_value = None
+    disagreement_level = 'LOW'
+
+    inputs = [sales_input, planner_input, marketing_input]
+    valid_inputs = [i for i in inputs if i is not None]
+
+    if valid_inputs:
+        consensus_value = sum(valid_inputs) / len(valid_inputs)
+
+        if len(valid_inputs) >= 2:
+            max_diff = max(valid_inputs) - min(valid_inputs)
+            avg_val = sum(valid_inputs) / len(valid_inputs)
+            if avg_val > 0:
+                diff_pct = max_diff / avg_val
+                if diff_pct > 0.5:
+                    disagreement_level = 'HIGH'
+                elif diff_pct > 0.2:
+                    disagreement_level = 'MEDIUM'
+
+    cursor = db.execute("""
+        INSERT INTO planning_consensus_forecasts
+        (version_id, item_id, period_start, sales_input, planner_input, marketing_input,
+         consensus_value, status, disagreement_level, created_by, company_id, branch_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'DRAFT', ?, ?, ?, ?)
+    """, (version_id, item_id, period_start, sales_input, planner_input, marketing_input,
+          consensus_value, disagreement_level, created_by, company_id, branch_id))
+
+    db.commit()
+    return cursor.lastrowid
+
+
+def add_consensus_comment(db, consensus_id, user_id, comment_text,
+                           user_role=None, is_internal=True, parent_comment_id=None):
+    """
+    Add a comment to a consensus forecast entry.
+    """
+    cursor = db.execute("""
+        INSERT INTO planning_consensus_comments
+        (consensus_id, user_id, user_role, comment_text, is_internal, parent_comment_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (consensus_id, user_id, user_role, comment_text, 1 if is_internal else 0, parent_comment_id))
+    db.commit()
+    return cursor.lastrowid
+
+
+def resolve_consensus_disagreement(db, consensus_id, final_value, user_id):
+    """
+    Resolve a disagreement in consensus forecast by setting final approved value.
+    """
+    db.execute("""
+        UPDATE planning_consensus_forecasts
+        SET final_approved_value = ?,
+            status = 'APPROVED'
+        WHERE id = ?
+    """, (final_value, consensus_id))
+
+    add_consensus_comment(db, consensus_id, user_id,
+                          f"Disagreement resolved. Final value set to {final_value}.",
+                          user_role='SYSTEM', is_internal=False)
+
+    db.commit()
+
+
+# ============================================================
+# ENTERPRISE DEMAND DRIVERS & CAUSAL FACTORS
+# ============================================================
+
+def create_demand_driver(db, driver_name, driver_type, impact_factor=1.0,
+                         start_date=None, end_date=None, item_id=None,
+                         brand_id=None, category_id=None, company_id=None,
+                         created_by=None, description=None):
+    """
+    Register a demand driver (promotion, event, season, etc.).
+    """
+    cursor = db.execute("""
+        INSERT INTO planning_demand_drivers
+        (driver_name, driver_type, description, impact_factor, start_date, end_date,
+         item_id, brand_id, category_id, company_id, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (driver_name, driver_type, description, impact_factor, start_date, end_date,
+          item_id, brand_id, category_id, company_id, created_by))
+    db.commit()
+    return cursor.lastrowid
+
+
+def create_promotion_record(db, promotion_name, promotion_type, start_date, end_date,
+                             expected_uplift_percent=0, item_id=None, brand_id=None,
+                             category_id=None, warehouse_id=None, company_id=None,
+                             created_by=None, budget_allocated=None):
+    """
+    Create a promotion impact record.
+    """
+    cursor = db.execute("""
+        INSERT INTO planning_promotion_impact
+        (promotion_name, promotion_type, item_id, brand_id, category_id,
+         warehouse_id, company_id, start_date, end_date,
+         expected_uplift_percent, budget_allocated, status, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PLANNED', ?)
+    """, (promotion_name, promotion_type, item_id, brand_id, category_id,
+          warehouse_id, company_id, start_date, end_date,
+          expected_uplift_percent, budget_allocated, created_by))
+    db.commit()
+    return cursor.lastrowid
+
+
+def update_promotion_actual_impact(db, promotion_id, actual_uplift_percent,
+                                    actual_additional_demand=None, budget_spent=None):
+    """
+    Update promotion record with actual measured impact.
+    """
+    db.execute("""
+        UPDATE planning_promotion_impact
+        SET actual_uplift_percent = ?,
+            actual_additional_demand = ?,
+            budget_spent = ?,
+            status = 'COMPLETED',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    """, (actual_uplift_percent, actual_additional_demand, budget_spent, promotion_id))
+    db.commit()
+
+
+def apply_promotion_impact_to_forecast(db, promotion_id, forecast_run_id):
+    """
+    Apply promotion uplift to forecast lines for the promotion period.
+    """
+    promotion = db.execute("SELECT * FROM planning_promotion_impact WHERE id = ?",
+                           (promotion_id,)).fetchone()
+    if not promotion:
+        return
+
+    uplift_factor = 1 + (promotion['expected_uplift_percent'] / 100)
+
+    query = """
+        UPDATE planning_forecast_lines
+        SET override_quantity = final_quantity * ?,
+            notes = COALESCE(notes, '') || ' [Promotion: {name}]'
+        WHERE run_id = ?
+          AND period_start BETWEEN ? AND ?
+    """
+    params = [uplift_factor, forecast_run_id, promotion['start_date'], promotion['end_date']]
+
+    if promotion['item_id']:
+        query += " AND item_id = ?"
+        params.append(promotion['item_id'])
+    if promotion['brand_id']:
+        query += " AND item_id IN (SELECT id FROM wms_items WHERE brand_id = ?)"
+        params.append(promotion['brand_id'])
+    if promotion['category_id']:
+        query += " AND item_id IN (SELECT id FROM wms_items WHERE category_id = ?)"
+        params.append(promotion['category_id'])
+
+    db.execute(query, params)
+    db.commit()
+
+
+def create_seasonality_profile(db, profile_name, item_id=None, brand_id=None,
+                                 category_id=None, company_id=None,
+                                 monthly_factors=None):
+    """
+    Create a seasonality profile with monthly factors.
+    monthly_factors: dict with keys 'jan' through 'dec' (or list of 12 values).
+    """
+    if monthly_factors is None:
+        monthly_factors = {m: 1.0 for m in ['jan', 'feb', 'mar', 'apr', 'may', 'jun',
+                                              'jul', 'aug', 'sep', 'oct', 'nov', 'dec']}
+    elif isinstance(monthly_factors, (list, tuple)) and len(monthly_factors) == 12:
+        monthly_factors = {
+            'jan': monthly_factors[0], 'feb': monthly_factors[1], 'mar': monthly_factors[2],
+            'apr': monthly_factors[3], 'may': monthly_factors[4], 'jun': monthly_factors[5],
+            'jul': monthly_factors[6], 'aug': monthly_factors[7], 'sep': monthly_factors[8],
+            'oct': monthly_factors[9], 'nov': monthly_factors[10], 'dec': monthly_factors[11]
+        }
+
+    cursor = db.execute("""
+        INSERT INTO planning_seasonality_profiles
+        (profile_name, item_id, brand_id, category_id, company_id,
+         jan_factor, feb_factor, mar_factor, apr_factor, may_factor, jun_factor,
+         jul_factor, aug_factor, sep_factor, oct_factor, nov_factor, dec_factor)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (profile_name, item_id, brand_id, category_id, company_id,
+          monthly_factors.get('jan', 1.0), monthly_factors.get('feb', 1.0),
+          monthly_factors.get('mar', 1.0), monthly_factors.get('apr', 1.0),
+          monthly_factors.get('may', 1.0), monthly_factors.get('jun', 1.0),
+          monthly_factors.get('jul', 1.0), monthly_factors.get('aug', 1.0),
+          monthly_factors.get('sep', 1.0), monthly_factors.get('oct', 1.0),
+          monthly_factors.get('nov', 1.0), monthly_factors.get('dec', 1.0)))
+    db.commit()
+    return cursor.lastrowid
+
+
+def calculate_seasonal_factors_from_history(demand_history, period_length=12):
+    """
+    Calculate seasonal factors from historical demand data.
+    Returns a dict of month_index -> seasonal_factor.
+    """
+    if len(demand_history) < period_length * 2:
+        return {i: 1.0 for i in range(12)}
+
+    cycle_count = len(demand_history) // period_length
+    if cycle_count == 0:
+        return {i: 1.0 for i in range(len(demand_history))}
+
+    period_totals = [0.0] * period_length
+    period_counts = [0] * period_length
+
+    for idx, demand in enumerate(demand_history):
+        period_idx = idx % period_length
+        period_totals[period_idx] += demand
+        period_counts[period_idx] += 1
+
+    avg_demand = sum(demand_history) / len(demand_history)
+    factors = {}
+    for i in range(period_length):
+        if period_counts[i] > 0:
+            factors[i] = (period_totals[i] / period_counts[i]) / avg_demand if avg_demand > 0 else 1.0
+        else:
+            factors[i] = 1.0
+
+    return factors
+
+
+# ============================================================
+# ENTERPRISE DEMAND SENSING SCAFFOLD
+# ============================================================
+
+def record_demand_signal(db, item_id, signal_type, signal_value, signal_direction,
+                          signal_date=None, warehouse_id=None, company_id=None,
+                          volatility_score=None, anomaly_score=None,
+                          signal_source=None, notes=None):
+    """
+    Record a demand signal for short-term demand sensing.
+    """
+    if signal_date is None:
+        signal_date = datetime.now().date().strftime('%Y-%m-%d')
+
+    cursor = db.execute("""
+        INSERT INTO planning_demand_signals
+        (item_id, warehouse_id, company_id, signal_type, signal_source,
+         signal_value, signal_direction, volatility_score, anomaly_score,
+         signal_date, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (item_id, warehouse_id, company_id, signal_type, signal_source,
+          signal_value, signal_direction, volatility_score, anomaly_score,
+          signal_date, notes))
+    db.commit()
+    return cursor.lastrowid
+
+
+def detect_demand_volatility(db, item_id, warehouse_id=None, window=7, threshold_cv=0.5):
+    """
+    Detect high demand volatility for an item using coefficient of variation.
+    Returns volatility alert if CV exceeds threshold.
+    """
+    start_date = (datetime.now() - timedelta(days=window)).strftime('%Y-%m-%d')
+
+    rows = db.execute("""
+        SELECT sales_quantity + consumption_quantity as demand
+        FROM planning_demand_history
+        WHERE item_id = ? AND period_start >= ?
+    """, (item_id, start_date)).fetchall()
+
+    if not rows or len(rows) < 3:
+        return None
+
+    demand_values = [r['demand'] for r in rows]
+    mean = sum(demand_values) / len(demand_values)
+
+    if mean == 0:
+        return None
+
+    variance = sum((x - mean) ** 2 for x in demand_values) / len(demand_values)
+    std_dev = math.sqrt(variance)
+    cv = std_dev / mean
+
+    if cv > threshold_cv:
+        z_score = (demand_values[-1] - mean) / std_dev if std_dev > 0 else 0
+
+        cursor = db.execute("""
+            INSERT INTO planning_volatility_alerts
+            (item_id, warehouse_id, alert_type, severity, threshold_value,
+             actual_value, cv_value, z_score)
+            VALUES (?, ?, 'HIGH_VOLATILITY',
+                    CASE WHEN ? > 1.0 THEN 'HIGH' ELSE 'MEDIUM' END,
+                    ?, ?, ?, ?)
+        """, (item_id, warehouse_id, cv, threshold_cv, cv, cv, z_score))
+        db.commit()
+        return cursor.lastrowid
+
+    return None
+
+
+def detect_demand_spike_or_drop(db, item_id, warehouse_id=None, window=7, z_threshold=2.0):
+    """
+    Detect sudden demand spikes or drops using Z-score analysis.
+    """
+    start_date = (datetime.now() - timedelta(days=window * 2)).strftime('%Y-%m-%d')
+
+    rows = db.execute("""
+        SELECT period_start, sales_quantity + consumption_quantity as demand
+        FROM planning_demand_history
+        WHERE item_id = ? AND period_start >= ?
+        ORDER BY period_start
+    """, (item_id, start_date)).fetchall()
+
+    if not rows or len(rows) < window:
+        return None
+
+    recent_values = [r['demand'] for r in rows[-window:]]
+    baseline_values = [r['demand'] for r in rows[:-window]]
+
+    if not baseline_values:
+        return None
+
+    baseline_mean = sum(baseline_values) / len(baseline_values)
+    if baseline_mean == 0:
+        return None
+
+    baseline_var = sum((x - baseline_mean) ** 2 for x in baseline_values) / len(baseline_values)
+    baseline_std = math.sqrt(baseline_var)
+
+    if baseline_std == 0:
+        return None
+
+    z_score = (recent_values[-1] - baseline_mean) / baseline_std
+
+    if abs(z_score) > z_threshold:
+        alert_type = 'DEMAND_SPIKE' if z_score > 0 else 'DEMAND_DROP'
+        severity = 'HIGH' if abs(z_score) > 3 else 'MEDIUM' if abs(z_score) > 2.5 else 'LOW'
+
+        cursor = db.execute("""
+            INSERT INTO planning_volatility_alerts
+            (item_id, warehouse_id, alert_type, severity, threshold_value, actual_value, z_score)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (item_id, warehouse_id, alert_type, severity, z_threshold, recent_values[-1], z_score))
+        db.commit()
+        return cursor.lastrowid
+
+    return None
+
+
+# ============================================================
+# ENTERPRISE OVERRIDE APPROVAL WORKFLOW
+# ============================================================
+
+def create_override_approval(db, override_id, requested_by, approval_level=1):
+    """
+    Create an approval record for a forecast override.
+    """
+    db.execute("""
+        INSERT INTO planning_override_approvals
+        (override_id, requested_by, approval_level)
+        VALUES (?, ?, ?)
+    """, (override_id, requested_by, approval_level))
+    db.commit()
+
+
+def approve_override(db, approval_id, reviewed_by, review_notes=None):
+    """
+    Approve a forecast override.
+    """
+    db.execute("""
+        UPDATE planning_override_approvals
+        SET approval_status = 'APPROVED',
+            reviewed_by = ?,
+            reviewed_at = CURRENT_TIMESTAMP,
+            review_notes = ?
+        WHERE id = ?
+    """, (reviewed_by, review_notes, approval_id))
+
+    approval = db.execute("SELECT override_id FROM planning_override_approvals WHERE id = ?",
+                           (approval_id,)).fetchone()
+    if approval:
+        db.execute("""
+            UPDATE planning_forecast_overrides
+            SET status = 'APPROVED',
+                reviewed_by = ?,
+                reviewed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (reviewed_by, approval['override_id']))
+
+    db.commit()
+
+
+def reject_override(db, approval_id, reviewed_by, review_notes=None):
+    """
+    Reject a forecast override.
+    """
+    db.execute("""
+        UPDATE planning_override_approvals
+        SET approval_status = 'REJECTED',
+            reviewed_by = ?,
+            reviewed_at = CURRENT_TIMESTAMP,
+            review_notes = ?
+        WHERE id = ?
+    """, (reviewed_by, review_notes, approval_id))
+
+    approval = db.execute("SELECT override_id FROM planning_override_approvals WHERE id = ?",
+                           (approval_id,)).fetchone()
+    if approval:
+        db.execute("""
+            UPDATE planning_forecast_overrides
+            SET status = 'REJECTED',
+                reviewed_by = ?,
+                reviewed_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (reviewed_by, approval['override_id']))
+
+    db.commit()
+
+
+# ============================================================
+# ENTERPRISE FLOW INTEGRATION
+# ============================================================
+
+def create_flow_notification(db, notification_type, title, message,
+                              entity_type=None, entity_id=None, priority='NORMAL',
+                              action_url=None, created_by=None, company_id=None):
+    """
+    Create a Flow notification for demand planning events.
+    """
+    cursor = db.execute("""
+        INSERT INTO planning_flow_notifications
+        (notification_type, title, message, entity_type, entity_id,
+         priority, action_url, created_by, company_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (notification_type, title, message, entity_type, entity_id,
+          priority, action_url, created_by, company_id))
+    db.commit()
+    return cursor.lastrowid
+
+
+def notify_forecast_alert(db, item_id, alert_type, severity, title, message,
+                          company_id=None, action_url=None):
+    """
+    Create a Flow notification for forecast-related alerts.
+    """
+    notification_type = f'FORECAST_ALERT_{alert_type}'
+    priority = 'HIGH' if severity in ('CRITICAL', 'HIGH') else 'NORMAL'
+
+    create_flow_notification(
+        db, notification_type, title, message,
+        entity_type='forecast_alert', entity_id=item_id,
+        priority=priority, action_url=action_url,
+        company_id=company_id
+    )
+
+
+def notify_pending_approval(db, entity_type, entity_id, entity_name,
+                            approver_role, company_id=None, created_by=None):
+    """
+    Notify approvers of pending forecast approvals.
+    """
+    title = f"Pending Approval: {entity_name}"
+    message = f"A forecast {entity_type} requires your approval."
+
+    create_flow_notification(
+        db, 'PENDING_APPROVAL', title, message,
+        entity_type=entity_type, entity_id=entity_id,
+        priority='NORMAL', action_url=f'/{entity_type}/review/{entity_id}',
+        created_by=created_by, company_id=company_id
+    )
+
+
+# ============================================================
+# ENTERPRISE FORECAST GENERATION WITH ALL METHODS
+# ============================================================
+
+def generate_statistical_forecast(db, item_id, method='MOVING_AVERAGE',
+                                   horizon_days=30, period_type='daily',
+                                   warehouse_id=None, company_id=None,
+                                   created_by=None, run_name=None):
+    """
+    Generate a comprehensive statistical forecast using specified method.
+    Supports: MOVING_AVERAGE, WEIGHTED_MOVING_AVERAGE, EXPONENTIAL_SMOOTHING,
+              DOUBLE_EXPONENTIAL, HOLT_WINTERS, AUTO
+    """
+    if run_name is None:
+        run_name = f"{method} Forecast {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+
+    history_months = 12
+    if method in ('HOLT_WINTERS',):
+        history_months = 24
+
+    history = db.execute("""
+        SELECT period_start,
+               sales_quantity + consumption_quantity as demand
+        FROM planning_demand_history
+        WHERE item_id = ? AND period_start >= DATE('now', '-' || ? || ' months')
+        ORDER BY period_start
+    """, (item_id, history_months)).fetchall()
+
+    if not history:
+        return None
+
+    demand_values = [h['demand'] for h in history]
+
+    if method == 'AUTO':
+        method, params = auto_select_forecast_method(demand_values)
+    else:
+        params = {}
+
+    if method == 'MOVING_AVERAGE':
+        window = params.get('window', 3)
+        forecast_value = calculate_moving_average(demand_values, window)
+    elif method == 'WEIGHTED_MOVING_AVERAGE':
+        weights = params.get('weights', [0.5, 0.3, 0.2])
+        forecast_value = calculate_weighted_moving_average_v2(demand_values, weights)
+    elif method == 'EXPONENTIAL_SMOOTHING':
+        alpha = params.get('alpha', 0.3)
+        forecast_value = calculate_exponential_smoothing(demand_values, alpha)
+    elif method == 'DOUBLE_EXPONENTIAL':
+        alpha = params.get('alpha', 0.3)
+        beta = params.get('beta', 0.1)
+        level, trend = calculate_double_exponential_smoothing(demand_values, alpha, beta)
+        forecast_value = level + trend * (horizon_days / 2)
+    elif method == 'HOLT_WINTERS':
+        alpha = params.get('alpha', 0.3)
+        beta = params.get('beta', 0.1)
+        gamma = params.get('gamma', 0.1)
+        period = params.get('period', 12)
+        forecast_value, _ = calculate_triple_exponential_smoothing(
+            demand_values, alpha, beta, gamma, period
+        )
+    else:
+        forecast_value = calculate_moving_average(demand_values, 3)
+
+    cursor = db.execute("""
+        INSERT INTO planning_forecast_runs
+        (run_name, forecast_type, method, horizon_days, period_type,
+         warehouse_id, company_id, status, created_by, total_items, total_demand)
+        VALUES (?, 'DEMAND', ?, ?, ?, ?, ?, 'DRAFT', ?, 1, ?)
+    """, (run_name, method, horizon_days, period_type, warehouse_id, company_id,
+          created_by, forecast_value * horizon_days))
+
+    run_id = cursor.lastrowid
+
+    for day_offset in range(horizon_days):
+        forecast_date = (datetime.now() + timedelta(days=day_offset)).strftime('%Y-%m-%d')
+
+        seasonal_factor = 1.0
+        seasonal_profile = db.execute("""
+            SELECT * FROM planning_seasonality_profiles
+            WHERE item_id = ? OR (brand_id = (SELECT brand_id FROM wms_items WHERE id = ?))
+                   OR (category_id = (SELECT category_id FROM wms_items WHERE id = ?))
+            LIMIT 1
+        """, (item_id, item_id, item_id)).fetchone()
+
+        if seasonal_profile:
+            month = (datetime.strptime(forecast_date, '%Y-%m-%d').month)
+            month_col = {1: 'jan_factor', 2: 'feb_factor', 3: 'mar_factor', 4: 'apr_factor',
+                         5: 'may_factor', 6: 'jun_factor', 7: 'jul_factor', 8: 'aug_factor',
+                         9: 'sep_factor', 10: 'oct_factor', 11: 'nov_factor', 12: 'dec_factor'}
+            seasonal_factor = seasonal_profile.get(month_col.get(month), 1.0)
+
+        final_value = forecast_value * seasonal_factor
+
+        db.execute("""
+            INSERT INTO planning_forecast_lines
+            (run_id, item_id, warehouse_id, company_id, period_start, period_type,
+             base_quantity, seasonal_factor, final_quantity)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (run_id, item_id, warehouse_id, company_id, forecast_date, period_type,
+              forecast_value, seasonal_factor, final_value))
+
+    db.execute("""
+        UPDATE planning_item_profiles
+        SET last_forecast_run_id = ?, last_calculated_at = CURRENT_TIMESTAMP
+        WHERE item_id = ?
+    """, (run_id, item_id))
+
+    db.commit()
+    return run_id
+
+
+# ============================================================
+# ENTERPRISE MODEL PERFORMANCE TRACKING
+# ============================================================
+
+def record_model_performance(db, item_id, model_name, period_start, period_end,
+                              mape, wape=None, mae=None, bias=None, rmse=None,
+                              theil_u=None, is_best_fit=False, parameters=None):
+    """
+    Record forecast model performance metrics for model comparison.
+    """
+    params_json = json.dumps(parameters) if parameters else None
+
+    db.execute("""
+        INSERT INTO planning_model_performance
+        (item_id, model_name, period_start, period_end, mape, wape, mae, bias,
+         rmse, theil_u, is_best_fit, parameters_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """, (item_id, model_name, period_start, period_end, mape, wape, mae, bias,
+          rmse, theil_u, 1 if is_best_fit else 0, params_json))
+    db.commit()
+
+
+def get_best_forecast_model(db, item_id):
+    """
+    Get the best performing forecast model for an item based on historical MAPE.
+    """
+    row = db.execute("""
+        SELECT model_name, parameters_json
+        FROM planning_model_performance
+        WHERE item_id = ? AND mape IS NOT NULL
+        ORDER BY mape ASC
+        LIMIT 1
+    """, (item_id,)).fetchone()
+
+    if row:
+        params = json.loads(row['parameters_json']) if row['parameters_json'] else {}
+        return row['model_name'], params
+    return None, None
+
+
+# ============================================================
+# ENTERPRISE SCENARIO PLANNING ENHANCEMENTS
+# ============================================================
+
+def create_scenario_from_forecast(db, scenario_name, scenario_type, forecast_run_id=None,
+                                   parameters=None, created_by=None, company_id=None,
+                                   description=None):
+    """
+    Create a new planning scenario based on an existing forecast.
+    """
+    cursor = db.execute("""
+        INSERT INTO planning_scenarios
+        (name, description, scenario_type, parameters_json, created_by, company_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (scenario_name, description, scenario_type,
+          json.dumps(parameters) if parameters else None, created_by, company_id))
+
+    scenario_id = cursor.lastrowid
+
+    if forecast_run_id:
+        db.execute("""
+            INSERT INTO planning_scenario_lines
+            (scenario_id, item_id, warehouse_id, company_id, metric_name,
+             base_value)
+            SELECT ?, item_id, warehouse_id, company_id, 'FORECAST', final_quantity
+            FROM planning_forecast_lines
+            WHERE run_id = ?
+        """, (scenario_id, forecast_run_id))
+
+        total_items = db.execute("""
+            SELECT COUNT(DISTINCT item_id) as cnt FROM planning_forecast_lines WHERE run_id = ?
+        """, (forecast_run_id,)).fetchone()['cnt']
+
+        total_impact = db.execute("""
+            SELECT SUM(base_value) as total FROM planning_scenario_lines WHERE scenario_id = ?
+        """, (scenario_id,)).fetchone()['total'] or 0
+
+        db.execute("""
+            UPDATE planning_scenarios
+            SET total_impact_items = ?, total_shortage_impact = ?
+            WHERE id = ?
+        """, (total_items, total_impact, scenario_id))
+
+    db.commit()
+    return scenario_id
+
+
+def apply_scenario_assumptions(db, scenario_id):
+    """
+    Apply scenario parameters to forecast lines and calculate impacts.
+    """
+    scenario = db.execute("SELECT * FROM planning_scenarios WHERE id = ?",
+                          (scenario_id,)).fetchone()
+    if not scenario:
+        return
+
+    params = json.loads(scenario['parameters_json']) if scenario['parameters_json'] else {}
+
+    uplift_percent = params.get('uplift_percent', 0)
+    demand_shift = params.get('demand_shift', 0)
+    price_factor = params.get('price_factor', 1.0)
+
+    scenario_type = scenario['scenario_type']
+
+    if scenario_type == 'PROMOTION':
+        factor = 1 + (uplift_percent / 100)
+    elif scenario_type == 'DEMAND_SPIKE':
+        factor = 1 + (demand_shift / 100)
+    elif scenario_type == 'DEMAND_DROP':
+        factor = 1 - (abs(demand_shift) / 100)
+    elif scenario_type == 'PRICE_CHANGE':
+        factor = price_factor
+    else:
+        factor = 1 + (uplift_percent / 100)
+
+    db.execute("""
+        UPDATE planning_scenario_lines
+        SET scenario_value = base_value * ?,
+            impact_value = (base_value * ?) - base_value,
+            impact_percent = ((base_value * ?) - base_value) / NULLIF(base_value, 0) * 100
+        WHERE scenario_id = ?
+    """, (factor, factor, factor, scenario_id))
+
+    total_impact = db.execute("""
+        SELECT SUM(impact_value) as total, SUM(impact_percent) as pct
+        FROM planning_scenario_lines
+        WHERE scenario_id = ?
+    """, (scenario_id,)).fetchone()
+
+    db.execute("""
+        UPDATE planning_scenarios
+        SET total_cost_impact = ?
+        WHERE id = ?
+    """, (total_impact['total'] if total_impact else 0, scenario_id))
 
     db.commit()

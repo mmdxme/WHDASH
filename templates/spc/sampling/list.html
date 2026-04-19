@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1"><i class="fas fa-filter me-2 text-info"></i>{{ page_title }}</h1>
+                <p class="text-muted mb-0">AQL-based sampling plans (ANSI/ASQ Z1.4, ISO 2859)</p>
+            </div>
+            <a href="{{ url_for('spc.sampling_plan_create') }}" class="btn btn-info text-white">
+                <i class="fas fa-plus me-1"></i> Create Sampling Plan
+            </a>
+        </div>
+
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Plan Code</th>
+                                <th>Plan Name</th>
+                                <th>Inspection Type</th>
+                                <th>Sampling Type</th>
+                                <th>AQL</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for plan in plans %}
+                            <tr>
+                                <td class="fw-bold">{{ plan.plan_code }}</td>
+                                <td>{{ plan.plan_name }}</td>
+                                <td>{{ plan.inspection_type }}</td>
+                                <td><span class="badge bg-secondary">{{ plan.sampling_type }}</span></td>
+                                <td>{{ plan.aql }}%</td>
+                                <td>
+                                    <a href="{{ url_for('spc.sampling_plan_view', plan_id=plan.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="6" class="text-center py-5 text-muted">
+                                    <i class="fas fa-filter fs-1 mb-3"></i>
+                                    <p>No sampling plans configured.</p>
+                                    <a href="{{ url_for('spc.sampling_plan_create') }}" class="btn btn-info btn-sm text-white">
+                                        <i class="fas fa-plus me-1"></i> Create Plan
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lot Evaluation Tool -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-calculator me-2"></i>Lot Evaluation Tool</h5>
+            </div>
+            <div class="card-body">
+                <form id="evaluateForm" class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Lot Size</label>
+                        <input type="number" name="lot_size" class="form-control" value="1000" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Defects Found</label>
+                        <input type="number" name="defects_found" class="form-control" value="0" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">AQL Level</label>
+                        <select name="aql" class="form-select">
+                            <option value="0.010">0.010</option>
+                            <option value="0.065">0.065</option>
+                            <option value="0.150">0.150</option>
+                            <option value="0.250">0.250</option>
+                            <option value="0.400">0.400</option>
+                            <option value="0.650" selected>0.650</option>
+                            <option value="1.0">1.000</option>
+                            <option value="1.5">1.500</option>
+                            <option value="2.5">2.500</option>
+                            <option value="4.0">4.000</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-calculator me-1"></i> Evaluate
+                        </button>
+                    </div>
+                </form>
+                <div id="evalResult" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('evaluateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = new FormData(e.target);
+            const data = Object.fromEntries(form);
+
+            const response = await fetch('/spc/api/sampling/evaluate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+
+            const resultDiv = document.getElementById('evalResult');
+            if (result.decision === 'ACCEPT') {
+                resultDiv.innerHTML = `<div class="alert alert-success"><i class="fas fa-check-circle me-2"></i><strong>LOT ACCEPTED</strong> - ${result.defects_found} defects found, ${result.acceptance_number} max allowed</div>`;
+            } else if (result.decision === 'REJECT') {
+                resultDiv.innerHTML = `<div class="alert alert-danger"><i class="fas fa-times-circle me-2"></i><strong>LOT REJECTED</strong> - ${result.defects_found} defects found, ${result.rejection_number} min for rejection</div>`;
+            } else {
+                resultDiv.innerHTML = `<div class="alert alert-warning"><i class="fas fa-exclamation-circle me-2"></i><strong>SAMPLE REQUIRED</strong> - Continue sampling</div>`;
+            }
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>

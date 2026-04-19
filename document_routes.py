@@ -500,6 +500,15 @@ def register_document_routes(app):
             flash("You don't have permission to view this document.", "error")
             return redirect(url_for('documents_all'))
         
+        # Parse JSON fields for template use
+        if doc.get('tags_json'):
+            try:
+                doc['tags'] = json.loads(doc['tags_json'])
+            except (json.JSONDecodeError, TypeError):
+                doc['tags'] = []
+        else:
+            doc['tags'] = []
+        
         # Log access
         log_document_access(document_id, user_id, 'View')
         

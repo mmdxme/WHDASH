@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --success: #10B981;
+            --warning: #F59E0B;
+            --danger: #EF4444;
+            --info: #3B82F6;
+            --dark: #1F2937;
+            --light-bg: #F9FAFB;
+        }
+        body { background: var(--light-bg); font-family: 'Segoe UI', system-ui, sans-serif; }
+        .stat-card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card-header-custom { background: white; border-bottom: 2px solid #E5E7EB; font-weight: 600; padding: 1rem 1.25rem; }
+        .badge-status { font-weight: 500; padding: 0.375rem 0.625rem; }
+        .badge-PLANNED { background: #E0E7FF; color: #4338CA; }
+        .badge-IN_PROGRESS { background: #DBEAFE; color: #1E40AF; }
+        .badge-COMPLETED { background: #D1FAE5; color: #065F46; }
+        .badge-CANCELLED { background: #F3F4F6; color: #6B7280; }
+        .badge-OPEN { background: #FEF3C7; color: #92400E; }
+        .badge-CLOSED { background: #D1FAE5; color: #065F46; }
+        .badge-CRITICAL { background: #FEE2E2; color: #991B1B; }
+        .badge-MAJOR { background: #FEF3C7; color: #92400E; }
+        .badge-MINOR { background: #F3F4F6; color: #374151; }
+        .info-card { background: white; border-radius: 12px; padding: 1.5rem; }
+        .timeline-item { border-left: 2px solid #E5E7EB; padding-left: 1.5rem; margin-left: 0.5rem; position: relative; }
+        .timeline-item::before { content: ''; position: absolute; left: -6px; top: 0; width: 10px; height: 10px; border-radius: 50%; background: var(--primary); }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <!-- Page Header -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-1">
+                        <li class="breadcrumb-item"><a href="{{ url_for('quality.audits_list') }}">Audits</a></li>
+                        <li class="breadcrumb-item active">Plan Details</li>
+                    </ol>
+                </nav>
+                <h1 class="h3 mb-1"><i class="fas fa-user-check me-2 text-primary"></i>{{ audit.plan_number or 'Audit Plan' }}</h1>
+                <p class="text-muted mb-0">{{ audit.audit_type or 'Audit' }} - {{ audit.scope or 'N/A' }}</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('quality.audits_edit', plan_id=audit.id) }}" class="btn btn-outline-primary">
+                    <i class="fas fa-edit me-1"></i> Edit
+                </a>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-cog"></i> Actions
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-print me-2"></i>Print Checklist</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-file-pdf me-2"></i>Export to PDF</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-danger" href="#"><i class="fas fa-times-circle me-2"></i>Cancel Audit</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Banner -->
+        {% if audit.status == 'IN_PROGRESS' %}
+        <div class="alert alert-info d-flex align-items-center mb-4">
+            <i class="fas fa-info-circle me-3 fs-4"></i>
+            <div>This audit is currently <strong>IN PROGRESS</strong>. Add findings and complete the audit checklist.</div>
+        </div>
+        {% elif audit.status == 'PLANNED' %}
+        <div class="alert alert-warning d-flex align-items-center mb-4">
+            <i class="fas fa-clock me-3 fs-4"></i>
+            <div>This audit is <strong>PLANNED</strong> and scheduled for {{ audit.scheduled_start_date or 'N/A' }}.</div>
+        </div>
+        {% endif %}
+
+        <!-- Main Info Cards -->
+        <div class="row g-4 mb-4">
+            <div class="col-md-6">
+                <div class="info-card h-100">
+                    <h5 class="mb-3"><i class="fas fa-clipboard-list me-2 text-primary"></i>Audit Information</h5>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="text-muted small">Plan Number</label>
+                            <div class="fw-semibold">{{ audit.plan_number or 'N/A' }}</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="text-muted small">Status</label>
+                            <div><span class="badge badge-status badge-{{ audit.status }}">{{ audit.status }}</span></div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="text-muted small">Audit Type</label>
+                            <div class="fw-semibold">{{ audit.audit_type or 'N/A' }}</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="text-muted small">Audit Standard</label>
+                            <div class="fw-semibold">{{ audit.audit_standard or 'N/A' }}</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="text-muted small">Scope</label>
+                            <div class="fw-semibold">{{ audit.scope or 'N/A' }}</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="text-muted small">Objectives</label>
+                            <div class="fw-semibold">{{ audit.objectives or 'N/A' }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="info-card h-100">
+                    <h5 class="mb-3"><i class="fas fa-calendar me-2 text-primary"></i>Schedule & Team</h5>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="text-muted small">Scheduled Start</label>
+                            <div class="fw-semibold">{{ audit.scheduled_start_date or 'N/A' }}</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="text-muted small">Scheduled End</label>
+                            <div class="fw-semibold">{{ audit.scheduled_end_date or 'N/A' }}</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="text-muted small">Lead Auditor</label>
+                            <div class="fw-semibold">{{ audit.lead_auditor_name or 'N/A' }}</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="text-muted small">Auditee</label>
+                            <div class="fw-semibold">{{ audit.auditee_name or 'N/A' }}</div>
+                        </div>
+                        <div class="col-md-12 mb-3">
+                            <label class="text-muted small">Auditors</label>
+                            <div class="fw-semibold">{{ audit.auditor_names or 'N/A' }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Findings Section -->
+        <div class="card mb-4">
+            <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                <span><i class="fas fa-flag me-2 text-danger"></i>Audit Findings ({{ findings|length }})</span>
+                <a href="{{ url_for('quality.audits_add_finding', plan_id=audit.id) }}" class="btn btn-sm btn-danger">
+                    <i class="fas fa-plus me-1"></i> Add Finding
+                </a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Finding #</th>
+                                <th>Category</th>
+                                <th>Severity</th>
+                                <th>Title</th>
+                                <th>Owner</th>
+                                <th>Due Date</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if findings %}
+                                {% for finding in findings %}
+                                <tr>
+                                    <td><a href="{{ url_for('quality.audits_findings_view', finding_id=finding.id) }}">{{ finding.finding_number }}</a></td>
+                                    <td>{{ finding.category or 'N/A' }}</td>
+                                    <td>
+                                        <span class="badge badge-status badge-{{ finding.severity }}">{{ finding.severity }}</span>
+                                    </td>
+                                    <td>{{ finding.title[:50] if finding.title else 'N/A' }}{% if finding.title and finding.title|length > 50 %}...{% endif %}</td>
+                                    <td>{{ finding.owner_name or 'N/A' }}</td>
+                                    <td class="{% if finding.due_date and finding.due_date < today %}text-overdue{% endif %}">
+                                        {{ finding.due_date or 'N/A' }}
+                                    </td>
+                                    <td>
+                                        <span class="badge badge-status badge-{{ finding.status }}">{{ finding.status }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('quality.audits_findings_view', finding_id=finding.id) }}" class="btn btn-outline-primary" title="View">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a href="{{ url_for('quality.audits_findings_edit', finding_id=finding.id) }}" class="btn btn-outline-secondary" title="Edit">
+                                                <i class="fas fa-edit"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        <i class="fas fa-flag fa-2x mb-2 d-block"></i>
+                                        No findings recorded for this audit yet.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Details Tabs -->
+        <div class="card">
+            <div class="card-header card-header-custom">
+                <ul class="nav nav-tabs card-header-tabs" role="tablist">
+                    <li class="nav-item">
+                        <a class="nav-link active" data-bs-toggle="tab" href="#details">Details</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="tab" href="#checklist">Checklist</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="tab" href="#timeline">Timeline</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" data-bs-toggle="tab" href="#attachments">Attachments</a>
+                    </li>
+                </ul>
+            </div>
+            <div class="card-body">
+                <div class="tab-content">
+                    <!-- Details Tab -->
+                    <div class="tab-pane fade show active" id="details">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-muted mb-3">Location & Department</h6>
+                                <div class="mb-3">
+                                    <label class="text-muted small">Site Location</label>
+                                    <div>{{ audit.site_location or 'N/A' }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="text-muted small">Department</label>
+                                    <div>{{ audit.department or 'N/A' }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="text-muted small">Process Area</label>
+                                    <div>{{ audit.process_area or 'N/A' }}</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="text-muted mb-3">Preparation</h6>
+                                <div class="mb-3">
+                                    <label class="text-muted small">Preparation Status</label>
+                                    <div><span class="badge bg-secondary">{{ audit.preparation_status or 'NOT_STARTED' }}</span></div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="text-muted small">Document Review Notes</label>
+                                    <div>{{ audit.document_review_notes or 'N/A' }}</div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="text-muted small">Notification Sent</label>
+                                    <div>
+                                        {% if audit.notification_sent %}
+                                        <i class="fas fa-check-circle text-success"></i> Yes
+                                        {% else %}
+                                        <i class="fas fa-times-circle text-danger"></i> No
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% if audit.notes %}
+                        <div class="mt-3">
+                            <h6 class="text-muted mb-2">Notes</h6>
+                            <p class="mb-0">{{ audit.notes }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Checklist Tab -->
+                    <div class="tab-pane fade" id="checklist">
+                        <div class="alert alert-secondary">
+                            <i class="fas fa-clipboard-list me-2"></i>
+                            Audit checklist functionality will be available when you complete the audit execution.
+                        </div>
+                    </div>
+
+                    <!-- Timeline Tab -->
+                    <div class="tab-pane fade" id="timeline">
+                        <div class="timeline">
+                            {% if audit.created_at %}
+                            <div class="timeline-item mb-3">
+                                <div class="text-muted small">{{ audit.created_at[:16] if audit.created_at else '' }}</div>
+                                <div class="fw-semibold">Audit Plan Created</div>
+                            </div>
+                            {% endif %}
+                            {% if audit.scheduled_start_date %}
+                            <div class="timeline-item mb-3">
+                                <div class="text-muted small">{{ audit.scheduled_start_date }}</div>
+                                <div class="fw-semibold">Scheduled Start Date</div>
+                            </div>
+                            {% endif %}
+                            {% if audit.actual_start_date %}
+                            <div class="timeline-item mb-3">
+                                <div class="text-muted small">{{ audit.actual_start_date }}</div>
+                                <div class="fw-semibold">Audit Started</div>
+                            </div>
+                            {% endif %}
+                            {% if audit.actual_end_date %}
+                            <div class="timeline-item mb-3">
+                                <div class="text-muted small">{{ audit.actual_end_date }}</div>
+                                <div class="fw-semibold">Audit Completed</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Attachments Tab -->
+                    <div class="tab-pane fade" id="attachments">
+                        <div class="text-center text-muted py-4">
+                            <i class="fas fa-paperclip fa-2x mb-2 d-block"></i>
+                            No attachments uploaded for this audit.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

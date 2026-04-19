@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ t('workforce_planning', 'Workforce Planning') }}</h1>
+            <p class="text-slate-400 mt-1">{{ t('year', 'Year') }}: {{ current_year }}</p>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="glass-panel rounded-2xl p-6 text-center">
+            <p class="text-slate-400 text-sm">{{ t('total_headcount', 'Total Headcount') }}</p>
+            <p class="text-4xl font-bold text-white mt-2">{{ dept_headcount|sum(attribute='headcount') }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-6 text-center">
+            <p class="text-slate-400 text-sm">{{ t('open_vacancies', 'Open Vacancies') }}</p>
+            <p class="text-4xl font-bold text-amber-400 mt-2">{{ vacancies|sum(attribute='cnt') }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-6 text-center">
+            <p class="text-slate-400 text-sm">{{ t('new_hires_ytd', 'New Hires YTD') }}</p>
+            <p class="text-4xl font-bold text-emerald-400 mt-2">{{ new_hires }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-6 text-center">
+            <p class="text-slate-400 text-sm">{{ t('attrition_ytd', 'Attrition YTD') }}</p>
+            <p class="text-4xl font-bold text-red-400 mt-2">{{ attrition }}</p>
+        </div>
+    </div>
+
+    <!-- Headcount by Department -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">
+            <i class="fa-solid fa-building text-brand-400 mr-2"></i>{{ t('headcount_by_department', 'Headcount by Department') }}
+        </h3>
+        <div class="space-y-4">
+            {% for dept in dept_headcount %}
+            {% set vac_count = vacancies|selectattr('department_id','equalto',dept.id)|list|first %}
+            <div class="flex items-center justify-between p-4 bg-white/5 rounded-xl">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-brand-500/10 flex items-center justify-center">
+                        <i class="fa-solid fa-building text-brand-400"></i>
+                    </div>
+                    <span class="text-white font-medium">{{ dept.name }}</span>
+                </div>
+                <div class="flex items-center gap-6">
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-brand-400">{{ dept.headcount }}</p>
+                        <p class="text-slate-400 text-xs">{{ t('active', 'Active') }}</p>
+                    </div>
+                    {% if vac_count %}
+                    <div class="text-center">
+                        <p class="text-2xl font-bold text-amber-400">{{ vac_count.cnt }}</p>
+                        <p class="text-slate-400 text-xs">{{ t('vacant', 'Vacant') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <p class="text-slate-500 text-center py-4">{{ t('no_departments', 'No departments found') }}</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Headcount Trend -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">
+            <i class="fa-solid fa-chart-line text-purple-400 mr-2"></i>{{ t('monthly_headcount_trend', 'Monthly Headcount Trend') }}
+        </h3>
+        <div class="grid grid-cols-12 gap-2">
+            {% for m in monthly_headcount %}
+            <div class="text-center">
+                <div class="h-32 flex items-end justify-center">
+                    <div class="w-full max-w-[40px] bg-brand-500 rounded-t-lg" style="height: {{ (m.headcount / 20 * 100)|int }}%"></div>
+                </div>
+                <p class="text-slate-400 text-xs mt-2">{{ m.month }}</p>
+                <p class="text-white text-sm font-bold">{{ m.headcount }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Open Vacancies Detail -->
+    {% if vacancies %}
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">
+            <i class="fa-solid fa-briefcase text-amber-400 mr-2"></i>{{ t('vacancies_by_department', 'Vacancies by Department') }}
+        </h3>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/10">
+                        <th class="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('department', 'Department') }}</th>
+                        <th class="px-4 py-3 text-left text-xs font-bold text-slate-400 uppercase">{{ t('open_vacancies', 'Open Vacancies') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for v in vacancies %}
+                    <tr class="hover:bg-white/5">
+                        <td class="px-4 py-3 text-white">{{ v.department_name or 'Unassigned' }}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-3 py-1 bg-amber-500/10 text-amber-400 font-bold rounded-full">{{ v.cnt }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

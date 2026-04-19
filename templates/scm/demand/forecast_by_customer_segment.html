@@ -1,0 +1,87 @@
+{% extends "scm/base_scm.html" %}
+
+{% block scm_content %}
+{% set breadcrumb = [{'label': t.demand_planning|default('Demand Planning')}, {'label': t.forecast_by_customer_segment|default('Forecast by Customer Segment')}] %}
+
+<div class="glass-panel rounded-xl p-5">
+    <div class="flex items-center justify-between mb-6">
+        <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-lg bg-slate-700/50 flex items-center justify-center">
+                <i class="fas fa-users text-2xl"></i>
+            </div>
+            <div>
+                <h2 class="text-xl font-semibold text-white">{{ t.forecast_by_customer_segment|default('Forecast by Customer Segment') }}</h2>
+                <p class="text-slate-400 text-sm mt-1">{{ t.forecast_by_customer_segment_desc|default('Demand forecast analysis by customer segment') }}</p>
+            </div>
+        </div>
+        <div class="flex gap-2">
+            <button class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition">
+                <i class="fas fa-filter mr-2"></i>{{ t.filter|default('Filter') }}
+            </button>
+            <button class="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-sm transition">
+                <i class="fas fa-download mr-2"></i>{{ t.export|default('Export') }}
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-slate-800/50 rounded-lg p-4">
+            <p class="text-slate-400 text-xs">{{ t.total_segments|default('Total Segments') }}</p>
+            <p class="text-white text-xl font-bold">{{ segments|length }}</p>
+        </div>
+        <div class="bg-slate-800/50 rounded-lg p-4">
+            <p class="text-slate-400 text-xs">{{ t.total_sales|default('Total Sales') }}</p>
+            <p class="text-white text-xl font-bold">{{ segments|sum(attribute='total_sales')|int|default(0) }}</p>
+        </div>
+        <div class="bg-slate-800/50 rounded-lg p-4">
+            <p class="text-slate-400 text-xs">{{ t.avg_sales|default('Avg Sales') }}</p>
+            <p class="text-white text-xl font-bold">{{ (segments|sum(attribute='avg_sales') / segments|length)|round|int|default(0) }}</p>
+        </div>
+        <div class="bg-slate-800/50 rounded-lg p-4">
+            <p class="text-slate-400 text-xs">{{ t.top_segment|default('Top Segment') }}</p>
+            <p class="text-emerald-400 text-xl font-bold">{{ segments[0].segment if segments else '-' }}</p>
+        </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-slate-800/50">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t.segment|default('Segment') }}</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t.total_sales|default('Total Sales') }}</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t.avg_sales|default('Avg Sales') }}</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t.item_count|default('Item Count') }}</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">{{ t.share|default('Share') }}</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-700">
+                {% for segment in segments %}
+                {% set total = segments|sum(attribute='total_sales') %}
+                <tr class="hover:bg-slate-800/30">
+                    <td class="px-4 py-3 text-sm text-white font-medium">{{ segment.segment or 'N/A' }}</td>
+                    <td class="px-4 py-3 text-sm text-slate-300">{{ segment.total_sales|int|default(0) }}</td>
+                    <td class="px-4 py-3 text-sm text-slate-300">{{ segment.avg_sales|int|default(0) }}</td>
+                    <td class="px-4 py-3 text-sm text-slate-300">{{ segment.item_count|default(0) }}</td>
+                    <td class="px-4 py-3 text-sm text-slate-300">{{ ((segment.total_sales / total * 100) if total > 0 else 0)|round(1) }}%</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="px-4 py-8 text-center text-slate-400">{{ t.no_segment_data|default('No segment data available') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-700">
+        <p class="text-slate-400 text-sm">{{ t.showing|default('Showing') }} {{ segments|length }} {{ t.of|default('of') }} {{ segments|length }} {{ t.entries|default('entries') }}</p>
+        <div class="flex gap-2">
+            <button class="px-3 py-1 rounded bg-slate-700 text-slate-400 text-sm" disabled>{{ t.previous|default('Previous') }}</button>
+            <button class="px-3 py-1 rounded bg-slate-700 text-slate-400 text-sm" disabled>{{ t.next|default('Next') }}</button>
+        </div>
+    </div>
+</div>
+{% endblock %}

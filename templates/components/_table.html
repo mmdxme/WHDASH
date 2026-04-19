@@ -1,0 +1,123 @@
+{# 
+Enterprise Table Component
+========================
+Consistent table styling with sorting, pagination, and row actions.
+
+Usage:
+    {% include 'components/_table.html' with context %}
+    {% set table_id = 'myTable' %}
+    {% set table_headers = [{'key': 'name', 'label': 'Name'}, {'key': 'status', 'label': 'Status'}] %}
+    {% set table_rows = [{'name': 'Item 1', 'status': 'Active'}] %}
+    {% set table_sort_key = 'name' %}
+    {% set table_sort_dir = 'asc' %}
+    {% set table_actions = [{'icon': 'fa-edit', 'url': '/edit/', 'label': 'Edit'}] %}
+#}
+
+{% set table_id = table_id|default('enterpriseTable') %}
+{% set table_headers = table_headers|default([]) %}
+{% set table_rows = table_rows|default([]) %}
+{% set table_sort_key = table_sort_key|default('') %}
+{% set table_sort_dir = table_sort_dir|default('asc') %}
+{% set table_actions = table_actions|default([]) %}
+{% set table_empty_message = table_empty_message|default('No records found') %}
+
+<div class="table-container bg-slate-800/50 rounded-xl border border-white/5">
+    {% if table_headers|length > 0 %}
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm" id="{{ table_id }}">
+            <thead>
+                <tr class="text-slate-400 border-b border-white/10">
+                    {% for header in table_headers %}
+                    <th class="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap
+                        {% if header.sortable|default(false) %}sortable cursor-pointer hover:text-white transition-colors{% endif %}
+                        {% if header.class %} {{ header.class }}{% endif %}"
+                        {% if header.sortable|default(false) %}onclick="sortTable('{{ table_id }}', '{{ header.key }}')"{% endif %}>
+                        <div class="flex items-center gap-2">
+                            {{ header.label }}
+                            {% if header.sortable|default(false) %}
+                            <i class="fa-solid fa-sort text-slate-600 text-[10px]
+                                {% if table_sort_key == header.key %}text-brand-400{% endif %}"></i>
+                            {% endif %}
+                        </div>
+                    </th>
+                    {% endfor %}
+                    {% if table_actions|length > 0 %}
+                    <th class="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-400">Actions</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% if table_rows|length > 0 %}
+                {% for row in table_rows %}
+                <tr class="border-b border-white/5 hover:bg-white/5 transition-colors">
+                    {% for header in table_headers %}
+                    <td class="px-4 py-3 text-slate-300 {% if header.class %} {{ header.class }}{% endif %}">
+                        {% if header.render %}
+                            {{ header.render(row[header.key], row) }}
+                        {% else %}
+                            {{ row[header.key]|default('—') }}
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                    {% if table_actions|length > 0 %}
+                    <td class="px-4 py-3 text-right">
+                        <div class="flex items-center justify-end gap-1">
+                            {% for action in table_actions %}
+                            <a href="{{ action.url|replace('{id}', row.id|string) }}"
+                               class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+                               title="{{ action.label|default('Action') }}">
+                                <i class="fa-solid {{ action.icon|default('fa-circle') }} text-sm"></i>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr>
+                    <td colspan="{{ table_headers|length + (1 if table_actions|length > 0 else 0) }}" class="px-4 py-16 text-center">
+                        <div class="empty-state py-8">
+                            <div class="empty-state-icon mx-auto mb-4">
+                                <i class="fa-solid fa-inbox text-3xl text-slate-500"></i>
+                            </div>
+                            <p class="text-slate-400 font-medium">{{ table_empty_message }}</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+{% if table_pagination %}
+<div class="flex items-center justify-between mt-4 px-2">
+    <div class="text-sm text-slate-500">
+        Showing {{ table_pagination.start|default(1) }} to {{ table_pagination.end|default(1) }} of {{ table_pagination.total|default(0) }} entries
+    </div>
+    <div class="flex items-center gap-1">
+        {% if table_pagination.page > 1 %}
+        <button onclick="goToPage({{ table_pagination.page - 1 }})" class="pagination-item">
+            <i class="fa-solid fa-chevron-left text-xs"></i>
+        </button>
+        {% endif %}
+        
+        {% for p in range(1, (table_pagination.total_pages|default(1)) + 1) %}
+        {% if p >= table_pagination.page - 1 and p <= table_pagination.page + 1 %}
+        <button onclick="goToPage({{ p }})"
+                class="pagination-item {% if p == table_pagination.page %}active{% endif %}">
+            {{ p }}
+        </button>
+        {% endif %}
+        {% endfor %}
+        
+        {% if table_pagination.page < table_pagination.total_pages|default(1) %}
+        <button onclick="goToPage({{ table_pagination.page + 1 }})" class="pagination-item">
+            <i class="fa-solid fa-chevron-right text-xs"></i>
+        </button>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

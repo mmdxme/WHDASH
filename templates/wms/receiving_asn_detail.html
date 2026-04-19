@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <!-- Header -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('asn_detail', 'ASN Detail') }}</h1>
+            <p class="text-slate-400 text-sm mt-1">{{ asn.asn_number }} - {{ asn.partner_name or 'N/A' }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('wms_receiving_asn') }}" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-medium transition-all">
+                <i class="fa-solid fa-arrow-left mr-2"></i>{{ t('back', 'Back') }}
+            </a>
+            {% if asn.status == 'EXPECTED' %}
+            <form method="POST" action="{{ url_for('wms_receiving_asn_delete', asn_id=asn.id) }}" onsubmit="return confirm('{{ t('confirm_delete', 'Confirm delete?') }}');">
+                <button type="submit" class="px-4 py-2 bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-400 rounded-xl text-sm font-medium transition-all">
+                    <i class="fa-solid fa-trash mr-2"></i>{{ t('delete', 'Delete') }}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ASN Info -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs font-bold text-slate-400 uppercase">{{ t('status', 'Status') }}</p>
+            <p class="text-2xl font-extrabold mt-2">
+                {% if asn.status == 'EXPECTED' %}
+                <span class="text-amber-400">{{ t('expected', 'Expected') }}</span>
+                {% elif asn.status == 'RECEIVED' %}
+                <span class="text-emerald-400">{{ t('received', 'Received') }}</span>
+                {% elif asn.status == 'PARTIAL' %}
+                <span class="text-amber-400">{{ t('partial', 'Partial') }}</span>
+                {% else %}
+                <span class="text-slate-400">{{ asn.status }}</span>
+                {% endif %}
+            </p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs font-bold text-slate-400 uppercase">{{ t('expected_date', 'Expected Date') }}</p>
+            <p class="text-2xl font-extrabold text-white mt-2">{{ asn.expected_date[:10] if asn.expected_date else 'N/A' }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <p class="text-xs font-bold text-slate-400 uppercase">{{ t('partner', 'Partner') }}</p>
+            <p class="text-2xl font-extrabold text-white mt-2">{{ asn.partner_name or 'N/A' }}</p>
+        </div>
+    </div>
+
+    <!-- Details -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('asn_details', 'ASN Details') }}</h3>
+        <dl class="grid grid-cols-2 gap-4">
+            <div>
+                <dt class="text-xs font-semibold text-slate-400">{{ t('warehouse', 'Warehouse') }}</dt>
+                <dd class="text-white mt-1">{{ asn.warehouse_name or 'N/A' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-semibold text-slate-400">{{ t('po_number', 'PO Number') }}</dt>
+                <dd class="text-white mt-1">{{ asn.po_number or 'N/A' }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-semibold text-slate-400">{{ t('created_at', 'Created At') }}</dt>
+                <dd class="text-white mt-1">{{ asn.created_at }}</dd>
+            </div>
+            <div>
+                <dt class="text-xs font-semibold text-slate-400">{{ t('notes', 'Notes') }}</dt>
+                <dd class="text-white mt-1">{{ asn.notes or 'N/A' }}</dd>
+            </div>
+        </dl>
+    </div>
+
+    <!-- Lines -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-5 border-b border-white/5">
+            <h3 class="text-lg font-bold text-white">{{ t('asn_lines', 'ASN Lines') }}</h3>
+        </div>
+        <table class="w-full text-sm">
+            <thead>
+                <tr class="text-slate-400 border-b border-white/5">
+                    <th class="text-left py-4 px-4">{{ t('line', 'Line') }}</th>
+                    <th class="text-left py-4 px-4">{{ t('item', 'Item') }}</th>
+                    <th class="text-center py-4 px-4">{{ t('expected_qty', 'Expected Qty') }}</th>
+                    <th class="text-center py-4 px-4">{{ t('received_qty', 'Received Qty') }}</th>
+                    <th class="text-center py-4 px-4">{{ t('status', 'Status') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in lines %}
+                <tr class="border-b border-white/5 hover:bg-white/5">
+                    <td class="py-4 px-4 text-slate-300">{{ line.line_number }}</td>
+                    <td class="py-4 px-4">
+                        <div>
+                            <p class="text-white font-medium">{{ line.item_code }}</p>
+                            <p class="text-slate-500 text-xs">{{ line.item_name[:30] }}</p>
+                        </div>
+                    </td>
+                    <td class="py-4 px-4 text-center text-white">{{ line.expected_quantity|int }}</td>
+                    <td class="py-4 px-4 text-center text-slate-300">{{ line.received_quantity|int }}</td>
+                    <td class="py-4 px-4 text-center">
+                        <span class="px-3 py-1 rounded-lg text-xs font-bold {% if line.status == 'RECEIVED' %}bg-emerald-500/10 text-emerald-400{% elif line.status == 'PARTIAL' %}bg-amber-500/10 text-amber-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                            {{ line.status }}
+                        </span>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="py-8 text-center text-slate-500">
+                        <i class="fa-solid fa-inbox text-4xl mb-3 block opacity-30"></i>
+                        <p>{{ t('no_lines', 'No lines in this ASN') }}</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

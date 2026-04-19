@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="{{ session.get('language', 'en') }}" dir="{{ 'rtl' if session.get('direction') == 'rtl' else 'ltr' }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - WHDASH</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root { --primary: #4F46E5; --primary-dark: #4338CA; --success: #059669; --warning: #D97706; --danger: #DC2626; --info: #0891B2; --gray-50: #F9FAFB; --gray-100: #F3F4F6; --gray-200: #E5E7EB; --gray-300: #D1D5DB; --gray-400: #9CA3AF; --gray-500: #6B7280; --gray-600: #4B5563; --gray-700: #374151; --gray-800: #1F2937; --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1); --radius: 0.5rem; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--gray-50); color: var(--gray-900); }
+        .page-header { background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; padding: 2rem; }
+        .page-header h1 { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+        .metrics-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+        .metric-box { background: white; border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); text-align: center; }
+        .metric-box .label { font-size: 0.75rem; color: var(--gray-500); text-transform: uppercase; margin-bottom: 0.5rem; }
+        .metric-box .value { font-size: 1.5rem; font-weight: 700; color: var(--gray-900); }
+        .card { background: white; border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 1.5rem; }
+        .card-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; }
+        .card-header h2 { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+        .card-header h2 i { color: var(--primary); }
+        .card-body { padding: 0; }
+        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table th { text-align: left; padding: 0.875rem 1.5rem; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-500); border-bottom: 2px solid var(--gray-200); background: var(--gray-50); }
+        .data-table td { padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-100); font-size: 0.9rem; }
+        .data-table tr:hover { background: var(--gray-50); }
+        .data-table tr:last-child td { border-bottom: none; }
+        .data-table .num { text-align: right; }
+        .status-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; }
+        .status-draft { background: var(--gray-100); color: var(--gray-600); }
+        .status-calculated { background: #DBEAFE; color: var(--info); }
+        .status-approved { background: #ECFDF5; color: var(--success); }
+        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; border-radius: var(--radius); font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; text-decoration: none; transition: all 0.2s; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-secondary { background: var(--gray-100); color: var(--gray-700); }
+        .btn-secondary:hover { background: var(--gray-200); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #047857; }
+        .btn-sm { padding: 0.375rem 0.75rem; font-size: 0.8rem; }
+        .action-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+        .back-link { display: inline-flex; align-items: center; gap: 0.5rem; color: var(--primary); text-decoration: none; font-weight: 500; margin-bottom: 1rem; }
+        .empty-state { text-align: center; padding: 3rem; color: var(--gray-500); }
+        .empty-state i { font-size: 3rem; color: var(--gray-300); margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="page-header">
+        <h1><i class="fas fa-play-circle"></i> {{ title }}</h1>
+        <p>{{ run.name }} - {{ run.period_name }} | Status: {{ run.status }}</p>
+    </div>
+
+    <div class="container">
+        <a href="{{ url_for('payroll.processing_list') }}" class="back-link">
+            <i class="fas fa-arrow-left"></i> Back to Processing
+        </a>
+
+        <!-- Summary -->
+        {% if summary %}
+        <div class="metrics-row">
+            <div class="metric-box">
+                <div class="label">Total Records</div>
+                <div class="value">{{ summary.total_records or 0 }}</div>
+            </div>
+            <div class="metric-box">
+                <div class="label">Draft</div>
+                <div class="value">{{ summary.draft or 0 }}</div>
+            </div>
+            <div class="metric-box">
+                <div class="label">Calculated</div>
+                <div class="value">{{ summary.calculated or 0 }}</div>
+            </div>
+            <div class="metric-box">
+                <div class="label">Approved</div>
+                <div class="value">{{ summary.approved or 0 }}</div>
+            </div>
+            <div class="metric-box">
+                <div class="label">Total Net</div>
+                <div class="value">{% if summary.total_net %}{{ "AED {:,.0f}".format(summary.total_net) }}{% else %}AED 0{% endif %}</div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Actions -->
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-cogs"></i> Run Actions</h2>
+            </div>
+            <div class="card-body" style="padding: 1.5rem;">
+                <div class="action-buttons">
+                    {% if run.status == 'Draft' %}
+                    <form method="post" action="{{ url_for('payroll.processing_run_validate', id=run.id) }}" style="display: inline;">
+                        <button type="submit" class="btn btn-secondary">
+                            <i class="fas fa-check-circle"></i> Validate
+                        </button>
+                    </form>
+                    <form method="post" action="{{ url_for('payroll.processing_run_add_employees', id=run.id) }}" style="display: inline;">
+                        <button type="submit" class="btn btn-secondary">
+                            <i class="fas fa-user-plus"></i> Add Employees
+                        </button>
+                    </form>
+                    <form method="post" action="{{ url_for('payroll.processing_run_calculate', id=run.id) }}" style="display: inline;">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-calculator"></i> Calculate
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% if run.status == 'Calculated' %}
+                    <form method="post" action="{{ url_for('payroll.processing_run_approve', id=run.id) }}" style="display: inline;">
+                        <input type="hidden" name="remarks" value="Approved">
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-check"></i> Approve All
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% if run.status == 'Approved' %}
+                    <form method="post" action="{{ url_for('payroll.processing_run_lock', id=run.id) }}" style="display: inline;">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-lock"></i> Lock Run
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Records -->
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-users"></i> Employee Records ({{ records|length }})</h2>
+            </div>
+            <div class="card-body">
+                {% if records %}
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Department</th>
+                            <th class="num">Basic</th>
+                            <th class="num">Earnings</th>
+                            <th class="num">Deductions</th>
+                            <th class="num">Net</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in records %}
+                        <tr>
+                            <td>
+                                <strong>{{ record.employee_name }}</strong><br>
+                                <small style="color: var(--gray-500);">{{ record.employee_code }}</small>
+                            </td>
+                            <td>{{ record.department_name or '-' }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(record.basic_salary or 0) }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(record.total_earnings or 0) }}</td>
+                            <td class="num">AED {{ "{:,.2f}".format(record.total_deductions or 0) }}</td>
+                            <td class="num"><strong>AED {{ "{:,.2f}".format(record.net_salary or 0) }}</strong></td>
+                            <td><span class="status-badge status-{{ record.status|lower }}">{{ record.status }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-users"></i>
+                    <p>No employee records yet. Click "Add Employees" to include employees in this run.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Exceptions -->
+        {% if exceptions %}
+        <div class="card">
+            <div class="card-header">
+                <h2><i class="fas fa-exclamation-triangle"></i> Exceptions ({{ exceptions|length }})</h2>
+            </div>
+            <div class="card-body">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Type</th>
+                            <th>Severity</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for exc in exceptions %}
+                        <tr>
+                            <td>{{ exc.employee_name or 'N/A' }}</td>
+                            <td>{{ exc.exception_type }}</td>
+                            <td>{{ exc.severity }}</td>
+                            <td>{{ exc.error_message }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

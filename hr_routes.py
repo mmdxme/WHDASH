@@ -170,6 +170,41 @@ def error_response(message, status=400):
     return None
 
 
+def send_hr_flow_notification(title, message, priority='normal', user_ids=None, channel='hr'):
+    """Send HR notification via Flow system.
+    
+    Args:
+        title: Notification title
+        message: Notification body
+        priority: normal, high, urgent
+        user_ids: List of user IDs to notify, or None for broadcast
+        channel: Flow channel name (default: hr)
+    """
+    try:
+        # Try to import Flow notification function
+        from flow_models import create_flow_notification
+        
+        if user_ids:
+            for uid in user_ids:
+                create_flow_notification(
+                    user_id=uid,
+                    title=title,
+                    message=message,
+                    notification_type='hr',
+                    priority=priority,
+                    related_module='hr'
+                )
+        else:
+            # Broadcast to HR channel if no specific users
+            pass  # Would need Flow broadcast API
+    except ImportError:
+        # Flow module not available, skip notification
+        pass
+    except Exception as e:
+        # Log but don't fail the main operation
+        print(f"Flow notification failed: {str(e)}")
+
+
 # =============================================================================
 # 1. HR DASHBOARD
 # =============================================================================
@@ -1241,6 +1276,21 @@ def leave_approve(id):
             
             log_hr_audit('hr_leave_requests', id, 'APPROVE', user['id'])
             
+            # Get employee and leave type info for notification
+            emp = db.execute("SELECT first_name, last_name FROM hr_employees WHERE id = ?", (leave['employee_id'],)).fetchone()
+            lt = db.execute("SELECT name FROM hr_leave_types WHERE id = ?", (leave['leave_type_id'],)).fetchone()
+            
+            # Send Flow notification to employee
+            emp_user = db.execute("SELECT user_id FROM hr_employees WHERE id = ?", (leave['employee_id'],)).fetchone()
+            if emp_user and emp_user['user_id']:
+                send_hr_flow_notification(
+                    title='Leave Request Approved',
+                    message=f'Your {lt["name"] if lt else "leave"} request from {leave["start_date"]} to {leave["end_date"]} has been approved.',
+                    priority='normal',
+                    user_ids=[emp_user['user_id']],
+                    channel='hr'
+                )
+            
         elif action == 'reject':
             # Return pending days to balance
             db.execute("""
@@ -1641,23 +1691,52 @@ def overtime_approve(id):
         data = request.get_json() if request.is_json else request.form
         action = data.get('action')
         user = get_current_user()
-        
+
+        # Get overtime details before update
+        ot = db.execute("SELECT * FROM hr_overtime_requests WHERE id = ?", (id,)).fetchone()
+
         if action == 'approve':
             db.execute("""
                 UPDATE hr_overtime_requests
                 SET status = 'Approved', approved_by_id = ?, approved_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             """, (user['id'], id))
+
+            log_hr_audit('hr_overtime_requests', id, 'APPROVE', user['id'])
+
+            # Send Flow notification
+            emp = db.execute("SELECT user_id, first_name, last_name FROM hr_employees WHERE id = ?", (ot['employee_id'],)).fetchone() if ot else None
+            if emp and emp['user_id']:
+                send_hr_flow_notification(
+                    title='Overtime Request Approved',
+                    message=f'Your overtime request for {ot["hours"] if ot else "the"} hours on {ot["ot_date"] if ot else "the requested date"} has been approved.',
+                    priority='normal',
+                    user_ids=[emp['user_id']],
+                    channel='hr'
+                )
         else:
             db.execute("""
                 UPDATE hr_overtime_requests
                 SET status = 'Rejected', approved_by_id = ?, approved_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             """, (user['id'], id))
-        
+
+            log_hr_audit('hr_overtime_requests', id, 'REJECT', user['id'])
+
+            # Send Flow notification for rejection
+            emp = db.execute("SELECT user_id FROM hr_employees WHERE id = ?", (ot['employee_id'],)).fetchone() if ot else None
+            if emp and emp['user_id']:
+                send_hr_flow_notification(
+                    title='Overtime Request Rejected',
+                    message=f'Your overtime request for {ot["hours"] if ot else "the"} hours on {ot["ot_date"] if ot else "the requested date"} has been rejected.',
+                    priority='normal',
+                    user_ids=[emp['user_id']],
+                    channel='hr'
+                )
+
         db.commit()
-        return jsonify({'success': True})
-        
+        return jsonify({'success': True, 'message': f'Overtime request {action}d'})
+
     except Exception as e:
         db.rollback()
         return jsonify({'error': str(e)}), 500
@@ -2280,6 +2359,100 @@ def documents_new():
 
 
 # =============================================================================
+# DOCUMENT EXPIRY ALERTS API
+# =============================================================================
+
+@hr_bp.route('/api/document-expiry-alerts')
+@hr_login_required
+@hr_permission_required('view')
+def document_expiry_alerts():
+    """Get document expiry alerts for notifications."""
+    db = get_db()
+    try:
+        days = int(request.args.get('days', 30))
+        expiry_date = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
+
+        # Get documents expiring within the specified days
+        expiring_docs = db.execute("""
+            SELECT ed.*, e.first_name, e.last_name, e.employee_code, e.user_id,
+                   dt.name as document_type_name
+            FROM hr_employee_documents ed
+            JOIN hr_employees e ON ed.employee_id = e.id
+            LEFT JOIN hr_document_types dt ON ed.document_type_id = dt.id
+            WHERE ed.expiry_date IS NOT NULL
+            AND ed.expiry_date <= ?
+            AND ed.expiry_date >= date('now')
+            ORDER BY ed.expiry_date ASC
+        """, (expiry_date,)).fetchall()
+
+        # Send Flow notifications for each expiring document
+        alerts_sent = 0
+        for doc in expiring_docs:
+            if doc['user_id']:
+                send_hr_flow_notification(
+                    title='Document Expiry Alert',
+                    message=f'Your {doc["document_type_name"] or doc["document_type"] or "document"} "{doc["document_name"]}" will expire on {doc["expiry_date"]}. Please renew it soon.',
+                    priority='high',
+                    user_ids=[doc['user_id']],
+                    channel='compliance'
+                )
+                alerts_sent += 1
+
+        return jsonify({
+            'success': True,
+            'alerts_sent': alerts_sent,
+            'total_expiring': len(expiring_docs)
+        })
+    finally:
+        db.close()
+
+
+@hr_bp.route('/api/certification-expiry-alerts')
+@hr_login_required
+@hr_permission_required('view')
+def certification_expiry_alerts():
+    """Get certification expiry alerts for notifications."""
+    db = get_db()
+    try:
+        days = int(request.args.get('days', 30))
+        expiry_date = (datetime.now() + timedelta(days=days)).strftime('%Y-%m-%d')
+
+        # Get certifications expiring within the specified days
+        expiring_certs = db.execute("""
+            SELECT c.*, e.first_name, e.last_name, e.employee_code, e.user_id,
+                   ct.name as certification_type_name
+            FROM hr_employee_certifications c
+            JOIN hr_employees e ON c.employee_id = e.id
+            LEFT JOIN hr_certification_types ct ON c.certification_type_id = ct.id
+            WHERE c.expiry_date IS NOT NULL
+            AND c.expiry_date <= ?
+            AND c.expiry_date >= date('now')
+            ORDER BY c.expiry_date ASC
+        """, (expiry_date,)).fetchall()
+
+        # Send Flow notifications for each expiring certification
+        alerts_sent = 0
+        for cert in expiring_certs:
+            if cert['user_id']:
+                send_hr_flow_notification(
+                    title='Certification Expiry Alert',
+                    message=f'Your {cert["certification_type_name"] or cert["name"] or "certification"} will expire on {cert["expiry_date"]}. Please renew it soon.',
+                    priority='high',
+                    user_ids=[cert['user_id']],
+                    channel='compliance'
+                )
+                alerts_sent += 1
+
+        return jsonify({
+            'success': True,
+            'alerts_sent': alerts_sent,
+            'total_expiring': len(expiring_certs)
+        })
+    finally:
+        db.close()
+
+
+# =============================================================================
 # 13. RECRUITMENT
 # =============================================================================
 
@@ -2574,7 +2747,27 @@ def requisition_new():
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (title, department_id, position_id, vacancy_count, employment_type,
                   salary_min, salary_max, description, requirements, status, user_id))
+            req_id = db.execute("SELECT last_insert_rowid() as id").fetchone()['id']
             db.commit()
+
+            # Send Flow notification to HR managers
+            hr_managers = db.execute("""
+                SELECT DISTINCT u.id as user_id FROM users u
+                JOIN hr_employees e ON u.employee_id = e.id
+                JOIN hr_employee_employment ee ON e.id = ee.employee_id
+                WHERE ee.position_id IN (SELECT id FROM hr_positions WHERE title LIKE '%HR%Manager%' OR title LIKE '%HR%Head%')
+                OR u.can_manage_hr = 1
+            """).fetchall()
+
+            manager_ids = [m['user_id'] for m in hr_managers if m['user_id']]
+            if manager_ids:
+                send_hr_flow_notification(
+                    title='New Job Requisition Created',
+                    message=f'A new job requisition "{title}" has been created for {vacancy_count} position(s). Please review and approve.',
+                    priority='high',
+                    user_ids=manager_ids,
+                    channel='recruitment'
+                )
 
             flash(t('requisition_created', 'Job requisition created successfully'), 'success')
             return redirect(url_for('hr.recruitment_list'))
@@ -2868,6 +3061,254 @@ def report_payroll_summary():
         return render_template('hr/reports/payroll_summary.html',
                              title='Payroll Summary',
                              periods=[dict(p) for p in periods])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/reports/recruitment')
+@hr_login_required
+@hr_permission_required('view')
+def recruitment_report():
+    """Recruitment report with pipeline metrics."""
+    db = get_db()
+    try:
+        year = request.args.get('year', datetime.now().year)
+        status = request.args.get('status', '')
+        department = request.args.get('department', '')
+
+        # Get stats
+        stats = {
+            'total': 0,
+            'open': 0,
+            'candidates': 0,
+            'hired': 0
+        }
+
+        # Total requisitions
+        total_req = db.execute("SELECT COUNT(*) as cnt FROM hr_recruitment_requisitions").fetchone()
+        stats['total'] = total_req['cnt'] if total_req else 0
+
+        # Open requisitions
+        open_req = db.execute("SELECT COUNT(*) as cnt FROM hr_recruitment_requisitions WHERE status = 'Open'").fetchone()
+        stats['open'] = open_req['cnt'] if open_req else 0
+
+        # Total candidates
+        total_cand = db.execute("SELECT COUNT(*) as cnt FROM hr_candidates").fetchone()
+        stats['candidates'] = total_cand['cnt'] if total_cand else 0
+
+        # Hired
+        hired = db.execute("SELECT COUNT(*) as cnt FROM hr_candidates WHERE hiring_status = 'Hired'").fetchone()
+        stats['hired'] = hired['cnt'] if hired else 0
+
+        # Requisitions list
+        req_query = """
+            SELECT r.*, d.name as department_name, p.title as position_title,
+                   (SELECT COUNT(*) FROM hr_candidates c WHERE c.requisition_id = r.id) as candidate_count
+            FROM hr_recruitment_requisitions r
+            LEFT JOIN hr_departments d ON r.department_id = d.id
+            LEFT JOIN hr_positions p ON r.position_id = p.id
+            WHERE 1=1
+        """
+        req_params = []
+
+        if status:
+            req_query += " AND r.status = ?"
+            req_params.append(status)
+
+        if department:
+            req_query += " AND r.department_id = ?"
+            req_params.append(department)
+
+        req_query += " ORDER BY r.created_at DESC LIMIT 100"
+
+        requisitions = db.execute(req_query, req_params).fetchall()
+
+        # Departments for filter
+        departments = db.execute("SELECT id, name FROM hr_departments WHERE status = 'Active' ORDER BY name").fetchall()
+
+        return render_template('hr/reports/recruitment.html',
+                             title='Recruitment Report',
+                             stats=stats,
+                             requisitions=[dict(r) for r in requisitions],
+                             departments=[dict(d) for d in departments],
+                             year=year, status=status, department=department)
+    finally:
+        db.close()
+
+
+@hr_bp.route('/reports/performance')
+@hr_login_required
+@hr_permission_required('view')
+def performance_report():
+    """Performance report with review analytics."""
+    db = get_db()
+    try:
+        # Get stats
+        total_reviews = db.execute("SELECT COUNT(*) as cnt FROM hr_performance_reviews").fetchone()['cnt']
+        pending = db.execute("SELECT COUNT(*) as cnt FROM hr_performance_reviews WHERE status = 'Pending'").fetchone()['cnt']
+        completed = db.execute("SELECT COUNT(*) as cnt FROM hr_performance_reviews WHERE status = 'Completed'").fetchone()['cnt']
+
+        avg_result = db.execute("SELECT AVG(overall_rating) as avg FROM hr_performance_reviews WHERE overall_rating IS NOT NULL").fetchone()
+        avg_rating = round(avg_result['avg'], 1) if avg_result and avg_result['avg'] else 0
+
+        stats = {
+            'total_reviews': total_reviews,
+            'pending': pending,
+            'completed': completed,
+            'avg_rating': avg_rating
+        }
+
+        # Rating distribution
+        rating_dist = db.execute("""
+            SELECT overall_rating as rating, COUNT(*) as count
+            FROM hr_performance_reviews
+            WHERE overall_rating IS NOT NULL
+            GROUP BY overall_rating
+            ORDER BY overall_rating DESC
+        """).fetchall()
+
+        # Calculate percentages
+        rating_distribution = []
+        for r in rating_dist:
+            percentage = (r['count'] / total_reviews * 100) if total_reviews > 0 else 0
+            rating_distribution.append({
+                'rating': r['rating'],
+                'count': r['count'],
+                'percentage': round(percentage, 1)
+            })
+
+        # Reviews by department
+        by_dept = db.execute("""
+            SELECT d.name as department_name, COUNT(pr.id) as count
+            FROM hr_performance_reviews pr
+            LEFT JOIN hr_employee_employment ee ON pr.employee_id = ee.employee_id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            GROUP BY d.id
+            ORDER BY count DESC
+        """).fetchall()
+
+        # Reviews list
+        reviews = db.execute("""
+            SELECT pr.*, e.first_name || ' ' || e.last_name as employee_name
+            FROM hr_performance_reviews pr
+            LEFT JOIN hr_employees e ON pr.employee_id = e.id
+            ORDER BY pr.created_at DESC
+            LIMIT 100
+        """).fetchall()
+
+        return render_template('hr/reports/performance.html',
+                             title='Performance Report',
+                             stats=stats,
+                             rating_distribution=rating_distribution,
+                             by_department=[dict(d) for d in by_dept],
+                             reviews=[dict(r) for r in reviews])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/reports/training')
+@hr_login_required
+@hr_permission_required('view')
+def training_report():
+    """Training report with completion analytics."""
+    db = get_db()
+    try:
+        total_programs = db.execute("SELECT COUNT(*) as cnt FROM hr_training_programs WHERE is_active = 1").fetchone()['cnt']
+        total_sessions = db.execute("SELECT COUNT(*) as cnt FROM hr_training_sessions").fetchone()['cnt']
+        total_enrollments = db.execute("SELECT COUNT(*) as cnt FROM hr_training_enrollments").fetchone()['cnt']
+        completed = db.execute("SELECT COUNT(*) as cnt FROM hr_training_enrollments WHERE status = 'Completed'").fetchone()['cnt']
+
+        completion_rate = round(completed / total_enrollments * 100, 1) if total_enrollments > 0 else 0
+
+        stats = {
+            'total_programs': total_programs,
+            'total_sessions': total_sessions,
+            'total_enrollments': total_enrollments,
+            'completed': completed,
+            'completion_rate': completion_rate
+        }
+
+        # By training type
+        by_type = db.execute("""
+            SELECT tp.training_type, COUNT(DISTINCT tp.id) as programs,
+                   COUNT(te.id) as enrollments
+            FROM hr_training_programs tp
+            LEFT JOIN hr_training_sessions ts ON ts.program_id = tp.id
+            LEFT JOIN hr_training_enrollments te ON te.session_id = ts.id
+            GROUP BY tp.training_type
+        """).fetchall()
+
+        # Recent enrollments
+        recent = db.execute("""
+            SELECT te.*, e.first_name, e.last_name, e.employee_code,
+                   ts.session_title, tp.title as program_title
+            FROM hr_training_enrollments te
+            JOIN hr_employees e ON te.employee_id = e.id
+            JOIN hr_training_sessions ts ON te.session_id = ts.id
+            JOIN hr_training_programs tp ON ts.program_id = tp.id
+            ORDER BY te.created_at DESC
+            LIMIT 50
+        """).fetchall()
+
+        return render_template('hr/reports/training.html',
+                             title='Training Report',
+                             stats=stats,
+                             by_type=[dict(t) for t in by_type],
+                             recent=[dict(r) for r in recent])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/reports/compliance')
+@hr_login_required
+@hr_permission_required('view')
+def compliance_report():
+    """Compliance report for document and certification expiry."""
+    db = get_db()
+    try:
+        today = date.today()
+        thirty_days = (today + timedelta(days=30)).isoformat()
+        seven_days = (today + timedelta(days=7)).isoformat()
+
+        # Documents expiring soon
+        expiring_soon = db.execute("""
+            SELECT d.*, e.first_name, e.last_name, e.employee_code,
+                   dt.name as document_type_name
+            FROM hr_documents d
+            JOIN hr_employees e ON d.employee_id = e.id
+            LEFT JOIN hr_document_types dt ON d.document_type_id = dt.id
+            WHERE d.expiry_date IS NOT NULL AND d.expiry_date <= ?
+            ORDER BY d.expiry_date ASC
+        """, (thirty_days,)).fetchall()
+
+        # Certifications expiring soon
+        certs_expiring = db.execute("""
+            SELECT c.*, e.first_name, e.last_name, e.employee_code,
+                   ct.name as certification_type_name
+            FROM hr_employee_certifications c
+            JOIN hr_employees e ON c.employee_id = e.id
+            LEFT JOIN hr_certification_types ct ON c.certification_type_id = ct.id
+            WHERE c.expiry_date IS NOT NULL AND c.expiry_date <= ?
+            ORDER BY c.expiry_date ASC
+        """, (thirty_days,)).fetchall()
+
+        # Overdue renewals
+        overdue = db.execute("""
+            SELECT COUNT(*) as cnt FROM hr_documents
+            WHERE expiry_date < ? AND expiry_date IS NOT NULL
+        """, (today.isoformat(),)).fetchone()['cnt']
+
+        stats = {
+            'expiring_soon': len(expiring_soon),
+            'certs_expiring': len(certs_expiring),
+            'overdue': overdue
+        }
+
+        return render_template('hr/reports/compliance.html',
+                             title='Compliance Report',
+                             stats=stats,
+                             expiring_documents=[dict(d) for d in expiring_soon],
+                             expiring_certs=[dict(c) for c in certs_expiring])
     finally:
         db.close()
 
@@ -3222,6 +3663,1035 @@ def audit_logs():
                              entity_type=entity_type,
                              page=page,
                              total_pages=(total + per_page - 1) // per_page)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ONBOARDING & OFFBOARDING MODULE
+# =============================================================================
+
+@hr_bp.route('/onboarding')
+@hr_login_required
+@hr_permission_required('view')
+def onboarding_list():
+    """List onboarding plans."""
+    db = get_db()
+    try:
+        search = request.args.get('search', '').strip()
+        status = request.args.get('status', '')
+
+        query = """
+            SELECT e.*, ee.department_id, d.name as department_name,
+                   p.title as position_title,
+                   CASE
+                     WHEN e.probation_end_date IS NOT NULL AND e.probation_end_date >= date('now')
+                     THEN 'On Probation'
+                     WHEN e.status = 'Active' AND e.hire_date >= date('now', '-6 months')
+                     THEN 'New Joiner'
+                     ELSE 'Confirmed'
+                   END as onboarding_status
+            FROM hr_employees e
+            LEFT JOIN hr_employee_employment ee ON e.id = ee.employee_id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            LEFT JOIN hr_positions p ON ee.position_id = p.id
+            WHERE e.status IN ('Active', 'Probation')
+        """
+        params = []
+
+        if search:
+            query += " AND (e.first_name LIKE ? OR e.last_name LIKE ? OR e.employee_code LIKE ?)"
+            search_param = f'%{search}%'
+            params.extend([search_param, search_param, search_param])
+
+        query += " ORDER BY e.hire_date DESC"
+
+        employees = db.execute(query, params).fetchall()
+
+        return render_template('hr/onboarding/list.html',
+                             title='Onboarding',
+                             employees=[dict(e) for e in employees],
+                             search=search,
+                             status=status)
+    finally:
+        db.close()
+
+
+@hr_bp.route('/onboarding/<int:employee_id>')
+@hr_login_required
+@hr_permission_required('view')
+def onboarding_detail(employee_id):
+    """View onboarding details for an employee."""
+    db = get_db()
+    try:
+        employee = get_employee_with_employment(employee_id)
+        if not employee:
+            flash('Employee not found.', 'error')
+            return redirect(url_for('hr.onboarding_list'))
+
+        # Get tasks/checklist for this onboarding
+        tasks = db.execute("""
+            SELECT * FROM hr_tasks
+            WHERE employee_id = ? AND task_title LIKE '%onboard%'
+            ORDER BY due_date
+        """, (employee_id,)).fetchall()
+
+        # Get training enrollments for new hire
+        training = db.execute("""
+            SELECT te.*, ts.session_title, tp.title as program_name
+            FROM hr_training_enrollments te
+            JOIN hr_training_sessions ts ON te.session_id = ts.id
+            JOIN hr_training_programs tp ON ts.program_id = tp.id
+            WHERE te.employee_id = ?
+            ORDER BY ts.start_date DESC
+        """, (employee_id,)).fetchall()
+
+        # Get probation review dates
+        probation_info = None
+        if employee.get('probation_end_date'):
+            probation_info = {
+                'end_date': employee['probation_end_date'],
+                'days_remaining': (datetime.strptime(employee['probation_end_date'], '%Y-%m-%d').date() - datetime.now().date()).days if employee['probation_end_date'] else 0
+            }
+
+        return render_template('hr/onboarding/detail.html',
+                             title=f"Onboarding - {employee['first_name']} {employee['last_name']}",
+                             employee=employee,
+                             tasks=[dict(t) for t in tasks],
+                             training=[dict(t) for t in training],
+                             probation_info=probation_info)
+    finally:
+        db.close()
+
+
+@hr_bp.route('/offboarding')
+@hr_login_required
+@hr_permission_required('view')
+def offboarding_list():
+    """List offboarding requests."""
+    db = get_db()
+    try:
+        search = request.args.get('search', '').strip()
+        status = request.args.get('status', '')
+
+        query = """
+            SELECT e.*, ee.department_id, d.name as department_name,
+                   p.title as position_title,
+                   eh.new_value as termination_reason,
+                   eh.created_at as offboarding_date
+            FROM hr_employees e
+            LEFT JOIN hr_employee_employment ee ON e.id = ee.employee_id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            LEFT JOIN hr_positions p ON ee.position_id = p.id
+            LEFT JOIN hr_audit_logs eh ON eh.entity_id = e.id AND eh.entity_type = 'hr_employees' AND eh.action = 'TERMINATE'
+            WHERE e.status = 'Terminated'
+        """
+        params = []
+
+        if search:
+            query += " AND (e.first_name LIKE ? OR e.last_name LIKE ? OR e.employee_code LIKE ?)"
+            search_param = f'%{search}%'
+            params.extend([search_param, search_param, search_param])
+
+        query += " ORDER BY e.termination_date DESC"
+
+        employees = db.execute(query, params).fetchall()
+
+        return render_template('hr/offboarding/list.html',
+                             title='Offboarding',
+                             employees=[dict(e) for e in employees],
+                             search=search)
+    finally:
+        db.close()
+
+
+@hr_bp.route('/offboarding/<int:employee_id>')
+@hr_login_required
+@hr_permission_required('view')
+def offboarding_detail(employee_id):
+    """View offboarding details for an employee."""
+    db = get_db()
+    try:
+        employee = get_employee_with_employment(employee_id)
+        if not employee:
+            flash('Employee not found.', 'error')
+            return redirect(url_for('hr.offboarding_list'))
+
+        # Get exit interview if exists
+        exit_interview = db.execute("""
+            SELECT * FROM hr_tasks
+            WHERE employee_id = ? AND task_title LIKE '%exit%'
+            ORDER BY due_date DESC LIMIT 1
+        """, (employee_id,)).fetchone()
+
+        # Get final settlement info
+        settlement = db.execute("""
+            SELECT * FROM hr_payroll_records
+            WHERE employee_id = ? AND status = 'Approved'
+            ORDER BY period_id DESC LIMIT 1
+        """, (employee_id,)).fetchone()
+
+        return render_template('hr/offboarding/detail.html',
+                             title=f"Offboarding - {employee['first_name']} {employee['last_name']}",
+                             employee=employee,
+                             exit_interview=dict(exit_interview) if exit_interview else None,
+                             settlement=dict(settlement) if settlement else None)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# LOANS MODULE
+# =============================================================================
+
+@hr_bp.route('/loans')
+@hr_login_required
+@hr_permission_required('view')
+def loans_list():
+    """List employee loans."""
+    db = get_db()
+    try:
+        search = request.args.get('search', '').strip()
+        status = request.args.get('status', '')
+
+        query = """
+            SELECT l.*, e.first_name, e.last_name, e.employee_code
+            FROM hr_loans l
+            JOIN hr_employees e ON l.employee_id = e.id
+            WHERE 1=1
+        """
+        params = []
+
+        if search:
+            query += " AND (e.first_name LIKE ? OR e.last_name LIKE ? OR e.employee_code LIKE ?)"
+            search_param = f'%{search}%'
+            params.extend([search_param, search_param, search_param])
+
+        if status:
+            query += " AND l.status = ?"
+            params.append(status)
+
+        query += " ORDER BY l.created_at DESC"
+
+        loans = db.execute(query, params).fetchall()
+
+        return render_template('hr/loans/list.html',
+                             title='Loans & Advances',
+                             loans=[dict(l) for l in loans],
+                             search=search,
+                             status=status)
+    finally:
+        db.close()
+
+
+@hr_bp.route('/loans/<int:loan_id>')
+@hr_login_required
+@hr_permission_required('view')
+def loans_detail(loan_id):
+    """View loan details with installment schedule."""
+    db = get_db()
+    try:
+        loan = db.execute("""
+            SELECT l.*, e.first_name, e.last_name, e.employee_code
+            FROM hr_loans l
+            JOIN hr_employees e ON l.employee_id = e.id
+            WHERE l.id = ?
+        """, (loan_id,)).fetchone()
+
+        if not loan:
+            flash('Loan not found.', 'error')
+            return redirect(url_for('hr.loans_list'))
+
+        installments = db.execute("""
+            SELECT li.*, pp.name as period_name
+            FROM hr_loan_installments li
+            LEFT JOIN hr_payroll_periods pp ON li.period_id = pp.id
+            WHERE li.loan_id = ?
+            ORDER BY li.due_date
+        """, (loan_id,)).fetchall()
+
+        return render_template('hr/loans/detail.html',
+                             title=f'Loan - {loan["first_name"]} {loan["last_name"]}',
+                             loan=dict(loan),
+                             installments=[dict(i) for i in installments])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/loans/new', methods=['GET', 'POST'])
+@hr_login_required
+@hr_permission_required('create')
+def loans_new():
+    """Create new loan."""
+    user = get_current_user()
+    db = get_db()
+
+    if request.method == 'POST':
+        try:
+            data = request.form
+
+            # Calculate total amount with interest
+            principal = float(data.get('principal_amount', 0))
+            interest_rate = float(data.get('interest_rate', 0))
+            tenure = int(data.get('tenure_months', 1))
+
+            total_amount = principal * (1 + interest_rate / 100)
+            monthly_installment = total_amount / tenure
+
+            cursor = db.execute("""
+                INSERT INTO hr_loans (employee_id, loan_type, principal_amount, interest_rate,
+                                   total_amount, monthly_installment, tenure_months, amount_remaining,
+                                   start_date, approved_by_id, remarks)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                data.get('employee_id'),
+                data.get('loan_type', 'Personal'),
+                principal,
+                interest_rate,
+                total_amount,
+                monthly_installment,
+                tenure,
+                total_amount,
+                parse_date(data.get('start_date')) or datetime.now().date(),
+                user['id'],
+                data.get('remarks')
+            ))
+
+            loan_id = cursor.lastrowid
+
+            # Create installment schedule
+            start_date = parse_date(data.get('start_date')) or datetime.now().date()
+            for i in range(tenure):
+                due_date = start_date + timedelta(days=30 * (i + 1))
+                db.execute("""
+                    INSERT INTO hr_loan_installments (loan_id, due_date, installment_amount, principal_amount, interest_amount)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (loan_id, due_date, monthly_installment, principal / tenure, (total_amount - principal) / tenure))
+
+            db.commit()
+            flash('Loan created successfully!', 'success')
+            return redirect(url_for('hr.loans_detail', loan_id=loan_id))
+
+        except Exception as e:
+            db.rollback()
+            flash(f'Error creating loan: {str(e)}', 'error')
+
+    try:
+        employees = db.execute("""
+            SELECT e.id, e.first_name, e.last_name, e.employee_code
+            FROM hr_employees e
+            WHERE e.status = 'Active'
+            ORDER BY e.first_name, e.last_name
+        """).fetchall()
+
+        return render_template('hr/loans/new.html',
+                             title='New Loan',
+                             employees=[dict(e) for e in employees])
+    finally:
+        db.close()
+
+
+# =============================================================================
+# TALENT & SUCCESSION MODULE
+# =============================================================================
+
+@hr_bp.route('/talent')
+@hr_login_required
+@hr_permission_required('view')
+def talent_list():
+    """List talent profiles and succession plans."""
+    db = get_db()
+    try:
+        search = request.args.get('search', '').strip()
+
+        # Get employees with potential assessments
+        query = """
+            SELECT e.*, d.name as department_name, p.title as position_title,
+                   s.readiness_level, s.status as succession_status
+            FROM hr_employees e
+            LEFT JOIN hr_employee_employment ee ON e.id = ee.employee_id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            LEFT JOIN hr_positions p ON ee.position_id = p.id
+            LEFT JOIN hr_successors s ON e.id = s.employee_id
+            WHERE e.status = 'Active'
+        """
+        params = []
+
+        if search:
+            query += " AND (e.first_name LIKE ? OR e.last_name LIKE ?)"
+            search_param = f'%{search}%'
+            params.extend([search_param, search_param])
+
+        query += " ORDER BY e.first_name, e.last_name"
+
+        employees = db.execute(query, params).fetchall()
+
+        # Get Hi-Po watchlist
+        hipo_count = db.execute("""
+            SELECT COUNT(*) as cnt FROM hr_successors
+            WHERE status = 'Active' AND is_primary = 1
+        """).fetchone()['cnt']
+
+        return render_template('hr/talent/list.html',
+                             title='Talent & Succession',
+                             employees=[dict(e) for e in employees],
+                             hipo_count=hipo_count,
+                             search=search)
+    finally:
+        db.close()
+
+
+@hr_bp.route('/talent/hipo')
+@hr_login_required
+@hr_permission_required('view')
+def talent_hipo():
+    """High Potential watchlist."""
+    db = get_db()
+    try:
+        successors = db.execute("""
+            SELECT s.*, e.first_name, e.last_name, e.employee_code,
+                   d.name as department_name, p.title as position_title,
+                   succ.first_name || ' ' || succ.last_name as successor_name,
+                   dep.first_name || ' ' || dep.last_name as deputy_name
+            FROM hr_successors s
+            JOIN hr_employees e ON s.employee_id = e.id
+            LEFT JOIN hr_departments d ON d.id = (SELECT department_id FROM hr_employee_employment WHERE employee_id = e.id AND is_primary = 1)
+            LEFT JOIN hr_positions p ON p.id = (SELECT position_id FROM hr_employee_employment WHERE employee_id = e.id AND is_primary = 1)
+            LEFT JOIN hr_employees succ ON s.successor_id = succ.id
+            LEFT JOIN hr_employees dep ON s.deputy_id = dep.id
+            WHERE s.status = 'Active'
+            ORDER BY s.readiness_level, e.last_name
+        """).fetchall()
+
+        return render_template('hr/talent/hipo.html',
+                             title='Hi-Po Watchlist',
+                             successors=[dict(s) for s in successors])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/talent/<int:employee_id>')
+@hr_login_required
+@hr_permission_required('view')
+def talent_profile(employee_id):
+    """View talent profile for an employee."""
+    db = get_db()
+    try:
+        employee = get_employee_with_employment(employee_id)
+        if not employee:
+            flash('Employee not found.', 'error')
+            return redirect(url_for('hr.talent_list'))
+
+        # Get succession plans
+        succession = db.execute("""
+            SELECT s.*, succ.first_name || ' ' || succ.last_name as successor_name,
+                   dep.first_name || ' ' || dep.last_name as deputy_name
+            FROM hr_successors s
+            LEFT JOIN hr_employees succ ON s.successor_id = succ.id
+            LEFT JOIN hr_employees dep ON s.deputy_id = dep.id
+            WHERE s.employee_id = ?
+        """, (employee_id,)).fetchall()
+
+        # Get performance reviews
+        reviews = db.execute("""
+            SELECT * FROM hr_performance_reviews
+            WHERE employee_id = ?
+            ORDER BY review_date DESC
+            LIMIT 5
+        """, (employee_id,)).fetchall()
+
+        # Get training history
+        training = db.execute("""
+            SELECT te.*, tp.title as program_name, ts.session_title
+            FROM hr_training_enrollments te
+            JOIN hr_training_sessions ts ON te.session_id = ts.id
+            JOIN hr_training_programs tp ON ts.program_id = tp.id
+            WHERE te.employee_id = ?
+            ORDER BY te.enrollment_date DESC
+        """, (employee_id,)).fetchall()
+
+        return render_template('hr/talent/profile.html',
+                             title=f'Talent Profile - {employee["first_name"]} {employee["last_name"]}',
+                             employee=employee,
+                             succession=[dict(s) for s in succession],
+                             reviews=[dict(r) for r in reviews],
+                             training=[dict(t) for t in training])
+    finally:
+        db.close()
+
+
+# =============================================================================
+# CERTIFICATIONS MODULE
+# =============================================================================
+
+@hr_bp.route('/certifications')
+@hr_login_required
+@hr_permission_required('view')
+def certifications_list():
+    """List employee certifications and expiry tracking."""
+    db = get_db()
+    try:
+        search = request.args.get('search', '').strip()
+        status = request.args.get('status', '')  # valid, expiring, expired
+
+        query = """
+            SELECT te.*, e.first_name, e.last_name, e.employee_code,
+                   tp.title as program_name, tp.certification_validity_months,
+                   ts.start_date, ts.end_date
+            FROM hr_training_enrollments te
+            JOIN hr_employees e ON te.employee_id = e.id
+            JOIN hr_training_sessions ts ON te.session_id = ts.id
+            JOIN hr_training_programs tp ON ts.program_id = tp.id
+            WHERE te.certificate_number IS NOT NULL
+        """
+        params = []
+
+        if search:
+            query += " AND (e.first_name LIKE ? OR e.last_name LIKE ? OR te.certificate_number LIKE ?)"
+            search_param = f'%{search}%'
+            params.extend([search_param, search_param, search_param])
+
+        query += " ORDER BY te.completion_date DESC"
+
+        certs = db.execute(query, params).fetchall()
+
+        # Categorize by status
+        now = datetime.now().date()
+        categorized = []
+        for c in certs:
+            cert_dict = dict(c)
+            if cert_dict.get('completion_date'):
+                expiry = datetime.strptime(cert_dict['completion_date'], '%Y-%m-%d').date()
+                expiry = expiry.replace(year=expiry.year + (cert_dict.get('certification_validity_months') or 12) // 12)
+                cert_dict['expiry_date'] = expiry
+                cert_dict['days_remaining'] = (expiry - now).days
+                if cert_dict['days_remaining'] < 0:
+                    cert_dict['expiry_status'] = 'Expired'
+                elif cert_dict['days_remaining'] <= 30:
+                    cert_dict['expiry_status'] = 'Expiring Soon'
+                else:
+                    cert_dict['expiry_status'] = 'Valid'
+            categorized.append(cert_dict)
+
+        # Filter if status provided
+        if status:
+            categorized = [c for c in categorized if c.get('expiry_status') == status]
+
+        return render_template('hr/certifications/list.html',
+                             title='Certifications',
+                             certifications=categorized,
+                             search=search,
+                             status=status)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# HR CASES / SERVICE REQUESTS MODULE
+# =============================================================================
+
+@hr_bp.route('/cases')
+@hr_login_required
+@hr_permission_required('view')
+def hr_cases_list():
+    """List HR service cases/requests."""
+    db = get_db()
+    try:
+        search = request.args.get('search', '').strip()
+        status = request.args.get('status', '')
+        priority = request.args.get('priority', '')
+
+        query = """
+            SELECT t.*, e.first_name, e.last_name, e.employee_code,
+                   ass.first_name || ' ' || ass.last_name as assigned_to_name
+            FROM hr_tasks t
+            JOIN hr_employees e ON t.employee_id = e.id
+            LEFT JOIN users ass ON t.assigned_by_id = ass.id
+            WHERE t.task_title NOT LIKE '%onboard%' AND t.task_title NOT LIKE '%exit%'
+        """
+        params = []
+
+        if search:
+            query += " AND (t.task_title LIKE ? OR e.first_name LIKE ? OR e.last_name LIKE ?)"
+            search_param = f'%{search}%'
+            params.extend([search_param, search_param, search_param])
+
+        if status:
+            query += " AND t.status = ?"
+            params.append(status)
+
+        if priority:
+            query += " AND t.priority = ?"
+            params.append(priority)
+
+        query += " ORDER BY t.created_at DESC"
+
+        cases = db.execute(query, params).fetchall()
+
+        return render_template('hr/cases/list.html',
+                             title='HR Cases',
+                             cases=[dict(c) for c in cases],
+                             search=search,
+                             status=status,
+                             priority=priority)
+    finally:
+        db.close()
+
+
+@hr_bp.route('/cases/new', methods=['GET', 'POST'])
+@hr_login_required
+@hr_permission_required('create')
+def hr_cases_new():
+    """Create new HR case/request."""
+    user = get_current_user()
+    db = get_db()
+
+    if request.method == 'POST':
+        try:
+            data = request.form
+
+            cursor = db.execute("""
+                INSERT INTO hr_tasks (employee_id, task_title, task_description, priority,
+                                   due_date, status, assigned_by_id)
+                VALUES (?, ?, ?, ?, ?, 'Open', ?)
+            """, (
+                data.get('employee_id'),
+                data.get('task_title'),
+                data.get('task_description'),
+                data.get('priority', 'Medium'),
+                parse_date(data.get('due_date')),
+                user['id']
+            ))
+
+            db.commit()
+            flash('Case created successfully!', 'success')
+            return redirect(url_for('hr.hr_cases_list'))
+
+        except Exception as e:
+            db.rollback()
+            flash(f'Error creating case: {str(e)}', 'error')
+
+    try:
+        employees = db.execute("""
+            SELECT e.id, e.first_name, e.last_name, e.employee_code
+            FROM hr_employees e
+            WHERE e.status = 'Active'
+            ORDER BY e.first_name, e.last_name
+        """).fetchall()
+
+        return render_template('hr/cases/new.html',
+                             title='New HR Case',
+                             employees=[dict(e) for e in employees])
+    finally:
+        db.close()
+
+
+# =============================================================================
+# WORKFORCE PLANNING MODULE
+# =============================================================================
+
+@hr_bp.route('/workforce')
+@hr_login_required
+@hr_permission_required('view')
+def workforce_planning():
+    """Workforce planning dashboard."""
+    db = get_db()
+    try:
+        today = datetime.now()
+
+        # Current headcount by department
+        dept_headcount = db.execute("""
+            SELECT d.name, COUNT(ee.employee_id) as headcount
+            FROM hr_departments d
+            LEFT JOIN hr_employee_employment ee ON d.id = ee.department_id AND ee.employment_status = 'Active'
+            WHERE d.status = 'Active'
+            GROUP BY d.id
+            ORDER BY d.name
+        """).fetchall()
+
+        # Open vacancies
+        vacancies = db.execute("""
+            SELECT COUNT(*) as cnt, department_id, d.name as department_name
+            FROM hr_job_requisitions jr
+            LEFT JOIN hr_departments d ON jr.department_id = d.id
+            WHERE jr.status IN ('Open', 'Approved', 'Posted')
+            GROUP BY jr.department_id
+        """).fetchall()
+
+        # Attrition this year
+        attrition = db.execute("""
+            SELECT COUNT(*) as cnt FROM hr_employees
+            WHERE termination_date IS NOT NULL
+            AND strftime('%Y', termination_date) = ?
+        """, (str(today.year),)).fetchone()['cnt']
+
+        # New hires this year
+        new_hires = db.execute("""
+            SELECT COUNT(*) as cnt FROM hr_employees
+            WHERE strftime('%Y', hire_date) = ?
+        """, (str(today.year),)).fetchone()['cnt']
+
+        # Headcount trend (monthly for current year)
+        monthly_headcount = []
+        for month in range(1, today.month + 1):
+            headcount = db.execute("""
+                SELECT COUNT(*) as cnt FROM hr_employees
+                WHERE hire_date <= ? AND (termination_date IS NULL OR termination_date >= ?)
+            """, (f"{today.year}-{month:02d}-01", f"{today.year}-{month:02d}-01")).fetchone()['cnt']
+            monthly_headcount.append({
+                'month': month,
+                'headcount': headcount
+            })
+
+        return render_template('hr/workforce/planning.html',
+                             title='Workforce Planning',
+                             dept_headcount=[dict(d) for d in dept_headcount],
+                             vacancies=[dict(v) for v in vacancies],
+                             attrition=attrition,
+                             new_hires=new_hires,
+                             monthly_headcount=monthly_headcount,
+                             current_year=today.year)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# EXPORT CENTER
+# =============================================================================
+
+@hr_bp.route('/export')
+@hr_login_required
+@hr_permission_required('view')
+def export_center():
+    """Export center for HR reports."""
+    db = get_db()
+    try:
+        # Get available report types
+        report_types = [
+            {'id': 'employees', 'name': 'Employee Master', 'route': '/hr/employees/export'},
+            {'id': 'headcount', 'name': 'Headcount Report', 'route': '/hr/reports/headcount'},
+            {'id': 'attendance', 'name': 'Attendance Report', 'route': '/hr/reports/attendance'},
+            {'id': 'leave', 'name': 'Leave Report', 'route': '/hr/reports/leave'},
+            {'id': 'payroll', 'name': 'Payroll Report', 'route': '/hr/reports/payroll'},
+            {'id': 'recruitment', 'name': 'Recruitment Report', 'route': '/hr/reports/recruitment'},
+            {'id': 'performance', 'name': 'Performance Report', 'route': '/hr/reports/performance'},
+            {'id': 'training', 'name': 'Training Report', 'route': '/hr/reports/training'},
+            {'id': 'compliance', 'name': 'Compliance Report', 'route': '/hr/reports/compliance'},
+        ]
+
+        # Get departments for filter
+        departments = db.execute("SELECT id, name FROM hr_departments WHERE status = 'Active' ORDER BY name").fetchall()
+
+        return render_template('hr/export/center.html',
+                             title='Export Center',
+                             report_types=report_types,
+                             departments=[dict(d) for d in departments])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/employees/export')
+@hr_login_required
+@hr_permission_required('view')
+def employees_export():
+    """Export employees to CSV/Excel/PDF with column selection."""
+    db = get_db()
+    try:
+        format_type = request.args.get('format', 'csv')
+        status = request.args.get('status', 'Active')
+        department = request.args.get('department', '')
+        columns = request.args.getlist('columns') or ['employee_code', 'first_name', 'last_name', 'email', 'mobile', 'department_name', 'position_title', 'status', 'hire_date', 'manager_name']
+
+        # All available columns
+        all_columns = {
+            'employee_code': 'Employee Code',
+            'first_name': 'First Name',
+            'last_name': 'Last Name',
+            'email': 'Email',
+            'mobile': 'Mobile',
+            'department_name': 'Department',
+            'position_title': 'Position',
+            'status': 'Status',
+            'hire_date': 'Hire Date',
+            'manager_name': 'Manager',
+            'nationality': 'Nationality',
+            'gender': 'Gender',
+            'date_of_birth': 'Date of Birth',
+            'city': 'City',
+            'country': 'Country',
+            'employment_type': 'Employment Type'
+        }
+
+        # Build dynamic query based on selected columns
+        col_list = ', '.join(['e.' + c if c in ['employee_code', 'first_name', 'last_name', 'email', 'mobile', 'status', 'hire_date', 'nationality', 'gender', 'date_of_birth', 'city', 'country'] else c for c in columns])
+
+        query = f"""
+            SELECT {col_list}
+            FROM hr_employees e
+            LEFT JOIN hr_employee_employment ee ON e.id = ee.employee_id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            LEFT JOIN hr_positions p ON ee.position_id = p.id
+            LEFT JOIN hr_employees m ON ee.reporting_to_id = m.id
+            WHERE 1=1
+        """
+        params = []
+
+        if status:
+            query += " AND e.status = ?"
+            params.append(status)
+
+        if department:
+            query += " AND ee.department_id = ?"
+            params.append(department)
+
+        query += " ORDER BY e.first_name, e.last_name"
+
+        employees = db.execute(query, params).fetchall()
+
+        if format_type == 'csv':
+            import csv
+            import io
+            output = io.StringIO()
+            writer = csv.writer(output)
+            # Use human-readable column headers
+            headers = [all_columns.get(c, c) for c in columns]
+            writer.writerow(headers)
+            for emp in employees:
+                row = [emp.get(c, '') for c in columns]
+                writer.writerow(row)
+
+            return Response(output.getvalue(), mimetype='text/csv',
+                          headers={'Content-Disposition': 'attachment; filename=employees_export.csv'})
+
+        elif format_type == 'json':
+            return jsonify([dict(e) for e in employees])
+
+        else:
+            # For PDF/Excel, return data for client-side generation
+            return jsonify({
+                'data': [dict(e) for e in employees],
+                'count': len(employees),
+                'format': format_type,
+                'columns': headers
+            })
+
+    finally:
+        db.close()
+
+
+@hr_bp.route('/reports/export/headcount')
+@hr_login_required
+@hr_permission_required('view')
+def export_headcount():
+    """Export headcount report."""
+    db = get_db()
+    try:
+        format_type = request.args.get('format', 'csv')
+
+        by_dept = db.execute("""
+            SELECT d.name as department,
+                   COUNT(DISTINCT ee.employee_id) as headcount,
+                   SUM(CASE WHEN e.gender = 'Male' THEN 1 ELSE 0 END) as male,
+                   SUM(CASE WHEN e.gender = 'Female' THEN 1 ELSE 0 END) as female
+            FROM hr_departments d
+            LEFT JOIN hr_employee_employment ee ON d.id = ee.department_id AND ee.employment_status = 'Active'
+            LEFT JOIN hr_employees e ON ee.employee_id = e.id AND e.status = 'Active'
+            WHERE d.status = 'Active'
+            GROUP BY d.id
+            ORDER BY d.name
+        """).fetchall()
+
+        if format_type == 'csv':
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(['Department', 'Headcount', 'Male', 'Female'])
+            for row in by_dept:
+                writer.writerow([row['department'], row['headcount'], row['male'], row['female']])
+            return Response(output.getvalue(), mimetype='text/csv',
+                          headers={'Content-Disposition': 'attachment; filename=headcount_report.csv'})
+        else:
+            return jsonify([dict(r) for r in by_dept])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/reports/export/leave')
+@hr_login_required
+@hr_permission_required('view')
+def export_leave():
+    """Export leave report."""
+    db = get_db()
+    try:
+        format_type = request.args.get('format', 'csv')
+        year = request.args.get('year', datetime.now().year)
+
+        leave_usage = db.execute("""
+            SELECT e.employee_code, e.first_name, e.last_name,
+                   lt.name as leave_type,
+                   lb.total_days, lb.used_days, lb.pending_days, lb.balance_days
+            FROM hr_leave_balances lb
+            JOIN hr_employees e ON lb.employee_id = e.id
+            JOIN hr_leave_types lt ON lb.leave_type_id = lt.id
+            WHERE lb.year = ?
+            ORDER BY e.first_name, lt.name
+        """, (year,)).fetchall()
+
+        if format_type == 'csv':
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(['Employee Code', 'First Name', 'Last Name', 'Leave Type', 'Total Days', 'Used', 'Pending', 'Balance'])
+            for row in leave_usage:
+                writer.writerow([row['employee_code'], row['first_name'], row['last_name'],
+                               row['leave_type'], row['total_days'], row['used_days'],
+                               row['pending_days'], row['balance_days']])
+            return Response(output.getvalue(), mimetype='text/csv',
+                          headers={'Content-Disposition': 'attachment; filename=leave_report.csv'})
+        else:
+            return jsonify([dict(r) for r in leave_usage])
+    finally:
+        db.close()
+
+
+@hr_bp.route('/reports/export/payroll')
+@hr_login_required
+@hr_permission_required('view')
+def export_payroll():
+    """Export payroll summary report."""
+    db = get_db()
+    try:
+        format_type = request.args.get('format', 'csv')
+
+        periods = db.execute("""
+            SELECT p.year, p.month, p.name,
+                   COUNT(pr.id) as employees,
+                   SUM(pr.gross_salary) as total_gross,
+                   SUM(pr.net_salary) as total_net
+            FROM hr_payroll_periods p
+            LEFT JOIN hr_payroll_records pr ON p.id = pr.period_id
+            GROUP BY p.id
+            ORDER BY p.year DESC, p.month DESC
+        """).fetchall()
+
+        if format_type == 'csv':
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(['Year', 'Month', 'Period Name', 'Employees', 'Total Gross', 'Total Net'])
+            for row in periods:
+                writer.writerow([row['year'], row['month'], row['name'], row['employees'],
+                               row['total_gross'] or 0, row['total_net'] or 0])
+            return Response(output.getvalue(), mimetype='text/csv',
+                          headers={'Content-Disposition': 'attachment; filename=payroll_report.csv'})
+        else:
+            return jsonify([dict(r) for r in periods])
+    finally:
+        db.close()
+
+
+# =============================================================================
+# LEAVE CALENDAR
+# =============================================================================
+
+@hr_bp.route('/leave/calendar')
+@hr_login_required
+@hr_permission_required('view')
+def leave_calendar():
+    """Leave calendar view showing who's on leave."""
+    db = get_db()
+    try:
+        month = request.args.get('month', datetime.now().month, type=int)
+        year = request.args.get('year', datetime.now().year, type=int)
+        department = request.args.get('department', '')
+
+        # Get all approved leaves for the month
+        start_date = f"{year}-{month:02d}-01"
+        if month == 12:
+            end_date = f"{year + 1}-01-01"
+        else:
+            end_date = f"{year}-{month + 1:02d}-01"
+
+        query = """
+            SELECT lr.*, e.first_name, e.last_name, e.employee_code, lt.name as leave_type_name
+            FROM hr_leave_requests lr
+            JOIN hr_employees e ON lr.employee_id = e.id
+            JOIN hr_leave_types lt ON lr.leave_type_id = lt.id
+            WHERE lr.status = 'Approved'
+            AND lr.start_date < ?
+            AND lr.end_date >= ?
+        """
+        params = [end_date, start_date]
+
+        if department:
+            query += """ AND e.id IN (
+                SELECT employee_id FROM hr_employee_employment
+                WHERE department_id = ? AND is_primary = 1
+            )"""
+            params.append(department)
+
+        leaves = db.execute(query, params).fetchall()
+
+        # Get departments for filter
+        departments = db.execute("SELECT * FROM hr_departments WHERE status = 'Active' ORDER BY name").fetchall()
+
+        return render_template('hr/leave/calendar.html',
+                             title='Leave Calendar',
+                             leaves=[dict(l) for l in leaves],
+                             departments=[dict(d) for d in departments],
+                             month=month,
+                             year=year,
+                             selected_department=department)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ORG CHART
+# =============================================================================
+
+@hr_bp.route('/org-chart')
+@hr_login_required
+@hr_permission_required('view')
+def org_chart():
+    """Organization chart visualization."""
+    db = get_db()
+    try:
+        # Get top-level departments (no parent or parent not in hr_departments)
+        root_depts = db.execute("""
+            SELECT d.*, e.first_name || ' ' || e.last_name as head_name,
+                   COUNT(ee.employee_id) as headcount
+            FROM hr_departments d
+            LEFT JOIN hr_employees e ON d.head_id = e.id
+            LEFT JOIN hr_employee_employment ee ON d.id = ee.department_id AND ee.employment_status = 'Active'
+            WHERE d.status = 'Active'
+            GROUP BY d.id
+            ORDER BY d.name
+        """).fetchall()
+
+        # Build org structure
+        org_data = []
+        for dept in root_depts:
+            dept_dict = dict(dept)
+            # Get positions in this department
+            positions = db.execute("""
+                SELECT p.*, COUNT(ee.employee_id) as filled
+                FROM hr_positions p
+                LEFT JOIN hr_employee_employment ee ON p.id = ee.position_id AND ee.employment_status = 'Active'
+                WHERE p.department_id = ? AND p.status = 'Active'
+                GROUP BY p.id
+            """, (dept['id'],)).fetchall()
+            dept_dict['positions'] = [dict(p) for p in positions]
+
+            # Get sub-departments
+            sub_depts = db.execute("""
+                SELECT * FROM hr_departments
+                WHERE parent_id = ? AND status = 'Active'
+            """, (dept['id'],)).fetchall()
+            dept_dict['sub_departments'] = [dict(s) for s in sub_depts]
+
+            org_data.append(dept_dict)
+
+        return render_template('hr/org_chart.html',
+                             title='Organization Chart',
+                             org_data=org_data)
     finally:
         db.close()
 

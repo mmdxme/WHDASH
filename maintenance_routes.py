@@ -2637,6 +2637,1994 @@ def my_work_orders():
 
 
 # =============================================================================
+# EXECUTIVE DASHBOARD
+# =============================================================================
+
+@maintenance_bp.route('/executive-dashboard')
+@require_login
+def executive_dashboard():
+    """Maintenance Executive Dashboard with KPIs and metrics."""
+    db = get_db()
+    try:
+        # Get overall stats
+        open_wos = db.execute("""
+            SELECT COUNT(*) as cnt FROM maintenance_work_orders
+            WHERE status NOT IN ('Completed', 'Closed', 'Canceled')
+        """).fetchone()['cnt']
+
+        overdue_wos = db.execute("""
+            SELECT COUNT(*) as cnt FROM maintenance_work_orders
+            WHERE status NOT IN ('Completed', 'Closed', 'Canceled')
+            AND (due_date < date('now') OR (scheduled_end_date < date('now') AND status = 'In Progress'))
+        """).fetchone()['cnt']
+
+        in_progress = db.execute("""
+            SELECT COUNT(*) as cnt FROM maintenance_work_orders WHERE status = 'In Progress'
+        """).fetchone()['cnt']
+
+        # PM Compliance
+        compliance = get_pm_compliance_rate()
+        pm_compliance_rate = compliance.get('compliance_rate', 0) if compliance else 0
+
+        # MTBF and MTTR (placeholder calculations)
+        total_downtime = db.execute("""
+            SELECT COALESCE(SUM(total_hours), 0) as total FROM maintenance_downtime_logs
+            WHERE date(downtime_start) >= date('now', '-30 days')
+        """).fetchone()['total']
+
+        incident_count = db.execute("""
+            SELECT COUNT(*) as cnt FROM maintenance_downtime_logs
+            WHERE date(downtime_start) >= date('now', '-30 days')
+        """).fetchone()['cnt']
+
+        mtbf = 720 if incident_count == 0 else (720 * 30) / incident_count  # Assume 720 hours/month
+        mttr = total_downtime / incident_count if incident_count > 0 else 0
+        availability = (mtbf - mttr) / mtbf * 100 if mtbf > 0 else 100
+
+        # Cost stats
+        total_cost = db.execute("""
+            SELECT COALESCE(SUM(amount), 0) as total FROM maintenance_cost_entries
+            WHERE cost_date >= date('now', '-30 days')
+        """).fetchone()['total']
+
+        labor_cost = db.execute("""
+            SELECT COALESCE(SUM(labor_cost), 0) as total FROM maintenance_labor_logs
+            WHERE work_date >= date('now', '-30 days')
+        """).fetchone()['total']
+
+        parts_cost = db.execute("""
+            SELECT COALESCE(SUM(total_cost), 0) as total FROM maintenance_parts_usage
+            WHERE issue_date >= date('now', '-30 days')
+        """).fetchone()['total']
+
+        # Active technicians
+        active_techs = db.execute("""
+            SELECT COUNT(DISTINCT assigned_technician_id) as cnt FROM maintenance_work_orders
+            WHERE status IN ('Assigned', 'In Progress')
+            AND assigned_technician_id IS NOT NULL
+        """).fetchone()['cnt']
+
+        # Work order status distribution
+        wo_status_dist = db.execute("""
+            SELECT status, COUNT(*) as count FROM maintenance_work_orders
+            GROUP BY status
+        """).fetchall()
+
+        total_wos = db.execute("SELECT COUNT(*) as cnt FROM maintenance_work_orders").fetchone()['cnt']
+
+        # Top failing equipment
+        top_failing_equipment = db.execute("""
+            SELECT a.name as asset_name, a.asset_code, COUNT(*) as failure_count
+            FROM maintenance_downtime_logs mdl
+            JOIN assets a ON mdl.asset_id = a.id
+            WHERE date(mdl.downtime_start) >= date('now', '-90 days')
+            GROUP BY a.id
+            ORDER BY failure_count DESC
+            LIMIT 5
+        """).fetchall()
+
+        # Technician utilization
+        tech_utilization = db.execute("""
+            SELECT e.first_name || ' ' || e.last_name as technician_name,
+                   COUNT(mwo.id) as assigned_count,
+                   SUM(CASE WHEN mwo.status = 'In Progress' THEN 1 ELSE 0 END) as in_progress_count,
+                   CASE WHEN e.max_weekly_hours > 0
+                        THEN (COUNT(mwo.id) * 40.0 / e.max_weekly_hours * 100)
+                        ELSE 50 END as utilization
+            FROM hr_employees e
+            LEFT JOIN maintenance_work_orders mwo ON e.id = mwo.assigned_technician_id
+                AND mwo.status NOT IN ('Completed', 'Closed', 'Canceled')
+            WHERE e.status = 'Active'
+            GROUP BY e.id
+            LIMIT 10
+        """).fetchall()
+
+        # Downtime by reason
+        downtime_by_reason = db.execute("""
+            SELECT downtime_reason, SUM(total_hours) as total_hours, COUNT(*) as count
+            FROM maintenance_downtime_logs
+            WHERE date(downtime_start) >= date('now', '-30 days')
+            GROUP BY downtime_reason
+            ORDER BY total_hours DESC
+            LIMIT 5
+        """).fetchall()
+
+        # Critical alerts (overdue WOs and missed PMs)
+        critical_alerts = []
+        for wo in db.execute("""
+            SELECT work_order_number as title, issue_description as message, created_at
+            FROM maintenance_work_orders
+            WHERE priority = 'Critical' AND status NOT IN ('Completed', 'Closed', 'Canceled')
+            LIMIT 5
+        """).fetchall():
+            critical_alerts.append({
+                'title': f"Critical WO: {wo['title']}",
+                'message': wo['message'][:100] if wo['message'] else 'No description',
+                'created_at': wo['created_at']
+            })
+
+        stats = {
+            'open_work_orders': open_wos,
+            'overdue_work_orders': overdue_wos,
+            'in_progress': in_progress,
+            'total_wos': total_wos,
+            'pm_compliance_rate': pm_compliance_rate,
+            'missed_pm': db.execute("SELECT COUNT(*) as cnt FROM maintenance_schedules WHERE is_active = 1 AND next_due_date < date('now')").fetchone()['cnt'],
+            'mtbf': mtbf,
+            'mttr': mttr,
+            'availability': availability,
+            'total_cost': total_cost,
+            'labor_cost': labor_cost,
+            'parts_cost': parts_cost,
+            'active_technicians': active_techs,
+            'pm_cost_pct': (total_cost - labor_cost - parts_cost) / total_cost * 100 if total_cost > 0 else 0,
+            'cm_cost_pct': labor_cost / total_cost * 100 if total_cost > 0 else 0,
+            'cost_trend': 'stable',
+        }
+
+        return render_template('maintenance/executive_dashboard.html',
+                             stats=stats,
+                             wo_status_dist=wo_status_dist,
+                             top_failing_equipment=top_failing_equipment,
+                             tech_utilization=tech_utilization,
+                             downtime_by_reason=downtime_by_reason,
+                             critical_alerts=critical_alerts)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# PLANNER BOARD
+# =============================================================================
+
+@maintenance_bp.route('/planner-board')
+@require_login
+def planner_board():
+    """Maintenance Planner Board for scheduling and assignment."""
+    db = get_db()
+    try:
+        # Get work orders grouped by status
+        unscheduled = db.execute("""
+            SELECT mwo.*, a.name as asset_name, a.asset_code,
+                   e.first_name || ' ' || e.last_name as technician_name
+            FROM maintenance_work_orders mwo
+            JOIN assets a ON mwo.asset_id = a.id
+            LEFT JOIN hr_employees e ON mwo.assigned_technician_id = e.id
+            WHERE mwo.status NOT IN ('Completed', 'Closed', 'Canceled')
+            AND mwo.scheduled_start_date IS NULL
+            ORDER BY mwo.priority DESC, mwo.issue_date ASC
+        """).fetchall()
+
+        scheduled = db.execute("""
+            SELECT mwo.*, a.name as asset_name, a.asset_code,
+                   e.first_name || ' ' || e.last_name as technician_name
+            FROM maintenance_work_orders mwo
+            JOIN assets a ON mwo.asset_id = a.id
+            LEFT JOIN hr_employees e ON mwo.assigned_technician_id = e.id
+            WHERE mwo.status = 'Scheduled'
+            ORDER BY mwo.scheduled_start_date ASC
+        """).fetchall()
+
+        in_progress = db.execute("""
+            SELECT mwo.*, a.name as asset_name, a.asset_code,
+                   e.first_name || ' ' || e.last_name as technician_name,
+                   (SELECT COUNT(*) FROM maintenance_work_order_tasks WHERE work_order_id = mwo.id AND is_completed = 1) * 100.0 /
+                   NULLIF((SELECT COUNT(*) FROM maintenance_work_order_tasks WHERE work_order_id = mwo.id), 0) as progress_pct
+            FROM maintenance_work_orders mwo
+            JOIN assets a ON mwo.asset_id = a.id
+            LEFT JOIN hr_employees e ON mwo.assigned_technician_id = e.id
+            WHERE mwo.status = 'In Progress'
+            ORDER BY mwo.scheduled_start_date ASC
+        """).fetchall()
+
+        on_hold = db.execute("""
+            SELECT mwo.*, a.name as asset_name, a.asset_code,
+                   e.first_name || ' ' || e.last_name as technician_name
+            FROM maintenance_work_orders mwo
+            JOIN assets a ON mwo.asset_id = a.id
+            LEFT JOIN hr_employees e ON mwo.assigned_technician_id = e.id
+            WHERE mwo.status = 'On Hold'
+            ORDER BY mwo.priority DESC
+        """).fetchall()
+
+        completed_today = db.execute("""
+            SELECT mwo.*, a.name as asset_name, a.asset_code,
+                   e.first_name || ' ' || e.last_name as technician_name
+            FROM maintenance_work_orders mwo
+            JOIN assets a ON mwo.asset_id = a.id
+            LEFT JOIN hr_employees e ON mwo.assigned_technician_id = e.id
+            WHERE mwo.status = 'Completed'
+            AND date(mwo.completed_at) = date('now')
+            ORDER BY mwo.completed_at DESC
+        """).fetchall()
+
+        # Stats
+        stats = {
+            'total': unscheduled|length + scheduled|length + in_progress|length + on_hold|length,
+            'scheduled': scheduled|length,
+            'unscheduled': unscheduled|length,
+            'in_progress': in_progress|length,
+            'overdue': db.execute("SELECT COUNT(*) as cnt FROM maintenance_work_orders WHERE status = 'In Progress' AND scheduled_end_date < date('now')").fetchone()['cnt'],
+            'capacity_used': 75,  # Placeholder
+        }
+
+        # Technician workload
+        technician_workload = db.execute("""
+            SELECT e.id, e.first_name || ' ' || e.last_name as technician_name,
+                   COUNT(mwo.id) as assigned,
+                   SUM(CASE WHEN mwo.status = 'In Progress' THEN 1 ELSE 0 END) as in_progress,
+                   SUM(CASE WHEN mwo.status = 'Completed' AND date(mwo.completed_at) >= date('now', 'start of month') THEN 1 ELSE 0 END) as completed_mtd,
+                   CASE WHEN e.max_weekly_hours > 0
+                        THEN (COUNT(mwo.id) * 40.0 / e.max_weekly_hours * 100)
+                        ELSE 50 END as capacity_pct
+            FROM hr_employees e
+            LEFT JOIN maintenance_work_orders mwo ON e.id = mwo.assigned_technician_id
+                AND mwo.status NOT IN ('Closed', 'Canceled')
+            WHERE e.status = 'Active'
+            GROUP BY e.id
+        """).fetchall()
+
+        technicians = db.execute("SELECT id, first_name, last_name FROM hr_employees WHERE status = 'Active' ORDER BY first_name").fetchall()
+
+        return render_template('maintenance/planner_board.html',
+                             unscheduled=unscheduled,
+                             scheduled=scheduled,
+                             in_progress=in_progress,
+                             on_hold=on_hold,
+                             completed_today=completed_today,
+                             stats=stats,
+                             technician_workload=technician_workload,
+                             technicians=technicians)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/work-orders/<int:wo_id>/schedule', methods=['POST'])
+@require_login
+def schedule_work_order(wo_id):
+    """Schedule a work order."""
+    user_id = session.get('user_id')
+    db = get_db()
+    try:
+        data = request.get_json()
+
+        db.execute("""
+            UPDATE maintenance_work_orders SET
+                status = 'Scheduled',
+                scheduled_start_date = ?,
+                assigned_technician_id = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (
+            data.get('scheduled_date'),
+            data.get('technician_id') or None,
+            wo_id
+        ))
+        db.commit()
+
+        log_audit('maintenance_work_order', wo_id, 'SCHEDULE', user_id)
+        return jsonify({'success': True})
+
+    finally:
+        db.close()
+
+
+# =============================================================================
+# DOWNTIME & RELIABILITY CENTER
+# =============================================================================
+
+@maintenance_bp.route('/reliability-dashboard')
+@maintenance_bp.route('/downtime-reliability')
+@require_login
+def reliability_dashboard():
+    """Downtime and Reliability Center."""
+    db = get_db()
+    try:
+        # Key metrics
+        total_downtime = db.execute("""
+            SELECT COALESCE(SUM(total_hours), 0) as total FROM maintenance_downtime_logs
+            WHERE date(downtime_start) >= date('now', '-30 days')
+        """).fetchone()['total']
+
+        incident_count = db.execute("""
+            SELECT COUNT(*) as cnt FROM maintenance_downtime_logs
+            WHERE date(downtime_start) >= date('now', '-30 days')
+        """).fetchone()['cnt']
+
+        planned = db.execute("""
+            SELECT COALESCE(SUM(total_hours), 0) as total FROM maintenance_downtime_logs
+            WHERE date(downtime_start) >= date('now', '-30 days') AND planned_downtime = 1
+        """).fetchone()['total']
+
+        unplanned = total_downtime - planned
+
+        mtbf = 720 if incident_count == 0 else (720 * 30) / incident_count
+        mttr = total_downtime / incident_count if incident_count > 0 else 0
+        availability = (mtbf - mttr) / mtbf * 100 if mtbf > 0 else 100
+
+        # Cost metrics
+        repair_cost = db.execute("""
+            SELECT COALESCE(SUM(actual_cost), 0) as total FROM maintenance_work_orders
+            WHERE status = 'Completed' AND date(completed_at) >= date('now', '-30 days')
+        """).fetchone()['total']
+
+        stats = {
+            'total_downtime': total_downtime,
+            'incident_count': incident_count,
+            'planned_downtime': planned,
+            'unplanned_downtime': unplanned,
+            'planned_pct': (planned / total_downtime * 100) if total_downtime > 0 else 0,
+            'unplanned_pct': (unplanned / total_downtime * 100) if total_downtime > 0 else 0,
+            'mtbf': mtbf,
+            'mttr': mttr,
+            'availability': availability,
+            'production_loss': total_downtime * 1000,  # Placeholder calculation
+            'repair_cost': repair_cost,
+            'total_cost': total_downtime * 1000 + repair_cost,
+        }
+
+        # Recent incidents
+        recent_incidents = db.execute("""
+            SELECT mdl.*, a.name as asset_name,
+                   CASE WHEN mdl.downtime_end IS NULL THEN 1 ELSE 0 END as is_ongoing
+            FROM maintenance_downtime_logs mdl
+            LEFT JOIN assets a ON mdl.asset_id = a.id
+            ORDER BY mdl.downtime_start DESC
+            LIMIT 10
+        """).fetchall()
+
+        # Top failure reasons
+        top_failure_reasons = db.execute("""
+            SELECT downtime_reason as reason, COUNT(*) as count, SUM(total_hours) as total_hours
+            FROM maintenance_downtime_logs
+            WHERE date(downtime_start) >= date('now', '-90 days')
+            GROUP BY downtime_reason
+            ORDER BY count DESC
+            LIMIT 5
+        """).fetchall()
+
+        # Reliability heatmap (equipment scores)
+        reliability_heatmap = db.execute("""
+            SELECT a.id, a.asset_code, a.name as asset_name,
+                   CASE WHEN COUNT(mdl.id) = 0 THEN 100
+                        ELSE MAX(0, 100 - COUNT(mdl.id) * 10) END as reliability_score,
+                   COUNT(mdl.id) as incident_count,
+                   CASE WHEN COUNT(mdl.id) >= 5 THEN '#ef4444'
+                        WHEN COUNT(mdl.id) >= 3 THEN '#f97316'
+                        WHEN COUNT(mdl.id) >= 1 THEN '#eab308'
+                        ELSE '#22c55e' END as color
+            FROM assets a
+            LEFT JOIN maintenance_downtime_logs mdl ON a.id = mdl.asset_id
+                AND date(mdl.downtime_start) >= date('now', '-90 days')
+            WHERE a.status NOT IN ('Disposed', 'Retired')
+            GROUP BY a.id
+            ORDER BY incident_count DESC
+            LIMIT 12
+        """).fetchall()
+
+        # Recurring failure patterns
+        recurring_patterns = db.execute("""
+            SELECT a.name as asset_name, COUNT(*) as failure_count,
+                   SUM(mdl.total_hours) as total_downtime,
+                   AVG(mdl.total_hours) as avg_mttr,
+                   mdl.root_cause,
+                   'Open' as status
+            FROM maintenance_downtime_logs mdl
+            JOIN assets a ON mdl.asset_id = a.id
+            WHERE date(mdl.downtime_start) >= date('now', '-180 days')
+            GROUP BY a.id, mdl.root_cause
+            HAVING COUNT(*) > 1
+            ORDER BY failure_count DESC
+            LIMIT 10
+        """).fetchall()
+
+        return render_template('maintenance/reliability_dashboard.html',
+                             stats=stats,
+                             recent_incidents=recent_incidents,
+                             top_failure_reasons=top_failure_reasons,
+                             reliability_heatmap=reliability_heatmap,
+                             recurring_patterns=recurring_patterns)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# BREAKDOWN & EMERGENCY CENTER
+# =============================================================================
+
+@maintenance_bp.route('/breakdown-center')
+@maintenance_bp.route('/breakdown')
+@require_login
+def breakdown_center():
+    """Breakdown and Emergency Maintenance Center."""
+    db = get_db()
+    try:
+        # Active emergencies (work orders with Emergency type)
+        active_emergencies = db.execute("""
+            SELECT mwo.*, a.name as asset_name, a.asset_code
+            FROM maintenance_work_orders mwo
+            JOIN assets a ON mwo.asset_id = a.id
+            WHERE mwo.work_order_type = 'Emergency'
+            AND mwo.status NOT IN ('Completed', 'Closed', 'Canceled')
+            ORDER BY mwo.created_at DESC
+        """).fetchall()
+
+        # Active breakdowns
+        active_breakdowns = db.execute("""
+            SELECT mdl.*, a.name as asset_name, mwo.id as work_order_id, mwo.work_order_number
+            FROM maintenance_downtime_logs mdl
+            LEFT JOIN assets a ON mdl.asset_id = a.id
+            LEFT JOIN maintenance_work_orders mwo ON mdl.work_order_id = mwo.id
+            WHERE mdl.is_resolved = 0
+            ORDER BY mdl.downtime_start DESC
+        """).fetchall()
+
+        # Stats
+        stats = {
+            'active_emergencies': len(active_emergencies),
+            'active_breakdowns': len(active_breakdowns),
+            'avg_response_time': 45,  # Placeholder
+            'avg_recovery_time': db.execute("""
+                SELECT AVG(total_hours) as avg FROM maintenance_downtime_logs
+                WHERE date(downtime_start) >= date('now', '-30 days') AND is_resolved = 1
+            """).fetchone()['avg'] or 0,
+            'resolved_today': db.execute("""
+                SELECT COUNT(*) as cnt FROM maintenance_downtime_logs
+                WHERE date(downtime_end) = date('now') AND is_resolved = 1
+            """).fetchone()['cnt'],
+        }
+
+        # Combined incident log
+        incident_log = []
+
+        for em in db.execute("""
+            SELECT 'Emergency' as type, mwo.work_order_number as reference,
+                   a.name as asset_name, mwo.issue_description as description,
+                   mwo.downtime_hours as duration, mwo.priority as impact_level,
+                   mwo.status, mwo.id as work_order_id, mwo.created_at
+            FROM maintenance_work_orders mwo
+            JOIN assets a ON mwo.asset_id = a.id
+            WHERE mwo.work_order_type = 'Emergency'
+            ORDER BY mwo.created_at DESC
+            LIMIT 20
+        """).fetchall():
+            incident_log.append({
+                'type': 'Emergency',
+                'reference': em['reference'],
+                'asset_name': em['asset_name'],
+                'description': em['description'],
+                'duration': em['duration'] or 0,
+                'impact_level': 'Critical',
+                'status': 'Resolved' if em['status'] in ('Completed', 'Closed') else 'Active',
+                'work_order_id': em['work_order_id']
+            })
+
+        return render_template('maintenance/breakdown_center.html',
+                             active_emergencies=active_emergencies,
+                             active_breakdowns=active_breakdowns,
+                             stats=stats,
+                             incident_log=incident_log)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/emergency/new', methods=['GET', 'POST'])
+@require_login
+def emergency_new():
+    """Create Emergency Work Order."""
+    user_id = session.get('user_id')
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            from asset_models import get_next_work_order_number
+            data = request.form
+            wo_number = get_next_work_order_number()
+
+            cursor = db.execute("""
+                INSERT INTO maintenance_work_orders
+                (work_order_number, asset_id, maintenance_type_id, work_order_type,
+                 priority, status, issue_date, issue_description,
+                 assigned_technician_id, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                wo_number,
+                data.get('asset_id'),
+                data.get('maintenance_type_id'),
+                'Emergency',
+                'Critical',
+                'In Progress',
+                datetime.now().strftime('%Y-%m-%d'),
+                data.get('issue_description'),
+                data.get('assigned_technician_id') or None,
+                user_id
+            ))
+            db.commit()
+
+            # Create downtime log
+            db.execute("""
+                INSERT INTO maintenance_downtime_logs
+                (log_number, asset_id, work_order_id, downtime_reason, downtime_start,
+                 impact_level, is_resolved, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+            """, (
+                get_next_downtime_log_number(),
+                data.get('asset_id'),
+                cursor.lastrowid,
+                'Emergency breakdown',
+                datetime.now().strftime('%Y-%m-%d %H:%M'),
+                'Critical',
+                user_id
+            ))
+            db.commit()
+
+            log_audit('maintenance_work_order', cursor.lastrowid, 'CREATE_EMERGENCY', user_id)
+            flash(f'Emergency work order {wo_number} created.', 'success')
+            return redirect(url_for('maintenance.breakdown_center'))
+
+        assets = db.execute("SELECT id, asset_code, name FROM assets WHERE status NOT IN ('Disposed', 'Retired') ORDER BY asset_code").fetchall()
+        maintenance_types = db.execute("SELECT * FROM maintenance_types WHERE is_active = 1").fetchall()
+        technicians = db.execute("SELECT id, first_name, last_name FROM hr_employees WHERE status = 'Active' ORDER BY first_name").fetchall()
+
+        return render_template('maintenance/emergency_form.html',
+                             assets=assets,
+                             maintenance_types=maintenance_types,
+                             technicians=technicians)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# PM COMPLIANCE DASHBOARD
+# =============================================================================
+
+@maintenance_bp.route('/pm-compliance-dashboard')
+@maintenance_bp.route('/pm-compliance')
+@require_login
+def pm_compliance_dashboard():
+    """PM Compliance Dashboard."""
+    db = get_db()
+    try:
+        compliance = get_pm_compliance_rate()
+
+        # Due this week
+        due_this_week = db.execute("""
+            SELECT COUNT(*) as cnt FROM maintenance_schedules
+            WHERE is_active = 1
+            AND next_due_date >= date('now')
+            AND next_due_date <= date('now', '+7 days')
+        """).fetchone()['cnt']
+
+        on_track = db.execute("""
+            SELECT COUNT(*) as cnt FROM maintenance_schedules
+            WHERE is_active = 1
+            AND next_due_date >= date('now')
+            AND next_due_date <= date('now', '+7 days')
+        """).fetchone()['cnt']
+
+        at_risk = db.execute("""
+            SELECT COUNT(*) as cnt FROM maintenance_schedules
+            WHERE is_active = 1
+            AND next_due_date < date('now', '+3 days')
+            AND next_due_date >= date('now')
+        """).fetchone()['cnt']
+
+        overdue = db.execute("""
+            SELECT COUNT(*) as cnt FROM maintenance_schedules
+            WHERE is_active = 1 AND next_due_date < date('now')
+        """).fetchone()['cnt']
+
+        overdue_by_priority = db.execute("""
+            SELECT priority, COUNT(*) as count FROM maintenance_schedules
+            WHERE is_active = 1 AND next_due_date < date('now')
+            GROUP BY priority
+        """).fetchall()
+
+        stats = {
+            'due_this_week': due_this_week,
+            'on_track': on_track,
+            'at_risk': at_risk,
+            'overdue': overdue,
+            'overdue_by_priority': overdue_by_priority,
+            'generated_wos': db.execute("""
+                SELECT COUNT(*) as cnt FROM maintenance_work_orders
+                WHERE work_order_type = 'Preventive'
+                AND date(created_at) >= date('now', 'start of month')
+            """).fetchone()['cnt'],
+            'completed_wos': db.execute("""
+                SELECT COUNT(*) as cnt FROM maintenance_work_orders
+                WHERE work_order_type = 'Preventive' AND status = 'Completed'
+                AND date(completed_at) >= date('now', 'start of month')
+            """).fetchone()['cnt'],
+        }
+
+        # Compliance by priority
+        compliance_by_priority = db.execute("""
+            SELECT priority,
+                   SUM(CASE WHEN next_due_date >= date('now') THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as compliance_rate
+            FROM maintenance_schedules
+            WHERE is_active = 1
+            GROUP BY priority
+        """).fetchall()
+
+        # PM by type
+        pm_by_type = db.execute("""
+            SELECT mt.name as maintenance_type, COUNT(*) as count
+            FROM maintenance_schedules ms
+            JOIN maintenance_types mt ON ms.maintenance_type_id = mt.id
+            WHERE ms.is_active = 1
+            GROUP BY mt.name
+        """).fetchall()
+
+        # Upcoming PM
+        upcoming_pm = db.execute("""
+            SELECT ms.*, a.name as asset_name
+            FROM maintenance_schedules ms
+            JOIN assets a ON ms.asset_id = a.id
+            WHERE ms.is_active = 1
+            AND ms.next_due_date >= date('now')
+            AND ms.next_due_date <= date('now', '+14 days')
+            ORDER BY ms.next_due_date ASC
+        """).fetchall()
+
+        # Overdue PM
+        overdue_pm = db.execute("""
+            SELECT ms.*, a.name as asset_name, a.asset_code, mt.name as maintenance_type,
+                   julianday('now') - julianday(ms.next_due_date) as days_overdue
+            FROM maintenance_schedules ms
+            JOIN assets a ON ms.asset_id = a.id
+            JOIN maintenance_types mt ON ms.maintenance_type_id = mt.id
+            WHERE ms.is_active = 1 AND ms.next_due_date < date('now')
+            ORDER BY days_overdue DESC
+        """).fetchall()
+
+        # Forecast
+        forecast = db.execute("""
+            SELECT strftime('%Y-%m', next_due_date) as month, COUNT(*) as count
+            FROM maintenance_schedules
+            WHERE is_active = 1 AND next_due_date >= date('now')
+            GROUP BY strftime('%Y-%m', next_due_date)
+            ORDER BY month
+            LIMIT 12
+        """).fetchall()
+
+        return render_template('maintenance/pm_compliance_dashboard.html',
+                             compliance=compliance,
+                             stats=stats,
+                             compliance_by_priority=compliance_by_priority,
+                             pm_by_type=pm_by_type,
+                             upcoming_pm=upcoming_pm,
+                             overdue_pm=overdue_pm,
+                             forecast=forecast)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - FUNCTIONAL LOCATIONS
+# =============================================================================
+
+@maintenance_bp.route('/functional-locations')
+@require_login
+def functional_locations_list():
+    """List all functional locations."""
+    db = get_db()
+    try:
+        locations = db.execute("""
+            SELECT fl.*,
+                   pfl.location_code as parent_code, pfl.name as parent_name,
+                   c.name as company_name
+            FROM functional_locations fl
+            LEFT JOIN functional_locations pfl ON fl.parent_location_id = pfl.id
+            LEFT JOIN companies c ON fl.company_id = c.id
+            ORDER BY fl.hierarchy_path
+        """).fetchall()
+
+        return render_template('maintenance/functional_locations_list.html',
+                             locations=locations)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/functional-locations/<int:loc_id>')
+@require_login
+def functional_location_detail(loc_id):
+    """View functional location details."""
+    db = get_db()
+    try:
+        loc = db.execute("""
+            SELECT fl.*,
+                   pfl.location_code as parent_code, pfl.name as parent_name,
+                   c.name as company_name, cb.name as branch_name
+            FROM functional_locations fl
+            LEFT JOIN functional_locations pfl ON fl.parent_location_id = pfl.id
+            LEFT JOIN companies c ON fl.company_id = c.id
+            LEFT JOIN company_branches cb ON fl.branch_id = cb.id
+            WHERE fl.id = ?
+        """, (loc_id,)).fetchone()
+
+        # Get child locations
+        children = db.execute("""
+            SELECT * FROM functional_locations WHERE parent_location_id = ?
+            ORDER BY location_code
+        """, (loc_id,)).fetchall()
+
+        # Get equipment at this location
+        equipment = db.execute("""
+            SELECT id, asset_code, name, status FROM assets
+            WHERE functional_location_id = ?
+            ORDER BY asset_code
+        """, (loc_id,)).fetchall()
+
+        # Get hierarchy path
+        hierarchy = []
+        current_id = loc['parent_location_id']
+        while current_id:
+            parent = db.execute("SELECT id, location_code, name, parent_location_id FROM functional_locations WHERE id = ?",
+                              (current_id,)).fetchone()
+            if parent:
+                hierarchy.insert(0, dict(parent))
+                current_id = parent['parent_location_id']
+            else:
+                break
+
+        return render_template('maintenance/functional_location_detail.html',
+                             location=loc,
+                             children=children,
+                             equipment=equipment,
+                             hierarchy=hierarchy)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/functional-locations/new', methods=['GET', 'POST'])
+@require_login
+def functional_location_new():
+    """Create new functional location."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            loc_code = data.get('location_code') or None
+
+            if not loc_code:
+                seq = db.execute("SELECT COUNT(*) as cnt FROM functional_locations").fetchone()['cnt'] + 1
+                loc_code = f"FLOC-{seq:05d}"
+
+            parent_id = data.get('parent_location_id')
+            parent_path = ""
+            hierarchy_level = 0
+            if parent_id:
+                parent = db.execute("SELECT hierarchy_path, hierarchy_level FROM functional_locations WHERE id = ?",
+                                   (parent_id,)).fetchone()
+                if parent:
+                    parent_path = parent['hierarchy_path'] or ""
+                    hierarchy_level = parent['hierarchy_level'] + 1
+
+            cursor = db.execute("""
+                INSERT INTO functional_locations
+                (location_code, name, description, location_type, parent_location_id,
+                 address, cost_center, company_id, branch_id, is_active, is_critical,
+                 operating_hours, hierarchy_path, hierarchy_level, latitude, longitude,
+                 qr_code, bar_code, specifications, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                loc_code, data.get('name'), data.get('description'),
+                data.get('location_type', 'Area'), parent_id or None,
+                data.get('address'), data.get('cost_center'),
+                data.get('company_id') or None, data.get('branch_id') or None,
+                1 if data.get('is_active') else 0,
+                1 if data.get('is_critical') else 0,
+                data.get('operating_hours'),
+                f"{parent_path}/{loc_code}" if parent_path else f"/{loc_code}",
+                hierarchy_level,
+                data.get('latitude'), data.get('longitude'),
+                data.get('qr_code'), data.get('bar_code'),
+                data.get('specifications'), session.get('user_id')
+            ))
+            db.commit()
+
+            log_audit('functional_location', cursor.lastrowid, 'CREATE', session.get('user_id'))
+            flash(f'Functional location {loc_code} created successfully.', 'success')
+            return redirect(url_for('maintenance.functional_locations_list'))
+
+        parent_locations = db.execute("""
+            SELECT id, location_code, name, location_type, hierarchy_level
+            FROM functional_locations ORDER BY hierarchy_path
+        """).fetchall()
+        companies = db.execute("SELECT id, name FROM companies ORDER BY name").fetchall()
+        branches = db.execute("SELECT id, name FROM company_branches ORDER BY name").fetchall()
+
+        return render_template('maintenance/functional_location_form.html',
+                             location=None,
+                             parent_locations=parent_locations,
+                             companies=companies,
+                             branches=branches)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/functional-locations/<int:loc_id>/edit', methods=['GET', 'POST'])
+@require_login
+def functional_location_edit(loc_id):
+    """Edit functional location."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            parent_id = data.get('parent_location_id') or None
+
+            parent_path = ""
+            hierarchy_level = 0
+            if parent_id:
+                parent = db.execute("SELECT hierarchy_path, hierarchy_level FROM functional_locations WHERE id = ?",
+                                   (parent_id,)).fetchone()
+                if parent:
+                    parent_path = parent['hierarchy_path'] or ""
+                    hierarchy_level = parent['hierarchy_level'] + 1
+
+            db.execute("""
+                UPDATE functional_locations SET
+                name = ?, description = ?, location_type = ?, parent_location_id = ?,
+                address = ?, cost_center = ?, company_id = ?, branch_id = ?,
+                is_active = ?, is_critical = ?, operating_hours = ?,
+                hierarchy_path = ?, hierarchy_level = ?,
+                latitude = ?, longitude = ?, qr_code = ?, bar_code = ?,
+                specifications = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (
+                data.get('name'), data.get('description'),
+                data.get('location_type', 'Area'), parent_id,
+                data.get('address'), data.get('cost_center'),
+                data.get('company_id') or None, data.get('branch_id') or None,
+                1 if data.get('is_active') else 0,
+                1 if data.get('is_critical') else 0,
+                data.get('operating_hours'),
+                f"{parent_path}/{data.get('location_code')}" if parent_path else f"/{data.get('location_code')}",
+                hierarchy_level,
+                data.get('latitude'), data.get('longitude'),
+                data.get('qr_code'), data.get('bar_code'),
+                data.get('specifications'), loc_id
+            ))
+            db.commit()
+
+            log_audit('functional_location', loc_id, 'UPDATE', session.get('user_id'))
+            flash('Functional location updated successfully.', 'success')
+            return redirect(url_for('maintenance.functional_location_detail', loc_id=loc_id))
+
+        loc = db.execute("SELECT * FROM functional_locations WHERE id = ?", (loc_id,)).fetchone()
+        parent_locations = db.execute("""
+            SELECT id, location_code, name, location_type, hierarchy_level
+            FROM functional_locations WHERE id != ? ORDER BY hierarchy_path
+        """, (loc_id,)).fetchall()
+        companies = db.execute("SELECT id, name FROM companies ORDER BY name").fetchall()
+        branches = db.execute("SELECT id, name FROM company_branches ORDER BY name").fetchall()
+
+        return render_template('maintenance/functional_location_form.html',
+                             location=loc,
+                             parent_locations=parent_locations,
+                             companies=companies,
+                             branches=branches)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - EQUIPMENT BOMS
+# =============================================================================
+
+@maintenance_bp.route('/equipment-boms')
+@require_login
+def equipment_boms_list():
+    """List all equipment BOMs."""
+    db = get_db()
+    try:
+        boms = db.execute("""
+            SELECT eb.*, a.asset_code, a.name as equipment_name,
+                   u.username as created_by_name
+            FROM equipment_boms eb
+            JOIN assets a ON eb.equipment_id = a.id
+            LEFT JOIN users u ON eb.created_by = u.id
+            ORDER BY eb.bom_code
+        """).fetchall()
+
+        return render_template('maintenance/equipment_boms_list.html', boms=boms)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/equipment-boms/<int:bom_id>')
+@require_login
+def equipment_bom_detail(bom_id):
+    """View equipment BOM details."""
+    db = get_db()
+    try:
+        bom = db.execute("""
+            SELECT eb.*, a.asset_code, a.name as equipment_name
+            FROM equipment_boms eb
+            JOIN assets a ON eb.equipment_id = a.id
+            WHERE eb.id = ?
+        """, (bom_id,)).fetchone()
+
+        items = db.execute("""
+            SELECT ebi.*, ii.item_code, ii.description as material_name,
+                   wc.work_center_code, wc.work_center_name
+            FROM equipment_bom_items ebi
+            LEFT JOIN inventory_items ii ON ebi.material_id = ii.id
+            LEFT JOIN work_centers wc ON ebi.work_center_id = wc.id
+            WHERE ebi.bom_id = ?
+            ORDER BY ebi.item_sequence
+        """, (bom_id,)).fetchall()
+
+        return render_template('maintenance/equipment_bom_detail.html', bom=bom, items=items)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/equipment-boms/new', methods=['GET', 'POST'])
+@require_login
+def equipment_bom_new():
+    """Create new equipment BOM."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            bom_code = data.get('bom_code')
+            if not bom_code:
+                seq = db.execute("SELECT COUNT(*) as cnt FROM equipment_boms").fetchone()['cnt'] + 1
+                bom_code = f"BOM-{datetime.now().strftime('%Y%m')}-{seq:04d}"
+
+            cursor = db.execute("""
+                INSERT INTO equipment_boms
+                (bom_code, equipment_id, bom_type, version, is_active, is_template,
+                 valid_from, valid_to, description, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                bom_code, data.get('equipment_id'),
+                data.get('bom_type', 'SpareParts'),
+                data.get('version', 1),
+                1 if data.get('is_active') else 0,
+                1 if data.get('is_template') else 0,
+                data.get('valid_from'), data.get('valid_to'),
+                data.get('description'), session.get('user_id')
+            ))
+            db.commit()
+
+            log_audit('equipment_bom', cursor.lastrowid, 'CREATE', session.get('user_id'))
+            flash(f'BOM {bom_code} created successfully.', 'success')
+            return redirect(url_for('maintenance.equipment_bom_detail', bom_id=cursor.lastrowid))
+
+        equipment = db.execute("SELECT id, asset_code, name FROM assets ORDER BY asset_code").fetchall()
+        return render_template('maintenance/equipment_bom_form.html', bom=None, equipment=equipment)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/equipment-boms/<int:bom_id>/items/new', methods=['POST'])
+@require_login
+def equipment_bom_item_add(bom_id):
+    """Add item to BOM."""
+    db = get_db()
+    try:
+        data = request.form
+        cursor = db.execute("""
+            INSERT INTO equipment_bom_items
+            (bom_id, item_sequence, material_id, part_number, part_name,
+             quantity, unit_of_measure, is_optional, is_substitute_allowed,
+             substitute_group, work_center_id, storage_location_id, bom_position,
+             lead_time_days, cost_estimate, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            bom_id, data.get('item_sequence', 1), data.get('material_id') or None,
+            data.get('part_number'), data.get('part_name'),
+            data.get('quantity', 1), data.get('unit_of_measure', 'EA'),
+            1 if data.get('is_optional') else 0,
+            1 if data.get('is_substitute_allowed') else 0,
+            data.get('substitute_group'), data.get('work_center_id') or None,
+            data.get('storage_location_id'), data.get('bom_position'),
+            data.get('lead_time_days', 0), data.get('cost_estimate', 0),
+            data.get('notes')
+        ))
+        db.commit()
+
+        log_audit('equipment_bom_item', cursor.lastrowid, 'CREATE', session.get('user_id'))
+        flash('BOM item added successfully.', 'success')
+        return redirect(url_for('maintenance.equipment_bom_detail', bom_id=bom_id))
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - WORK CENTERS
+# =============================================================================
+
+@maintenance_bp.route('/work-centers')
+@require_login
+def work_centers_list():
+    """List all work centers."""
+    db = get_db()
+    try:
+        work_centers = db.execute("""
+            SELECT wc.*, e.first_name || ' ' || e.last_name as supervisor_name,
+                   fl.location_code, fl.name as location_name
+            FROM work_centers wc
+            LEFT JOIN hr_employees e ON wc.supervisor_id = e.id
+            LEFT JOIN functional_locations fl ON wc.location_id = fl.id
+            ORDER BY wc.work_center_code
+        """).fetchall()
+
+        return render_template('maintenance/work_centers_list.html', work_centers=work_centers)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/work-centers/<int:wc_id>')
+@require_login
+def work_center_detail(wc_id):
+    """View work center details."""
+    db = get_db()
+    try:
+        wc = db.execute("""
+            SELECT wc.*, e.first_name || ' ' || e.last_name as supervisor_name,
+                   fl.location_code, fl.name as location_name,
+                   cb.name as plant_name
+            FROM work_centers wc
+            LEFT JOIN hr_employees e ON wc.supervisor_id = e.id
+            LEFT JOIN functional_locations fl ON wc.location_id = fl.id
+            LEFT JOIN company_branches cb ON wc.plant_id = cb.id
+            WHERE wc.id = ?
+        """, (wc_id,)).fetchone()
+
+        shifts = db.execute("SELECT * FROM work_center_shifts WHERE work_center_id = ? ORDER BY shift_code",
+                          (wc_id,)).fetchall()
+
+        return render_template('maintenance/work_center_detail.html', work_center=wc, shifts=shifts)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/work-centers/new', methods=['GET', 'POST'])
+@require_login
+def work_center_new():
+    """Create new work center."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            wc_code = data.get('work_center_code')
+            if not wc_code:
+                seq = db.execute("SELECT COUNT(*) as cnt FROM work_centers").fetchone()['cnt'] + 1
+                wc_code = f"WC-{seq:04d}"
+
+            cursor = db.execute("""
+                INSERT INTO work_centers
+                (work_center_code, work_center_name, plant_id, description,
+                 work_center_category, location_id, cost_center, standard_wrk_dir,
+                 factory_calendar, currency, available_capacity, capacity_unit,
+                 utilization_target, supervisor_id, shift_pattern, capabilities,
+                 skilled_workers, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                wc_code, data.get('work_center_name'), data.get('plant_id') or None,
+                data.get('description'), data.get('work_center_category'),
+                data.get('location_id') or None, data.get('cost_center'),
+                data.get('standard_wrk_dir'), data.get('factory_calendar'),
+                data.get('currency', 'USD'), data.get('available_capacity', 8.0),
+                data.get('capacity_unit', 'HOUR'), data.get('utilization_target', 100.0),
+                data.get('supervisor_id') or None, data.get('shift_pattern'),
+                data.get('capabilities'), data.get('skilled_workers', 0),
+                1 if data.get('is_active') else 0
+            ))
+            db.commit()
+
+            log_audit('work_center', cursor.lastrowid, 'CREATE', session.get('user_id'))
+            flash(f'Work Center {wc_code} created successfully.', 'success')
+            return redirect(url_for('maintenance.work_center_detail', wc_id=cursor.lastrowid))
+
+        functional_locs = db.execute("SELECT id, location_code, name FROM functional_locations ORDER BY location_code").fetchall()
+        branches = db.execute("SELECT id, name FROM company_branches ORDER BY name").fetchall()
+        supervisors = db.execute("SELECT id, first_name, last_name FROM hr_employees WHERE status = 'Active' ORDER BY first_name").fetchall()
+
+        return render_template('maintenance/work_center_form.html',
+                             work_center=None,
+                             functional_locs=functional_locs,
+                             branches=branches,
+                             supervisors=supervisors)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - CAPACITY PLANNING
+# =============================================================================
+
+@maintenance_bp.route('/capacity-planning')
+@require_login
+def capacity_planning():
+    """Capacity planning view."""
+    db = get_db()
+    try:
+        work_centers = db.execute("SELECT id, work_center_code, work_center_name FROM work_centers WHERE is_active = 1 ORDER BY work_center_code").fetchall()
+
+        start_date = request.args.get('start_date', datetime.now().strftime('%Y-%m-%d'))
+        end_date = request.args.get('end_date', (datetime.now() + timedelta(days=14)).strftime('%Y-%m-%d'))
+        wc_id = request.args.get('work_center_id', type=int)
+
+        capacity_data = []
+        if wc_id:
+            capacity_data = db.execute("""
+                SELECT wcc.*, wc.work_center_code, wc.work_center_name
+                FROM work_center_capacity wcc
+                JOIN work_centers wc ON wcc.work_center_id = wc.id
+                WHERE wcc.work_center_id = ? AND wcc.work_date BETWEEN ? AND ?
+                ORDER BY wcc.work_date
+            """, (wc_id, start_date, end_date)).fetchall()
+        else:
+            capacity_data = db.execute("""
+                SELECT wcc.*, wc.work_center_code, wc.work_center_name
+                FROM work_center_capacity wcc
+                JOIN work_centers wc ON wcc.work_center_id = wc.id
+                WHERE wcc.work_date BETWEEN ? AND ?
+                ORDER BY wc.work_center_code, wcc.work_date
+            """, (start_date, end_date)).fetchall()
+
+        return render_template('maintenance/capacity_planning.html',
+                             work_centers=work_centers,
+                             capacity_data=capacity_data,
+                             start_date=start_date,
+                             end_date=end_date,
+                             selected_wc_id=wc_id)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - MAINTENANCE STRATEGIES
+# =============================================================================
+
+@maintenance_bp.route('/strategies')
+@require_login
+def maintenance_strategies_list():
+    """List all maintenance strategies."""
+    db = get_db()
+    try:
+        strategies = db.execute("SELECT * FROM maintenance_strategies ORDER BY strategy_code").fetchall()
+        return render_template('maintenance/strategies_list.html', strategies=strategies)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/strategies/new', methods=['GET', 'POST'])
+@require_login
+def maintenance_strategy_new():
+    """Create new maintenance strategy."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            strategy_code = data.get('strategy_code')
+            if not strategy_code:
+                seq = db.execute("SELECT COUNT(*) as cnt FROM maintenance_strategies").fetchone()['cnt'] + 1
+                strategy_code = f"STRAT-{seq:04d}"
+
+            cursor = db.execute("""
+                INSERT INTO maintenance_strategies
+                (strategy_code, strategy_name, strategy_type, description, is_active)
+                VALUES (?, ?, ?, ?, ?)
+            """, (
+                strategy_code, data.get('strategy_name'),
+                data.get('strategy_type', 'TIME-BASED'),
+                data.get('description'), 1 if data.get('is_active') else 0
+            ))
+            db.commit()
+
+            log_audit('maintenance_strategy', cursor.lastrowid, 'CREATE', session.get('user_id'))
+            flash(f'Strategy {strategy_code} created successfully.', 'success')
+            return redirect(url_for('maintenance.maintenance_strategies_list'))
+
+        return render_template('maintenance/strategy_form.html', strategy=None)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - EQUIPMENT COUNTERS
+# =============================================================================
+
+@maintenance_bp.route('/counters')
+@require_login
+def equipment_counters_list():
+    """List all equipment counters."""
+    db = get_db()
+    try:
+        counters = db.execute("""
+            SELECT mc.*, a.asset_code, a.name as equipment_name
+            FROM maintenance_counters mc
+            JOIN assets a ON mc.equipment_id = a.id
+            ORDER BY mc.counter_code
+        """).fetchall()
+
+        return render_template('maintenance/counters_list.html', counters=counters)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/counters/<int:counter_id>')
+@require_login
+def counter_detail(counter_id):
+    """View counter details and readings."""
+    db = get_db()
+    try:
+        counter = db.execute("""
+            SELECT mc.*, a.asset_code, a.name as equipment_name
+            FROM maintenance_counters mc
+            JOIN assets a ON mc.equipment_id = a.id
+            WHERE mc.id = ?
+        """, (counter_id,)).fetchone()
+
+        readings = db.execute("""
+            SELECT * FROM counter_readings
+            WHERE counter_id = ?
+            ORDER BY reading_date DESC
+            LIMIT 100
+        """, (counter_id,)).fetchall()
+
+        return render_template('maintenance/counter_detail.html', counter=counter, readings=readings)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/counters/new', methods=['GET', 'POST'])
+@require_login
+def counter_new():
+    """Create new equipment counter."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            counter_code = data.get('counter_code')
+            if not counter_code:
+                seq = db.execute("SELECT COUNT(*) as cnt FROM maintenance_counters").fetchone()['cnt'] + 1
+                counter_code = f"CNTR-{seq:05d}"
+
+            cursor = db.execute("""
+                INSERT INTO maintenance_counters
+                (counter_code, equipment_id, counter_type, unit_of_measure,
+                 min_warning_threshold, max_warning_threshold,
+                 min_critical_threshold, max_critical_threshold,
+                 reading_source, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                counter_code, data.get('equipment_id'),
+                data.get('counter_type', 'OPERATING_HOURS'),
+                data.get('unit_of_measure', 'HOUR'),
+                data.get('min_warning_threshold'), data.get('max_warning_threshold'),
+                data.get('min_critical_threshold'), data.get('max_critical_threshold'),
+                data.get('reading_source', 'MANUAL'),
+                1 if data.get('is_active') else 0
+            ))
+            db.commit()
+
+            log_audit('maintenance_counter', cursor.lastrowid, 'CREATE', session.get('user_id'))
+            flash(f'Counter {counter_code} created successfully.', 'success')
+            return redirect(url_for('maintenance.equipment_counters_list'))
+
+        equipment = db.execute("SELECT id, asset_code, name FROM assets ORDER BY asset_code").fetchall()
+        return render_template('maintenance/counter_form.html', counter=None, equipment=equipment)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/counters/<int:counter_id>/reading', methods=['POST'])
+@require_login
+def counter_reading_add(counter_id):
+    """Add counter reading."""
+    db = get_db()
+    try:
+        data = request.form
+        cursor = db.execute("""
+            INSERT INTO counter_readings (counter_id, reading_value, reading_date, reading_type)
+            VALUES (?, ?, ?, ?)
+        """, (counter_id, data.get('reading_value'), data.get('reading_date'), data.get('reading_type', 'MANUAL')))
+        db.commit()
+
+        # Update current value on counter
+        db.execute("""
+            UPDATE maintenance_counters SET
+            current_value = ?, counter_reading_date = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (data.get('reading_value'), data.get('reading_date'), counter_id))
+        db.commit()
+
+        log_audit('counter_reading', cursor.lastrowid, 'CREATE', session.get('user_id'))
+        flash('Counter reading recorded.', 'success')
+        return redirect(url_for('maintenance.counter_detail', counter_id=counter_id))
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - CONDITION INDICATORS
+# =============================================================================
+
+@maintenance_bp.route('/condition-indicators')
+@require_login
+def condition_indicators_list():
+    """List all condition indicators."""
+    db = get_db()
+    try:
+        indicators = db.execute("""
+            SELECT ci.*, a.asset_code, a.name as equipment_name
+            FROM condition_indicators ci
+            JOIN assets a ON ci.equipment_id = a.id
+            ORDER BY ci.indicator_code
+        """).fetchall()
+
+        return render_template('maintenance/condition_indicators_list.html', indicators=indicators)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/condition-indicators/new', methods=['GET', 'POST'])
+@require_login
+def condition_indicator_new():
+    """Create new condition indicator."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            indicator_code = data.get('indicator_code')
+            if not indicator_code:
+                seq = db.execute("SELECT COUNT(*) as cnt FROM condition_indicators").fetchone()['cnt'] + 1
+                indicator_code = f"IND-{seq:05d}"
+
+            cursor = db.execute("""
+                INSERT INTO condition_indicators
+                (indicator_code, equipment_id, indicator_name, indicator_type, unit,
+                 normal_min, normal_max, warning_min, warning_max,
+                 critical_min, critical_max, calculation_method,
+                 reading_interval_minutes, data_retention_days, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                indicator_code, data.get('equipment_id'),
+                data.get('indicator_name'), data.get('indicator_type', 'VIBRATION'),
+                data.get('unit'), data.get('normal_min'), data.get('normal_max'),
+                data.get('warning_min'), data.get('warning_max'),
+                data.get('critical_min'), data.get('critical_max'),
+                data.get('calculation_method'),
+                data.get('reading_interval_minutes', 60),
+                data.get('data_retention_days', 365),
+                1 if data.get('is_active') else 0
+            ))
+            db.commit()
+
+            log_audit('condition_indicator', cursor.lastrowid, 'CREATE', session.get('user_id'))
+            flash(f'Condition indicator {indicator_code} created successfully.', 'success')
+            return redirect(url_for('maintenance.condition_indicators_list'))
+
+        equipment = db.execute("SELECT id, asset_code, name FROM assets ORDER BY asset_code").fetchall()
+        return render_template('maintenance/condition_indicator_form.html', indicator=None, equipment=equipment)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - SKILL CATALOG
+# =============================================================================
+
+@maintenance_bp.route('/skill-catalog')
+@require_login
+def skill_catalog_list():
+    """List all skills in catalog."""
+    db = get_db()
+    try:
+        skills = db.execute("SELECT * FROM skill_catalog ORDER BY skill_code").fetchall()
+        return render_template('maintenance/skill_catalog_list.html', skills=skills)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/skill-catalog/new', methods=['GET', 'POST'])
+@require_login
+def skill_catalog_new():
+    """Add new skill to catalog."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            skill_code = data.get('skill_code')
+            if not skill_code:
+                seq = db.execute("SELECT COUNT(*) as cnt FROM skill_catalog").fetchone()['cnt'] + 1
+                skill_code = f"SKILL-{seq:04d}"
+
+            cursor = db.execute("""
+                INSERT INTO skill_catalog
+                (skill_code, skill_name, skill_category, description,
+                 certification_required, validity_months, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                skill_code, data.get('skill_name'), data.get('skill_category'),
+                data.get('description'),
+                1 if data.get('certification_required') else 0,
+                data.get('validity_months'), 1 if data.get('is_active') else 0
+            ))
+            db.commit()
+
+            flash(f'Skill {skill_code} added to catalog.', 'success')
+            return redirect(url_for('maintenance.skill_catalog_list'))
+
+        return render_template('maintenance/skill_form.html', skill=None)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - SHIFT PLANNING
+# =============================================================================
+
+@maintenance_bp.route('/shift-planning')
+@require_login
+def shift_planning():
+    """Shift planning view."""
+    db = get_db()
+    try:
+        work_centers = db.execute("SELECT id, work_center_code, work_center_name FROM work_centers WHERE is_active = 1 ORDER BY work_center_code").fetchall()
+
+        start_date = request.args.get('start_date', datetime.now().strftime('%Y-%m-%d'))
+        end_date = request.args.get('end_date', (datetime.now() + timedelta(days=14)).strftime('%Y-%m-%d'))
+        wc_id = request.args.get('work_center_id', type=int)
+
+        shift_assignments = []
+        if wc_id:
+            shift_assignments = db.execute("""
+                SELECT ts.*, e.first_name || ' ' || e.last_name as technician_name,
+                       e.employee_code, wcs.shift_name, wcs.start_time, wcs.end_time
+                FROM technician_shifts ts
+                JOIN hr_employees e ON ts.technician_id = e.id
+                LEFT JOIN work_center_shifts wcs ON ts.shift_definition_id = wcs.id
+                WHERE ts.work_center_id = ? AND ts.shift_date BETWEEN ? AND ?
+                ORDER BY ts.shift_date, e.first_name
+            """, (wc_id, start_date, end_date)).fetchall()
+        else:
+            shift_assignments = db.execute("""
+                SELECT ts.*, e.first_name || ' ' || e.last_name as technician_name,
+                       e.employee_code, wcs.shift_name, wcs.start_time, wcs.end_time,
+                       wc.work_center_name
+                FROM technician_shifts ts
+                JOIN hr_employees e ON ts.technician_id = e.id
+                LEFT JOIN work_center_shifts wcs ON ts.shift_definition_id = wcs.id
+                JOIN work_centers wc ON ts.work_center_id = wc.id
+                WHERE ts.shift_date BETWEEN ? AND ?
+                ORDER BY ts.shift_date, wc.work_center_code, e.first_name
+            """, (start_date, end_date)).fetchall()
+
+        return render_template('maintenance/shift_planning.html',
+                             work_centers=work_centers,
+                             shifts=shift_assignments,
+                             start_date=start_date,
+                             end_date=end_date,
+                             selected_wc_id=wc_id)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - SERVICE AGREEMENTS
+# =============================================================================
+
+@maintenance_bp.route('/service-agreements')
+@require_login
+def service_agreements_list():
+    """List all service agreements."""
+    db = get_db()
+    try:
+        agreements = db.execute("""
+            SELECT sa.*, c.name as customer_name
+            FROM service_agreements sa
+            LEFT JOIN customers c ON sa.customer_id = c.id
+            ORDER BY sa.agreement_number
+        """).fetchall()
+
+        return render_template('maintenance/service_agreements_list.html', agreements=agreements)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/service-agreements/<int:ag_id>')
+@require_login
+def service_agreement_detail(ag_id):
+    """View service agreement details."""
+    db = get_db()
+    try:
+        agreement = db.execute("""
+            SELECT sa.*, c.name as customer_name, c.contact_person, c.email
+            FROM service_agreements sa
+            LEFT JOIN customers c ON sa.customer_id = c.id
+            WHERE sa.id = ?
+        """, (ag_id,)).fetchone()
+
+        line_items = db.execute("""
+            SELECT ali.*, a.asset_code, a.name as equipment_name
+            FROM agreement_line_items ali
+            LEFT JOIN assets a ON ali.equipment_id = a.id
+            WHERE ali.agreement_id = ?
+            ORDER BY ali.id
+        """, (ag_id,)).fetchall()
+
+        return render_template('maintenance/service_agreement_detail.html',
+                             agreement=agreement,
+                             line_items=line_items)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/service-agreements/new', methods=['GET', 'POST'])
+@require_login
+def service_agreement_new():
+    """Create new service agreement."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            agreement_number = data.get('agreement_number')
+            if not agreement_number:
+                seq = db.execute("SELECT COUNT(*) as cnt FROM service_agreements").fetchone()['cnt'] + 1
+                agreement_number = f"SVC-{datetime.now().strftime('%Y')}-{seq:05d}"
+
+            cursor = db.execute("""
+                INSERT INTO service_agreements
+                (agreement_number, customer_id, agreement_type, start_date, end_date,
+                 response_time_hours, resolution_time_hours, availability_target,
+                 contract_value, billing_frequency, payment_terms,
+                 status, auto_renewal, contract_document_url, terms_conditions, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                agreement_number, data.get('customer_id'),
+                data.get('agreement_type', 'MAINTENANCE'),
+                data.get('start_date'), data.get('end_date'),
+                data.get('response_time_hours', 4),
+                data.get('resolution_time_hours', 24),
+                data.get('availability_target'),
+                data.get('contract_value', 0),
+                data.get('billing_frequency', 'MONTHLY'),
+                data.get('payment_terms'),
+                data.get('status', 'ACTIVE'),
+                1 if data.get('auto_renewal') else 0,
+                data.get('contract_document_url'),
+                data.get('terms_conditions'), session.get('user_id')
+            ))
+            db.commit()
+
+            log_audit('service_agreement', cursor.lastrowid, 'CREATE', session.get('user_id'))
+            flash(f'Service agreement {agreement_number} created.', 'success')
+            return redirect(url_for('maintenance.service_agreement_detail', ag_id=cursor.lastrowid))
+
+        customers = db.execute("SELECT id, name FROM customers ORDER BY name").fetchall()
+        return render_template('maintenance/service_agreement_form.html',
+                             agreement=None, customers=customers)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - WARRANTY MANAGEMENT
+# =============================================================================
+
+@maintenance_bp.route('/warranty')
+@require_login
+def warranty_list():
+    """List all warranty records."""
+    db = get_db()
+    try:
+        warranties = db.execute("""
+            SELECT wr.*, a.asset_code, a.name as equipment_name
+            FROM warranty_records wr
+            JOIN assets a ON wr.equipment_id = a.id
+            ORDER BY wr.warranty_number
+        """).fetchall()
+
+        return render_template('maintenance/warranty_list.html', warranties=warranties)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/warranty/<int:wr_id>')
+@require_login
+def warranty_detail(wr_id):
+    """View warranty details."""
+    db = get_db()
+    try:
+        warranty = db.execute("""
+            SELECT wr.*, a.asset_code, a.name as equipment_name
+            FROM warranty_records wr
+            JOIN assets a ON wr.equipment_id = a.id
+            WHERE wr.id = ?
+        """, (wr_id,)).fetchone()
+
+        claims = db.execute("""
+            SELECT wc.*, mwo.work_order_number
+            FROM warranty_claims wc
+            LEFT JOIN maintenance_work_orders mwo ON wc.work_order_id = mwo.id
+            WHERE wc.warranty_id = ?
+            ORDER BY wc.claim_date DESC
+        """, (wr_id,)).fetchall()
+
+        return render_template('maintenance/warranty_detail.html', warranty=warranty, claims=claims)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/warranty/new', methods=['GET', 'POST'])
+@require_login
+def warranty_new():
+    """Create new warranty record."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            cursor = db.execute("""
+                INSERT INTO warranty_records
+                (equipment_id, warranty_type, start_date, end_date, warranty_provider,
+                 warranty_number, coverage_scope, coverage_details,
+                 maximum_claims, maximum_value, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                data.get('equipment_id'), data.get('warranty_type', 'MANUFACTURER'),
+                data.get('start_date'), data.get('end_date'),
+                data.get('warranty_provider'), data.get('warranty_number'),
+                data.get('coverage_scope', 'FULL'), data.get('coverage_details'),
+                data.get('maximum_claims'), data.get('maximum_value'),
+                1 if data.get('is_active') else 0
+            ))
+            db.commit()
+
+            log_audit('warranty_record', cursor.lastrowid, 'CREATE', session.get('user_id'))
+            flash('Warranty record created.', 'success')
+            return redirect(url_for('maintenance.warranty_list'))
+
+        equipment = db.execute("SELECT id, asset_code, name FROM assets ORDER BY asset_code").fetchall()
+        return render_template('maintenance/warranty_form.html', warranty=None, equipment=equipment)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - NOTIFICATIONS & PROBLEMS
+# =============================================================================
+
+@maintenance_bp.route('/notifications')
+@require_login
+def notifications_list():
+    """List all maintenance notifications."""
+    db = get_db()
+    try:
+        notifications = db.execute("""
+            SELECT mn.*, a.asset_code, a.name as equipment_name,
+                   fl.location_code, fl.name as location_name
+            FROM maintenance_notifications mn
+            LEFT JOIN assets a ON mn.equipment_id = a.id
+            LEFT JOIN functional_locations fl ON mn.functional_location_id = fl.id
+            ORDER BY mn.notification_number DESC
+            LIMIT 100
+        """).fetchall()
+
+        return render_template('maintenance/notifications_list.html', notifications=notifications)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/notifications/new', methods=['GET', 'POST'])
+@require_login
+def notification_new():
+    """Create new maintenance notification."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            notif_number = data.get('notification_number')
+            if not notif_number:
+                seq = db.execute("SELECT COUNT(*) as cnt FROM maintenance_notifications").fetchone()['cnt'] + 1
+                notif_number = f"NOTIF-{datetime.now().strftime('%Y%m')}-{seq:05d}"
+
+            cursor = db.execute("""
+                INSERT INTO maintenance_notifications
+                (notification_number, notification_type, priority, short_text, long_text,
+                 equipment_id, functional_location_id, status,
+                 damage_group, damage_code, cause_group, cause_code,
+                 reported_by, reported_date, required_start_date, required_end_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                notif_number, data.get('notification_type', 'MALFUNCTION'),
+                data.get('priority', 'MEDIUM'), data.get('short_text'),
+                data.get('long_text'), data.get('equipment_id') or None,
+                data.get('functional_location_id') or None,
+                data.get('status', 'OPEN'),
+                data.get('damage_group'), data.get('damage_code'),
+                data.get('cause_group'), data.get('cause_code'),
+                session.get('user_id'), datetime.now().strftime('%Y-%m-%d %H:%M'),
+                data.get('required_start_date'), data.get('required_end_date')
+            ))
+            db.commit()
+
+            log_audit('maintenance_notification', cursor.lastrowid, 'CREATE', session.get('user_id'))
+            flash(f'Notification {notif_number} created.', 'success')
+            return redirect(url_for('maintenance.notifications_list'))
+
+        equipment = db.execute("SELECT id, asset_code, name FROM assets ORDER BY asset_code").fetchall()
+        locations = db.execute("SELECT id, location_code, name FROM functional_locations ORDER BY location_code").fetchall()
+        return render_template('maintenance/notification_form.html',
+                             notification=None, equipment=equipment, locations=locations)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/problems')
+@require_login
+def problems_list():
+    """List all problem records."""
+    db = get_db()
+    try:
+        problems = db.execute("""
+            SELECT pr.*, e.first_name || ' ' || e.last_name as assigned_to_name
+            FROM problem_records pr
+            LEFT JOIN hr_employees e ON pr.assigned_to = e.id
+            ORDER BY pr.problem_number DESC
+        """).fetchall()
+
+        return render_template('maintenance/problems_list.html', problems=problems)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/problems/new', methods=['GET', 'POST'])
+@require_login
+def problem_new():
+    """Create new problem record."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            problem_number = data.get('problem_number')
+            if not problem_number:
+                seq = db.execute("SELECT COUNT(*) as cnt FROM problem_records").fetchone()['cnt'] + 1
+                problem_number = f"PRB-{datetime.now().strftime('%Y')}-{seq:05d}"
+
+            cursor = db.execute("""
+                INSERT INTO problem_records
+                (problem_number, title, description, priority, status,
+                 problem_category, problem_type, root_cause_analysis,
+                 corrective_action, preventive_action, assigned_to)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                problem_number, data.get('title'), data.get('description'),
+                data.get('priority', 'MEDIUM'), data.get('status', 'OPEN'),
+                data.get('problem_category'), data.get('problem_type'),
+                data.get('root_cause_analysis'), data.get('corrective_action'),
+                data.get('preventive_action'), data.get('assigned_to') or None
+            ))
+            db.commit()
+
+            log_audit('problem_record', cursor.lastrowid, 'CREATE', session.get('user_id'))
+            flash(f'Problem record {problem_number} created.', 'success')
+            return redirect(url_for('maintenance.problems_list'))
+
+        employees = db.execute("SELECT id, first_name, last_name FROM hr_employees ORDER BY first_name").fetchall()
+        return render_template('maintenance/problem_form.html', problem=None, employees=employees)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - IOT DEVICES & ALERTS
+# =============================================================================
+
+@maintenance_bp.route('/iot-devices')
+@require_login
+def iot_devices_list():
+    """List all IoT devices."""
+    db = get_db()
+    try:
+        devices = db.execute("""
+            SELECT iot.*, a.asset_code, a.name as equipment_name,
+                   fl.location_code, fl.name as location_name
+            FROM iot_devices iot
+            LEFT JOIN assets a ON iot.equipment_id = a.id
+            LEFT JOIN functional_locations fl ON iot.location_id = fl.id
+            ORDER BY iot.device_code
+        """).fetchall()
+
+        return render_template('maintenance/iot_devices_list.html', devices=devices)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/iot-devices/<int:device_id>')
+@require_login
+def iot_device_detail(device_id):
+    """View IoT device details and telemetry."""
+    db = get_db()
+    try:
+        device = db.execute("""
+            SELECT iot.*, a.asset_code, a.name as equipment_name
+            FROM iot_devices iot
+            LEFT JOIN assets a ON iot.equipment_id = a.id
+            WHERE iot.id = ?
+        """, (device_id,)).fetchone()
+
+        streams = db.execute("""
+            SELECT * FROM iot_data_streams WHERE device_id = ? ORDER BY stream_name
+        """, (device_id,)).fetchall()
+
+        recent_data = db.execute("""
+            SELECT idp.*, ids.stream_name, ids.data_type, ids.unit
+            FROM iot_data_points idp
+            JOIN iot_data_streams ids ON idp.stream_id = ids.id
+            WHERE ids.device_id = ?
+            ORDER BY idp.timestamp DESC LIMIT 100
+        """, (device_id,)).fetchall()
+
+        return render_template('maintenance/iot_device_detail.html',
+                             device=device, streams=streams, recent_data=recent_data)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/iot-devices/new', methods=['GET', 'POST'])
+@require_login
+def iot_device_new():
+    """Register new IoT device."""
+    db = get_db()
+    try:
+        if request.method == 'POST':
+            data = request.form
+            device_code = data.get('device_code')
+            if not device_code:
+                seq = db.execute("SELECT COUNT(*) as cnt FROM iot_devices").fetchone()['cnt'] + 1
+                device_code = f"IOT-{seq:06d}"
+
+            cursor = db.execute("""
+                INSERT INTO iot_devices
+                (device_code, device_type, manufacturer, model, serial_number,
+                 protocol, endpoint_url, auth_type, sampling_interval_seconds,
+                 data_format, is_active, equipment_id, location_id,
+                 latitude, longitude, installed_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                device_code, data.get('device_type', 'SENSOR'),
+                data.get('manufacturer'), data.get('model'), data.get('serial_number'),
+                data.get('protocol', 'MQTT'), data.get('endpoint_url'),
+                data.get('auth_type'), data.get('sampling_interval_seconds', 60),
+                data.get('data_format', 'JSON'),
+                1 if data.get('is_active') else 0,
+                data.get('equipment_id') or None, data.get('location_id') or None,
+                data.get('latitude'), data.get('longitude'),
+                data.get('installed_date')
+            ))
+            db.commit()
+
+            log_audit('iot_device', cursor.lastrowid, 'CREATE', session.get('user_id'))
+            flash(f'IoT device {device_code} registered.', 'success')
+            return redirect(url_for('maintenance.iot_devices_list'))
+
+        equipment = db.execute("SELECT id, asset_code, name FROM assets ORDER BY asset_code").fetchall()
+        locations = db.execute("SELECT id, location_code, name FROM functional_locations ORDER BY location_code").fetchall()
+        return render_template('maintenance/iot_device_form.html', device=None, equipment=equipment, locations=locations)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/iot-alerts')
+@require_login
+def iot_alerts_list():
+    """List all IoT alerts."""
+    db = get_db()
+    try:
+        alerts = db.execute("""
+            SELECT ia.*, iar.rule_name, ids.stream_name, ids.data_type,
+                   iot.device_code
+            FROM iot_alerts ia
+            JOIN iot_alert_rules iar ON ia.rule_id = iar.id
+            JOIN iot_data_streams ids ON ia.stream_id = ids.id
+            JOIN iot_devices iot ON ids.device_id = iot.id
+            ORDER BY ia.triggered_at DESC
+            LIMIT 100
+        """).fetchall()
+
+        return render_template('maintenance/iot_alerts_list.html', alerts=alerts)
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ENHANCED EAM/PM ROUTES - COST PLANNING & SETTLEMENTS
+# =============================================================================
+
+@maintenance_bp.route('/cost-planning')
+@require_login
+def cost_planning():
+    """Cost planning view for work orders."""
+    db = get_db()
+    try:
+        work_orders = db.execute("""
+            SELECT mwo.*, a.asset_code, a.name as equipment_name,
+                   wocp.total_planned_cost, wocp.total_actual_cost
+            FROM maintenance_work_orders mwo
+            JOIN assets a ON mwo.asset_id = a.id
+            LEFT JOIN (
+                SELECT work_order_id,
+                       SUM(planned_total_cost) as total_planned_cost,
+                       SUM(actual_total_cost) as total_actual_cost
+                FROM work_order_cost_plan GROUP BY work_order_id
+            ) wocp ON mwo.id = wocp.work_order_id
+            WHERE mwo.status NOT IN ('Closed', 'Canceled')
+            ORDER BY mwo.work_order_number
+        """).fetchall()
+
+        return render_template('maintenance/cost_planning.html', work_orders=work_orders)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/settlements')
+@require_login
+def settlements_list():
+    """List all maintenance settlements."""
+    db = get_db()
+    try:
+        settlements = db.execute("""
+            SELECT ms.*, mwo.work_order_number, sr.rule_name
+            FROM maintenance_settlements ms
+            JOIN maintenance_work_orders mwo ON ms.work_order_id = mwo.id
+            LEFT JOIN settlement_rules sr ON ms.settlement_rule_id = sr.id
+            ORDER BY ms.settlement_date DESC
+            LIMIT 100
+        """).fetchall()
+
+        return render_template('maintenance/settlements_list.html', settlements=settlements)
+    finally:
+        db.close()
+
+
+@maintenance_bp.route('/wip')
+@require_login
+def wip_view():
+    """Work in Progress view."""
+    db = get_db()
+    try:
+        wip_data = db.execute("""
+            SELECT mw.*, mwo.work_order_number, mwo.work_order_type,
+                   mce.element_name as cost_element_name
+            FROM maintenance_wip mw
+            JOIN maintenance_work_orders mwo ON mw.work_order_id = mwo.id
+            LEFT JOIN maintenance_cost_elements mce ON mw.cost_element_id = mce.id
+            ORDER BY mw.work_order_id
+        """).fetchall()
+
+        return render_template('maintenance/wip_view.html', wip_data=wip_data)
+    finally:
+        db.close()
+
+
+# =============================================================================
 # API HELPERS
 # =============================================================================
 
