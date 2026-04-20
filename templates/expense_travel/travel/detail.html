@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        :root { --primary: #6366f1; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">Travel: {{ travel.travel_number }}</h1>
+                <p class="text-gray-400 mt-1">{{ travel.trip_purpose }}</p>
+            </div>
+            <div class="flex gap-3">
+                {% if travel.status == 'draft' %}
+                <a href="/expense-travel/travel/{{ travel.id }}/edit" class="btn btn-primary">
+                    <i class="fas fa-edit"></i> Edit
+                </a>
+                <form method="post" action="/expense-travel/travel/{{ travel.id }}/submit" class="inline">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-paper-plane"></i> Submit
+                    </button>
+                </form>
+                {% elif travel.status == 'submitted' %}
+                <form method="post" action="/expense-travel/travel/{{ travel.id }}/approve" class="inline">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                </form>
+                <form method="post" action="/expense-travel/travel/{{ travel.id }}/reject" class="inline">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                </form>
+                {% endif %}
+                <a href="/expense-travel/travel" class="btn btn-outline">
+                    <i class="fas fa-arrow-left"></i> Back
+                </a>
+            </div>
+        </div>
+
+        <!-- Status Banner -->
+        <div class="card mb-6 border-l-4 
+            {% if travel.status == 'approved' %}border-success bg-success/10
+            {% elif travel.status == 'rejected' %}border-danger bg-danger/10
+            {% elif travel.status == 'submitted' %}border-warning bg-warning/10
+            {% else %}border-info bg-info/10{% endif %}">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <span class="badge {% if travel.status == 'approved' %}bg-success/20 text-success{% elif travel.status == 'rejected' %}bg-danger/20 text-danger{% elif travel.status == 'submitted' %}bg-warning/20 text-warning{% else %}bg-gray-500/20 text-gray-400{% endif %}">
+                        {{ travel.status|title }}
+                    </span>
+                    <div>
+                        <p class="text-white font-semibold">{{ travel.destination_city }}, {{ travel.destination_country }}</p>
+                        <p class="text-sm text-gray-400">{{ travel.total_trip_days }} days</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-gray-400">Estimated Cost</p>
+                    <p class="text-2xl font-bold text-white amount">{{ "%.2f"|format(travel.estimated_total_cost) }} {{ travel.currency }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Main Content -->
+            <div class="lg:col-span-2">
+                <!-- Itinerary -->
+                <div class="card mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Itinerary</h3>
+                    {% for itin in itineraries %}
+                    <div class="flex gap-4 p-4 bg-gray-800/50 rounded-lg mb-3">
+                        <div class="w-16 h-16 bg-primary/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-{{ itin.itinerary_type == 'flight' and 'plane' or itin.itinerary_type == 'hotel' and 'hotel' or 'map-marker-alt' }} text-primary"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-white font-medium">{{ itin.segment_name or itin.itinerary_type|title }}</p>
+                            <p class="text-sm text-gray-400">{{ itin.origin_city|default('N/A') }} → {{ itin.destination_city|default('N/A') }}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm text-gray-400">{{ itin.segment_date }}</p>
+                            <p class="text-sm text-white">{{ itin.estimated_cost|default(0)|round(2) }} {{ travel.currency }}</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-8 text-gray-400">
+                        <i class="fas fa-calendar text-4xl mb-3"></i>
+                        <p>No itinerary items yet</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="lg:col-span-1">
+                <div class="card mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Trip Information</h3>
+                    <dl class="space-y-3">
+                        <div>
+                            <dt class="text-gray-400 text-sm">Employee</dt>
+                            <dd class="text-white">{{ travel.employee_name }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400 text-sm">Department</dt>
+                            <dd class="text-white">{{ travel.department_name }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400 text-sm">Travel Period</dt>
+                            <dd class="text-white">{{ travel.travel_start_date }} - {{ travel.travel_end_date }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400 text-sm">Trip Type</dt>
+                            <dd class="text-white">{{ travel.trip_type|title }}</dd>
+                        </div>
+                    </dl>
+                </div>
+
+                {% if travel.advance_requested > 0 %}
+                <div class="card mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Cash Advance</h3>
+                    <p class="text-2xl font-bold text-warning">{{ "%.2f"|format(travel.advance_requested) }} {{ travel.advance_requested_currency }}</p>
+                    <p class="text-sm text-gray-400">Requested</p>
+                </div>
+                {% endif %}
+
+                {% if travel.has_expense_claim %}
+                <div class="card">
+                    <h3 class="text-lg font-semibold text-white mb-4">Linked Expense</h3>
+                    <a href="/expense-travel/claims/{{ travel.expense_claim_id }}" class="btn btn-outline w-full">
+                        <i class="fas fa-file-invoice-dollar"></i> View Expense Claim
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

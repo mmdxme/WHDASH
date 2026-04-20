@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        :root { --primary: #6366f1; --primary-dark: #4f46e5; --success: #10b981; --danger: #ef4444; }
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        input, select, textarea { background: #1e293b; border: 1px solid #334155; color: #e5e7eb; padding: 0.5rem 0.75rem; border-radius: 0.5rem; width: 100%; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); }
+        label { display: block; color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.25rem; }
+        .form-group { margin-bottom: 1rem; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem; border-bottom: 2px solid #334155; color: #94a3b8; }
+        td { padding: 0.75rem; border-bottom: 1px solid #334155; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        .required::after { content: ' *'; color: var(--danger); }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">Edit Claim: {{ claim.claim_number }}</h1>
+                <p class="text-gray-400 mt-1">Modify expense claim details and line items</p>
+            </div>
+            <a href="/expense-travel/claims/{{ claim.id }}" class="btn btn-outline">
+                <i class="fas fa-arrow-left"></i> Back to Claim
+            </a>
+        </div>
+
+        <form method="post">
+            <!-- Basic Info -->
+            <div class="card mb-6">
+                <h3 class="text-lg font-semibold text-white mb-4">Basic Information</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="form-group">
+                        <label>Claim Date</label>
+                        <input type="date" name="claim_date" value="{{ claim.claim_date }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Currency</label>
+                        <select name="currency">
+                            <option value="AED" {% if claim.currency == 'AED' %}selected{% endif %}>AED</option>
+                            <option value="USD" {% if claim.currency == 'USD' %}selected{% endif %}>USD</option>
+                            <option value="EUR" {% if claim.currency == 'EUR' %}selected{% endif %}>EUR</option>
+                            <option value="GBP" {% if claim.currency == 'GBP' %}selected{% endif %}>GBP</option>
+                        </select>
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label>Business Purpose</label>
+                        <textarea name="business_purpose" rows="2">{{ claim.business_purpose }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lines Table -->
+            <div class="card mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-white">Expense Lines</h3>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="addLine()">
+                        <i class="fas fa-plus"></i> Add Line
+                    </button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Category</th>
+                            <th>Date</th>
+                            <th>Description</th>
+                            <th>Vendor</th>
+                            <th class="text-right">Amount</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in lines %}
+                        <tr>
+                            <td>{{ line.line_number }}</td>
+                            <td>{{ line.category_name }}</td>
+                            <td>{{ line.expense_date }}</td>
+                            <td>{{ line.expense_description or '-' }}</td>
+                            <td>{{ line.vendor_name or '-' }}</td>
+                            <td class="text-right amount">{{ "%.2f"|format(line.amount) }}</td>
+                            <td>
+                                <button type="button" class="btn btn-danger btn-sm">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-8 text-gray-400">
+                                No lines yet. Click "Add Line" to add expenses.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Notes -->
+            <div class="card mb-6">
+                <h3 class="text-lg font-semibold text-white mb-4">Notes</h3>
+                <textarea name="notes" rows="3">{{ claim.notes or '' }}</textarea>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex justify-end gap-4">
+                <a href="/expense-travel/claims/{{ claim.id }}" class="btn btn-outline">Cancel</a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Changes
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        function addLine() {
+            alert('Add line functionality - expands form');
+        }
+    </script>
+    {% endblock %}
+</body>
+</html>

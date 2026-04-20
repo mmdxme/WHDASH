@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">Complaints</h1>
+            <p class="text-gray-500 dark:text-gray-400 mt-1">Manage customer complaints and service issues</p>
+        </div>
+        <div class="mt-4 md:mt-0">
+            <a href="{{ url_for('crm_complaints_new') }}"
+               class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition flex items-center gap-2 inline-flex">
+                <i class="fas fa-plus"></i> New Complaint
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            <div>
+                <label class="block text-sm text-gray-500 dark:text-gray-400 mb-1">Search</label>
+                <input type="text" name="search" value="{{ filters.search or '' }}"
+                       placeholder="Complaint #, subject..."
+                       class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 dark:text-gray-400 mb-1">Status</label>
+                <select name="status" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="">All</option>
+                    {% for status in lookups.complaint_statuses %}
+                    <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 dark:text-gray-400 mb-1">Priority</label>
+                <select name="priority" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="">All</option>
+                    {% for priority in lookups.complaint_priorities %}
+                    <option value="{{ priority }}" {% if filters.priority == priority %}selected{% endif %}>{{ priority }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 dark:text-gray-400 mb-1">Category</label>
+                <select name="category" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="">All</option>
+                    {% for cat in lookups.complaint_categories %}
+                    <option value="{{ cat }}" {% if filters.category == cat %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 dark:text-gray-400 mb-1">Assigned To</label>
+                <select name="assigned_to" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="">All</option>
+                    {% for sp in salespersons %}
+                    <option value="{{ sp.id }}" {% if filters.assigned_to|int == sp.id %}selected{% endif %}>{{ sp.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 dark:text-gray-400 mb-1">Customer</label>
+                <select name="customer_id" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="">All</option>
+                    {% for c in customers %}
+                    <option value="{{ c.id }}" {% if filters.customer_id|int == c.id %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="px-4 py-2 bg-gray-800 dark:bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                    <i class="fas fa-filter mr-1"></i> Filter
+                </button>
+                <a href="{{ url_for('crm_complaints') }}" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300">
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Complaints Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Complaint #</th>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Customer</th>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Subject</th>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Category</th>
+                        <th class="px-4 py-3 text-center text-gray-600 dark:text-gray-300 font-semibold">Priority</th>
+                        <th class="px-4 py-3 text-center text-gray-600 dark:text-gray-300 font-semibold">Status</th>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Assigned To</th>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Created</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
+                    {% for complaint in complaints %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-3">
+                            <a href="{{ url_for('crm_complaints_view', complaint_id=complaint.id) }}"
+                               class="text-blue-600 hover:underline font-medium">
+                                {{ complaint.complaint_number }}
+                            </a>
+                        </td>
+                        <td class="px-4 py-3 text-gray-900 dark:text-white">{{ complaint.customer_name or '-' }}</td>
+                        <td class="px-4 py-3 text-gray-900 dark:text-white truncate max-w-xs">{{ complaint.subject }}</td>
+                        <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ complaint.category or '-' }}</td>
+                        <td class="px-4 py-3 text-center">
+                            <span class="px-2 py-1 text-xs rounded-full {% if complaint.priority == 'Critical' %}bg-red-100 text-red-800{% elif complaint.priority == 'High' %}bg-orange-100 text-orange-800{% elif complaint.priority == 'Medium' %}bg-yellow-100 text-yellow-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ complaint.priority }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-center">
+                            <span class="px-2 py-1 text-xs rounded-full {% if complaint.status == 'New' %}bg-blue-100 text-blue-800{% elif complaint.status == 'In Progress' %}bg-yellow-100 text-yellow-800{% elif complaint.status == 'Escalated' %}bg-red-100 text-red-800{% elif complaint.status == 'Resolved' %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ complaint.status }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ complaint.assigned_to_name or '-' }}</td>
+                        <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ complaint.created_at[:10] if complaint.created_at else '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                            <i class="fas fa-check-circle text-4xl mb-3 text-green-500"></i>
+                            <p>No complaints found. Great job!</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if pages > 1 %}
+        <div class="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
+            <div class="flex items-center justify-center gap-2">
+                {% if page > 1 %}
+                <a href="{{ url_for('crm_complaints', page=page-1, **filters) }}"
+                   class="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">Prev</a>
+                {% endif %}
+                <span class="px-3 py-1">Page {{ page }} of {{ pages }}</span>
+                {% if page < pages %}
+                <a href="{{ url_for('crm_complaints', page=page+1, **filters) }}"
+                   class="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

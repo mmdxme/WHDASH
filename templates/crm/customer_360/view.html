@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+        <div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="px-2 py-1 text-xs rounded-full {{ 'bg-green-100 text-green-800' if customer.status == 'Active' else 'bg-gray-100 text-gray-800' }}">
+                    {{ customer.status or 'Active' }}
+                </span>
+                {% if customer.key_account %}
+                <span class="px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800">
+                    <i class="fas fa-star mr-1"></i> Key Account
+                </span>
+                {% endif %}
+                {% if customer.churn_risk %}
+                <span class="px-2 py-1 text-xs rounded-full {% if customer.churn_risk.risk_level == 'Critical' %}bg-red-100 text-red-800{% elif customer.churn_risk.risk_level == 'High' %}bg-orange-100 text-orange-800{% elif customer.churn_risk.risk_level == 'Medium' %}bg-yellow-100 text-yellow-800{% else %}bg-green-100 text-green-800{% endif %}">
+                    Risk: {{ customer.churn_risk.risk_level }}
+                </span>
+                {% endif %}
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">{{ customer.name }}</h1>
+            <p class="text-gray-500 dark:text-gray-400">
+                Customer Code: {{ customer.customer_code or 'N/A' }}
+                {% if customer.assigned_salesperson_name %} • Assigned to: {{ customer.assigned_salesperson_name }}{% endif %}
+            </p>
+        </div>
+        <div class="mt-4 md:mt-0 flex gap-2">
+            <a href="{{ url_for('sales_inquiries_new') }}?customer_id={{ customer.id }}"
+               class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition inline-flex items-center gap-2">
+                <i class="fas fa-plus"></i> New Inquiry
+            </a>
+            <a href="{{ url_for('sales_quotations_new') }}?customer_id={{ customer.id }}"
+               class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition inline-flex items-center gap-2">
+                <i class="fas fa-file-invoice"></i> New Quote
+            </a>
+            <a href="{{ url_for('sales_customers_edit', customer_id=customer.id) }}"
+               class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition inline-flex items-center gap-2">
+                <i class="fas fa-edit"></i> Edit
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Left Column - Customer Details -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Overview Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+                    <p class="text-sm text-gray-500">Total Revenue</p>
+                    <p class="text-xl font-bold text-green-600">{{ "$ {:,.0f}".format(customer.total_revenue or 0) }}</p>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+                    <p class="text-sm text-gray-500">Total Orders</p>
+                    <p class="text-xl font-bold text-blue-600">{{ customer.total_orders or 0 }}</p>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+                    <p class="text-sm text-gray-500">Outstanding</p>
+                    <p class="text-xl font-bold text-red-600">{{ "$ {:,.0f}".format(customer.financials.outstanding_balance or 0) }}</p>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center">
+                    <p class="text-sm text-gray-500">Engagement</p>
+                    <p class="text-xl font-bold text-purple-600">{{ customer.engagement_score.level if customer.engagement_score else 'N/A' }}</p>
+                </div>
+            </div>
+
+            <!-- Open Opportunities -->
+            {% if customer.opportunities %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white">
+                        <i class="fas fa-bullseye mr-2 text-indigo-500"></i> Open Opportunities
+                    </h2>
+                </div>
+                <div class="space-y-3">
+                    {% for opp in customer.opportunities %}
+                    <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                        <div>
+                            <p class="font-medium text-gray-900 dark:text-white">{{ opp.opportunity_number }}</p>
+                            <p class="text-sm text-gray-500">{{ opp.stage }}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-semibold text-green-600">{{ "$ {:,.0f}".format(opp.estimated_value or 0) }}</p>
+                            <p class="text-xs text-gray-500">{{ opp.success_probability }}%</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Recent Activities -->
+            {% if customer.activities %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white">
+                        <i class="fas fa-stream mr-2 text-cyan-500"></i> Recent Activities
+                    </h2>
+                    <a href="{{ url_for('crm_activities') }}?customer_id={{ customer.id }}" class="text-blue-500 hover:underline text-sm">View All</a>
+                </div>
+                <div class="space-y-3">
+                    {% for activity in customer.activities[:10] %}
+                    <div class="flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg">
+                        <div class="w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                            <i class="fas fa-{% if activity.activity_type == 'Call' %}phone{% elif activity.activity_type == 'Meeting' %}calendar{% elif activity.activity_type == 'Visit' %}home{% else %}clipboard{% endif %} text-blue-600 text-sm"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-sm text-gray-900 dark:text-white">{{ activity.subject }}</p>
+                            <p class="text-xs text-gray-500">{{ activity.activity_date }} • {{ activity.owner_name }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Journey Timeline -->
+            {% if customer.journey_timeline %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-lg font-semibold text-gray-800 dark:text-white">
+                        <i class="fas fa-route mr-2 text-teal-500"></i> Customer Journey
+                    </h2>
+                    <a href="{{ url_for('crm_customer_journey', customer_id=customer.id) }}" class="text-blue-500 hover:underline text-sm">Full Journey</a>
+                </div>
+                <div class="relative">
+                    <div class="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-600"></div>
+                    <div class="space-y-4">
+                        {% for event in customer.journey_timeline[:8] %}
+                        <div class="flex gap-4 relative">
+                            <div class="w-8 h-8 bg-teal-100 dark:bg-teal-900 rounded-full flex items-center justify-center z-10">
+                                <i class="fas fa-circle text-teal-500 text-xs"></i>
+                            </div>
+                            <div class="flex-1 pt-1">
+                                <p class="text-sm font-medium text-gray-900 dark:text-white">{{ event.event_type }}</p>
+                                <p class="text-xs text-gray-500">{{ event.event_date }} • {{ event.channel or '' }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Contacts -->
+            {% if customer.contacts %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4 border-b pb-2">
+                    <i class="fas fa-address-book mr-2 text-purple-500"></i> Contacts
+                </h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {% for contact in customer.contacts %}
+                    <div class="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                        <div class="flex items-center gap-2 mb-2">
+                            {% if contact.is_primary %}
+                            <span class="px-2 py-0.5 text-xs bg-blue-100 text-blue-700 rounded">Primary</span>
+                            {% endif %}
+                            <span class="font-medium text-gray-900 dark:text-white">{{ contact.name }}</span>
+                        </div>
+                        <p class="text-sm text-gray-500">{{ contact.title }}{% if contact.department %} • {{ contact.department }}{% endif %}</p>
+                        <p class="text-sm text-gray-600 dark:text-gray-300">{{ contact.phone }} • {{ contact.email }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Column -->
+        <div class="space-y-6">
+            <!-- Customer Info -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+                    <i class="fas fa-user mr-2 text-blue-500"></i> Customer Info
+                </h2>
+                <div class="space-y-3 text-sm">
+                    <div>
+                        <label class="block text-gray-500">Phone</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.phone or 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-gray-500">Email</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.email or 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-gray-500">Location</label>
+                        <p class="text-gray-900 dark:text-white">{{ [customer.city, customer.country]|join(', ') if customer.city or customer.country else 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-gray-500">Payment Terms</label>
+                        <p class="text-gray-900 dark:text-white">{{ customer.payment_terms or 'Net 30' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-gray-500">Credit Limit</label>
+                        <p class="text-gray-900 dark:text-white">{{ "$ {:,.0f}".format(customer.credit_limit or 0) }}</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Engagement Score -->
+            {% if customer.engagement_score %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+                    <i class="fas fa-chart-line mr-2 text-purple-500"></i> Engagement
+                </h2>
+                <div class="text-center mb-4">
+                    <div class="inline-flex items-center justify-center w-20 h-20 rounded-full {% if customer.engagement_score.level in ['Very High', 'High'] %}bg-green-100 text-green-600{% elif customer.engagement_score.level == 'Medium' %}bg-yellow-100 text-yellow-600{% else %}bg-red-100 text-red-600{% endif %}">
+                        <span class="text-2xl font-bold">{{ customer.engagement_score.score }}</span>
+                    </div>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Recent Activities</span>
+                        <span class="font-medium">{{ customer.engagement_score.recent_activities }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Recent Orders</span>
+                        <span class="font-medium">{{ customer.engagement_score.recent_orders }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-500">Recent Quotations</span>
+                        <span class="font-medium">{{ customer.engagement_score.recent_quotations }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Churn Risk -->
+            {% if customer.churn_risk %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+                    <i class="fas fa-exclamation-triangle mr-2 text-orange-500"></i> Churn Risk
+                </h2>
+                <div class="text-center mb-4">
+                    <span class="px-3 py-1 text-lg font-bold rounded-full {% if customer.churn_risk.risk_level == 'Critical' %}bg-red-100 text-red-700{% elif customer.churn_risk.risk_level == 'High' %}bg-orange-100 text-orange-700{% elif customer.churn_risk.risk_level == 'Medium' %}bg-yellow-100 text-yellow-700{% else %}bg-green-100 text-green-700{% endif %}">
+                        {{ customer.churn_risk.risk_level }}
+                    </span>
+                </div>
+                {% if customer.churn_risk.factors %}
+                <div class="space-y-2">
+                    {% for factor in customer.churn_risk.factors %}
+                    <div class="flex items-center gap-2 text-sm">
+                        <i class="fas fa-exclamation-circle text-orange-500"></i>
+                        <span class="text-gray-600 dark:text-gray-300">{{ factor.factor }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Segments -->
+            {% if customer.segments %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+                    <i class="fas fa-layer-group mr-2 text-teal-500"></i> Segments
+                </h2>
+                <div class="flex flex-wrap gap-2">
+                    {% for seg in customer.segments %}
+                    <span class="px-3 py-1 bg-teal-100 text-teal-700 rounded-full text-sm">{{ seg.segment_name }}</span>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Open Complaints -->
+            {% if customer.complaints %}
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">
+                    <i class="fas fa-exclamation-circle mr-2 text-red-500"></i> Open Complaints
+                </h2>
+                <div class="space-y-2">
+                    {% for comp in customer.complaints[:3] %}
+                    <div class="p-2 bg-gray-50 dark:bg-gray-700 rounded">
+                        <p class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ comp.subject }}</p>
+                        <span class="px-2 py-0.5 text-xs rounded-full {% if comp.priority == 'Critical' %}bg-red-100 text-red-700{% else %}bg-orange-100 text-orange-700{% endif %}">
+                            {{ comp.priority }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('talent.pools') }}" class="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-all">
+                <i class="fa-solid fa-arrow-left"></i>
+            </a>
+            <div>
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-xl flex items-center justify-center" style="background-color: {{ pool.color_code or '#6366f1' }}20">
+                        <i class="fa-solid {{ pool.icon_class or 'fa-users' }} text-2xl" style="color: {{ pool.color_code or '#6366f1' }}"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-3xl font-bold text-white">{{ pool.name }}</h1>
+                        <p class="text-slate-400">{{ pool.pool_type }} - {{ pool.member_count or 0 }} {{ t('members', 'members') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pool Description -->
+    {% if pool.description %}
+    <div class="glass-panel rounded-2xl p-6">
+        <p class="text-slate-300">{{ pool.description }}</p>
+        {% if pool.criteria_json %}
+        <div class="mt-4 p-4 bg-white/5 rounded-xl">
+            <p class="text-slate-400 text-sm">{{ t('criteria', 'Criteria') }}:</p>
+            <p class="text-white text-sm mt-1">{{ pool.criteria_json }}</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Members Grid -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-6 border-b border-white/10">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">
+                    <i class="fa-solid fa-users mr-2" style="color: {{ pool.color_code or '#6366f1' }}"></i>
+                    {{ t('pool_members', 'Pool Members') }}
+                </h3>
+                <button onclick="document.getElementById('addMemberModal').classList.remove('hidden')" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-semibold transition-all">
+                    <i class="fa-solid fa-plus mr-2"></i>{{ t('add_member', 'Add Member') }}
+                </button>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
+            {% for member in members %}
+            <div class="p-4 bg-white/5 rounded-xl border-l-4 hover:bg-white/10 transition-all" style="border-color: {{ pool.color_code or '#6366f1' }}">
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center">
+                        <span class="text-purple-400 font-bold">{{ member.first_name[0] }}{{ member.last_name[0] }}</span>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-white font-medium">{{ member.first_name }} {{ member.last_name }}</p>
+                        <p class="text-slate-400 text-sm">{{ member.employee_code }}</p>
+                    </div>
+                </div>
+                <div class="space-y-2 text-sm">
+                    <p class="text-slate-400">{{ t('department', 'Department') }}: <span class="text-white">{{ member.department_name or '-' }}</span></p>
+                    <p class="text-slate-400">{{ t('position', 'Position') }}: <span class="text-white">{{ member.position_title or '-' }}</span></p>
+                    <p class="text-slate-400">{{ t('joined', 'Joined') }}: <span class="text-white">{{ member.joined_date }}</span></p>
+                </div>
+                <div class="mt-4 flex items-center justify-between">
+                    <span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ member.status }}</span>
+                    <form action="{{ url_for('talent.pool_remove_member', pool_id=pool.id, member_id=member.id) }}" method="POST" onsubmit="return confirm('{{ t('confirm_remove', 'Remove this member?') }}')">
+                        <button type="submit" class="p-2 hover:bg-red-500/10 rounded-lg text-red-400 transition-all">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% else %}
+            <div class="col-span-full text-center py-12">
+                <i class="fa-solid fa-users text-4xl text-slate-600 mb-4 block"></i>
+                <p class="text-slate-500">{{ t('no_members_in_pool', 'No members in this pool yet') }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Member Modal -->
+<div id="addMemberModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+    <div class="glass-panel rounded-2xl p-6 w-full max-w-md mx-4">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-xl font-bold text-white">{{ t('add_member_to_pool', 'Add Member to Pool') }}</h3>
+            <button onclick="document.getElementById('addMemberModal').classList.add('hidden')" class="p-2 hover:bg-white/10 rounded-lg text-slate-400">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+        <form action="{{ url_for('talent.pool_add_member', pool_id=pool.id) }}" method="POST">
+            <div class="mb-4">
+                <label class="block text-sm text-slate-400 mb-2">{{ t('employee', 'Employee') }}</label>
+                <select name="employee_id" required class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:border-purple-500 focus:outline-none">
+                    <option value="" class="bg-slate-800">{{ t('select_employee', 'Select an employee...') }}</option>
+                </select>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button type="button" onclick="document.getElementById('addMemberModal').classList.add('hidden')" class="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all">
+                    {{ t('cancel', 'Cancel') }}
+                </button>
+                <button type="submit" class="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-semibold transition-all">
+                    {{ t('add_member', 'Add Member') }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

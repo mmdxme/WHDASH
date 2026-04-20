@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div>
+        <h1 class="text-3xl font-bold text-white">
+            <i class="fa-solid fa-chart-network text-emerald-400 mr-2"></i>
+            {{ t('workforce_capability', 'Workforce Capability') }}
+        </h1>
+        <p class="text-slate-400 mt-1">{{ t('workforce_capability_desc', 'Analyze bench strength and workforce capabilities') }}</p>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="glass-panel rounded-2xl p-6 text-center">
+            <p class="text-slate-400 text-sm">{{ t('leadership_ready', 'Leadership Ready') }}</p>
+            <p class="text-3xl font-bold text-emerald-400 mt-1">{{ capability_summary.leadership_ready }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-6 text-center">
+            <p class="text-slate-400 text-sm">{{ t('leadership_pipeline', 'Leadership Pipeline') }}</p>
+            <p class="text-3xl font-bold text-blue-400 mt-1">{{ capability_summary.leadership_pipeline }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-6 text-center">
+            <p class="text-slate-400 text-sm">{{ t('critical_skills', 'Critical Skills') }}</p>
+            <p class="text-3xl font-bold text-purple-400 mt-1">{{ capability_summary.critical_skills_count }}</p>
+        </div>
+        <div class="glass-panel rounded-2xl p-6 text-center">
+            <p class="text-slate-400 text-sm">{{ t('skills_gaps', 'Skills Gaps') }}</p>
+            <p class="text-3xl font-bold text-amber-400 mt-1">{{ capability_summary.skills_gap_count }}</p>
+        </div>
+    </div>
+
+    <!-- Bench Strength by Department -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-6 border-b border-white/10">
+            <h3 class="text-lg font-bold text-white">
+                <i class="fa-solid fa-chart-bar text-amber-400 mr-2"></i>
+                {{ t('bench_strength_by_dept', 'Bench Strength by Department') }}
+            </h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/10 bg-white/5">
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('department', 'Department') }}</th>
+                        <th class="px-6 py-4 text-center text-xs font-bold text-slate-400 uppercase">{{ t('critical_roles', 'Critical Roles') }}</th>
+                        <th class="px-6 py-4 text-center text-xs font-bold text-slate-400 uppercase">{{ t('covered', 'Covered') }}</th>
+                        <th class="px-6 py-4 text-center text-xs font-bold text-slate-400 uppercase">{{ t('ready_now', 'Ready Now') }}</th>
+                        <th class="px-6 py-4 text-center text-xs font-bold text-slate-400 uppercase">{{ t('coverage', 'Coverage') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for dept in bench_by_dept %}
+                    {% set coverage = ((dept.covered_roles / dept.critical_roles * 100) if dept.critical_roles > 0 else 0)|round|int %}
+                    <tr class="hover:bg-white/5 transition-all">
+                        <td class="px-6 py-4 text-white font-medium">{{ dept.department_name }}</td>
+                        <td class="px-6 py-4 text-center text-slate-300">{{ dept.critical_roles }}</td>
+                        <td class="px-6 py-4 text-center">
+                            {% if dept.covered_roles > 0 %}
+                            <span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ dept.covered_roles }}</span>
+                            {% else %}
+                            <span class="px-2 py-1 bg-slate-500/10 text-slate-400 text-xs font-bold rounded-full">0</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-center text-emerald-400 font-bold">{{ dept.ready_now or 0 }}</td>
+                        <td class="px-6 py-4 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <div class="w-20 h-2 bg-white/10 rounded-full overflow-hidden">
+                                    <div class="h-full {% if coverage >= 80 %}bg-emerald-500{% elif coverage >= 50 %}bg-amber-500{% else %}bg-red-500{% endif %} rounded-full" style="width: {{ coverage }}%"></div>
+                                </div>
+                                <span class="text-white font-bold text-sm">{{ coverage }}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="px-6 py-12 text-center text-slate-500">{{ t('no_data', 'No data available') }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Readiness Distribution -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">
+                <i class="fa-solid fa-chart-pie text-purple-400 mr-2"></i>
+                {{ t('readiness_distribution', 'Readiness Distribution') }}
+            </h3>
+            <div class="space-y-3">
+                {% for level, count in readiness_dist.items() %}
+                <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                    <div class="flex items-center gap-3">
+                        <div class="w-3 h-3 rounded-full {% if level == 'Ready Now' %}bg-emerald-500{% elif level in ['6 Months', '1 Year'] %}bg-blue-500{% else %}bg-slate-500{% endif %}"></div>
+                        <span class="text-slate-300">{{ level or 'Not Set' }}</span>
+                    </div>
+                    <span class="text-white font-bold">{{ count }}</span>
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-center py-4">{{ t('no_readiness_data', 'No readiness data') }}</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">
+                <i class="fa-solid fa-gem text-cyan-400 mr-2"></i>
+                {{ t('leadership_pipeline', 'Leadership Pipeline') }}
+            </h3>
+            <div class="space-y-4">
+                {% for leader in leadership_pipeline[:10] %}
+                <div class="flex items-center gap-3 p-3 bg-white/5 rounded-xl">
+                    <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                        <span class="text-purple-400 font-bold">{{ leader.first_name[0] }}{{ leader.last_name[0] }}</span>
+                    </div>
+                    <div class="flex-1">
+                        <p class="text-white font-medium">{{ leader.first_name }} {{ leader.last_name }}</p>
+                        <p class="text-slate-400 text-xs">{{ leader.department_name or '' }} - {{ leader.position_title or '' }}</p>
+                    </div>
+                    <span class="px-2 py-1 bg-purple-500/10 text-purple-400 text-xs font-bold rounded-full">
+                        {{ leader.potential_rating or 'High' }}
+                    </span>
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-center py-4">{{ t('no_leaders', 'No leadership pipeline data') }}</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

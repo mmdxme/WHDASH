@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+        }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; transition: transform 0.2s, box-shadow 0.2s; }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); }
+        .stat-card { transition: transform 0.2s, box-shadow 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-warning { background: var(--warning); color: white; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        .kpi-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ page_title }}</h1>
+                <p class="text-gray-400 mt-1">Expense & Travel Management Dashboard</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="/expense-travel/executive-dashboard" class="btn btn-outline">
+                    <i class="fas fa-chart-pie"></i> Executive View
+                </a>
+                <a href="/expense-travel/claims/new" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> New Expense Claim
+                </a>
+                <a href="/expense-travel/travel/new" class="btn btn-primary">
+                    <i class="fas fa-plane"></i> New Travel Request
+                </a>
+            </div>
+        </div>
+
+        <!-- Expense Claims KPIs -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-4 mb-8">
+            <!-- Total Claims -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="kpi-icon bg-info/20 text-info">
+                        <i class="fas fa-file-invoice-dollar"></i>
+                    </div>
+                    <span class="text-xs text-gray-400">Claims</span>
+                </div>
+                <p class="text-2xl font-bold text-white amount mb-1">{{ stats.claims.total_claims|default(0) }}</p>
+                <p class="text-xs text-gray-500">Total Claims</p>
+            </div>
+
+            <!-- Pending Claims -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="kpi-icon bg-warning/20 text-warning">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <span class="text-xs text-warning">Pending</span>
+                </div>
+                <p class="text-2xl font-bold text-warning amount mb-1">{{ stats.claims.submitted_claims|default(0) + stats.claims.under_review_claims|default(0) }}</p>
+                <p class="text-xs text-gray-500">Pending Review</p>
+            </div>
+
+            <!-- Approved Claims -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="kpi-icon bg-success/20 text-success">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <span class="text-xs text-success">Approved</span>
+                </div>
+                <p class="text-2xl font-bold text-success amount mb-1">{{ stats.claims.approved_claims|default(0) }}</p>
+                <p class="text-xs text-gray-500">Approved</p>
+            </div>
+
+            <!-- Paid Claims -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="kpi-icon bg-primary/20 text-primary">
+                        <i class="fas fa-money-bill-wave"></i>
+                    </div>
+                    <span class="text-xs text-primary">Paid</span>
+                </div>
+                <p class="text-2xl font-bold text-white amount mb-1">{{ stats.claims.paid_claims|default(0) }}</p>
+                <p class="text-xs text-gray-500">Paid</p>
+            </div>
+
+            <!-- Total Submitted Amount -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="kpi-icon bg-info/20 text-info">
+                        <i class="fas fa-coins"></i>
+                    </div>
+                    <span class="text-xs text-gray-400">AED</span>
+                </div>
+                <p class="text-2xl font-bold text-white amount mb-1">{{ "%.2f"|format(stats.claims.total_submitted_amount|default(0)) }}</p>
+                <p class="text-xs text-gray-500">Total Submitted</p>
+            </div>
+
+            <!-- Total Paid Amount -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="kpi-icon bg-success/20 text-success">
+                        <i class="fas fa-hand-holding-usd"></i>
+                    </div>
+                    <span class="text-xs text-success">AED</span>
+                </div>
+                <p class="text-2xl font-bold text-success amount mb-1">{{ "%.2f"|format(stats.claims.total_paid_amount|default(0)) }}</p>
+                <p class="text-xs text-gray-500">Total Reimbursed</p>
+            </div>
+        </div>
+
+        <!-- Travel KPIs -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <!-- Travel Requests -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="kpi-icon bg-info/20 text-info">
+                        <i class="fas fa-plane-departure"></i>
+                    </div>
+                    <span class="text-xs text-gray-400">Travel</span>
+                </div>
+                <p class="text-2xl font-bold text-white amount mb-1">{{ stats.travel.total_requests|default(0) }}</p>
+                <p class="text-xs text-gray-500">Travel Requests</p>
+            </div>
+
+            <!-- Approved Travel -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="kpi-icon bg-success/20 text-success">
+                        <i class="fas fa-check"></i>
+                    </div>
+                    <span class="text-xs text-success">Approved</span>
+                </div>
+                <p class="text-2xl font-bold text-success amount mb-1">{{ stats.travel.approved_requests|default(0) }}</p>
+                <p class="text-xs text-gray-500">Approved Trips</p>
+            </div>
+
+            <!-- Cash Advances -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="kpi-icon bg-warning/20 text-warning">
+                        <i class="fas fa-wallet"></i>
+                    </div>
+                    <span class="text-xs text-warning">Advances</span>
+                </div>
+                <p class="text-2xl font-bold text-warning amount mb-1">{{ stats.advances.total_advances|default(0) }}</p>
+                <p class="text-xs text-gray-500">Advance Requests</p>
+            </div>
+
+            <!-- Outstanding Advances -->
+            <div class="card stat-card">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="kpi-icon bg-danger/20 text-danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <span class="text-xs text-danger">Overdue</span>
+                </div>
+                <p class="text-2xl font-bold text-danger amount mb-1">{{ stats.advances.overdue_advances|default(0) }}</p>
+                <p class="text-xs text-gray-500">Overdue Settlements</p>
+            </div>
+        </div>
+
+        <!-- Alerts & Pending Actions Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Policy Violations -->
+            <div class="card">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-shield-alt text-danger"></i>
+                    Policy Violations
+                </h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center p-3 bg-danger/10 rounded-lg">
+                        <div>
+                            <p class="text-white font-medium">Open Violations</p>
+                            <p class="text-xs text-gray-400">Requires attention</p>
+                        </div>
+                        <span class="text-2xl font-bold text-danger">{{ stats.violations.open_violations|default(0) }}</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-warning/10 rounded-lg">
+                        <div>
+                            <p class="text-white font-medium">High Severity</p>
+                            <p class="text-xs text-gray-400">Critical policy breaches</p>
+                        </div>
+                        <span class="text-2xl font-bold text-warning">{{ stats.violations.high_severity_open|default(0) }}</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-warning/10 rounded-lg">
+                        <div>
+                            <p class="text-white font-medium">Missing Receipts</p>
+                            <p class="text-xs text-gray-400">Need documentation</p>
+                        </div>
+                        <span class="text-2xl font-bold text-warning">{{ stats.missing_receipts|default(0) }}</span>
+                    </div>
+                </div>
+                <a href="/expense-travel/reports" class="btn btn-outline w-full mt-4 justify-center">
+                    View Violations Report
+                </a>
+            </div>
+
+            <!-- Pending Approvals -->
+            <div class="card">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-tasks text-warning"></i>
+                    Pending Approvals
+                </h3>
+                <div class="space-y-3">
+                    <div class="flex justify-between items-center p-3 bg-info/10 rounded-lg">
+                        <div>
+                            <p class="text-white font-medium">Expense Claims</p>
+                            <p class="text-xs text-gray-400">Awaiting approval</p>
+                        </div>
+                        <span class="text-2xl font-bold text-info">{{ pending_claims|length }}</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-success/10 rounded-lg">
+                        <div>
+                            <p class="text-white font-medium">Travel Requests</p>
+                            <p class="text-xs text-gray-400">Awaiting authorization</p>
+                        </div>
+                        <span class="text-2xl font-bold text-success">{{ pending_travel|length }}</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-warning/10 rounded-lg">
+                        <div>
+                            <p class="text-white font-medium">Cash Advances</p>
+                            <p class="text-xs text-gray-400">Awaiting issuance</p>
+                        </div>
+                        <span class="text-2xl font-bold text-warning">{{ pending_advances|length }}</span>
+                    </div>
+                </div>
+                <div class="mt-4 text-center">
+                    <span class="text-3xl font-bold text-warning">{{ stats.pending_approvals|default(0) }}</span>
+                    <p class="text-xs text-gray-400 mt-1">Total Pending Items</p>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="card">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-bolt text-primary"></i>
+                    Quick Actions
+                </h3>
+                <div class="space-y-2">
+                    <a href="/expense-travel/claims/new" class="btn btn-primary w-full justify-center">
+                        <i class="fas fa-plus"></i> New Expense Claim
+                    </a>
+                    <a href="/expense-travel/travel/new" class="btn btn-primary w-full justify-center">
+                        <i class="fas fa-plane"></i> New Travel Request
+                    </a>
+                    <a href="/expense-travel/advances/new" class="btn btn-outline w-full justify-center">
+                        <i class="fas fa-wallet"></i> Request Cash Advance
+                    </a>
+                    <a href="/expense-travel/receipts" class="btn btn-outline w-full justify-center">
+                        <i class="fas fa-receipt"></i> Upload Receipt
+                    </a>
+                    <a href="/expense-travel/reports" class="btn btn-outline w-full justify-center">
+                        <i class="fas fa-chart-bar"></i> View Reports
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Claims Table -->
+        <div class="card mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                    <i class="fas fa-list"></i>
+                    Recent Expense Claims
+                </h3>
+                <a href="/expense-travel/claims" class="btn btn-outline text-sm">
+                    View All <i class="fas fa-arrow-right ml-2"></i>
+                </a>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Claim #</th>
+                            <th>Date</th>
+                            <th>Employee</th>
+                            <th>Department</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for claim in recent_claims %}
+                        <tr>
+                            <td class="font-medium text-white">{{ claim.claim_number }}</td>
+                            <td>{{ claim.claim_date }}</td>
+                            <td>{{ claim.employee_name }}</td>
+                            <td>{{ claim.department_name }}</td>
+                            <td class="amount">{{ "%.2f"|format(claim.total_amount) }} {{ claim.currency }}</td>
+                            <td>
+                                <span class="badge 
+                                    {% if claim.status == 'approved' %}bg-success/20 text-success
+                                    {% elif claim.status == 'submitted' %}bg-warning/20 text-warning
+                                    {% elif claim.status == 'rejected' %}bg-danger/20 text-danger
+                                    {% elif claim.status == 'paid' %}bg-primary/20 text-primary
+                                    {% else %}bg-gray/20 text-gray{% endif %}">
+                                    {{ claim.status|title }}
+                                </span>
+                            </td>
+                            <td>
+                                <a href="/expense-travel/claims/{{ claim.id }}" class="text-primary hover:text-primary-dark">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-gray-400 py-8">
+                                <i class="fas fa-inbox text-4xl mb-3"></i>
+                                <p>No expense claims yet</p>
+                                <a href="/expense-travel/claims/new" class="btn btn-primary mt-3">
+                                    <i class="fas fa-plus"></i> Create First Claim
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- Expense by Status Chart -->
+            <div class="card">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-chart-pie"></i>
+                    Claims by Status
+                </h3>
+                <div class="chart-container">
+                    <canvas id="claimsStatusChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Travel Destinations Chart -->
+            <div class="card">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-globe"></i>
+                    Travel Overview
+                </h3>
+                <div class="chart-container">
+                    <canvas id="travelOverviewChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Claims by Status Chart
+        const claimsStatusCtx = document.getElementById('claimsStatusChart').getContext('2d');
+        new Chart(claimsStatusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Draft', 'Submitted', 'Under Review', 'Approved', 'Paid', 'Rejected'],
+                datasets: [{
+                    data: [
+                        {{ stats.claims.draft_claims|default(0) }},
+                        {{ stats.claims.submitted_claims|default(0) }},
+                        {{ stats.claims.under_review_claims|default(0) }},
+                        {{ stats.claims.approved_claims|default(0) }},
+                        {{ stats.claims.paid_claims|default(0) }},
+                        {{ stats.claims.rejected_claims|default(0) }}
+                    ],
+                    backgroundColor: [
+                        '#6b7280', // gray - draft
+                        '#f59e0b', // warning - submitted
+                        '#8b5cf6', // purple - under review
+                        '#10b981', // success - approved
+                        '#6366f1', // primary - paid
+                        '#ef4444'  // danger - rejected
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: '#9ca3af' }
+                    }
+                }
+            }
+        });
+
+        // Travel Overview Chart
+        const travelCtx = document.getElementById('travelOverviewChart').getContext('2d');
+        new Chart(travelCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Draft', 'Submitted', 'Approved', 'Completed', 'Rejected'],
+                datasets: [{
+                    label: 'Travel Requests',
+                    data: [
+                        {{ stats.travel.draft_requests|default(0) }},
+                        {{ stats.travel.submitted_requests|default(0) }},
+                        {{ stats.travel.approved_requests|default(0) }},
+                        {{ stats.travel.completed_trips|default(0) }},
+                        {{ stats.travel.rejected_requests|default(0) }}
+                    ],
+                    backgroundColor: '#6366f1'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#9ca3af' },
+                        grid: { color: '#374151' }
+                    },
+                    x: {
+                        ticks: { color: '#9ca3af' },
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    </script>
+    {% endblock %}
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        :root { --primary: #6366f1; --primary-dark: #4f46e5; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; }
+        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        input, select, textarea { background: #1e293b; border: 1px solid #334155; color: #e5e7eb; padding: 0.5rem 0.75rem; border-radius: 0.5rem; width: 100%; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); }
+        label { display: block; color: #94a3b8; font-size: 0.875rem; margin-bottom: 0.25rem; }
+        .form-group { margin-bottom: 1rem; }
+        .required::after { content: ' *'; color: var(--danger); }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ page_title }}</h1>
+                <p class="text-gray-400 mt-1">Create a new expense claim</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="/expense-travel/claims" class="btn btn-outline">
+                    <i class="fas fa-arrow-left"></i> Back to Claims
+                </a>
+            </div>
+        </div>
+
+        <form method="post" action="/expense-travel/claims/new">
+            <!-- Basic Information -->
+            <div class="card mb-6">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-info-circle"></i> Basic Information
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="form-group">
+                        <label class="required">Claim Date</label>
+                        <input type="date" name="claim_date" value="{{ today }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Currency</label>
+                        <select name="currency">
+                            <option value="AED">AED - UAE Dirham</option>
+                            <option value="USD">USD - US Dollar</option>
+                            <option value="EUR">EUR - Euro</option>
+                            <option value="GBP">GBP - British Pound</option>
+                            <option value="SAR">SAR - Saudi Riyal</option>
+                            <option value="INR">INR - Indian Rupee</option>
+                        </select>
+                    </div>
+                    <div class="form-group md:col-span-2">
+                        <label class="required">Business Purpose</label>
+                        <textarea name="business_purpose" rows="2" required placeholder="Describe the business purpose for this expense..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Project Code</label>
+                        <input type="text" name="project_code" placeholder="Optional project code">
+                    </div>
+                    <div class="form-group">
+                        <label>Trip Purpose</label>
+                        <input type="text" name="trip_purpose" placeholder="Related travel/trip if applicable">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cost Center Allocation -->
+            <div class="card mb-6">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-building"></i> Cost Center Allocation
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div class="form-group">
+                        <label>Cost Center</label>
+                        <input type="text" name="cost_center_name" placeholder="Cost center name">
+                    </div>
+                    <div class="form-group">
+                        <label>Cost Center Code</label>
+                        <input type="text" name="cost_center_code" placeholder="Cost center code">
+                    </div>
+                    <div class="form-group">
+                        <label>Cost Center ID</label>
+                        <input type="number" name="cost_center_id" placeholder="Cost center ID">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Expense Lines -->
+            <div class="card mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+                        <i class="fas fa-list"></i> Expense Lines
+                    </h3>
+                    <button type="button" class="btn btn-outline btn-sm" onclick="addExpenseLine()">
+                        <i class="fas fa-plus"></i> Add Line
+                    </button>
+                </div>
+                <p class="text-gray-400 text-sm mb-4">
+                    After creating the claim, you can add individual expense lines with categories, amounts, and receipts.
+                </p>
+                <div id="expense-lines-placeholder" class="text-center py-8 text-gray-400 border-2 border-dashed border-gray-600 rounded-lg">
+                    <i class="fas fa-receipt text-3xl mb-2"></i>
+                    <p>No expense lines yet</p>
+                    <p class="text-sm">Click "Add Line" or save and edit after creation</p>
+                </div>
+            </div>
+
+            <!-- Notes -->
+            <div class="card mb-6">
+                <h3 class="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                    <i class="fas fa-sticky-note"></i> Notes
+                </h3>
+                <div class="form-group">
+                    <textarea name="notes" rows="3" placeholder="Additional notes or comments..."></textarea>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="flex justify-end gap-4">
+                <a href="/expense-travel/claims" class="btn btn-outline">
+                    Cancel
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Create Claim
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        let lineCount = 0;
+        
+        function addExpenseLine() {
+            const container = document.getElementById('expense-lines-placeholder');
+            if (container) {
+                container.remove();
+            }
+            
+            const linesDiv = document.getElementById('expense-lines') || createLinesContainer();
+            
+            const lineHtml = `
+                <div class="expense-line bg-gray-800/50 p-4 rounded-lg mb-4" id="line-${lineCount}">
+                    <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+                        <div class="md:col-span-2">
+                            <label>Category</label>
+                            <select name="lines[${lineCount}][category_id]" required>
+                                <option value="">Select Category</option>
+                                {% for cat in categories %}
+                                <option value="{{ cat.id }}">{{ cat.name }} ({{ cat.code }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label>Amount</label>
+                            <input type="number" step="0.01" name="lines[${lineCount}][amount]" required placeholder="0.00">
+                        </div>
+                        <div>
+                            <label>Date</label>
+                            <input type="date" name="lines[${lineCount}][expense_date]" required>
+                        </div>
+                        <div>
+                            <label>Vendor</label>
+                            <input type="text" name="lines[${lineCount}][vendor_name]" placeholder="Vendor name">
+                        </div>
+                        <div class="flex items-end">
+                            <button type="button" class="btn btn-danger btn-sm" onclick="removeLine(${lineCount})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <label>Description</label>
+                        <input type="text" name="lines[${lineCount}][expense_description]" placeholder="Expense description">
+                    </div>
+                </div>
+            `;
+            
+            linesDiv.insertAdjacentHTML('beforeend', lineHtml);
+            lineCount++;
+        }
+        
+        function createLinesContainer() {
+            const div = document.createElement('div');
+            div.id = 'expense-lines';
+            document.querySelector('.card.mb-6:nth-of-type(3)').appendChild(div);
+            return div;
+        }
+        
+        function removeLine(id) {
+            const line = document.getElementById(`line-${id}`);
+            if (line) line.remove();
+        }
+    </script>
+    {% endblock %}
+</body>
+</html>

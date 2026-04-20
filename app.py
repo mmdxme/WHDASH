@@ -35,6 +35,7 @@ from email_manager import register_email_manager
 from peyvast_sync import PeyvastSyncManager, get_sync_manager, run_sync as run_peyvast_sync
 from translations import TRANSLATIONS, LANGUAGES, RTL_LANGUAGES, get_translation, get_translations, is_rtl, get_language_direction
 from hr_routes import register_hr_routes
+from talent_routes import register_talent_routes
 from wms_routes import register_wms_routes
 from logistics_routes import register_logistics_routes
 from task_center_routes import task_bp
@@ -47,6 +48,7 @@ from customer_intelligence_models import init_ci_tables
 from planning_models import init_planning_tables
 from sales_routes import register_sales_routes
 from sales_suite_routes import register_sales_suite_routes
+from crm_routes import register_crm_routes
 from admin_routes import register_admin_routes
 from procurement_routes import register_procurement_routes
 from profile_routes import register_profile_routes
@@ -63,6 +65,7 @@ from flow_routes import register_flow_routes
 from quick_tools_routes import register_quick_tools_routes
 from feedback_routes import register_feedback_routes
 from org_planning_routes import register_org_planning_routes
+from expense_travel_routes import expense_travel_bp
 from org_planning_models import run_org_planning_migrations
 from dashboard_routes import dashboard_bp
 
@@ -448,6 +451,7 @@ def require_login(f):
 register_google_workspace(app, get_db)
 register_email_manager(app, get_db)
 register_hr_routes(app)
+register_talent_routes(app, get_db)
 register_wms_routes(app, get_db)
 register_company_routes(app)
 app.register_blueprint(task_bp)
@@ -462,6 +466,7 @@ register_ci_routes(app)
 register_social_media_routes(app)
 register_sales_routes(app, require_login, user_has_permission, get_db)
 register_sales_suite_routes(app, require_login, user_has_permission, get_db)
+register_crm_routes(app, require_login, user_has_permission, get_db)
 register_admin_routes(app)
 register_procurement_routes(app, get_db)
 register_profile_routes(app)
@@ -490,6 +495,20 @@ except Exception as e:
 # Register payroll blueprint
 app.register_blueprint(payroll_bp)
 print("Payroll blueprint registered at /payroll")
+
+# =============================================================================
+# INITIALIZE EXPENSE / TRAVEL MANAGEMENT MODULE
+# =============================================================================
+from expense_travel_models import initialize_expense_travel_schema
+try:
+    initialize_expense_travel_schema()
+    print("Expense/Travel module initialized successfully")
+except Exception as e:
+    print(f"Warning: Expense/Travel module initialization: {str(e)}")
+
+# Register Expense/Travel blueprint
+app.register_blueprint(expense_travel_bp)
+print("Expense/Travel blueprint registered at /expense-travel")
 
 # Register Workflow / BPM routes
 register_workflow_routes(app)

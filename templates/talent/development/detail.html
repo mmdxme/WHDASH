@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('talent.development') }}" class="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-all">
+                <i class="fa-solid fa-arrow-left"></i>
+            </a>
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ plan.employee_name }} - {{ plan.plan_year }}</h1>
+                <p class="text-slate-400 mt-1">{{ t('individual_development_plan', 'Individual Development Plan') }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Plan Overview -->
+    <div class="glass-panel rounded-2xl p-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div>
+                <p class="text-slate-400 text-sm">{{ t('status', 'Status') }}</p>
+                <span class="inline-block mt-1 px-2.5 py-1 {% if plan.status == 'Completed' %}bg-emerald-500/10 text-emerald-400{% elif plan.status == 'In Progress' %}bg-blue-500/10 text-blue-400{% else %}bg-slate-500/10 text-slate-400{% endif %} text-xs font-bold rounded-full">
+                    {{ plan.status }}
+                </span>
+            </div>
+            <div>
+                <p class="text-slate-400 text-sm">{{ t('manager', 'Manager') }}</p>
+                <p class="text-white font-medium mt-1">{{ plan.manager_name or '-' }}</p>
+            </div>
+            <div>
+                <p class="text-slate-400 text-sm">{{ t('goals', 'Goals') }}</p>
+                <p class="text-white font-medium mt-1">{{ plan.completed_goals or 0 }} / {{ plan.total_goals or 0 }}</p>
+            </div>
+            <div>
+                <p class="text-slate-400 text-sm">{{ t('completion', 'Completion') }}</p>
+                <p class="text-2xl font-bold text-cyan-400 mt-1">{{ plan.completion_percentage or 0 }}%</p>
+            </div>
+        </div>
+        <div class="mt-6">
+            <div class="h-3 bg-white/10 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all" style="width: {{ plan.completion_percentage or 0 }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Goals -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-6 border-b border-white/10 flex items-center justify-between">
+            <h3 class="text-lg font-bold text-white">
+                <i class="fa-solid fa-bullseye text-cyan-400 mr-2"></i>
+                {{ t('development_goals', 'Development Goals') }}
+            </h3>
+        </div>
+        <div class="divide-y divide-white/5">
+            {% for goal in goals %}
+            <div class="p-6 hover:bg-white/5 transition-all">
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-3">
+                            <span class="px-2 py-1 {% if goal.priority == 'High' %}bg-red-500/10 text-red-400{% elif goal.priority == 'Medium' %}bg-amber-500/10 text-amber-400{% else %}bg-blue-500/10 text-blue-400{% endif %} text-xs font-bold rounded">
+                                {{ goal.priority }}
+                            </span>
+                            <h4 class="text-white font-bold">{{ goal.goal_title }}</h4>
+                        </div>
+                        {% if goal.goal_description %}
+                        <p class="text-slate-400 text-sm mt-2">{{ goal.goal_description }}</p>
+                        {% endif %}
+                        {% if goal.competency_focus %}
+                        <p class="text-slate-500 text-xs mt-2">{{ t('competency_focus', 'Competency Focus') }}: {{ goal.competency_focus }}</p>
+                        {% endif %}
+                    </div>
+                    <span class="px-2.5 py-1 {% if goal.status == 'Completed' %}bg-emerald-500/10 text-emerald-400{% elif goal.status == 'In Progress' %}bg-blue-500/10 text-blue-400{% else %}bg-slate-500/10 text-slate-400{% endif %} text-xs font-bold rounded-full">
+                        {{ goal.status }}
+                    </span>
+                </div>
+
+                <!-- Actions -->
+                {% if goal.actions %}
+                <div class="ml-6 pl-4 border-l-2 border-purple-500/30 space-y-2">
+                    {% for action in goal.actions %}
+                    <div class="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                        <div class="flex items-center gap-3">
+                            {% if action.status == 'Completed' %}
+                            <i class="fa-solid fa-check-circle text-emerald-400"></i>
+                            {% else %}
+                            <i class="fa-regular fa-circle text-slate-500"></i>
+                            {% endif %}
+                            <div>
+                                <p class="text-white text-sm">{{ action.action_title }}</p>
+                                {% if action.linked_learning_title %}
+                                <p class="text-slate-500 text-xs">{{ action.linked_learning_title }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-slate-400 text-sm">{{ action.due_date or '' }}</span>
+                            {% if action.status != 'Completed' %}
+                            <form action="{{ url_for('talent.development_complete_action', action_id=action.id) }}" method="POST" class="inline">
+                                <button type="submit" class="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold rounded-lg transition-all">
+                                    {{ t('complete', 'Complete') }}
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="p-12 text-center">
+                <i class="fa-solid fa-bullseye text-4xl text-slate-600 mb-4 block"></i>
+                <p class="text-slate-500">{{ t('no_goals_defined', 'No development goals defined yet') }}</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

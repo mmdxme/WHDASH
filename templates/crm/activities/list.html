@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">Activities</h1>
+            <p class="text-gray-500 dark:text-gray-400 mt-1">Track all customer interactions</p>
+        </div>
+        <div class="mt-4 md:mt-0 flex gap-2">
+            <a href="{{ url_for('crm_activities_calendar') }}"
+               class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition flex items-center gap-2">
+                <i class="fas fa-calendar"></i> Calendar
+            </a>
+            <a href="{{ url_for('crm_activities_new') }}"
+               class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2">
+                <i class="fas fa-plus"></i> Log Activity
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+        <form method="get" class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            <div>
+                <label class="block text-sm text-gray-500 dark:text-gray-400 mb-1">Search</label>
+                <input type="text" name="search" value="{{ filters.search or '' }}"
+                       placeholder="Subject..."
+                       class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 dark:text-gray-400 mb-1">Type</label>
+                <select name="activity_type" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="">All Types</option>
+                    {% for type in lookups.activity_types %}
+                    <option value="{{ type }}" {% if filters.activity_type == type %}selected{% endif %}>{{ type }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 dark:text-gray-400 mb-1">Owner</label>
+                <select name="owner_id" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="">All</option>
+                    {% for sp in salespersons %}
+                    <option value="{{ sp.id }}" {% if filters.owner_id|int == sp.id %}selected{% endif %}>{{ sp.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 dark:text-gray-400 mb-1">Customer</label>
+                <select name="customer_id" class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    <option value="">All Customers</option>
+                    {% for c in customers %}
+                    <option value="{{ c.id }}" {% if filters.customer_id|int == c.id %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm text-gray-500 dark:text-gray-400 mb-1">From</label>
+                <input type="date" name="date_from" value="{{ filters.date_from or '' }}"
+                       class="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+            </div>
+            <div class="flex items-end gap-2">
+                <button type="submit" class="px-4 py-2 bg-gray-800 dark:bg-gray-600 text-white rounded-lg hover:bg-gray-700">
+                    <i class="fas fa-filter mr-1"></i> Filter
+                </button>
+                <a href="{{ url_for('crm_activities') }}" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg hover:bg-gray-300">
+                    Clear
+                </a>
+            </div>
+        </form>
+        <div class="mt-4 flex justify-end">
+            <a href="{{ url_for('crm_export_activities') }}" class="text-sm text-blue-500 hover:underline">
+                <i class="fas fa-download mr-1"></i> Export
+            </a>
+        </div>
+    </div>
+
+    <!-- Activities Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Date</th>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Type</th>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Subject</th>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Customer</th>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Owner</th>
+                        <th class="px-4 py-3 text-center text-gray-600 dark:text-gray-300 font-semibold">Duration</th>
+                        <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-semibold">Outcome</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-600">
+                    {% for activity in activities %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ activity.activity_date }}</td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 text-xs rounded-full {% if activity.activity_type == 'Call' %}bg-blue-100 text-blue-800{% elif activity.activity_type == 'Meeting' %}bg-purple-100 text-purple-800{% elif activity.activity_type == 'Visit' %}bg-green-100 text-green-800{% elif activity.activity_type == 'Email' %}bg-yellow-100 text-yellow-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                                {{ activity.activity_type }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-3 text-gray-900 dark:text-white">{{ activity.subject }}</td>
+                        <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ activity.customer_name or '-' }}</td>
+                        <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ activity.owner_name }}</td>
+                        <td class="px-4 py-3 text-center text-gray-600 dark:text-gray-300">
+                            {% if activity.duration_minutes %}
+                                {{ activity.duration_minutes }} min
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3 text-gray-600 dark:text-gray-300">{{ activity.outcome or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
+                            <i class="fas fa-clipboard-list text-4xl mb-3"></i>
+                            <p>No activities found.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if pages > 1 %}
+        <div class="px-4 py-3 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600">
+            <div class="flex items-center justify-center gap-2">
+                {% if page > 1 %}
+                <a href="{{ url_for('crm_activities', page=page-1, **filters) }}"
+                   class="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">Prev</a>
+                {% endif %}
+                <span class="px-3 py-1">Page {{ page }} of {{ pages }}</span>
+                {% if page < pages %}
+                <a href="{{ url_for('crm_activities', page=page+1, **filters) }}"
+                   class="px-3 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300">Next</a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

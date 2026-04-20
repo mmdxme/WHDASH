@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        :root { --primary: #6366f1; --primary-dark: #4f46e5; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --info: #3b82f6; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
+        tr:hover { background: #293548; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.75rem; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        input, select { background: #1e293b; border: 1px solid #334155; color: #e5e7eb; padding: 0.5rem 0.75rem; border-radius: 0.5rem; }
+        input:focus, select:focus { outline: none; border-color: var(--primary); }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">{{ page_title }}</h1>
+                <p class="text-gray-400 mt-1">Manage and track all expense claims</p>
+            </div>
+            <div class="flex gap-3">
+                <a href="/expense-travel/reports/expense-claims" class="btn btn-outline">
+                    <i class="fas fa-chart-bar"></i> Report
+                </a>
+                <a href="/expense-travel/claims/new" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> New Expense Claim
+                </a>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="card mb-6">
+            <form method="get" class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Status</label>
+                    <select name="status" class="w-40">
+                        <option value="">All Statuses</option>
+                        <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+                        <option value="submitted" {% if status_filter == 'submitted' %}selected{% endif %}>Submitted</option>
+                        <option value="under_review" {% if status_filter == 'under_review' %}selected{% endif %}>Under Review</option>
+                        <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
+                        <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+                        <option value="paid" {% if status_filter == 'paid' %}selected{% endif %}>Paid</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Date From</label>
+                    <input type="date" name="date_from" value="{{ date_from }}" class="w-40">
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Date To</label>
+                    <input type="date" name="date_to" value="{{ date_to }}" class="w-40">
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Search</label>
+                    <input type="text" name="search" value="{{ search }}" placeholder="Claim #, Employee, Purpose..." class="w-64">
+                </div>
+                <div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-search"></i> Filter
+                    </button>
+                </div>
+                <div>
+                    <a href="/expense-travel/claims" class="btn btn-outline">
+                        <i class="fas fa-times"></i> Clear
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Claims Table -->
+        <div class="card">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Claim #</th>
+                            <th>Date</th>
+                            <th>Employee</th>
+                            <th>Department</th>
+                            <th>Purpose</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for claim in claims %}
+                        <tr>
+                            <td class="font-medium text-white">{{ claim.claim_number }}</td>
+                            <td>{{ claim.claim_date or '-' }}</td>
+                            <td>{{ claim.employee_name or claim.submitted_by_name or '-' }}</td>
+                            <td>{{ claim.department_name or '-' }}</td>
+                            <td class="max-w-xs truncate">{{ claim.business_purpose or '-' }}</td>
+                            <td class="amount">{{ "%.2f"|format(claim.total_amount) }} {{ claim.currency }}</td>
+                            <td>
+                                <span class="badge 
+                                    {% if claim.status == 'approved' %}bg-success/20 text-success
+                                    {% elif claim.status == 'submitted' %}bg-warning/20 text-warning
+                                    {% elif claim.status == 'under_review' %}bg-purple-500/20 text-purple-400
+                                    {% elif claim.status == 'rejected' %}bg-danger/20 text-danger
+                                    {% elif claim.status == 'paid' %}bg-primary/20 text-primary
+                                    {% elif claim.status == 'returned' %}bg-orange-500/20 text-orange-400
+                                    {% else %}bg-gray-500/20 text-gray-400{% endif %}">
+                                    {{ claim.status|title|replace('_', ' ') }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="flex gap-2">
+                                    <a href="/expense-travel/claims/{{ claim.id }}" class="btn btn-sm btn-outline" title="View">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if claim.status == 'draft' %}
+                                    <a href="/expense-travel/claims/{{ claim.id }}/edit" class="btn btn-sm btn-outline" title="Edit">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% endif %}
+                                    {% if claim.status in ['draft', 'returned'] and claim.employee_id == session.user_id %}
+                                    <form method="post" action="/expense-travel/claims/{{ claim.id }}/submit" class="inline">
+                                        <button type="submit" class="btn btn-sm btn-success" title="Submit">
+                                            <i class="fas fa-paper-plane"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-12">
+                                <div class="text-gray-400">
+                                    <i class="fas fa-inbox text-5xl mb-4"></i>
+                                    <p class="text-lg">No expense claims found</p>
+                                    <p class="text-sm mt-2">Create your first expense claim to get started</p>
+                                    <a href="/expense-travel/claims/new" class="btn btn-primary mt-4">
+                                        <i class="fas fa-plus"></i> New Expense Claim
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

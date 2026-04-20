@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        :root { --primary: #6366f1; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">Cash Advance: {{ advance.advance_number }}</h1>
+                <p class="text-gray-400 mt-1">{{ advance.purpose or advance.trip_purpose }}</p>
+            </div>
+            <div class="flex gap-3">
+                {% if advance.status == 'draft' %}
+                <form method="post" action="/expense-travel/advances/{{ advance.id }}/submit" class="inline">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-paper-plane"></i> Submit
+                    </button>
+                </form>
+                {% elif advance.status == 'submitted' %}
+                <form method="post" action="/expense-travel/advances/{{ advance.id }}/approve" class="inline">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                </form>
+                {% endif %}
+                <a href="/expense-travel/advances" class="btn btn-outline">
+                    <i class="fas fa-arrow-left"></i> Back
+                </a>
+            </div>
+        </div>
+
+        <!-- Status Banner -->
+        <div class="card mb-6 border-l-4 
+            {% if advance.status == 'approved' %}border-success bg-success/10
+            {% elif advance.status == 'rejected' %}border-danger bg-danger/10
+            {% elif advance.status == 'issued' %}border-primary bg-primary/10
+            {% elif advance.status == 'settled' %}border-gray-500 bg-gray-500/10
+            {% else %}border-warning bg-warning/10{% endif %}">
+            <div class="flex justify-between items-center">
+                <span class="badge {% if advance.status == 'approved' %}bg-success/20 text-success{% elif advance.status == 'rejected' %}bg-danger/20 text-danger{% elif advance.status == 'issued' %}bg-primary/20 text-primary{% elif advance.status == 'settled' %}bg-gray-500/20 text-gray-400{% else %}bg-warning/20 text-warning{% endif %}">
+                    {{ advance.status|title }}
+                </span>
+                <div class="text-right">
+                    <p class="text-sm text-gray-400">Requested Amount</p>
+                    <p class="text-3xl font-bold text-white amount">{{ "%.2f"|format(advance.requested_amount) }} {{ advance.currency }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div class="lg:col-span-2">
+                <!-- Settlement Info -->
+                {% if advance.settlement_claim_id %}
+                <div class="card mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Settlement</h3>
+                    <p class="text-gray-400">Settled against claim #{{ advance.settlement_claim_id }}</p>
+                </div>
+                {% endif %}
+            </div>
+            <div class="lg:col-span-1">
+                <div class="card">
+                    <h3 class="text-lg font-semibold text-white mb-4">Details</h3>
+                    <dl class="space-y-3">
+                        <div>
+                            <dt class="text-gray-400 text-sm">Employee</dt>
+                            <dd class="text-white">{{ advance.employee_name }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400 text-sm">Department</dt>
+                            <dd class="text-white">{{ advance.department_name }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400 text-sm">Approved Amount</dt>
+                            <dd class="text-white amount">{{ "%.2f"|format(advance.approved_amount|default(0)) }} {{ advance.currency }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400 text-sm">Outstanding Balance</dt>
+                            <dd class="text-warning amount">{{ "%.2f"|format(advance.outstanding_balance|default(0)) }} {{ advance.currency }}</dd>
+                        </div>
+                        {% if advance.overdue_days > 0 %}
+                        <div>
+                            <dt class="text-gray-400 text-sm">Overdue By</dt>
+                            <dd class="text-danger font-bold">{{ advance.overdue_days }} days</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

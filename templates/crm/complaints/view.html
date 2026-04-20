@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+        <div>
+            <div class="flex items-center gap-2 mb-2">
+                <span class="px-2 py-1 text-xs rounded-full {% if complaint.status == 'New' %}bg-blue-100 text-blue-800{% elif complaint.status == 'In Progress' %}bg-yellow-100 text-yellow-800{% elif complaint.status == 'Escalated' %}bg-red-100 text-red-800{% elif complaint.status == 'Resolved' %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                    {{ complaint.status }}
+                </span>
+                <span class="px-2 py-1 text-xs rounded-full {% if complaint.priority == 'Critical' %}bg-red-100 text-red-800{% elif complaint.priority == 'High' %}bg-orange-100 text-orange-800{% elif complaint.priority == 'Medium' %}bg-yellow-100 text-yellow-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                    {{ complaint.priority }}
+                </span>
+            </div>
+            <h1 class="text-2xl font-bold text-gray-800 dark:text-white">{{ complaint.subject }}</h1>
+            <p class="text-gray-500 dark:text-gray-400">
+                Complaint {{ complaint.complaint_number }} • {{ complaint.customer_name }}
+            </p>
+        </div>
+        <div class="mt-4 md:mt-0 flex gap-2">
+            <form action="{{ url_for('crm_complaints_update', complaint_id=complaint.id) }}" method="post" class="flex gap-2">
+                <input type="hidden" name="action" value="status">
+                <select name="status" class="px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    {% for status in lookups.complaint_statuses %}
+                    <option value="{{ status }}" {% if complaint.status == status %}selected{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                    Update Status
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Content -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Complaint Details -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">Complaint Details</h2>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm text-gray-500">Category</label>
+                        <p class="text-gray-900 dark:text-white">{{ complaint.category or 'N/A' }}</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-500">Customer</label>
+                        <p class="text-gray-900 dark:text-white">{{ complaint.customer_name or 'N/A' }}</p>
+                    </div>
+                    {% if complaint.order %}
+                    <div>
+                        <label class="block text-sm text-gray-500">Related Order</label>
+                        <p class="text-blue-600">{{ complaint.order.order_number }}</p>
+                    </div>
+                    {% endif %}
+                    <div>
+                        <label class="block text-sm text-gray-500">Assigned To</label>
+                        <p class="text-gray-900 dark:text-white">{{ complaint.assigned_to_name or 'Unassigned' }}</p>
+                    </div>
+                </div>
+                <div class="mt-4">
+                    <label class="block text-sm text-gray-500 mb-2">Description</label>
+                    <p class="text-gray-900 dark:text-white whitespace-pre-wrap">{{ complaint.description }}</p>
+                </div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">Timeline</h2>
+
+                <!-- Add Response Form -->
+                <form action="{{ url_for('crm_complaints_update', complaint_id=complaint.id) }}" method="post" class="mb-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <input type="hidden" name="action" value="response">
+                    <textarea name="response_description" rows="2" required placeholder="Add a response..."
+                              class="w-full px-3 py-2 border rounded-lg dark:bg-gray-600 dark:border-gray-500 dark:text-white mb-2"></textarea>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                        <i class="fas fa-paper-plane mr-2"></i> Add Response
+                    </button>
+                </form>
+
+                {% if complaint.timeline %}
+                <div class="relative">
+                    <div class="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200 dark:bg-gray-600"></div>
+                    <div class="space-y-4">
+                        {% for event in complaint.timeline %}
+                        <div class="flex gap-4 relative">
+                            <div class="w-8 h-8 {% if event.event_type == 'Created' %}bg-blue-100 dark:bg-blue-900{% elif event.event_type == 'Status Changed' %}bg-yellow-100 dark:bg-yellow-900{% else %}bg-gray-100 dark:bg-gray-700{% endif %} rounded-full flex items-center justify-center z-10">
+                                <i class="fas fa-{% if event.event_type == 'Created' %}plus{% elif event.event_type == 'Status Changed' %}sync{% else %}comment{% endif %} text-xs"></i>
+                            </div>
+                            <div class="flex-1 pt-1">
+                                <p class="font-medium text-gray-900 dark:text-white">{{ event.event_type }}</p>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">{{ event.description }}</p>
+                                <p class="text-xs text-gray-500 mt-1">{{ event.created_at }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-center py-4">No timeline events yet</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="space-y-6">
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold text-gray-800 dark:text-white mb-4">Details</h2>
+                <div class="space-y-3 text-sm">
+                    <div>
+                        <label class="block text-gray-500">Created</label>
+                        <p class="text-gray-900 dark:text-white">{{ complaint.created_at[:10] if complaint.created_at else 'N/A' }}</p>
+                    </div>
+                    {% if complaint.resolution_target_date %}
+                    <div>
+                        <label class="block text-gray-500">Target Resolution</label>
+                        <p class="text-gray-900 dark:text-white">{{ complaint.resolution_target_date }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

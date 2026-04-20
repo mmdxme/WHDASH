@@ -336,6 +336,110 @@ MODULE_PERMISSIONS = {
             'settings': ['view', 'edit'],
         }
     },
+    'expense_travel': {
+        'label': 'Expense & Travel Management',
+        'resources': {
+            # Dashboards
+            'dashboard': ['view'],
+            'executive_dashboard': ['view'],
+            'workspace': ['view'],
+            
+            # Expense Claims
+            'claims': ['view', 'create', 'edit', 'delete', 'submit', 'approve', 'reject', 'return'],
+            'claims_view_own': ['view_own'],
+            'claims_edit_own': ['edit_own'],
+            'claims_submit': ['submit'],
+            'claims_approve': ['approve'],
+            'claims_reject': ['reject'],
+            'claims_return': ['return'],
+            
+            # Travel Requests
+            'travel': ['view', 'create', 'edit', 'delete', 'submit', 'approve', 'reject', 'return'],
+            'travel_view_own': ['view_own'],
+            'travel_edit_own': ['edit_own'],
+            'travel_submit': ['submit'],
+            'travel_approve': ['approve'],
+            'travel_reject': ['reject'],
+            'travel_return': ['return'],
+            
+            # Cash Advances
+            'advances': ['view', 'create', 'edit', 'delete', 'submit', 'approve', 'reject', 'issue', 'settle'],
+            'advances_view_own': ['view_own'],
+            'advances_edit_own': ['edit_own'],
+            'advances_submit': ['submit'],
+            'advances_approve': ['approve'],
+            'advances_reject': ['reject'],
+            'advances_issue': ['issue'],
+            'advances_settle': ['settle'],
+            
+            # Receipts
+            'receipts': ['view', 'upload', 'delete', 'link', 'unlink'],
+            'receipts_view_own': ['view_own'],
+            'receipts_upload': ['upload'],
+            'receipts_delete': ['delete'],
+            
+            # Reimbursements
+            'reimbursements': ['view', 'create', 'edit', 'approve', 'reject', 'pay'],
+            'reimbursements_view_own': ['view_own'],
+            'reimbursements_approve': ['approve'],
+            'reimbursements_pay': ['pay'],
+            
+            # Travel Planning & Itinerary
+            'itineraries': ['view', 'create', 'edit', 'delete'],
+            'itineraries_view_own': ['view_own'],
+            
+            # Policy & Controls
+            'policies': ['view', 'create', 'edit', 'delete', 'approve'],
+            'policy_rules': ['view', 'create', 'edit', 'delete'],
+            'violations': ['view', 'approve', 'reject', 'waive'],
+            
+            # Per Diem
+            'per_diem': ['view', 'create', 'edit', 'delete'],
+            
+            # Finance Integration
+            'cost_allocation': ['view', 'create', 'edit'],
+            'journal_preview': ['view', 'create', 'post'],
+            'ap_posting': ['view', 'create', 'edit', 'post'],
+            
+            # Reports & Analytics
+            'reports': ['view', 'export'],
+            'report_expenses': ['view', 'export'],
+            'report_travel': ['view', 'export'],
+            'report_advances': ['view', 'export'],
+            'report_reimbursements': ['view', 'export'],
+            'report_violations': ['view', 'export'],
+            'report_department': ['view', 'export'],
+            'report_branch': ['view', 'export'],
+            'report_custom': ['view', 'create', 'export'],
+            
+            # Export
+            'export': ['view', 'export'],
+            'export_excel': ['export'],
+            'export_pdf': ['export'],
+            'export_csv': ['export'],
+            
+            # Workflow & Approvals
+            'approvals': ['view', 'approve', 'reject', 'return', 'delegate'],
+            'delegations': ['view', 'create', 'edit', 'delete'],
+            'escalations': ['view', 'manage'],
+            'sla_policies': ['view', 'create', 'edit', 'delete'],
+            'approval_history': ['view', 'export'],
+            
+            # Settings
+            'settings': ['view', 'edit'],
+            'expense_settings': ['view', 'edit'],
+            'travel_settings': ['view', 'edit'],
+            'advance_settings': ['view', 'edit'],
+            'reimbursement_settings': ['view', 'edit'],
+            'policy_settings': ['view', 'edit'],
+            'validation_rules': ['view', 'create', 'edit', 'delete'],
+            'output_settings': ['view', 'edit'],
+            'notification_settings': ['view', 'edit'],
+            
+            # Audit
+            'audit_log': ['view', 'export'],
+        }
+    },
     'payroll': {
         'label': 'Enterprise Payroll',
         'resources': {

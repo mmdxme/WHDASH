@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="/static/css/tailwind.min.css" rel="stylesheet">
+    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+    <style>
+        :root { --primary: #6366f1; --success: #10b981; --warning: #f59e0b; --danger: #ef4444; }
+        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
+        .btn-outline:hover { background: #334155; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem; border-bottom: 2px solid #334155; color: #94a3b8; }
+        td { padding: 0.75rem; border-bottom: 1px solid #334155; }
+    </style>
+</head>
+<body>
+    {% extends "base.html" %}
+
+    {% block content %}
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-white">Claim: {{ claim.claim_number }}</h1>
+                <p class="text-gray-400 mt-1">Submitted on {{ claim.submission_date or claim.created_at }}</p>
+            </div>
+            <div class="flex gap-3">
+                {% if claim.status == 'draft' %}
+                <a href="/expense-travel/claims/{{ claim.id }}/edit" class="btn btn-primary">
+                    <i class="fas fa-edit"></i> Edit
+                </a>
+                <form method="post" action="/expense-travel/claims/{{ claim.id }}/submit" class="inline">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-paper-plane"></i> Submit
+                    </button>
+                </form>
+                {% elif claim.status == 'submitted' %}
+                <form method="post" action="/expense-travel/claims/{{ claim.id }}/approve" class="inline">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                </form>
+                <form method="post" action="/expense-travel/claims/{{ claim.id }}/reject" class="inline">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                </form>
+                {% endif %}
+                <a href="/expense-travel/claims" class="btn btn-outline">
+                    <i class="fas fa-arrow-left"></i> Back
+                </a>
+            </div>
+        </div>
+
+        <!-- Status Banner -->
+        <div class="card mb-6 
+            {% if claim.status == 'approved' %}border-l-4 border-success bg-success/10
+            {% elif claim.status == 'rejected' %}border-l-4 border-danger bg-danger/10
+            {% elif claim.status == 'submitted' %}border-l-4 border-warning bg-warning/10
+            {% else %}border-l-4 border-info bg-info/10{% endif %}">
+            <div class="flex justify-between items-center">
+                <div>
+                    <span class="badge 
+                        {% if claim.status == 'approved' %}bg-success/20 text-success
+                        {% elif claim.status == 'rejected' %}bg-danger/20 text-danger
+                        {% elif claim.status == 'submitted' %}bg-warning/20 text-warning
+                        {% elif claim.status == 'paid' %}bg-primary/20 text-primary
+                        {% else %}bg-gray-500/20 text-gray-400{% endif %}">
+                        {{ claim.status|title|replace('_', ' ') }}
+                    </span>
+                    <span class="text-gray-400 ml-4">{{ claim.business_purpose }}</span>
+                </div>
+                <div class="text-right">
+                    <p class="text-3xl font-bold text-white amount">{{ "%.2f"|format(claim.total_amount) }} {{ claim.currency }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Main Content -->
+            <div class="lg:col-span-2">
+                <!-- Claim Lines -->
+                <div class="card mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Expense Lines</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Category</th>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th>Vendor</th>
+                                <th class="text-right">Amount</th>
+                                <th>Receipt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for line in lines %}
+                            <tr>
+                                <td>{{ line.line_number }}</td>
+                                <td>{{ line.category_name }}<br><span class="text-xs text-gray-500">{{ line.category_code }}</span></td>
+                                <td>{{ line.expense_date }}</td>
+                                <td>{{ line.expense_description or '-' }}</td>
+                                <td>{{ line.vendor_name or '-' }}</td>
+                                <td class="text-right amount">{{ "%.2f"|format(line.amount) }} {{ line.amount_currency }}</td>
+                                <td>
+                                    {% if line.has_receipt %}
+                                    <i class="fas fa-check-circle text-success"></i>
+                                    {% else %}
+                                    <i class="fas fa-times-circle text-danger"></i>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7" class="text-center py-8 text-gray-400">
+                                    No expense lines yet
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot>
+                            <tr class="font-bold text-white">
+                                <td colspan="5" class="text-right">Total:</td>
+                                <td class="text-right">{{ "%.2f"|format(claim.total_amount) }} {{ claim.currency }}</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <!-- Receipts -->
+                <div class="card mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Receipts & Attachments</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {% for receipt in receipts %}
+                        <div class="bg-gray-800 rounded-lg p-3 text-center">
+                            <i class="fas fa-file-alt text-3xl text-gray-400 mb-2"></i>
+                            <p class="text-sm truncate">{{ receipt.original_file_name or receipt.file_name }}</p>
+                            <p class="text-xs text-gray-500">{{ receipt.total_amount }} {{ receipt.currency }}</p>
+                        </div>
+                        {% else %}
+                        <div class="col-span-4 text-center py-8 text-gray-400">
+                            <i class="fas fa-receipt text-3xl mb-2"></i>
+                            <p>No receipts uploaded</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="lg:col-span-1">
+                <!-- Employee Info -->
+                <div class="card mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Employee Information</h3>
+                    <dl class="space-y-3">
+                        <div>
+                            <dt class="text-gray-400 text-sm">Employee</dt>
+                            <dd class="text-white">{{ claim.employee_name or claim.submitted_by_name }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400 text-sm">Employee Code</dt>
+                            <dd class="text-white">{{ claim.employee_code or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400 text-sm">Department</dt>
+                            <dd class="text-white">{{ claim.department_name or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400 text-sm">Branch</dt>
+                            <dd class="text-white">{{ claim.branch_name or '-' }}</dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <!-- Cost Center -->
+                <div class="card mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Cost Allocation</h3>
+                    <dl class="space-y-3">
+                        <div>
+                            <dt class="text-gray-400 text-sm">Cost Center</dt>
+                            <dd class="text-white">{{ claim.cost_center_name or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400 text-sm">Cost Center Code</dt>
+                            <dd class="text-white">{{ claim.cost_center_code or '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400 text-sm">Project</dt>
+                            <dd class="text-white">{{ claim.project_name or claim.project_code or '-' }}</dd>
+                        </div>
+                    </dl>
+                </div>
+
+                <!-- Travel Linkage -->
+                {% if claim.travel_request_id %}
+                <div class="card mb-6">
+                    <h3 class="text-lg font-semibold text-white mb-4">Linked Travel</h3>
+                    <a href="/expense-travel/travel/{{ claim.travel_request_id }}" class="btn btn-outline w-full">
+                        <i class="fas fa-plane"></i> View Travel Request
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- Audit Info -->
+                <div class="card">
+                    <h3 class="text-lg font-semibold text-white mb-4">Audit Trail</h3>
+                    <dl class="space-y-3 text-sm">
+                        <div>
+                            <dt class="text-gray-400">Created</dt>
+                            <dd class="text-white">{{ claim.created_at }}</dd>
+                        </div>
+                        {% if claim.submitted_by_name %}
+                        <div>
+                            <dt class="text-gray-400">Submitted By</dt>
+                            <dd class="text-white">{{ claim.submitted_by_name }} on {{ claim.submission_date }}</dd>
+                        </div>
+                        {% endif %}
+                        {% if claim.approved_by_name %}
+                        <div>
+                            <dt class="text-gray-400">Approved By</dt>
+                            <dd class="text-white">{{ claim.approved_by_name }}</dd>
+                        </div>
+                        {% endif %}
+                        {% if claim.rejected_by_name %}
+                        <div>
+                            <dt class="text-gray-400">Rejected By</dt>
+                            <dd class="text-white">{{ claim.rejected_by_name }}</dd>
+                        </div>
+                        <div>
+                            <dt class="text-gray-400">Rejection Reason</dt>
+                            <dd class="text-danger">{{ claim.rejection_reason }}</dd>
+                        </div>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+</body>
+</html>

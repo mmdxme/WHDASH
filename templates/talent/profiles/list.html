@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">
+                <i class="fa-solid fa-users text-purple-400 mr-2"></i>
+                {{ t('talent_profiles', 'Talent Profiles') }}
+            </h1>
+            <p class="text-slate-400 mt-1">{{ total }} {{ t('employees_in_talent_system', 'employees in the talent system') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('talent.dashboard') }}" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-arrow-left"></i>
+                {{ t('back_to_dashboard', 'Back to Dashboard') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-6">
+        <form method="GET" class="flex flex-wrap gap-4 items-end">
+            <div class="flex-1 min-w-[200px]">
+                <label class="block text-sm text-slate-400 mb-2">{{ t('search', 'Search') }}</label>
+                <input type="text" name="search" value="{{ search }}" placeholder="{{ t('search_employee', 'Search by name or code...') }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:border-purple-500 focus:outline-none transition-all">
+            </div>
+            <div class="w-48">
+                <label class="block text-sm text-slate-400 mb-2">{{ t('department', 'Department') }}</label>
+                <select name="department" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:border-purple-500 focus:outline-none transition-all">
+                    <option value="" class="bg-slate-800">{{ t('all_departments', 'All Departments') }}</option>
+                    {% for dept in departments %}
+                    <option value="{{ dept.id }}" {% if department == dept.id|string %}selected{% endif %} class="bg-slate-800">{{ dept.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="w-40">
+                <label class="block text-sm text-slate-400 mb-2">{{ t('readiness', 'Readiness') }}</label>
+                <select name="readiness" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:border-purple-500 focus:outline-none transition-all">
+                    <option value="" class="bg-slate-800">{{ t('all_levels', 'All Levels') }}</option>
+                    <option value="Ready Now" {% if readiness == 'Ready Now' %}selected{% endif %} class="bg-slate-800">{{ t('ready_now', 'Ready Now') }}</option>
+                    <option value="6 Months" {% if readiness == '6 Months' %}selected{% endif %} class="bg-slate-800">{{ t('ready_6mo', 'Ready in 6 Months') }}</option>
+                    <option value="1 Year" {% if readiness == '1 Year' %}selected{% endif %} class="bg-slate-800">{{ t('ready_1yr', 'Ready in 1 Year') }}</option>
+                    <option value="2 Years" {% if readiness == '2 Years' %}selected{% endif %} class="bg-slate-800">{{ t('ready_2yr', 'Ready in 2 Years') }}</option>
+                </select>
+            </div>
+            <div class="w-40">
+                <label class="block text-sm text-slate-400 mb-2">{{ t('potential', 'Potential') }}</label>
+                <select name="potential" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white focus:border-purple-500 focus:outline-none transition-all">
+                    <option value="" class="bg-slate-800">{{ t('all_levels', 'All Levels') }}</option>
+                    <option value="Very High" {% if potential == 'Very High' %}selected{% endif %} class="bg-slate-800">{{ t('very_high', 'Very High') }}</option>
+                    <option value="High" {% if potential == 'High' %}selected{% endif %} class="bg-slate-800">{{ t('high', 'High') }}</option>
+                    <option value="Medium" {% if potential == 'Medium' %}selected{% endif %} class="bg-slate-800">{{ t('medium', 'Medium') }}</option>
+                    <option value="Low" {% if potential == 'Low' %}selected{% endif %} class="bg-slate-800">{{ t('low', 'Low') }}</option>
+                </select>
+            </div>
+            <button type="submit" class="px-6 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl font-semibold transition-all">
+                <i class="fa-solid fa-search mr-2"></i>{{ t('filter', 'Filter') }}
+            </button>
+            <a href="{{ url_for('talent.profiles') }}" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all">
+                <i class="fa-solid fa-times mr-2"></i>{{ t('clear', 'Clear') }}
+            </a>
+        </form>
+    </div>
+
+    <!-- Profiles Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/10 bg-white/5">
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('employee', 'Employee') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('department', 'Department') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('position', 'Position') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('manager', 'Manager') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('potential', 'Potential') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('performance', 'Performance') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('readiness', 'Readiness') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('flags', 'Flags') }}</th>
+                        <th class="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for profile in profiles %}
+                    <tr class="hover:bg-white/5 transition-all">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full {% if profile.hi_po %}bg-purple-500/20{% else %}bg-brand-500/20{% endif %} flex items-center justify-center">
+                                    <span class="{% if profile.hi_po %}text-purple-400{% else %}text-brand-400{% endif %} font-bold">{{ profile.first_name[0] }}{{ profile.last_name[0] }}</span>
+                                </div>
+                                <div>
+                                    <div class="text-white font-medium">{{ profile.first_name }} {{ profile.last_name }}</div>
+                                    <div class="text-sm text-slate-400">{{ profile.employee_code }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-slate-300">{{ profile.department_name or '-' }}</td>
+                        <td class="px-6 py-4 text-slate-300">{{ profile.position_title or '-' }}</td>
+                        <td class="px-6 py-4 text-slate-300">{{ profile.manager_name or '-' }}</td>
+                        <td class="px-6 py-4">
+                            {% if profile.potential_rating %}
+                            <span class="px-2.5 py-1 {% if profile.potential_rating in ['Very High', 'High'] %}bg-purple-500/10 text-purple-400{% elif profile.potential_rating == 'Medium' %}bg-blue-500/10 text-blue-400{% else %}bg-slate-500/10 text-slate-400{% endif %} text-xs font-bold rounded-full">
+                                {{ profile.potential_rating }}
+                            </span>
+                            {% else %}
+                            <span class="text-slate-500">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if profile.performance_rating %}
+                            <span class="px-2.5 py-1 {% if profile.performance_rating in ['Exceeds', 'Exceptional'] %}bg-emerald-500/10 text-emerald-400{% elif profile.performance_rating == 'Meets' %}bg-blue-500/10 text-blue-400{% else %}bg-amber-500/10 text-amber-400{% endif %} text-xs font-bold rounded-full">
+                                {{ profile.performance_rating }}
+                            </span>
+                            {% else %}
+                            <span class="text-slate-500">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if profile.readiness_level == 'Ready Now' %}
+                            <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ t('ready_now', 'Ready Now') }}</span>
+                            {% elif profile.readiness_level == '6 Months' %}
+                            <span class="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full">{{ t('ready_6mo', '6 Months') }}</span>
+                            {% elif profile.readiness_level == '1 Year' %}
+                            <span class="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full">{{ t('ready_1yr', '1 Year') }}</span>
+                            {% elif profile.readiness_level %}
+                            <span class="px-2.5 py-1 bg-amber-500/10 text-amber-400 text-xs font-bold rounded-full">{{ profile.readiness_level }}</span>
+                            {% else %}
+                            <span class="text-slate-500">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-2">
+                                {% if profile.hi_po %}
+                                <span class="px-2 py-0.5 bg-purple-500/10 text-purple-400 text-xs font-bold rounded-full" title="{{ t('high_potential', 'High Potential') }}">
+                                    <i class="fa-solid fa-star"></i>
+                                </span>
+                                {% endif %}
+                                {% if profile.succession_candidate %}
+                                <span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full" title="{{ t('succession_candidate', 'Succession Candidate') }}">
+                                    <i class="fa-solid fa-user-clock"></i>
+                                </span>
+                                {% endif %}
+                                {% if profile.flight_risk %}
+                                <span class="px-2 py-0.5 bg-red-500/10 text-red-400 text-xs font-bold rounded-full" title="{{ t('flight_risk', 'Flight Risk') }}">
+                                    <i class="fa-solid fa-plane"></i>
+                                </span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                <a href="{{ url_for('talent.profile_detail', employee_id=profile.employee_id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="{{ t('view_profile', 'View Profile') }}">
+                                    <i class="fa-solid fa-eye"></i>
+                                </a>
+                                <a href="{{ url_for('talent.profile_edit', employee_id=profile.employee_id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all" title="{{ t('edit_profile', 'Edit Profile') }}">
+                                    <i class="fa-solid fa-edit"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="px-6 py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-users text-4xl mb-4 block opacity-50"></i>
+                            {{ t('no_talent_profiles', 'No talent profiles found') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="px-6 py-4 border-t border-white/10 flex items-center justify-between">
+            <p class="text-slate-400 text-sm">
+                {{ t('showing', 'Showing') }} {{ (page - 1) * 20 + 1 }} {{ t('to', 'to') }} {{ [page * 20, total]|min }} {{ t('of', 'of') }} {{ total }} {{ t('results', 'results') }}
+            </p>
+            <div class="flex items-center gap-2">
+                {% if page > 1 %}
+                <a href="{{ url_for('talent.profiles') }}?page={{ page - 1 }}&search={{ search }}&department={{ department }}&readiness={{ readiness }}&potential={{ potential }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </a>
+                {% endif %}
+                <span class="px-3 py-1.5 bg-purple-600 text-white rounded-lg">{{ page }}</span>
+                {% if page < total_pages %}
+                <a href="{{ url_for('talent.profiles') }}?page={{ page + 1 }}&search={{ search }}&department={{ department }}&readiness={{ readiness }}&potential={{ potential }}" class="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-all">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,396 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between flex-wrap gap-4">
+        <div>
+            <h1 class="text-3xl font-bold text-white">
+                <i class="fa-solid fa-user-astronaut text-purple-400 mr-2"></i>
+                {{ t('talent_dashboard', 'Talent Dashboard') }}
+            </h1>
+            <p class="text-slate-400 mt-1">{{ t('talent_dashboard_desc', 'Overview of your talent management metrics') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('talent.executive_dashboard') }}" class="px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-chart-pie"></i>
+                {{ t('executive_view', 'Executive View') }}
+            </a>
+            <a href="{{ url_for('talent.profiles') }}" class="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white rounded-xl font-semibold transition-all flex items-center gap-2">
+                <i class="fa-solid fa-users"></i>
+                {{ t('all_talent_profiles', 'All Profiles') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Key Metrics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Total Talent Profiles -->
+        <div class="glass-panel rounded-2xl p-6 border-l-4 border-brand-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('total_talent_profiles', 'Total Talent Profiles') }}</p>
+                    <p class="text-3xl font-bold text-white mt-1">{{ metrics.total_profiles or 0 }}</p>
+                </div>
+                <div class="w-14 h-14 rounded-2xl bg-brand-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-users text-brand-400 text-2xl"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex items-center gap-2">
+                <span class="px-2 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">
+                    {{ t('active', 'Active') }}
+                </span>
+                <span class="text-slate-500 text-sm">{{ t('employees_in_talent', 'employees tracked') }}</span>
+            </div>
+        </div>
+
+        <!-- Hi-Po Count -->
+        <div class="glass-panel rounded-2xl p-6 border-l-4 border-purple-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('high_potentials', 'High Potentials') }}</p>
+                    <p class="text-3xl font-bold text-purple-400 mt-1">{{ metrics.hi_po_count or 0 }}</p>
+                </div>
+                <div class="w-14 h-14 rounded-2xl bg-purple-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-star text-purple-400 text-2xl"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex items-center gap-2">
+                <span class="text-slate-500 text-sm">{{ t('identified_hipo', 'identified Hi-Po talent') }}</span>
+            </div>
+        </div>
+
+        <!-- Succession Coverage -->
+        <div class="glass-panel rounded-2xl p-6 border-l-4 border-amber-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('succession_coverage', 'Succession Coverage') }}</p>
+                    <p class="text-3xl font-bold text-amber-400 mt-1">{{ metrics.succession_coverage or 0 }}%</p>
+                </div>
+                <div class="w-14 h-14 rounded-2xl bg-amber-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-shield-alt text-amber-400 text-2xl"></i>
+                </div>
+            </div>
+            <div class="mt-4">
+                <div class="h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div class="h-full {% if (metrics.succession_coverage or 0) >= 80 %}bg-emerald-500{% elif (metrics.succession_coverage or 0) >= 50 %}bg-amber-500{% else %}bg-red-500{% endif %} rounded-full transition-all" style="width: {{ metrics.succession_coverage or 0 }}%"></div>
+                </div>
+                <p class="text-slate-500 text-sm mt-1">{{ metrics.critical_without_successor or 0 }} {{ t('critical_without_successor', 'critical roles at risk') }}</p>
+            </div>
+        </div>
+
+        <!-- Development Plans -->
+        <div class="glass-panel rounded-2xl p-6 border-l-4 border-cyan-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-slate-400 text-sm">{{ t('idp_in_progress', 'IDPs In Progress') }}</p>
+                    <p class="text-3xl font-bold text-cyan-400 mt-1">{{ metrics.idp_in_progress or 0 }}</p>
+                </div>
+                <div class="w-14 h-14 rounded-2xl bg-cyan-500/20 flex items-center justify-center">
+                    <i class="fa-solid fa-graduation-cap text-cyan-400 text-2xl"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex items-center gap-2">
+                <span class="text-slate-500 text-sm">{{ t('active_development_plans', 'active development plans') }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Second Row Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Readiness Distribution -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">
+                <i class="fa-solid fa-chart-bar text-blue-400 mr-2"></i>
+                {{ t('readiness_distribution', 'Readiness Distribution') }}
+            </h3>
+            <div class="space-y-3">
+                {% for level, count in (metrics.readiness_dist or {}).items() %}
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-3 h-3 rounded-full {% if level == 'Ready Now' %}bg-emerald-500{% elif level in ['6 Months', '1 Year'] %}bg-blue-500{% else %}bg-slate-500{% endif %}"></div>
+                        <span class="text-slate-300">{{ level or 'Not Set' }}</span>
+                    </div>
+                    <span class="text-white font-bold">{{ count }}</span>
+                </div>
+                {% else %}
+                <p class="text-slate-500 text-center py-4">{{ t('no_readiness_data', 'No readiness data available') }}</p>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Active Review Cycles -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">
+                <i class="fa-solid fa-clipboard-check text-emerald-400 mr-2"></i>
+                {{ t('active_review_cycles', 'Active Review Cycles') }}
+            </h3>
+            <div class="text-center py-4">
+                <p class="text-4xl font-bold text-emerald-400">{{ metrics.active_reviews or 0 }}</p>
+                <p class="text-slate-400 mt-2">{{ t('talent_review_cycles', 'talent review cycles in progress') }}</p>
+            </div>
+            <div class="mt-4 flex justify-center gap-2">
+                <a href="{{ url_for('talent.reviews') }}" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-sm font-medium rounded-lg transition-all">
+                    {{ t('view_reviews', 'View Reviews') }}
+                </a>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">
+                <i class="fa-solid fa-bolt text-amber-400 mr-2"></i>
+                {{ t('quick_actions', 'Quick Actions') }}
+            </h3>
+            <div class="space-y-2">
+                <a href="{{ url_for('talent.profiles') }}?potential=High" class="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+                    <i class="fa-solid fa-star text-purple-400"></i>
+                    <span class="text-slate-300">{{ t('identify_hipo', 'Identify High Potentials') }}</span>
+                </a>
+                <a href="{{ url_for('talent.succession') }}" class="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+                    <i class="fa-solid fa-shield-alt text-amber-400"></i>
+                    <span class="text-slate-300">{{ t('review_succession', 'Review Succession Plans') }}</span>
+                </a>
+                <a href="{{ url_for('talent.development') }}" class="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+                    <i class="fa-solid fa-graduation-cap text-cyan-400"></i>
+                    <span class="text-slate-300">{{ t('manage_idp', 'Manage Development Plans') }}</span>
+                </a>
+                <a href="{{ url_for('talent.reports') }}" class="flex items-center gap-3 p-3 bg-white/5 hover:bg-white/10 rounded-xl transition-all">
+                    <i class="fa-solid fa-chart-line text-brand-400"></i>
+                    <span class="text-slate-300">{{ t('view_talent_reports', 'View Talent Reports') }}</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hi-Po Summary -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-6 border-b border-white/10">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">
+                    <i class="fa-solid fa-star text-purple-400 mr-2"></i>
+                    {{ t('hipo_talent', 'High Potential Talent') }}
+                </h3>
+                <a href="{{ url_for('talent.reports.hipo') }}" class="text-purple-400 hover:text-purple-300 text-sm font-medium">
+                    {{ t('view_all', 'View All') }} <i class="fa-solid fa-arrow-right ml-1"></i>
+                </a>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-white/10 bg-white/5">
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('employee', 'Employee') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('department', 'Department') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('position', 'Position') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('potential', 'Potential') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('readiness', 'Readiness') }}</th>
+                        <th class="px-6 py-4 text-left text-xs font-bold text-slate-400 uppercase">{{ t('manager', 'Manager') }}</th>
+                        <th class="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for hipo in hipo_summary %}
+                    <tr class="hover:bg-white/5 transition-all">
+                        <td class="px-6 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                                    <span class="text-purple-400 font-bold">{{ hipo.first_name[0] }}{{ hipo.last_name[0] }}</span>
+                                </div>
+                                <div>
+                                    <div class="text-white font-medium">{{ hipo.first_name }} {{ hipo.last_name }}</div>
+                                    <div class="text-sm text-slate-400">{{ hipo.employee_code }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 text-slate-300">{{ hipo.department_name or '-' }}</td>
+                        <td class="px-6 py-4 text-slate-300">{{ hipo.position_title or '-' }}</td>
+                        <td class="px-6 py-4">
+                            <span class="px-2.5 py-1 bg-purple-500/10 text-purple-400 text-xs font-bold rounded-full">{{ hipo.potential_rating or 'High' }}</span>
+                        </td>
+                        <td class="px-6 py-4">
+                            {% if hipo.readiness_level == 'Ready Now' %}
+                            <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">{{ t('ready_now', 'Ready Now') }}</span>
+                            {% elif hipo.readiness_level %}
+                            <span class="px-2.5 py-1 bg-blue-500/10 text-blue-400 text-xs font-bold rounded-full">{{ hipo.readiness_level }}</span>
+                            {% else %}
+                            <span class="px-2.5 py-1 bg-slate-500/10 text-slate-400 text-xs font-bold rounded-full">{{ t('not_ready', 'Not Set') }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-slate-300">{{ hipo.manager_name or '-' }}</td>
+                        <td class="px-6 py-4 text-right">
+                            <a href="{{ url_for('talent.profile_detail', employee_id=hipo.employee_id) }}" class="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-all">
+                                <i class="fa-solid fa-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="px-6 py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-star text-4xl mb-4 block opacity-50"></i>
+                            {{ t('no_hipo_identified', 'No high potentials identified yet') }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Succession Overview & Development Summary -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Succession Overview -->
+        <div class="glass-panel rounded-2xl overflow-hidden">
+            <div class="p-6 border-b border-white/10">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">
+                        <i class="fa-solid fa-shield-alt text-amber-400 mr-2"></i>
+                        {{ t('succession_overview', 'Succession Overview') }}
+                    </h3>
+                    <a href="{{ url_for('talent.succession') }}" class="text-amber-400 hover:text-amber-300 text-sm font-medium">
+                        {{ t('view_details', 'View Details') }} <i class="fa-solid fa-arrow-right ml-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="p-6">
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="text-center p-4 bg-white/5 rounded-xl">
+                        <p class="text-3xl font-bold text-white">{{ succession_overview.critical_roles or 0 }}</p>
+                        <p class="text-slate-400 text-sm mt-1">{{ t('critical_roles', 'Critical Roles') }}</p>
+                    </div>
+                    <div class="text-center p-4 bg-white/5 rounded-xl">
+                        <p class="text-3xl font-bold text-emerald-400">{{ succession_overview.covered or 0 }}</p>
+                        <p class="text-slate-400 text-sm mt-1">{{ t('with_successor', 'With Successor') }}</p>
+                    </div>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                        <span class="text-slate-300">{{ t('at_risk', 'At Risk (No Successor)') }}</span>
+                        <span class="px-2.5 py-1 {% if succession_overview.at_risk > 0 %}bg-red-500/10 text-red-400{% else %}bg-emerald-500/10 text-emerald-400{% endif %} text-xs font-bold rounded-full">
+                            {{ succession_overview.at_risk or 0 }}
+                        </span>
+                    </div>
+                    <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                        <span class="text-slate-300">{{ t('emergency_ready', 'Emergency Ready') }}</span>
+                        <span class="px-2.5 py-1 bg-emerald-500/10 text-emerald-400 text-xs font-bold rounded-full">
+                            {{ succession_overview.emergency_ready or 0 }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Development Plan Summary -->
+        <div class="glass-panel rounded-2xl overflow-hidden">
+            <div class="p-6 border-b border-white/10">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-lg font-bold text-white">
+                        <i class="fa-solid fa-graduation-cap text-cyan-400 mr-2"></i>
+                        {{ t('development_plans', 'Development Plans') }}
+                    </h3>
+                    <a href="{{ url_for('talent.development') }}" class="text-cyan-400 hover:text-cyan-300 text-sm font-medium">
+                        {{ t('view_details', 'View Details') }} <i class="fa-solid fa-arrow-right ml-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="p-6">
+                <div class="mb-6">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-slate-300">{{ t('completion_rate', 'Completion Rate') }}</span>
+                        <span class="text-white font-bold">{{ dev_summary.completion_rate or 0 }}%</span>
+                    </div>
+                    <div class="h-3 bg-white/10 rounded-full overflow-hidden">
+                        <div class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all" style="width: {{ dev_summary.completion_rate or 0 }}%"></div>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    <div class="text-center p-3 bg-white/5 rounded-xl">
+                        <p class="text-2xl font-bold text-white">{{ dev_summary.total or 0 }}</p>
+                        <p class="text-slate-400 text-xs mt-1">{{ t('total', 'Total') }}</p>
+                    </div>
+                    <div class="text-center p-3 bg-white/5 rounded-xl">
+                        <p class="text-2xl font-bold text-blue-400">{{ dev_summary.in_progress or 0 }}</p>
+                        <p class="text-slate-400 text-xs mt-1">{{ t('in_progress', 'In Progress') }}</p>
+                    </div>
+                    <div class="text-center p-3 bg-white/5 rounded-xl">
+                        <p class="text-2xl font-bold text-emerald-400">{{ dev_summary.completed or 0 }}</p>
+                        <p class="text-slate-400 text-xs mt-1">{{ t('completed', 'Completed') }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity & Pending Approvals -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Recent Activity -->
+        <div class="glass-panel rounded-2xl overflow-hidden">
+            <div class="p-6 border-b border-white/10">
+                <h3 class="text-lg font-bold text-white">
+                    <i class="fa-solid fa-clock-rotate-left text-brand-400 mr-2"></i>
+                    {{ t('recent_talent_activity', 'Recent Talent Activity') }}
+                </h3>
+            </div>
+            <div class="p-6 max-h-96 overflow-y-auto">
+                <div class="space-y-4">
+                    {% for activity in recent_activity %}
+                    <div class="flex items-start gap-4 p-3 bg-white/5 rounded-xl">
+                        <div class="w-10 h-10 rounded-full bg-brand-500/20 flex items-center justify-center flex-shrink-0">
+                            <i class="fa-solid fa-pen text-brand-400"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-white text-sm">{{ activity.employee_name }}</p>
+                            <p class="text-slate-400 text-xs mt-1">
+                                {{ activity.field_name or 'Talent Update' }}:
+                                {% if activity.old_value and activity.new_value %}
+                                <span class="text-slate-500">{{ activity.old_value }}</span>
+                                <i class="fa-solid fa-arrow-right mx-1 text-xs"></i>
+                                <span class="text-emerald-400">{{ activity.new_value }}</span>
+                                {% else %}
+                                {{ activity.new_value or 'Record updated' }}
+                                {% endif %}
+                            </p>
+                            <p class="text-slate-500 text-xs mt-1">{{ activity.changed_at or '' }}</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <p class="text-slate-500 text-center py-8">{{ t('no_recent_activity', 'No recent activity') }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Pending Approvals -->
+        <div class="glass-panel rounded-2xl overflow-hidden">
+            <div class="p-6 border-b border-white/10">
+                <h3 class="text-lg font-bold text-white">
+                    <i class="fa-solid fa-clock text-amber-400 mr-2"></i>
+                    {{ t('pending_approvals', 'Pending Approvals') }}
+                </h3>
+            </div>
+            <div class="p-6 max-h-96 overflow-y-auto">
+                <div class="space-y-4">
+                    {% for approval in pending_approvals %}
+                    <div class="flex items-center justify-between p-3 bg-white/5 rounded-xl">
+                        <div class="flex items-center gap-3">
+                            <div class="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                <i class="fa-solid fa-user-clock text-amber-400"></i>
+                            </div>
+                            <div>
+                                <p class="text-white text-sm">{{ approval.employee_name }}</p>
+                                <p class="text-slate-400 text-xs">{{ approval.approval_type_name or 'Talent Approval' }}</p>
+                            </div>
+                        </div>
+                        <a href="#" class="px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-xs font-medium rounded-lg transition-all">
+                            {{ t('review', 'Review') }}
+                        </a>
+                    </div>
+                    {% else %}
+                    <p class="text-slate-500 text-center py-8">{{ t('no_pending_approvals', 'No pending approvals') }}</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
