@@ -30,6 +30,12 @@ from ecommerce_models import (
     EcommerceCategoryMapping, EcommerceWarehouseMapping, EcommerceSetting
 )
 
+# Import export utilities
+from export_utils import (
+    send_export_response,
+    get_export_columns
+)
+
 # Create blueprint
 ecommerce_bp = Blueprint('ecommerce', __name__, url_prefix='/ecommerce')
 
@@ -141,6 +147,161 @@ def create_exception(exception_type: str, title: str, description: str,
 def generate_exception_number() -> str:
     """Generate unique exception number."""
     return f"EXC-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+
+# =============================================================================
+# FLOW INTEGRATION HELPER FUNCTIONS
+# =============================================================================
+
+def create_ecommerce_flow_notification(
+    notification_type: str,
+    title: str,
+    message: str,
+    channel_id: int = 0,
+    channel_name: str = "",
+    exception_number: str = "",
+    entity_type: str = "",
+    entity_id: int = 0,
+    entity_reference: str = "",
+    priority: str = "NORMAL",
+    action_url: str = "",
+    company_id: int = 0
+):
+    """
+    Create a Flow notification for e-commerce events.
+    Types: ORDER_IMPORTED, ORDER_FAILED, SYNC_FAILED, INVENTORY_ALERT,
+           LOW_STOCK, EXCEPTION_CREATED, CHANNEL_HEALTH, REFUND_REQUEST,
+           RETURN_REQUEST, MAPPING_ERROR, PRICING_ALERT
+    """
+    user_id = get_current_user_id()
+
+    try:
+        with get_db_context() as db:
+            db.execute("""
+                INSERT INTO ecommerce_flow_notifications
+                (notification_type, title, message, entity_type, entity_id,
+                 entity_reference, channel_id, channel_name, exception_number,
+                 priority, action_url, created_by, company_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                notification_type, title, message, entity_type, entity_id,
+                entity_reference, channel_id, channel_name, exception_number,
+                priority, action_url, user_id, company_id
+            ))
+            db.commit()
+            return True
+    except Exception as e:
+        # Log but don't fail - Flow notifications are non-critical
+        print(f"Failed to create Flow notification: {e}")
+        return False
+
+
+def notify_channel_health_alert(channel_id: int, channel_name: str, health_status: str, message: str, company_id: int = 0):
+    """Send alert when channel health degrades."""
+    priority = "HIGH" if health_status == "critical" else "NORMAL"
+    return create_ecommerce_flow_notification(
+        notification_type="CHANNEL_HEALTH_ALERT",
+        title=f"Channel Health Alert: {channel_name}",
+        message=message,
+        channel_id=channel_id,
+        channel_name=channel_name,
+        priority=priority,
+        action_url=f"/ecommerce/channels/{channel_id}/view",
+        company_id=company_id
+    )
+
+
+def notify_sync_failure(channel_id: int, channel_name: str, sync_type: str, error_message: str, company_id: int = 0):
+    """Send alert when sync fails."""
+    return create_ecommerce_flow_notification(
+        notification_type="SYNC_FAILURE",
+        title=f"{sync_type.title()} Sync Failed: {channel_name}",
+        message=error_message,
+        channel_id=channel_id,
+        channel_name=channel_name,
+        priority="HIGH",
+        action_url=f"/ecommerce/sync/jobs",
+        company_id=company_id
+    )
+
+
+def notify_exception_created(exception_number: str, exception_type: str, title: str, severity: str, channel_id: int = 0, channel_name: str = "", company_id: int = 0):
+    """Send notification when new exception is created."""
+    priority = "HIGH" if severity in ("critical", "high") else "NORMAL"
+    return create_ecommerce_flow_notification(
+        notification_type="EXCEPTION_CREATED",
+        title=f"New {exception_type}: {title[:50]}",
+        message=f"Severity: {severity.upper()}",
+        channel_id=channel_id,
+        channel_name=channel_name,
+        exception_number=exception_number,
+        entity_type="exception",
+        entity_reference=exception_number,
+        priority=priority,
+        action_url=f"/ecommerce/exceptions/{exception_number}/view",
+        company_id=company_id
+    )
+
+
+def notify_low_stock(channel_id: int, channel_name: str, product_name: str, current_stock: int, company_id: int = 0):
+    """Send alert when product stock is low."""
+    return create_ecommerce_flow_notification(
+        notification_type="LOW_STOCK_ALERT",
+        title=f"Low Stock Alert: {product_name[:40]}",
+        message=f"Current stock: {current_stock} units on {channel_name}",
+        channel_id=channel_id,
+        channel_name=channel_name,
+        priority="NORMAL",
+        action_url=f"/ecommerce/inventory",
+        company_id=company_id
+    )
+
+
+def notify_refund_request(exception_number: str, order_ref: str, amount: float, channel_name: str, company_id: int = 0):
+    """Send notification for pending refund review."""
+    return create_ecommerce_flow_notification(
+        notification_type="REFUND_REQUEST",
+        title=f"Refund Request: {order_ref}",
+        message=f"Amount: ${amount:.2f} on {channel_name}",
+        channel_name=channel_name,
+        exception_number=exception_number,
+        entity_type="refund",
+        entity_reference=order_ref,
+        priority="NORMAL",
+        action_url=f"/ecommerce/exceptions/{exception_number}/view",
+        company_id=company_id
+    )
+
+
+def notify_return_request(exception_number: str, order_ref: str, channel_name: str, company_id: int = 0):
+    """Send notification for pending return review."""
+    return create_ecommerce_flow_notification(
+        notification_type="RETURN_REQUEST",
+        title=f"Return Request: {order_ref}",
+        message=f"Return request on {channel_name}",
+        channel_name=channel_name,
+        exception_number=exception_number,
+        entity_type="return",
+        entity_reference=order_ref,
+        priority="NORMAL",
+        action_url=f"/ecommerce/exceptions/{exception_number}/view",
+        company_id=company_id
+    )
+
+
+def notify_order_imported(order_number: str, channel_name: str, total_amount: float, company_id: int = 0):
+    """Send notification when new order is imported."""
+    return create_ecommerce_flow_notification(
+        notification_type="ORDER_IMPORTED",
+        title=f"New Order: {order_number}",
+        message=f"Amount: ${total_amount:.2f} from {channel_name}",
+        channel_name=channel_name,
+        entity_type="order",
+        entity_reference=order_number,
+        priority="NORMAL",
+        action_url=f"/ecommerce/orders",
+        company_id=company_id
+    )
 
 
 # =============================================================================
@@ -2024,6 +2185,655 @@ def mappings_categories():
 
 
 # =============================================================================
+# FULFILLMENT & RETURNS
+# =============================================================================
+
+@ecommerce_bp.route('/fulfillment')
+@require_ecommerce_permission('fulfillment', 'view')
+def fulfillment():
+    """Fulfillment & Returns dashboard."""
+    company_id = session.get('company_id', 0)
+
+    # Get fulfillment stats
+    stats = {}
+    with get_db_context() as db:
+        # Shipments by status
+        shipments = db.execute("""
+            SELECT fulfillment_status, COUNT(*) as cnt
+            FROM ecommerce_order_imports
+            WHERE company_id = ? AND fulfillment_status != 'unfulfilled'
+            GROUP BY fulfillment_status
+        """, (company_id,)).fetchall()
+        stats['shipments'] = {s['fulfillment_status']: s['cnt'] for s in shipments}
+
+        # Returns stats
+        returns = db.execute("""
+            SELECT COUNT(*) as cnt FROM ecommerce_exceptions
+            WHERE company_id = ? AND exception_type = 'return_request'
+        """, (company_id,)).fetchone()
+        stats['total_returns'] = returns['cnt'] if returns else 0
+
+        # Pending refunds
+        refunds = db.execute("""
+            SELECT COUNT(*) as cnt FROM ecommerce_exceptions
+            WHERE company_id = ? AND exception_type = 'refund_request' AND status = 'open'
+        """, (company_id,)).fetchone()
+        stats['pending_refunds'] = refunds['cnt'] if refunds else 0
+
+    # Recent fulfillment activity
+    recent_fulfillment = get_all("""
+        SELECT o.*, c.channel_name
+        FROM ecommerce_order_imports o
+        LEFT JOIN ecommerce_channels c ON o.channel_id = c.id
+        WHERE o.company_id = ? AND o.fulfillment_status IN ('shipped', 'delivered')
+        ORDER BY o.updated_at DESC
+        LIMIT 20
+    """, (company_id,))
+
+    return render_template('ecommerce/fulfillment/index.html',
+                         stats=stats,
+                         recent_fulfillment=recent_fulfillment)
+
+
+@ecommerce_bp.route('/fulfillment/returns')
+@require_ecommerce_permission('fulfillment', 'view')
+def fulfillment_returns():
+    """List return requests."""
+    company_id = session.get('company_id', 0)
+
+    returns = get_all("""
+        SELECT e.*, c.channel_name
+        FROM ecommerce_exceptions e
+        LEFT JOIN ecommerce_channels c ON e.channel_id = c.id
+        WHERE e.company_id = ? AND e.exception_type = 'return_request'
+        ORDER BY e.created_at DESC
+    """, (company_id,))
+
+    return render_template('ecommerce/fulfillment/returns.html', returns=returns)
+
+
+@ecommerce_bp.route('/fulfillment/refunds')
+@require_ecommerce_permission('fulfillment', 'view')
+def fulfillment_refunds():
+    """List refund requests."""
+    company_id = session.get('company_id', 0)
+
+    refunds = get_all("""
+        SELECT e.*, c.channel_name
+        FROM ecommerce_exceptions e
+        LEFT JOIN ecommerce_channels c ON e.channel_id = c.id
+        WHERE e.company_id = ? AND e.exception_type = 'refund_request'
+        ORDER BY e.created_at DESC
+    """, (company_id,))
+
+    return render_template('ecommerce/fulfillment/refunds.html', refunds=refunds)
+
+
+@ecommerce_bp.route('/orders/shipped')
+@require_ecommerce_permission('orders', 'view')
+def orders_shipped():
+    """List shipped orders."""
+    company_id = session.get('company_id', 0)
+
+    orders = get_all("""
+        SELECT o.*, c.channel_name
+        FROM ecommerce_order_imports o
+        LEFT JOIN ecommerce_channels c ON o.channel_id = c.id
+        WHERE o.company_id = ? AND o.fulfillment_status = 'shipped'
+        ORDER BY o.shipped_at DESC
+    """, (company_id,))
+
+    return render_template('ecommerce/orders/shipped.html', orders=orders)
+
+
+@ecommerce_bp.route('/orders/delivered')
+@require_ecommerce_permission('orders', 'view')
+def orders_delivered():
+    """List delivered orders."""
+    company_id = session.get('company_id', 0)
+
+    orders = get_all("""
+        SELECT o.*, c.channel_name
+        FROM ecommerce_order_imports o
+        LEFT JOIN ecommerce_channels c ON o.channel_id = c.id
+        WHERE o.company_id = ? AND o.fulfillment_status = 'delivered'
+        ORDER BY o.delivered_at DESC
+    """, (company_id,))
+
+    return render_template('ecommerce/orders/delivered.html', orders=orders)
+
+
+@ecommerce_bp.route('/orders/cancelled')
+@require_ecommerce_permission('orders', 'view')
+def orders_cancelled():
+    """List cancelled orders."""
+    company_id = session.get('company_id', 0)
+
+    orders = get_all("""
+        SELECT o.*, c.channel_name
+        FROM ecommerce_order_imports o
+        LEFT JOIN ecommerce_channels c ON o.channel_id = c.id
+        WHERE o.company_id = ? AND o.order_status = 'cancelled'
+        ORDER BY o.updated_at DESC
+    """, (company_id,))
+
+    return render_template('ecommerce/orders/cancelled.html', orders=orders)
+
+
+# =============================================================================
+# COMMERCE ANALYTICS
+# =============================================================================
+
+@ecommerce_bp.route('/analytics')
+@require_ecommerce_permission('analytics', 'view')
+def analytics():
+    """Commerce Analytics dashboard."""
+    company_id = session.get('company_id', 0)
+
+    # Date range for reports
+    date_from = request.args.get('date_from', (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
+    date_to = request.args.get('date_to', datetime.now().strftime('%Y-%m-%d'))
+
+    # Channel performance metrics
+    channel_metrics = get_all("""
+        SELECT
+            c.id as channel_id,
+            c.channel_name,
+            c.channel_type,
+            COUNT(o.id) as order_count,
+            SUM(o.total_amount) as total_revenue,
+            AVG(o.total_amount) as avg_order_value,
+            SUM(CASE WHEN o.payment_status = 'paid' THEN 1 ELSE 0 END) as paid_orders,
+            SUM(CASE WHEN o.fulfillment_status = 'delivered' THEN 1 ELSE 0 END) as delivered_orders,
+            SUM(CASE WHEN o.order_status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders
+        FROM ecommerce_channels c
+        LEFT JOIN ecommerce_order_imports o ON c.id = o.channel_id
+            AND DATE(o.order_date) BETWEEN ? AND ?
+        WHERE c.company_id = ?
+        GROUP BY c.id
+        ORDER BY total_revenue DESC
+    """, (date_from, date_to, company_id))
+
+    # Daily sales trend
+    daily_sales = get_all("""
+        SELECT
+            DATE(order_date) as date,
+            COUNT(*) as orders,
+            SUM(total_amount) as revenue
+        FROM ecommerce_order_imports
+        WHERE company_id = ? AND DATE(order_date) BETWEEN ? AND ?
+        GROUP BY DATE(order_date)
+        ORDER BY date
+    """, (company_id, date_from, date_to))
+
+    # Top products
+    top_products = get_all("""
+        SELECT
+            l.external_product_name,
+            l.external_sku,
+            SUM(l.quantity) as units_sold,
+            SUM(l.total_amount) as revenue
+        FROM ecommerce_order_lines l
+        JOIN ecommerce_order_imports o ON l.order_import_id = o.id
+        WHERE o.company_id = ? AND DATE(o.order_date) BETWEEN ? AND ?
+        GROUP BY l.external_product_id
+        ORDER BY revenue DESC
+        LIMIT 10
+    """, (company_id, date_from, date_to))
+
+    # Order status distribution
+    status_dist = get_all("""
+        SELECT order_status, COUNT(*) as cnt
+        FROM ecommerce_order_imports
+        WHERE company_id = ? AND DATE(order_date) BETWEEN ? AND ?
+        GROUP BY order_status
+    """, (company_id, date_from, date_to))
+
+    # Fulfillment metrics
+    fulfillment_metrics = get_one("""
+        SELECT
+            SUM(CASE WHEN fulfillment_status = 'unfulfilled' THEN 1 ELSE 0 END) as unfulfilled,
+            SUM(CASE WHEN fulfillment_status = 'processing' THEN 1 ELSE 0 END) as processing,
+            SUM(CASE WHEN fulfillment_status = 'shipped' THEN 1 ELSE 0 END) as shipped,
+            SUM(CASE WHEN fulfillment_status = 'delivered' THEN 1 ELSE 0 END) as delivered
+        FROM ecommerce_order_imports
+        WHERE company_id = ? AND DATE(order_date) BETWEEN ? AND ?
+    """, (company_id, date_from, date_to))
+
+    return render_template('ecommerce/analytics/index.html',
+                         channel_metrics=channel_metrics,
+                         daily_sales=daily_sales,
+                         top_products=top_products,
+                         status_dist=status_dist,
+                         fulfillment_metrics=fulfillment_metrics,
+                         date_from=date_from,
+                         date_to=date_to)
+
+
+@ecommerce_bp.route('/analytics/product-performance')
+@require_ecommerce_permission('analytics', 'view')
+def analytics_product_performance():
+    """Product performance report."""
+    company_id = session.get('company_id', 0)
+
+    date_from = request.args.get('date_from', (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
+    date_to = request.args.get('date_to', datetime.now().strftime('%Y-%m-%d'))
+
+    products = get_all("""
+        SELECT
+            l.external_product_id,
+            l.external_product_name,
+            l.external_sku,
+            c.channel_name,
+            SUM(l.quantity) as units_sold,
+            SUM(l.total_amount) as total_revenue,
+            AVG(l.unit_price) as avg_price,
+            COUNT(DISTINCT l.order_import_id) as order_count
+        FROM ecommerce_order_lines l
+        JOIN ecommerce_order_imports o ON l.order_import_id = o.id
+        LEFT JOIN ecommerce_channels c ON o.channel_id = c.id
+        WHERE o.company_id = ? AND DATE(o.order_date) BETWEEN ? AND ?
+        GROUP BY l.external_product_id, c.id
+        ORDER BY total_revenue DESC
+    """, (company_id, date_from, date_to))
+
+    return render_template('ecommerce/analytics/product_performance.html',
+                         products=products,
+                         date_from=date_from,
+                         date_to=date_to)
+
+
+@ecommerce_bp.route('/analytics/conversion')
+@require_ecommerce_permission('analytics', 'view')
+def analytics_conversion():
+    """Conversion analytics."""
+    company_id = session.get('company_id', 0)
+
+    # Get conversion metrics
+    metrics = get_one("""
+        SELECT
+            COUNT(DISTINCT customer_email) as unique_customers,
+            COUNT(*) as total_orders,
+            SUM(CASE WHEN order_status = 'completed' THEN 1 ELSE 0 END) as completed_orders,
+            SUM(CASE WHEN order_status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders
+        FROM ecommerce_order_imports
+        WHERE company_id = ?
+    """, (company_id,))
+
+    # Repeat customer analysis
+    repeat_customers = get_all("""
+        SELECT
+            customer_email,
+            COUNT(*) as order_count,
+            SUM(total_amount) as lifetime_value
+        FROM ecommerce_order_imports
+        WHERE company_id = ? AND customer_email IS NOT NULL AND customer_email != ''
+        GROUP BY customer_email
+        HAVING COUNT(*) > 1
+        ORDER BY lifetime_value DESC
+        LIMIT 20
+    """, (company_id,))
+
+    return render_template('ecommerce/analytics/conversion.html',
+                         metrics=metrics,
+                         repeat_customers=repeat_customers)
+
+
+# =============================================================================
+# CHANNEL STATUS & HEALTH
+# =============================================================================
+
+@ecommerce_bp.route('/channels/status')
+@require_ecommerce_permission('channels', 'view')
+def channels_status():
+    """Channel health status view."""
+    company_id = session.get('company_id', 0)
+
+    channels = get_all("""
+        SELECT
+            c.*,
+            p.inventory_sync_enabled,
+            p.order_sync_enabled,
+            p.customer_sync_enabled,
+            (SELECT COUNT(*) FROM ecommerce_order_imports WHERE channel_id = c.id) as total_orders,
+            (SELECT COUNT(*) FROM ecommerce_order_imports WHERE channel_id = c.id AND sync_status = 'failed') as failed_orders,
+            (SELECT COUNT(*) FROM ecommerce_exceptions WHERE channel_id = c.id AND status = 'open') as open_exceptions,
+            (SELECT MAX(last_synced_at) FROM ecommerce_inventory_syncs WHERE channel_id = c.id) as last_inventory_sync
+        FROM ecommerce_channels c
+        LEFT JOIN ecommerce_channel_profiles p ON c.id = p.channel_id
+        WHERE c.company_id = ?
+        ORDER BY c.channel_name
+    """, (company_id,))
+
+    return render_template('ecommerce/channels/status.html', channels=channels)
+
+
+@ecommerce_bp.route('/channels/logs')
+@require_ecommerce_permission('channels', 'view')
+def channels_logs():
+    """Channel API/webhook logs."""
+    company_id = session.get('company_id', 0)
+    channel_id = request.args.get('channel', '')
+
+    query = """
+        SELECT * FROM ecommerce_api_logs
+        WHERE company_id = ?
+    """
+    params = [company_id]
+
+    if channel_id:
+        query += " AND channel_id = ?"
+        params.append(channel_id)
+
+    query += " ORDER BY created_at DESC LIMIT 200"
+
+    logs = get_all(query, params)
+
+    channels = get_all("""
+        SELECT id, channel_name FROM ecommerce_channels
+        WHERE company_id = ? ORDER BY channel_name
+    """, (company_id,))
+
+    return render_template('ecommerce/channels/logs.html', logs=logs, channels=channels, channel_filter=channel_id)
+
+
+# =============================================================================
+# CATALOG & PUBLISHING
+# =============================================================================
+
+@ecommerce_bp.route('/catalog')
+@require_ecommerce_permission('catalog', 'view')
+def catalog():
+    """Catalog management dashboard."""
+    company_id = session.get('company_id', 0)
+
+    # Get catalog stats
+    stats = {}
+    with get_db_context() as db:
+        total_mappings = db.execute("""
+            SELECT COUNT(*) as cnt FROM ecommerce_product_mappings pm
+            JOIN ecommerce_channels c ON pm.channel_id = c.id
+            WHERE c.company_id = ?
+        """, (company_id,)).fetchone()
+        stats['total_mappings'] = total_mappings['cnt'] if total_mappings else 0
+
+        published = db.execute("""
+            SELECT COUNT(*) as cnt FROM ecommerce_product_mappings pm
+            JOIN ecommerce_channels c ON pm.channel_id = c.id
+            WHERE c.company_id = ? AND pm.sync_status = 'synced'
+        """, (company_id,)).fetchone()
+        stats['published'] = published['cnt'] if published else 0
+
+        pending = db.execute("""
+            SELECT COUNT(*) as cnt FROM ecommerce_product_mappings pm
+            JOIN ecommerce_channels c ON pm.channel_id = c.id
+            WHERE c.company_id = ? AND pm.sync_status = 'pending'
+        """, (company_id,)).fetchone()
+        stats['pending'] = pending['cnt'] if pending else 0
+
+        failed = db.execute("""
+            SELECT COUNT(*) as cnt FROM ecommerce_product_mappings pm
+            JOIN ecommerce_channels c ON pm.channel_id = c.id
+            WHERE c.company_id = ? AND pm.sync_status = 'failed'
+        """, (company_id,)).fetchone()
+        stats['failed'] = failed['cnt'] if failed else 0
+
+    return render_template('ecommerce/catalog/index.html', stats=stats)
+
+
+@ecommerce_bp.route('/catalog/publish-queue')
+@require_ecommerce_permission('catalog', 'view')
+def catalog_publish_queue():
+    """Product publish queue."""
+    company_id = session.get('company_id', 0)
+
+    products = get_all("""
+        SELECT pm.*, c.channel_name, i.item_name, i.item_sku
+        FROM ecommerce_product_mappings pm
+        JOIN ecommerce_channels c ON pm.channel_id = c.id
+        LEFT JOIN items i ON pm.internal_item_id = i.id
+        WHERE c.company_id = ? AND pm.sync_status = 'pending'
+        ORDER BY pm.created_at DESC
+    """, (company_id,))
+
+    return render_template('ecommerce/catalog/publish_queue.html', products=products)
+
+
+@ecommerce_bp.route('/catalog/published')
+@require_ecommerce_permission('catalog', 'view')
+def catalog_published():
+    """Published products."""
+    company_id = session.get('company_id', 0)
+
+    products = get_all("""
+        SELECT pm.*, c.channel_name, i.item_name, i.item_sku
+        FROM ecommerce_product_mappings pm
+        JOIN ecommerce_channels c ON pm.channel_id = c.id
+        LEFT JOIN items i ON pm.internal_item_id = i.id
+        WHERE c.company_id = ? AND pm.sync_status = 'synced'
+        ORDER BY pm.last_synced_at DESC
+    """, (company_id,))
+
+    return render_template('ecommerce/catalog/published.html', products=products)
+
+
+@ecommerce_bp.route('/catalog/failed')
+@require_ecommerce_permission('catalog', 'view')
+def catalog_failed():
+    """Failed publishing."""
+    company_id = session.get('company_id', 0)
+
+    products = get_all("""
+        SELECT pm.*, c.channel_name, i.item_name, i.item_sku
+        FROM ecommerce_product_mappings pm
+        JOIN ecommerce_channels c ON pm.channel_id = c.id
+        LEFT JOIN items i ON pm.internal_item_id = i.id
+        WHERE c.company_id = ? AND pm.sync_status = 'failed'
+        ORDER BY pm.updated_at DESC
+    """, (company_id,))
+
+    return render_template('ecommerce/catalog/failed.html', products=products)
+
+
+# =============================================================================
+# PRICING & PROMOTIONS
+# =============================================================================
+
+@ecommerce_bp.route('/pricing')
+@require_ecommerce_permission('pricing', 'view')
+def pricing():
+    """Pricing & Promotions dashboard."""
+    company_id = session.get('company_id', 0)
+
+    # Get pricing stats
+    stats = {}
+    with get_db_context() as db:
+        price_lists = db.execute("""
+            SELECT COUNT(DISTINCT channel_id) as cnt
+            FROM ecommerce_channel_profiles
+            WHERE product_sync_enabled = 1
+        """).fetchone()
+        stats['active_price_lists'] = price_lists['cnt'] if price_lists else 0
+
+        active_promotions = db.execute("""
+            SELECT COUNT(*) as cnt FROM ecommerce_exceptions
+            WHERE company_id = ? AND exception_type = 'promotion_sync' AND status = 'open'
+        """, (company_id,)).fetchone()
+        stats['active_promotions'] = active_promotions['cnt'] if active_promotions else 0
+
+    return render_template('ecommerce/pricing/index.html', stats=stats)
+
+
+@ecommerce_bp.route('/pricing/lists')
+@require_ecommerce_permission('pricing', 'view')
+def pricing_lists():
+    """Channel price lists."""
+    company_id = session.get('company_id', 0)
+
+    channels = get_all("""
+        SELECT c.*, p.product_sync_enabled, p.inventory_sync_enabled
+        FROM ecommerce_channels c
+        LEFT JOIN ecommerce_channel_profiles p ON c.id = p.channel_id
+        WHERE c.company_id = ? AND c.is_active = 1
+        ORDER BY c.channel_name
+    """, (company_id,))
+
+    return render_template('ecommerce/pricing/lists.html', channels=channels)
+
+
+@ecommerce_bp.route('/pricing/promotions')
+@require_ecommerce_permission('pricing', 'view')
+def pricing_promotions():
+    """Promotions management."""
+    company_id = session.get('company_id', 0)
+
+    promotions = get_all("""
+        SELECT e.*, c.channel_name
+        FROM ecommerce_exceptions e
+        LEFT JOIN ecommerce_channels c ON e.channel_id = c.id
+        WHERE e.company_id = ? AND e.exception_type = 'promotion_sync'
+        ORDER BY e.created_at DESC
+    """, (company_id,))
+
+    return render_template('ecommerce/pricing/promotions.html', promotions=promotions)
+
+
+# =============================================================================
+# CRM / MARKETING LINKAGE
+# =============================================================================
+
+@ecommerce_bp.route('/crm-linkage')
+@require_ecommerce_permission('crm_linkage', 'view')
+def crm_linkage():
+    """CRM / Marketing Linkage dashboard."""
+    company_id = session.get('company_id', 0)
+
+    # Linkage stats
+    stats = {}
+    with get_db_context() as db:
+        # Customers with linked CRM profiles
+        linked = db.execute("""
+            SELECT COUNT(*) as cnt FROM ecommerce_customer_imports
+            WHERE company_id = ? AND internal_customer_id > 0
+        """, (company_id,)).fetchone()
+        stats['linked_customers'] = linked['cnt'] if linked else 0
+
+        # Orders from linked customers
+        orders_from_linked = db.execute("""
+            SELECT COUNT(*) as cnt FROM ecommerce_order_imports o
+            JOIN ecommerce_customer_imports c ON o.customer_email = c.email
+            WHERE c.company_id = ? AND c.internal_customer_id > 0
+        """, (company_id,)).fetchone()
+        stats['orders_from_linked'] = orders_from_linked['cnt'] if orders_from_linked else 0
+
+    return render_template('ecommerce/crm_linkage/index.html', stats=stats)
+
+
+@ecommerce_bp.route('/crm-linkage/customer-360')
+@require_ecommerce_permission('crm_linkage', 'view')
+def crm_linkage_customer_360():
+    """Customer 360 commerce view."""
+    company_id = session.get('company_id', 0)
+
+    customers = get_all("""
+        SELECT
+            c.*,
+            ch.channel_name,
+            COUNT(o.id) as order_count,
+            SUM(o.total_amount) as lifetime_value,
+            MAX(o.order_date) as last_order_date
+        FROM ecommerce_customer_imports c
+        LEFT JOIN ecommerce_channels ch ON c.channel_id = ch.id
+        LEFT JOIN ecommerce_order_imports o ON c.email = o.customer_email
+        WHERE c.company_id = ? AND c.internal_customer_id > 0
+        GROUP BY c.id
+        ORDER BY lifetime_value DESC
+        LIMIT 50
+    """, (company_id,))
+
+    return render_template('ecommerce/crm_linkage/customer_360.html', customers=customers)
+
+
+# =============================================================================
+# WORKFLOW & APPROVALS
+# =============================================================================
+
+@ecommerce_bp.route('/workflow')
+@require_ecommerce_permission('workflow', 'view')
+def workflow():
+    """Workflow & Approvals dashboard."""
+    company_id = session.get('company_id', 0)
+
+    # Get pending approvals
+    pending = get_all("""
+        SELECT e.*, c.channel_name
+        FROM ecommerce_exceptions e
+        LEFT JOIN ecommerce_channels c ON e.channel_id = c.id
+        WHERE e.company_id = ? AND e.status IN ('open', 'in_review')
+            AND e.severity IN ('high', 'critical')
+        ORDER BY e.created_at DESC
+        LIMIT 20
+    """, (company_id,))
+
+    return render_template('ecommerce/workflow/index.html', pending=pending)
+
+
+@ecommerce_bp.route('/workflow/pending')
+@require_ecommerce_permission('workflow', 'view')
+def workflow_pending():
+    """Pending approvals list."""
+    company_id = session.get('company_id', 0)
+
+    approvals = get_all("""
+        SELECT e.*, c.channel_name
+        FROM ecommerce_exceptions e
+        LEFT JOIN ecommerce_channels c ON e.channel_id = c.id
+        WHERE e.company_id = ? AND e.status IN ('open', 'in_review')
+        ORDER BY
+            CASE e.severity
+                WHEN 'critical' THEN 1
+                WHEN 'high' THEN 2
+                WHEN 'medium' THEN 3
+                ELSE 4
+            END,
+            e.created_at ASC
+    """, (company_id,))
+
+    return render_template('ecommerce/workflow/pending.html', approvals=approvals)
+
+
+@ecommerce_bp.route('/workflow/history')
+@require_ecommerce_permission('workflow', 'view')
+def workflow_history():
+    """Approval history."""
+    company_id = session.get('company_id', 0)
+
+    history = get_all("""
+        SELECT e.*, c.channel_name
+        FROM ecommerce_exceptions e
+        LEFT JOIN ecommerce_channels c ON e.channel_id = c.id
+        WHERE e.company_id = ? AND e.status IN ('resolved', 'cancelled')
+        ORDER BY e.resolved_at DESC
+        LIMIT 100
+    """, (company_id,))
+
+    return render_template('ecommerce/workflow/history.html', history=history)
+
+
+# =============================================================================
+# REPORTS - EXPORT CENTER
+# =============================================================================
+
+@ecommerce_bp.route('/reports/export')
+@require_ecommerce_permission('reports', 'export')
+def reports_export():
+    """Export center for e-commerce reports."""
+    company_id = session.get('company_id', 0)
+
+    return render_template('ecommerce/reports/export.html')
+
+
+# =============================================================================
 # SYNC ENGINE
 # =============================================================================
 
@@ -2097,6 +2907,139 @@ def sync_jobs():
     """, (company_id,))
     
     return render_template('ecommerce/sync_jobs.html', jobs=jobs)
+
+
+# =============================================================================
+# EXPORT ENDPOINTS - ALL 20 EXPORT TYPES
+# =============================================================================
+
+ECOMMERCE_EXPORT_TYPES = [
+    'csv', 'excel_text', 'excel_general', 'json', 'xml', 'txt',
+    'pdf', 'docx', 'html', 'printable', 'barcode', 'api',
+    'email', 'zip', 'backup', 'sql_dump', 'dashboard',
+    'summary', 'detailed', 'audit_log'
+]
+
+ECOMMERCE_EXPORT_COLUMNS = {
+    'orders': ['order_number', 'customer_name', 'email', 'total_amount', 'status', 'order_date'],
+    'channels': ['channel_name', 'platform', 'is_active', 'sync_status', 'last_sync'],
+    'customers': ['email', 'first_name', 'last_name', 'phone', 'total_orders', 'lifetime_value'],
+    'products': ['sku', 'item_name', 'channel_name', 'sync_status', 'price', 'stock'],
+    'inventory': ['sku', 'item_name', 'warehouse', 'quantity', 'reserved', 'available'],
+    'exceptions': ['exception_number', 'exception_type', 'title', 'severity', 'status', 'created_at'],
+    'audit': ['action', 'entity_type', 'user_name', 'timestamp', 'ip_address', 'changes']
+}
+
+
+@ecommerce_bp.route('/api/export/<export_type>', methods=['GET', 'POST'])
+@ecommerce_bp.route('/api/export/<data_type>/<export_type>', methods=['GET', 'POST'])
+@require_ecommerce_permission('reports', 'export')
+def api_export(export_type, data_type=None):
+    """Export e-commerce data in all 20 formats."""
+    if export_type not in ECOMMERCE_EXPORT_TYPES:
+        return jsonify({
+            'error': f'Invalid export type. Valid types: {ECOMMERCE_EXPORT_TYPES}'
+        }), 400
+
+    company_id = session.get('company_id', 0)
+
+    # Determine data type from URL or default
+    if data_type is None:
+        data_type = request.args.get('type', 'orders')
+
+    # Get data based on type
+    if data_type == 'orders':
+        data = get_all("""
+            SELECT o.*, c.channel_name
+            FROM ecommerce_order_imports o
+            LEFT JOIN ecommerce_channels c ON o.channel_id = c.id
+            WHERE o.company_id = ?
+            ORDER BY o.order_date DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = ECOMMERCE_EXPORT_COLUMNS['orders']
+        title = 'E-commerce Orders'
+    elif data_type == 'channels':
+        data = get_all("""
+            SELECT * FROM ecommerce_channels
+            WHERE company_id = ?
+            ORDER BY channel_name
+        """, (company_id,))
+        columns = ECOMMERCE_EXPORT_COLUMNS['channels']
+        title = 'E-commerce Channels'
+    elif data_type == 'customers':
+        data = get_all("""
+            SELECT c.*, ch.channel_name,
+                   COUNT(o.id) as total_orders,
+                   COALESCE(SUM(o.total_amount), 0) as lifetime_value
+            FROM ecommerce_customer_imports c
+            LEFT JOIN ecommerce_channels ch ON c.channel_id = ch.id
+            LEFT JOIN ecommerce_order_imports o ON c.email = o.customer_email
+            WHERE c.company_id = ?
+            GROUP BY c.id
+            ORDER BY lifetime_value DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = ECOMMERCE_EXPORT_COLUMNS['customers']
+        title = 'E-commerce Customers'
+    elif data_type == 'products':
+        data = get_all("""
+            SELECT pm.*, c.channel_name, i.item_name, i.item_sku
+            FROM ecommerce_product_mappings pm
+            JOIN ecommerce_channels c ON pm.channel_id = c.id
+            LEFT JOIN items i ON pm.internal_item_id = i.id
+            WHERE c.company_id = ?
+            ORDER BY pm.last_synced_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = ECOMMERCE_EXPORT_COLUMNS['products']
+        title = 'E-commerce Products'
+    elif data_type == 'inventory':
+        data = get_all("""
+            SELECT i.*, w.warehouse_name
+            FROM ecommerce_inventory_sync i
+            LEFT JOIN warehouses w ON i.warehouse_id = w.id
+            WHERE i.company_id = ?
+            ORDER BY i.last_synced_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = ECOMMERCE_EXPORT_COLUMNS['inventory']
+        title = 'E-commerce Inventory'
+    elif data_type == 'exceptions':
+        data = get_all("""
+            SELECT * FROM ecommerce_exceptions
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = ECOMMERCE_EXPORT_COLUMNS['exceptions']
+        title = 'E-commerce Exceptions'
+    elif data_type == 'audit':
+        data = get_all("""
+            SELECT * FROM ecommerce_audit_logs
+            WHERE company_id = ?
+            ORDER BY timestamp DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = ECOMMERCE_EXPORT_COLUMNS['audit']
+        title = 'E-commerce Audit Log'
+    else:
+        return jsonify({'error': f'Data type {data_type} not supported'}), 400
+
+    filename = f'ecommerce_{data_type}_{datetime.now().strftime("%Y%m%d")}'
+
+    return send_export_response(data, export_type, filename, columns, title)
+
+
+@ecommerce_bp.route('/api/export/list')
+@require_ecommerce_permission('reports', 'export')
+def list_export_types():
+    """List available export types for e-commerce module."""
+    return jsonify({
+        'module': 'ecommerce',
+        'data_types': list(ECOMMERCE_EXPORT_COLUMNS.keys()),
+        'export_types': [{'type': t} for t in ECOMMERCE_EXPORT_TYPES]
+    })
 
 
 # =============================================================================

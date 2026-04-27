@@ -796,6 +796,597 @@ MARKETING_TABLES = [
         FOREIGN KEY (marketing_role_id) REFERENCES marketing_roles(id),
         FOREIGN KEY (assigned_by_id) REFERENCES users(id)
     )""",
+
+    # -------------------------------------------------------------------------
+    # 26. Lead Scoring Rules
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_lead_scoring_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rule_name TEXT NOT NULL,
+        rule_code TEXT UNIQUE,
+        rule_type TEXT NOT NULL,
+        category TEXT NOT NULL,
+        attribute_field TEXT,
+        operator TEXT NOT NULL,
+        attribute_value TEXT,
+        score_change INTEGER NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        priority INTEGER DEFAULT 0,
+        description TEXT,
+        example_scenario TEXT,
+        created_by_user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 27. Lead Scores (calculated scores per lead)
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_lead_scores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lead_id INTEGER NOT NULL,
+        total_score INTEGER DEFAULT 0,
+        demographic_score INTEGER DEFAULT 0,
+        behavioral_score INTEGER DEFAULT 0,
+        engagement_score INTEGER DEFAULT 0,
+        mql_threshold INTEGER DEFAULT 50,
+        sql_threshold INTEGER DEFAULT 80,
+        is_mql INTEGER DEFAULT 0,
+        is_sql INTEGER DEFAULT 0,
+        score_grade TEXT DEFAULT 'Cold',
+        last_calculated_at DATETIME,
+        score_breakdown TEXT,
+        improvement_suggestions TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (lead_id) REFERENCES marketing_leads(id) ON DELETE CASCADE
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 28. Lead Score History
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_lead_score_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lead_id INTEGER NOT NULL,
+        score_change INTEGER NOT NULL,
+        previous_score INTEGER NOT NULL,
+        new_score INTEGER NOT NULL,
+        trigger_type TEXT NOT NULL,
+        trigger_description TEXT,
+        triggered_by_rule_id INTEGER,
+        triggered_by_user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (lead_id) REFERENCES marketing_leads(id) ON DELETE CASCADE,
+        FOREIGN KEY (triggered_by_rule_id) REFERENCES marketing_lead_scoring_rules(id),
+        FOREIGN KEY (triggered_by_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 29. Nurture Journeys
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_nurture_journeys (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        journey_name TEXT NOT NULL,
+        journey_code TEXT UNIQUE,
+        journey_type TEXT NOT NULL,
+        description TEXT,
+        objective TEXT,
+        target_segment_id INTEGER,
+        entry_trigger_type TEXT,
+        entry_trigger_config TEXT,
+        exit_criteria TEXT,
+        is_active INTEGER DEFAULT 0,
+        is_published INTEGER DEFAULT 0,
+        published_at DATETIME,
+        published_by_user_id INTEGER,
+        total_enrolled INTEGER DEFAULT 0,
+        total_completed INTEGER DEFAULT 0,
+        total_dropped INTEGER DEFAULT 0,
+        avg_completion_days INTEGER,
+        estimated_revenue DECIMAL(12,2) DEFAULT 0,
+        status TEXT DEFAULT 'Draft',
+        version INTEGER DEFAULT 1,
+        created_by_user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (target_segment_id) REFERENCES marketing_customer_segments(id),
+        FOREIGN KEY (published_by_user_id) REFERENCES users(id),
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 30. Journey Steps
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_journey_steps (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        journey_id INTEGER NOT NULL,
+        step_order INTEGER NOT NULL,
+        step_name TEXT NOT NULL,
+        step_type TEXT NOT NULL,
+        step_config TEXT,
+        delay_days INTEGER DEFAULT 0,
+        delay_hours INTEGER DEFAULT 0,
+        branch_condition TEXT,
+        branch_type TEXT,
+        success_metric TEXT,
+        failure_metric TEXT,
+        is_entry_step INTEGER DEFAULT 0,
+        is_exit_step INTEGER DEFAULT 0,
+        step_duration_hours INTEGER,
+        status TEXT DEFAULT 'Active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (journey_id) REFERENCES marketing_nurture_journeys(id) ON DELETE CASCADE
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 31. Journey Participants
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_journey_participants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        journey_id INTEGER NOT NULL,
+        lead_id INTEGER NOT NULL,
+        current_step_id INTEGER,
+        step_history TEXT,
+        enrolled_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_activity_at DATETIME,
+        completed_at DATETIME,
+        exit_reason TEXT,
+        exit_at DATETIME,
+        status TEXT DEFAULT 'Active',
+        email_sent_count INTEGER DEFAULT 0,
+        sms_sent_count INTEGER DEFAULT 0,
+        whatsapp_sent_count INTEGER DEFAULT 0,
+        push_sent_count INTEGER DEFAULT 0,
+        total_engagements INTEGER DEFAULT 0,
+        conversion_value DECIMAL(12,2) DEFAULT 0,
+        notes TEXT,
+        FOREIGN KEY (journey_id) REFERENCES marketing_nurture_journeys(id) ON DELETE CASCADE,
+        FOREIGN KEY (lead_id) REFERENCES marketing_leads(id) ON DELETE CASCADE,
+        FOREIGN KEY (current_step_id) REFERENCES marketing_journey_steps(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 32. Journey Step Events (tracking)
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_journey_step_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        participant_id INTEGER NOT NULL,
+        journey_id INTEGER NOT NULL,
+        step_id INTEGER NOT NULL,
+        event_type TEXT NOT NULL,
+        event_data TEXT,
+        occurred_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        channel TEXT,
+        content_id INTEGER,
+        FOREIGN KEY (participant_id) REFERENCES marketing_journey_participants(id) ON DELETE CASCADE,
+        FOREIGN KEY (journey_id) REFERENCES marketing_nurture_journeys(id) ON DELETE CASCADE,
+        FOREIGN KEY (step_id) REFERENCES marketing_journey_steps(id) ON DELETE CASCADE,
+        FOREIGN KEY (content_id) REFERENCES marketing_content(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 33. A/B Tests
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_ab_tests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        test_name TEXT NOT NULL,
+        test_code TEXT UNIQUE,
+        test_type TEXT NOT NULL,
+        hypothesis TEXT,
+        description TEXT,
+        target_segment_id INTEGER,
+        campaign_id INTEGER,
+        channel TEXT,
+        control_variant TEXT,
+        challenger_variant TEXT,
+        control_percentage INTEGER DEFAULT 50,
+        challenger_percentage INTEGER DEFAULT 50,
+        split_type TEXT DEFAULT 'equal',
+        success_metric TEXT,
+        winning_variant TEXT,
+        confidence_level DECIMAL(5,2),
+        uplift_percentage DECIMAL(5,2),
+        sample_size_required INTEGER,
+        actual_sample_size INTEGER DEFAULT 0,
+        start_date DATE,
+        end_date DATE,
+        status TEXT DEFAULT 'Draft',
+        is_conclusive INTEGER DEFAULT 0,
+        notes TEXT,
+        created_by_user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (target_segment_id) REFERENCES marketing_customer_segments(id),
+        FOREIGN KEY (campaign_id) REFERENCES marketing_campaigns(id),
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 34. A/B Test Variants
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_ab_test_variants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        test_id INTEGER NOT NULL,
+        variant_name TEXT NOT NULL,
+        variant_type TEXT DEFAULT 'control',
+        variant_config TEXT,
+        impressions INTEGER DEFAULT 0,
+        conversions INTEGER DEFAULT 0,
+        conversion_rate DECIMAL(5,2) DEFAULT 0,
+        clicks INTEGER DEFAULT 0,
+        ctr DECIMAL(5,2) DEFAULT 0,
+        engagements INTEGER DEFAULT 0,
+        revenue_generated DECIMAL(12,2) DEFAULT 0,
+        status TEXT DEFAULT 'Active',
+        FOREIGN KEY (test_id) REFERENCES marketing_ab_tests(id) ON DELETE CASCADE
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 35. Customer Journey Intelligence
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_journey_intelligence (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER,
+        lead_id INTEGER,
+        journey_stage TEXT NOT NULL,
+        touchpoint_type TEXT,
+        touchpoint_source TEXT,
+        touchpoint_name TEXT,
+        touchpoint_date DATETIME,
+        days_in_stage INTEGER DEFAULT 0,
+        is_conversion_point INTEGER DEFAULT 0,
+        conversion_value DECIMAL(12,2) DEFAULT 0,
+        channel_id INTEGER,
+        campaign_id INTEGER,
+        content_id INTEGER,
+        next_best_action TEXT,
+        churn_risk_score INTEGER,
+        engagement_score INTEGER,
+        sentiment_score INTEGER,
+        notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES sdad_customers(id),
+        FOREIGN KEY (lead_id) REFERENCES marketing_leads(id),
+        FOREIGN KEY (channel_id) REFERENCES marketing_channels(id),
+        FOREIGN KEY (campaign_id) REFERENCES marketing_campaigns(id),
+        FOREIGN KEY (content_id) REFERENCES marketing_content(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 36. Marketing Assets Library
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_assets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        asset_name TEXT NOT NULL,
+        asset_code TEXT UNIQUE,
+        asset_type TEXT NOT NULL,
+        category TEXT,
+        file_path TEXT,
+        file_url TEXT,
+        file_size INTEGER,
+        mime_type TEXT,
+        dimensions TEXT,
+        duration_seconds INTEGER,
+        thumbnail_path TEXT,
+        description TEXT,
+        tags TEXT,
+        usage_rights TEXT,
+        usage_count INTEGER DEFAULT 0,
+        last_used_at DATETIME,
+        campaign_usage TEXT,
+        approval_status TEXT DEFAULT 'Approved',
+        approved_by_user_id INTEGER,
+        approved_at DATETIME,
+        status TEXT DEFAULT 'Active',
+        version INTEGER DEFAULT 1,
+        metadata TEXT,
+        created_by_user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (approved_by_user_id) REFERENCES users(id),
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 37. Marketing Templates
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        template_name TEXT NOT NULL,
+        template_code TEXT UNIQUE,
+        template_type TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        category TEXT,
+        subject_line TEXT,
+        preview_text TEXT,
+        body_html TEXT,
+        body_text TEXT,
+        design_config TEXT,
+        personalization_fields TEXT,
+        approval_status TEXT DEFAULT 'Draft',
+        approved_by_user_id INTEGER,
+        approved_at DATETIME,
+        usage_count INTEGER DEFAULT 0,
+        last_used_at DATETIME,
+        avg_performance_score DECIMAL(5,2),
+        is_active INTEGER DEFAULT 1,
+        status TEXT DEFAULT 'Active',
+        version INTEGER DEFAULT 1,
+        created_by_user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (approved_by_user_id) REFERENCES users(id),
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 38. Marketing Communications Log
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_communications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        communication_type TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        recipient_type TEXT,
+        recipient_id INTEGER,
+        recipient_name TEXT,
+        recipient_phone TEXT,
+        recipient_email TEXT,
+        subject TEXT,
+        content_id INTEGER,
+        template_id INTEGER,
+        journey_id INTEGER,
+        journey_step_id INTEGER,
+        ab_test_id INTEGER,
+        variant_id INTEGER,
+        campaign_id INTEGER,
+        message_content TEXT,
+        scheduled_at DATETIME,
+        sent_at DATETIME,
+        delivered_at DATETIME,
+        opened_at DATETIME,
+        clicked_at DATETIME,
+        bounced_at DATETIME,
+        unsubscribed_at DATETIME,
+        status TEXT DEFAULT 'Pending',
+        error_message TEXT,
+        cost_per_message DECIMAL(8,4) DEFAULT 0,
+        total_cost DECIMAL(10,4) DEFAULT 0,
+        metadata TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (content_id) REFERENCES marketing_content(id),
+        FOREIGN KEY (template_id) REFERENCES marketing_templates(id),
+        FOREIGN KEY (journey_id) REFERENCES marketing_nurture_journeys(id),
+        FOREIGN KEY (journey_step_id) REFERENCES marketing_journey_steps(id),
+        FOREIGN KEY (ab_test_id) REFERENCES marketing_ab_tests(id),
+        FOREIGN KEY (variant_id) REFERENCES marketing_ab_test_variants(id),
+        FOREIGN KEY (campaign_id) REFERENCES marketing_campaigns(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 39. Marketing Export Configurations
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_export_configs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        config_name TEXT NOT NULL,
+        config_code TEXT UNIQUE,
+        export_type TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        report_type TEXT,
+        columns_config TEXT,
+        filters_config TEXT,
+        grouping_config TEXT,
+        sorting_config TEXT,
+        date_range_type TEXT DEFAULT 'custom',
+        date_range_days INTEGER DEFAULT 30,
+        output_format TEXT DEFAULT 'csv',
+        include_headers INTEGER DEFAULT 1,
+        include_totals INTEGER DEFAULT 1,
+        is_system_config INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_by_user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 40. Marketing Activity Log (detailed)
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_activity_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        activity_type TEXT NOT NULL,
+        entity_type TEXT,
+        entity_id INTEGER,
+        entity_name TEXT,
+        action TEXT,
+        field_changed TEXT,
+        old_value TEXT,
+        new_value TEXT,
+        change_reason TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        actor_user_id INTEGER,
+        actor_username TEXT,
+        branch_entity TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (actor_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 41. Marketing SLA Policies
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_sla_policies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        policy_name TEXT NOT NULL,
+        policy_code TEXT UNIQUE,
+        policy_type TEXT NOT NULL,
+        description TEXT,
+        target_entity_type TEXT,
+        priority_level TEXT,
+        response_time_hours INTEGER,
+        resolution_time_hours INTEGER,
+        escalation_1_user_id INTEGER,
+        escalation_2_user_id INTEGER,
+        auto_escalate INTEGER DEFAULT 1,
+        is_active INTEGER DEFAULT 1,
+        created_by_user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (escalation_1_user_id) REFERENCES users(id),
+        FOREIGN KEY (escalation_2_user_id) REFERENCES users(id),
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 42. Marketing SLA Instances
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_sla_instances (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        sla_policy_id INTEGER NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        entity_name TEXT,
+        priority TEXT,
+        status TEXT DEFAULT 'Active',
+        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        first_response_at DATETIME,
+        resolved_at DATETIME,
+        breached_at DATETIME,
+        current_assignee_id INTEGER,
+        escalated_to_user_id INTEGER,
+        escalation_level INTEGER DEFAULT 0,
+        notes TEXT,
+        FOREIGN KEY (sla_policy_id) REFERENCES marketing_sla_policies(id),
+        FOREIGN KEY (current_assignee_id) REFERENCES users(id),
+        FOREIGN KEY (escalated_to_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 43. Branch Marketing Configuration
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_branch_configs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        branch_entity TEXT NOT NULL,
+        branch_name TEXT,
+        marketing_enabled INTEGER DEFAULT 1,
+        default_campaign_type TEXT,
+        channel_priorities TEXT,
+        budget_allocation DECIMAL(12,2) DEFAULT 0,
+        target_leads_per_month INTEGER,
+        target_conversion_rate DECIMAL(5,2) DEFAULT 0,
+        local_contact_info TEXT,
+        local_social_links TEXT,
+        custom_settings TEXT,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 44. Marketing Notifications
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        notification_type TEXT NOT NULL,
+        notification_title TEXT NOT NULL,
+        notification_message TEXT,
+        recipient_user_id INTEGER,
+        recipient_role TEXT,
+        linked_entity_type TEXT,
+        linked_entity_id INTEGER,
+        linked_entity_name TEXT,
+        priority TEXT DEFAULT 'Normal',
+        is_read INTEGER DEFAULT 0,
+        read_at DATETIME,
+        action_url TEXT,
+        expires_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (recipient_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 45. Marketing Channel Deliverability
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_channel_deliverability (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel TEXT NOT NULL,
+        total_sent INTEGER DEFAULT 0,
+        total_delivered INTEGER DEFAULT 0,
+        total_opened INTEGER DEFAULT 0,
+        total_clicked INTEGER DEFAULT 0,
+        total_bounced INTEGER DEFAULT 0,
+        total_unsubscribed INTEGER DEFAULT 0,
+        total_complained INTEGER DEFAULT 0,
+        delivery_rate DECIMAL(5,2) DEFAULT 0,
+        open_rate DECIMAL(5,2) DEFAULT 0,
+        click_rate DECIMAL(5,2) DEFAULT 0,
+        bounce_rate DECIMAL(5,2) DEFAULT 0,
+        unsubscribe_rate DECIMAL(5,2) DEFAULT 0,
+        complaint_rate DECIMAL(5,2) DEFAULT 0,
+        period_start DATE,
+        period_end DATE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 46. Marketing Suppression Lists
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_suppression_list (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        suppression_type TEXT NOT NULL,
+        contact_value TEXT NOT NULL,
+        contact_type TEXT,
+        reason TEXT,
+        added_by_user_id INTEGER,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        expires_at DATETIME,
+        is_active INTEGER DEFAULT 1,
+        metadata TEXT,
+        FOREIGN KEY (added_by_user_id) REFERENCES users(id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 47. Marketing Attribution Models Config
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_attribution_models (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        model_name TEXT NOT NULL,
+        model_code TEXT UNIQUE,
+        model_type TEXT NOT NULL,
+        description TEXT,
+        config_params TEXT,
+        is_default INTEGER DEFAULT 0,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 48. Marketing ROI Metrics
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS marketing_roi_metrics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        entity_name TEXT,
+        period_start DATE,
+        period_end DATE,
+        total_investment DECIMAL(12,2) DEFAULT 0,
+        total_revenue DECIMAL(12,2) DEFAULT 0,
+        total_profit DECIMAL(12,2) DEFAULT 0,
+        roi_percentage DECIMAL(8,2) DEFAULT 0,
+        cost_per_lead DECIMAL(10,2) DEFAULT 0,
+        cost_per_conversion DECIMAL(10,2) DEFAULT 0,
+        cost_per_acquisition DECIMAL(10,2) DEFAULT 0,
+        cac DECIMAL(12,2) DEFAULT 0,
+        ltv DECIMAL(12,2) DEFAULT 0,
+        ltv_cac_ratio DECIMAL(5,2) DEFAULT 0,
+        payback_period_days INTEGER,
+        breakeven_point DECIMAL(12,2) DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )"""
 ]
 
 
@@ -989,6 +1580,31 @@ def run_marketing_migrations():
 
         # Seed default marketing roles
         seed_marketing_roles(conn)
+
+        # Seed lead scoring rules
+        seed_lead_scoring_rules(conn)
+
+        # Seed attribution models
+        seed_attribution_models(conn)
+
+        # Seed SLA policies
+        seed_sla_policies(conn)
+
+        # Seed marketing templates
+        seed_marketing_templates(conn)
+
+        # Seed export configurations
+        seed_marketing_export_configs(conn)
+
+        # Seed sample data for new features
+        seed_sample_lead_scores(conn)
+        seed_sample_nurture_journeys(conn)
+        seed_sample_ab_tests(conn)
+        seed_sample_journey_intelligence(conn)
+        seed_sample_sla_instances(conn)
+        seed_sample_branch_configs(conn)
+        seed_sample_notifications(conn)
+        seed_sample_communications(conn)
 
     finally:
         conn.close()
@@ -1221,6 +1837,434 @@ def seed_marketing_roles(conn):
                 role_data.get('can_view_all_data', 0),
             )
         )
+
+
+def seed_lead_scoring_rules(conn):
+    """Seed default lead scoring rules if not exist."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_lead_scoring_rules").fetchone()[0]
+    if existing > 0:
+        return
+
+    rules = [
+        # Demographic Rules
+        ('High Industry Match', 'LSR-IND-HIGH', 'demographic', 'industry', 'industry', 'equals', 'Auto Parts', 15, 1, 10, None, 'Industry matches target market profile'),
+        ('Medium Industry Match', 'LSR-IND-MED', 'demographic', 'industry', 'industry', 'equals', 'Manufacturing', 10, 1, 10, None, 'Manufacturing industry has moderate potential'),
+        ('Wholesale Customer Type', 'LSR-TYPE-WHOLESALE', 'demographic', 'customer_type', 'customer_type', 'equals', 'Wholesale', 12, 1, 10, None, 'Wholesale customers typically have higher value'),
+        ('Retail Customer Type', 'LSR-TYPE-RETAIL', 'demographic', 'customer_type', 'customer_type', 'equals', 'Retail', 8, 1, 10, None, 'Retail customers for volume'),
+        ('Export Market', 'LSR-MARKET-EXPORT', 'demographic', 'trade_type', 'trade_type', 'equals', 'Export', 15, 1, 10, None, 'Export customers for international growth'),
+        ('High Buying Power', 'LSR-BUY-HIGH', 'demographic', 'buying_power', 'buying_power', 'equals', 'High', 20, 1, 8, None, 'High buying power indicates larger orders'),
+        ('Medium Buying Power', 'LSR-BUY-MED', 'demographic', 'buying_power', 'buying_power', 'equals', 'Medium', 10, 1, 8, None, 'Medium buying power'),
+        ('Large Company Size', 'LSR-SIZE-LARGE', 'demographic', 'company_size', 'company_size', 'equals', 'Large', 15, 1, 7, None, 'Large companies for enterprise deals'),
+
+        # Behavioral Rules
+        ('Website Form Submit', 'LSR-BEH-WEB-FORM', 'behavioral', 'engagement_action', 'engagement_action', 'equals', 'website_form', 20, 1, 20, None, 'Submitted website inquiry form'),
+        ('WhatsApp Contact', 'LSR-BEH-WHATSAPP', 'behavioral', 'engagement_action', 'engagement_action', 'equals', 'whatsapp', 15, 1, 18, None, 'Contacted via WhatsApp'),
+        ('Phone Call Initiated', 'LSR-BEH-PHONE', 'behavioral', 'engagement_action', 'engagement_action', 'equals', 'phone_call', 12, 1, 16, None, 'Initiated phone call inquiry'),
+        ('Email Click', 'LSR-BEH-EMAIL-CLICK', 'behavioral', 'engagement_action', 'engagement_action', 'equals', 'email_click', 10, 1, 15, None, 'Clicked link in email'),
+        ('Email Open', 'LSR-BEH-EMAIL-OPEN', 'behavioral', 'engagement_action', 'engagement_action', 'equals', 'email_open', 5, 1, 14, None, 'Opened marketing email'),
+        ('Content Download', 'LSR-BEH-CONTENT-DL', 'behavioral', 'engagement_action', 'engagement_action', 'equals', 'content_download', 18, 1, 17, None, 'Downloaded content asset'),
+        ('Video Watch', 'LSR-BEH-VIDEO', 'behavioral', 'engagement_action', 'engagement_action', 'equals', 'video_watch', 8, 1, 12, None, 'Watched product video'),
+        ('Price Page View', 'LSR-BEH-PRICE', 'behavioral', 'engagement_action', 'engagement_action', 'equals', 'price_page', 12, 1, 14, None, 'Viewed pricing page'),
+        ('Multiple Page Views', 'LSR-BEH-MULTI-PAGE', 'behavioral', 'page_views', 'page_views', 'greater_than', '5', 10, 1, 13, None, 'Viewed more than 5 pages'),
+
+        # Engagement Rules
+        ('Follow-up Requested', 'LSR-ENG-FOLLOWUP', 'engagement', 'followup_requested', 'followup_requested', 'equals', 'true', 25, 1, 25, None, 'Requested follow-up meeting/call'),
+        ('Quotation Requested', 'LSR-ENG-QUOTE', 'engagement', 'quotation_requested', 'quotation_requested', 'equals', 'true', 30, 1, 30, None, 'Requested formal quotation'),
+        ('Site Visit Interest', 'LSR-ENG-SITE-VISIT', 'engagement', 'site_visit_interest', 'site_visit_interest', 'equals', 'true', 20, 1, 22, None, 'Expressed interest in warehouse visit'),
+        ('Demo Request', 'LSR-ENG-DEMO', 'engagement', 'demo_requested', 'demo_requested', 'equals', 'true', 25, 1, 26, None, 'Requested product demonstration'),
+        ('Bulk Order Intent', 'LSR-ENG-BULK', 'engagement', 'bulk_order_intent', 'bulk_order_intent', 'equals', 'true', 30, 1, 28, None, 'Indicated bulk ordering intent'),
+        ('Repeat Inquiry', 'LSR-ENG-REPEAT', 'engagement', 'is_repeat_inquiry', 'is_repeat_inquiry', 'equals', 'true', 15, 1, 18, None, 'Has made previous inquiries'),
+
+        # Negative Rules
+        ('No Response 7 Days', 'LSR-NEG-NO-RESP-7', 'behavioral', 'days_since_contact', 'days_since_contact', 'greater_than', '7', -5, 1, 5, None, 'No response for 7+ days'),
+        ('No Response 14 Days', 'LSR-NEG-NO-RESP-14', 'behavioral', 'days_since_contact', 'days_since_contact', 'greater_than', '14', -10, 1, 8, None, 'No response for 14+ days'),
+        ('Email Bounced', 'LSR-NEG-BOUNCED', 'behavioral', 'email_bounced', 'email_bounced', 'equals', 'true', -20, 1, 15, None, 'Email address bounced'),
+        ('Unsubscribed', 'LSR-NEG-UNSUB', 'behavioral', 'unsubscribed', 'unsubscribed', 'equals', 'true', -25, 1, 20, None, 'Unsubscribed from communications'),
+        ('Invalid Phone', 'LSR-NEG-PHONE-INVALID', 'demographic', 'phone_valid', 'phone_valid', 'equals', 'false', -10, 1, 10, None, 'Phone number invalid'),
+    ]
+
+    for rule in rules:
+        conn.execute("""
+            INSERT OR IGNORE INTO marketing_lead_scoring_rules
+            (rule_name, rule_code, rule_type, category, attribute_field, operator, attribute_value, score_change, is_active, priority, example_scenario, description)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, rule)
+
+
+def seed_attribution_models(conn):
+    """Seed default attribution models if not exist."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_attribution_models").fetchone()[0]
+    if existing > 0:
+        return
+
+    models = [
+        ('First Touch Attribution', 'ATTR-FIRST', 'first_touch', '100% credit to first marketing touchpoint', json.dumps({'first_weight': 100, 'middle_weight': 0, 'last_weight': 0}), 1),
+        ('Last Touch Attribution', 'ATTR-LAST', 'last_touch', '100% credit to last marketing touchpoint', json.dumps({'first_weight': 0, 'middle_weight': 0, 'last_weight': 100}), 0),
+        ('Linear Attribution', 'ATTR-LINEAR', 'linear', 'Equal credit to all marketing touchpoints', json.dumps({'weight_distribution': 'equal'}), 0),
+        ('Time Decay Attribution', 'ATTR-TIME-DECAY', 'time_decay', 'More credit to recent touchpoints (exponential decay)', json.dumps({'decay_rate': 0.7, 'half_life_days': 7}), 0),
+        ('Position Based Attribution', 'ATTR-POSITION', 'position_based', '40% first touch, 20% middle, 40% last touch', json.dumps({'first_weight': 40, 'middle_weight': 20, 'last_weight': 40}), 0),
+        ('Custom Attribution', 'ATTR-CUSTOM', 'custom', 'Custom attribution weights based on business rules', json.dumps({'weights': {}}), 0),
+    ]
+
+    for model in models:
+        conn.execute("""
+            INSERT OR IGNORE INTO marketing_attribution_models
+            (model_name, model_code, model_type, description, config_params, is_default)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, model)
+
+
+def seed_sla_policies(conn):
+    """Seed default SLA policies if not exist."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_sla_policies").fetchone()[0]
+    if existing > 0:
+        return
+
+    policies = [
+        ('Lead Response SLA', 'SLA-LEAD-RESP', 'lead_response', 'Response time for new leads', 'lead', 'High', 2, 24, 1),
+        ('Lead Response SLA Medium', 'SLA-LEAD-RESP-MED', 'lead_response', 'Response time for medium priority leads', 'lead', 'Medium', 4, 48, 1),
+        ('Lead Response SLA Low', 'SLA-LEAD-RESP-LOW', 'lead_response', 'Response time for low priority leads', 'lead', 'Low', 8, 72, 1),
+        ('Campaign Approval SLA', 'SLA-CAMP-APPROVE', 'campaign_approval', 'Campaign approval turnaround', 'campaign', 'High', 24, 72, 1),
+        ('Campaign Approval SLA Normal', 'SLA-CAMP-APPROVE-NORM', 'campaign_approval', 'Standard campaign approval', 'campaign', 'Normal', 48, 168, 1),
+        ('Content Approval SLA', 'SLA-CONTENT-APPROVE', 'content_approval', 'Content approval turnaround', 'content', 'High', 4, 24, 1),
+        ('Offer Response SLA', 'SLA-OFFER-RESP', 'offer_response', 'Response time for offer requests', 'offer', 'High', 1, 8, 1),
+        ('Complaint Resolution SLA', 'SLA-COMPLAINT', 'complaint_resolution', 'Customer complaint resolution', 'complaint', 'Critical', 1, 24, 1),
+    ]
+
+    for policy in policies:
+        conn.execute("""
+            INSERT OR IGNORE INTO marketing_sla_policies
+            (policy_name, policy_code, policy_type, description, target_entity_type, priority_level, response_time_hours, resolution_time_hours, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, policy)
+
+
+def seed_marketing_templates(conn):
+    """Seed default marketing templates if not exist."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_templates").fetchone()[0]
+    if existing > 0:
+        return
+
+    templates = [
+        ('Welcome Email', 'TMPL-WELCOME', 'email', 'email', 'Welcome', 'Welcome to Our Family!', 'Thank you for choosing us', '<h1>Welcome</h1><p>Dear {{customer_name}},</p><p>Welcome to our family!</p>', 'Dear Customer, Thank you for choosing us.', 'Approved'),
+        ('Lead Nurture Email', 'TMPL-LEAD-NURTURE', 'email', 'email', 'Nurture', 'Following Up on Your Inquiry', 'Just checking in', '<h1>Follow Up</h1><p>Dear {{customer_name}},</p><p>We wanted to follow up on your recent inquiry.</p>', 'Dear Customer, We wanted to follow up.', 'Approved'),
+        ('Promotional Email', 'TMPL-PROMO', 'email', 'email', 'Promotion', 'Special Offer Just for You!', 'Limited time offer inside', '<h1>Special Offer</h1><p>Dear {{customer_name}},</p><p>Check out our exclusive deals!</p>', 'Dear Customer, Check out our exclusive deals!', 'Approved'),
+        ('SMS Promotion', 'TMPL-SMS-PROMO', 'sms', 'sms', 'Promotion', None, None, None, 'Dear Customer, Special offer just for you! Visit {{link}}', 'Approved'),
+        ('WhatsApp Greeting', 'TMPL-WA-GREET', 'whatsapp', 'whatsapp', 'Greeting', None, None, None, 'Hello {{customer_name}}! Thank you for contacting us. How can we help you today?', 'Approved'),
+        ('Follow-up WhatsApp', 'TMPL-WA-FOLLOWUP', 'whatsapp', 'whatsapp', 'Follow-up', None, None, None, 'Hello {{customer_name}}, Just wanted to check if you have any questions about our products.', 'Approved'),
+        ('Push Notification', 'TMPL-PUSH-OFFER', 'push', 'push', 'Promotion', 'New Offer Available!', None, None, 'Check out our latest offer!', 'Approved'),
+    ]
+
+    for template in templates:
+        conn.execute("""
+            INSERT OR IGNORE INTO marketing_templates
+            (template_name, template_code, template_type, channel, category, subject_line, preview_text, body_html, body_text, approval_status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, template)
+
+
+def seed_marketing_export_configs(conn):
+    """Seed default export configurations if not exist."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_export_configs WHERE is_system_config = 1").fetchone()[0]
+    if existing > 0:
+        return
+
+    configs = [
+        ('Campaign Export Standard', 'EXP-CAMP-STANDARD', 'campaign', 'campaign', 'campaign_performance', 'csv', 1, 1, 1),
+        ('Lead Export Standard', 'EXP-LEAD-STANDARD', 'lead', 'lead', 'lead_list', 'csv', 1, 1, 1),
+        ('Segment Export', 'EXP-SEG-EXPORT', 'segment', 'segment', 'segment_members', 'csv', 1, 1, 1),
+        ('Channel Performance Export', 'EXP-CHAN-PERF', 'channel', 'channel', 'channel_performance', 'excel', 1, 1, 1),
+        ('Journey Performance Export', 'EXP-JOURNEY-PERF', 'journey', 'journey', 'journey_performance', 'excel', 1, 1, 1),
+        ('ROI Summary Export', 'EXP-ROI-SUMMARY', 'roi', 'campaign', 'roi_summary', 'excel', 1, 1, 1),
+        ('Attribution Export', 'EXP-ATTR-EXPORT', 'attribution', 'campaign', 'attribution_report', 'csv', 1, 1, 1),
+    ]
+
+    for config in configs:
+        conn.execute("""
+            INSERT OR IGNORE INTO marketing_export_configs
+            (config_name, config_code, export_type, entity_type, report_type, output_format, include_headers, include_totals, is_system_config)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, config)
+
+
+def seed_sample_lead_scores(conn):
+    """Seed sample lead scores for existing leads."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_lead_scores").fetchone()[0]
+    if existing > 0:
+        return
+
+    leads = conn.execute("SELECT id FROM marketing_leads LIMIT 50").fetchall()
+    import random
+    import datetime
+
+    for lead in leads:
+        demographic_score = random.randint(10, 40)
+        behavioral_score = random.randint(5, 35)
+        engagement_score = random.randint(0, 30)
+        total_score = demographic_score + behavioral_score + engagement_score
+
+        if total_score >= 80:
+            grade = 'Hot'
+            is_mql = 1
+            is_sql = 1
+        elif total_score >= 50:
+            grade = 'Warm'
+            is_mql = 1
+            is_sql = 0
+        else:
+            grade = 'Cold'
+            is_mql = 0
+            is_sql = 0
+
+        conn.execute("""
+            INSERT INTO marketing_lead_scores
+            (lead_id, total_score, demographic_score, behavioral_score, engagement_score, is_mql, is_sql, score_grade, last_calculated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (lead['id'], total_score, demographic_score, behavioral_score, engagement_score, is_mql, is_sql, grade))
+
+
+def seed_sample_nurture_journeys(conn):
+    """Seed sample nurture journeys."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_nurture_journeys").fetchone()[0]
+    if existing > 0:
+        return
+
+    journeys = [
+        ('Welcome Series', 'JRN-WELCOME-001', 'welcome', 'New customer onboarding series', 'Introduce brand and products to new customers', None, 'segment_join', 'Draft', 1, 1),
+        ('Hot Lead Nurture', 'JRN-HOT-001', 'lead_nurture', 'Nurture hot leads to conversion', 'High-value lead nurturing for Auto Parts segment', None, 'score_threshold', 'Active', 1, 1),
+        ('Re-engagement Campaign', 'JRN-REENGAGE-001', 'reengagement', 'Win back dormant customers', 'Re-activate customers with no purchase in 90+ days', None, 'time_inactive', 'Active', 1, 1),
+        ('Product Launch Series', 'JRN-LAUNCH-001', 'lead_nurture', 'New product awareness campaign', 'Generate buzz and leads for new product line', None, 'campaign_enroll', 'Draft', 1, 1),
+        ('Upsell Journey', 'JRN-UPSELL-001', 'upsell', 'Increase average order value', 'Target existing customers with complementary products', None, 'purchase_history', 'Active', 1, 1),
+    ]
+
+    for name, code, jtype, desc, obj, seg_id, trigger, status, published, user_id in journeys:
+        cursor = conn.execute("""
+            INSERT INTO marketing_nurture_journeys
+            (journey_name, journey_code, journey_type, description, objective, target_segment_id, entry_trigger_type, status, is_published, is_active, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (name, code, jtype, desc, obj, seg_id, trigger, status, published, 1, user_id))
+        journey_id = cursor.lastrowid
+
+        # Add journey steps
+        if jtype == 'welcome':
+            steps = [
+                ('Welcome Email', 'email', 0, 1),
+                ('Product Highlights', 'email', 24, 0),
+                ('Special Offer', 'email', 72, 0),
+                ('Feedback Request', 'sms', 120, 0),
+            ]
+        elif jtype == 'lead_nurture':
+            steps = [
+                ('Initial Outreach', 'email', 0, 1),
+                ('Value Proposition', 'email', 24, 0),
+                ('Case Study', 'email', 72, 0),
+                ('Limited Offer', 'sms', 120, 0),
+                ('Final Follow-up', 'whatsapp', 168, 0),
+            ]
+        else:
+            steps = [
+                ('Re-engagement Email', 'email', 0, 1),
+                ('Discount Offer', 'email', 48, 0),
+                ('Last Chance', 'sms', 96, 0),
+            ]
+
+        for i, (sname, stype, delay, is_entry) in enumerate(steps):
+            conn.execute("""
+                INSERT INTO marketing_journey_steps
+                (journey_id, step_order, step_name, step_type, delay_hours, is_entry_step)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (journey_id, i + 1, sname, stype, delay, is_entry))
+
+
+def seed_sample_ab_tests(conn):
+    """Seed sample A/B tests."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_ab_tests").fetchone()[0]
+    if existing > 0:
+        return
+
+    campaigns = conn.execute("SELECT id FROM marketing_campaigns LIMIT 10").fetchall()
+
+    tests = [
+        ('Email Subject Line Test', 'AB-SUBJ-001', 'subject_line', 'Testing if personalized subject lines increase open rates',
+         'We believe personalized subject lines will increase email open rates by 15%', campaigns[0]['id'] if campaigns else None,
+         'email', 'Standard Subject', 'Personalized Subject', 50, 'open_rate', '2026-04-01', '2026-04-15', 'Active', 1),
+        ('CTA Button Color Test', 'AB-CTA-001', 'cta', 'Testing green vs blue CTA buttons',
+         'Green CTA buttons will drive more clicks than blue', campaigns[0]['id'] if campaigns else None,
+         'email', 'Blue CTA Button', 'Green CTA Button', 50, 'click_rate', '2026-04-05', '2026-04-20', 'Active', 1),
+        ('Email Content Length', 'AB-CONTENT-001', 'content', 'Testing short vs long email formats',
+         'Shorter emails will have higher conversion rates', campaigns[1]['id'] if len(campaigns) > 1 else None,
+         'email', 'Long Format', 'Short Format', 50, 'conversion_rate', '2026-04-10', '2026-04-25', 'Draft', 1),
+    ]
+
+    for test in tests:
+        cursor = conn.execute("""
+            INSERT INTO marketing_ab_tests
+            (test_name, test_code, test_type, hypothesis, description, campaign_id, channel,
+             control_variant, challenger_variant, control_percentage, success_metric,
+             start_date, end_date, status, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, test)
+        test_id = cursor.lastrowid
+
+        # Add variants
+        conn.execute("""
+            INSERT INTO marketing_ab_test_variants
+            (test_id, variant_name, variant_type, impressions, conversions, conversion_rate, clicks)
+            VALUES (?, ?, 'control', ?, ?, ?, ?)
+        """, (test_id, test[8], 1500, 75, 5.0, 450))
+
+        conn.execute("""
+            INSERT INTO marketing_ab_test_variants
+            (test_id, variant_name, variant_type, impressions, conversions, conversion_rate, clicks)
+            VALUES (?, ?, 'challenger', ?, ?, ?, ?)
+        """, (test_id, test[9], 1500, 105, 7.0, 520))
+
+
+def seed_sample_journey_intelligence(conn):
+    """Seed sample customer journey intelligence data."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_journey_intelligence").fetchone()[0]
+    if existing > 0:
+        return
+
+    leads = conn.execute("SELECT id FROM marketing_leads LIMIT 100").fetchall()
+    channels = conn.execute("SELECT id FROM marketing_channels LIMIT 5").fetchall()
+    campaigns = conn.execute("SELECT id FROM marketing_campaigns LIMIT 5").fetchall()
+    import random
+
+    stages = ['Awareness', 'Consideration', 'Conversion', 'Retention', 'Advocacy']
+    touchpoint_types = ['Website Visit', 'Email Open', 'Email Click', 'Form Submit', 'Purchase', 'Support Contact']
+    actions = ['Send Promotional Email', 'Offer Discount', 'Schedule Call', 'Send Case Study', 'Provide Demo']
+
+    for lead in leads:
+        for i in range(random.randint(2, 6)):
+            stage = random.choice(stages)
+            channel_id = channels[random.randint(0, len(channels)-1)]['id'] if channels else None
+            campaign_id = campaigns[random.randint(0, len(campaigns)-1)]['id'] if campaigns else None
+
+            conn.execute("""
+                INSERT INTO marketing_journey_intelligence
+                (lead_id, customer_id, channel_id, campaign_id, journey_stage, touchpoint_type, touchpoint_name,
+                 engagement_score, churn_risk_score, next_best_action, touchpoint_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (
+                lead['id'],
+                None,
+                channel_id,
+                campaign_id,
+                stage,
+                random.choice(touchpoint_types),
+                f"{random.choice(touchpoint_types)} - {random.choice(['Homepage', 'Product Page', 'Landing Page', 'Email', 'SMS'])}",
+                random.randint(20, 95),
+                random.randint(5, 80),
+                random.choice(actions) if random.random() > 0.3 else None
+            ))
+
+
+def seed_sample_sla_instances(conn):
+    """Seed sample SLA instances."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_sla_instances").fetchone()[0]
+    if existing > 0:
+        return
+
+    campaigns = conn.execute("SELECT id, name FROM marketing_campaigns WHERE approval_state = 'Pending' LIMIT 5").fetchall()
+    policies = conn.execute("SELECT id, policy_name FROM marketing_sla_policies LIMIT 3").fetchall()
+
+    for campaign in campaigns:
+        if policies:
+            conn.execute("""
+                INSERT INTO marketing_sla_instances
+                (sla_policy_id, entity_type, entity_id, entity_name, status, priority, started_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            """, (
+                policies[0]['id'],
+                'campaign',
+                campaign['id'],
+                campaign['name'],
+                'Active',
+                'High'
+            ))
+
+
+def seed_sample_branch_configs(conn):
+    """Seed sample branch marketing configurations."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_branch_configs").fetchone()[0]
+    if existing > 0:
+        return
+
+    branches = [
+        ('Tehran Main Branch', 'TEH-MAIN', 'Retail', 50000, 500, 8.5),
+        ('Isfahan Branch', 'ISF-BRANCH', 'Retail', 30000, 300, 7.5),
+        ('Shiraz Branch', 'SHI-BRANCH', 'Wholesale', 40000, 200, 6.0),
+        ('Online Channel', 'ONLINE-CH', 'Digital', 60000, 800, 10.0),
+    ]
+
+    for name, code, btype, budget, leads, conversion in branches:
+        conn.execute("""
+            INSERT INTO marketing_branch_configs
+            (branch_entity, branch_name, default_campaign_type, budget_allocation,
+             target_leads_per_month, target_conversion_rate, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+        """, (code, name, btype, budget, leads, conversion))
+
+
+def seed_sample_notifications(conn):
+    """Seed sample marketing notifications."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_notifications").fetchone()[0]
+    if existing > 0:
+        return
+
+    notifications = [
+        ('Campaign Approval Required', 'Campaign "Spring Sale 2026" is awaiting your approval', 'approval', 'Medium', '/marketing/approvals'),
+        ('Lead Score Alert', '3 new hot leads detected in Automotive segment', 'alert', 'High', '/marketing/lead-scoring'),
+        ('Journey Milestone', 'Welcome Series reached 100 participants', 'milestone', 'Low', '/marketing/journeys/view/1'),
+        ('Budget Alert', 'Email campaign at 85% of allocated budget', 'alert', 'Medium', '/marketing/budgets'),
+        ('A/B Test Complete', 'Subject Line Test has reached statistical significance', 'test', 'Medium', '/marketing/ab-tests/view/1'),
+        ('SLA Warning', 'Campaign approval overdue by 2 days', 'sla', 'High', '/marketing/sla-monitoring'),
+    ]
+
+    users = conn.execute("SELECT id FROM users LIMIT 3").fetchall()
+    for title, message, ntype, priority, action_url in notifications:
+        for user in users:
+            conn.execute("""
+                INSERT INTO marketing_notifications
+                (recipient_user_id, notification_title, notification_message, notification_type, priority, action_url, is_read)
+                VALUES (?, ?, ?, ?, ?, ?, 0)
+            """, (user['id'], title, message, ntype, priority, action_url))
+
+
+def seed_sample_communications(conn):
+    """Seed sample marketing communications/delivery logs."""
+    existing = conn.execute("SELECT COUNT(*) FROM marketing_communications").fetchone()[0]
+    if existing > 0:
+        return
+
+    channels = conn.execute("SELECT id, channel_type FROM marketing_channels").fetchall()
+    import random
+
+    statuses = ['Sent', 'Delivered', 'Opened', 'Clicked', 'Bounced', 'Unsubscribed']
+
+    for channel in channels:
+        for i in range(20):
+            status = random.choice(statuses)
+            conn.execute("""
+                INSERT INTO marketing_communications
+                (channel_id, channel, recipient, subject, status, sent_at, delivered_at, opened_at, clicked_at,
+                 bounced_at, total_cost, is_active)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP,
+                    CASE WHEN ? IN ('Delivered', 'Opened', 'Clicked') THEN CURRENT_TIMESTAMP ELSE NULL END,
+                    CASE WHEN ? IN ('Opened', 'Clicked') THEN CURRENT_TIMESTAMP ELSE NULL END,
+                    CASE WHEN ? = 'Clicked' THEN CURRENT_TIMESTAMP ELSE NULL END,
+                    CASE WHEN ? = 'Bounced' THEN CURRENT_TIMESTAMP ELSE NULL END,
+                    ?, 1)
+            """, (
+                channel['id'],
+                channel['channel_type'],
+                f"contact{i}@example.com",
+                f"Campaign Update {i+1}",
+                status,
+                status, status, status, status,
+                random.uniform(0.01, 0.50)
+            ))
 
 
 def get_user_marketing_permissions(user_id: int) -> List[str]:

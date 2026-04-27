@@ -268,7 +268,7 @@ def register_document_routes(app):
     # DOCUMENT DASHBOARD
     # =========================================================================
     
-    @app.route('/documents/')
+    @app.route('/documents')
     @app.route('/documents/dashboard')
     @require_login
     @document_permission_required('view')
@@ -1205,7 +1205,8 @@ def register_document_routes(app):
     # DOCUMENT TEMPLATES
     # =========================================================================
     
-    @app.route('/documents/templates/')
+    @app.route('/documents/templates')
+    @app.route('/documents/templates/list')
     @require_login
     def documents_templates():
         """List all document templates."""
@@ -1347,7 +1348,7 @@ def register_document_routes(app):
     # E-SIGNATURE WORKFLOWS
     # =========================================================================
     
-    @app.route('/documents/signatures/')
+    @app.route('/documents/signatures')
     @require_login
     def documents_signatures():
         """List all signature requests."""
@@ -1664,7 +1665,7 @@ def register_document_routes(app):
     # REPORTS
     # =========================================================================
     
-    @app.route('/documents/reports/')
+    @app.route('/documents/reports')
     @require_login
     def documents_reports():
         """Document management reports."""
@@ -1807,7 +1808,7 @@ def register_document_routes(app):
     # CATEGORIES AND TAGS MANAGEMENT
     # =========================================================================
     
-    @app.route('/documents/categories/')
+    @app.route('/documents/categories')
     @require_login
     @document_permission_required('view')
     def documents_categories():
@@ -1918,7 +1919,7 @@ def register_document_routes(app):
         
         return jsonify({'success': True, 'message': 'Category deleted successfully'})
     
-    @app.route('/documents/tags/')
+    @app.route('/documents/tags')
     @require_login
     @document_permission_required('view')
     def documents_tags():
@@ -1974,7 +1975,7 @@ def register_document_routes(app):
     # SETTINGS
     # =========================================================================
     
-    @app.route('/documents/settings/')
+    @app.route('/documents/settings')
     @require_login
     def documents_settings():
         """Document management settings."""
@@ -2018,7 +2019,7 @@ def register_document_routes(app):
     # AUDIT LOGS
     # =========================================================================
     
-    @app.route('/documents/audit-logs/')
+    @app.route('/documents/audit-logs')
     @require_login
     @document_permission_required('view')
     def documents_audit_logs():
@@ -2045,7 +2046,7 @@ def register_document_routes(app):
     # LINKED RECORDS VIEW
     # =========================================================================
     
-    @app.route('/documents/linked-records/')
+    @app.route('/documents/linked-records')
     @require_login
     def documents_linked_records():
         """View documents linked to business records."""
@@ -2098,6 +2099,17 @@ def get_document_stats_for_user(user_id):
         'published_documents': 0,
         'archived_documents': 0,
         'recent_activity_count': 0,
+        'pending_review': 0,
+        'pending_approval': 0,
+        'checked_out': 0,
+        'expiring_soon': 0,
+        'expired': 0,
+        'total_versions': 0,
+        'total_templates': 0,
+        'total_folders': 0,
+        'legal_holds_active': 0,
+        'by_status': {},
+        'by_category': {},
     }
     
     # Total documents accessible by user
@@ -2158,6 +2170,77 @@ def get_document_stats_for_user(user_id):
         WHERE user_id = ? AND created_at > datetime('now', '-7 days')
     """, (user_id,))
     stats['recent_activity_count'] = result['cnt'] if result else 0
+    
+    # Pending reviews
+    result = get_one("""
+        SELECT COUNT(*) as cnt FROM dms_document_reviews 
+        WHERE review_status = 'Pending'
+    """)
+    stats['pending_review'] = result['cnt'] if result else 0
+    
+    # Pending approvals
+    result = get_one("""
+        SELECT COUNT(*) as cnt FROM dms_document_approvals 
+        WHERE approval_status = 'Pending'
+    """)
+    stats['pending_approval'] = result['cnt'] if result else 0
+    
+    # Checked out documents
+    result = get_one("""
+        SELECT COUNT(*) as cnt FROM document_checkout 
+        WHERE check_out_expires_at IS NULL OR check_out_expires_at > datetime('now')
+    """)
+    stats['checked_out'] = result['cnt'] if result else 0
+    
+    # Expiring soon (within 30 days)
+    result = get_one("""
+        SELECT COUNT(*) as cnt FROM documents 
+        WHERE expiry_date IS NOT NULL 
+        AND expiry_date <= date('now', '+30 days') 
+        AND expiry_date >= date('now')
+        AND is_archived = 0
+    """)
+    stats['expiring_soon'] = result['cnt'] if result else 0
+    
+    # Expired documents
+    result = get_one("""
+        SELECT COUNT(*) as cnt FROM documents 
+        WHERE expiry_date IS NOT NULL 
+        AND expiry_date < date('now')
+    """)
+    stats['expired'] = result['cnt'] if result else 0
+    
+    # Total versions
+    result = get_one("SELECT COUNT(*) as cnt FROM document_versions")
+    stats['total_versions'] = result['cnt'] if result else 0
+    
+    # Total templates
+    result = get_one("SELECT COUNT(*) as cnt FROM document_templates WHERE is_active = 1")
+    stats['total_templates'] = result['cnt'] if result else 0
+    
+    # Total folders
+    result = get_one("SELECT COUNT(*) as cnt FROM document_folders WHERE is_archived = 0")
+    stats['total_folders'] = result['cnt'] if result else 0
+    
+    # Active legal holds
+    result = get_one("SELECT COUNT(*) as cnt FROM dms_legal_holds WHERE status = 'Active'")
+    stats['legal_holds_active'] = result['cnt'] if result else 0
+    
+    # Documents by status
+    rows = get_all("""
+        SELECT status, COUNT(*) as cnt FROM documents 
+        WHERE status IS NOT NULL GROUP BY status
+    """)
+    stats['by_status'] = {r['status']: r['cnt'] for r in rows}
+    
+    # Documents by category
+    rows = get_all("""
+        SELECT c.name, COUNT(d.id) as cnt 
+        FROM document_categories c
+        LEFT JOIN documents d ON c.id = d.category_id
+        GROUP BY c.id, c.name
+    """)
+    stats['by_category'] = {r['name']: r['cnt'] for r in rows if r['name']}
     
     return stats
 
@@ -3354,3 +3437,1210 @@ def handle_signature_request_create(document_id, user_id):
                 related_id=document_id
             )
         return jsonify({'success': True})
+
+    # =========================================================================
+    # PENDING REVIEW
+    # =========================================================================
+
+    @app.route('/documents/pending-review')
+    @require_login
+    def documents_pending_review():
+        """Documents pending review."""
+        user_id = get_current_user_id()
+
+        reviews = get_all("""
+            SELECT r.*, d.title as document_title, d.document_code,
+                   u.username as reviewer_username
+            FROM dms_document_reviews r
+            JOIN documents d ON r.document_id = d.id
+            LEFT JOIN users u ON r.reviewer_user_id = u.id
+            WHERE r.review_status = 'Pending'
+            ORDER BY r.due_date ASC, r.review_requested_at DESC
+        """)
+
+        return render_template('documents/pending_review.html',
+            reviews=reviews,
+            page_title='Pending Document Reviews')
+
+    @app.route('/documents/<int:document_id>/review', methods=['GET', 'POST'])
+    @require_login
+    def documents_review_document(document_id):
+        """Review a document."""
+        user_id = get_current_user_id()
+
+        if request.method == 'POST':
+            status = request.form.get('review_status')
+            comments = request.form.get('review_comments')
+            score = request.form.get('review_score')
+
+            with get_db_context() as db:
+                db.execute("""
+                    UPDATE dms_document_reviews
+                    SET review_status = ?, review_comments = ?, review_score = ?,
+                        review_completed_at = datetime('now')
+                    WHERE document_id = ? AND reviewer_user_id = ?
+                """, (status, comments, score, document_id, user_id))
+                db.commit()
+
+            return jsonify({'success': True, 'message': 'Review completed'})
+
+        review = get_one("""
+            SELECT r.*, d.title, d.document_code, d.description
+            FROM dms_document_reviews r
+            JOIN documents d ON r.document_id = d.id
+            WHERE r.document_id = ? AND r.reviewer_user_id = ?
+        """, (document_id, user_id))
+
+        return render_template('documents/review_form.html',
+            review=review,
+            page_title='Review Document')
+
+    # =========================================================================
+    # PENDING APPROVAL
+    # =========================================================================
+
+    @app.route('/documents/pending-approval')
+    @require_login
+    def documents_pending_approval():
+        """Documents pending approval."""
+        user_id = get_current_user_id()
+
+        approvals = get_all("""
+            SELECT a.*, d.title as document_title, d.document_code,
+                   u.username as approver_username
+            FROM dms_document_approvals a
+            JOIN documents d ON a.document_id = d.id
+            LEFT JOIN users u ON a.approver_user_id = u.id
+            WHERE a.approval_status = 'Pending'
+            ORDER BY a.due_date ASC, a.approval_requested_at DESC
+        """)
+
+        return render_template('documents/pending_approval.html',
+            approvals=approvals,
+            page_title='Pending Document Approvals')
+
+    @app.route('/documents/<int:document_id>/approve', methods=['GET', 'POST'])
+    @require_login
+    def documents_approve_document(document_id):
+        """Approve a document."""
+        user_id = get_current_user_id()
+
+        if request.method == 'POST':
+            status = request.form.get('approval_status')
+            comments = request.form.get('approval_comments')
+            rejection = request.form.get('rejection_reason', '')
+
+            with get_db_context() as db:
+                db.execute("""
+                    UPDATE dms_document_approvals
+                    SET approval_status = ?, approval_comments = ?,
+                        rejection_reason = ?, approval_completed_at = datetime('now')
+                    WHERE document_id = ? AND approver_user_id = ?
+                """, (status, comments, rejection, document_id, user_id))
+
+                if status == 'Approved':
+                    db.execute("""
+                        UPDATE documents
+                        SET approved_by_user_id = ?, approved_at = datetime('now'), status = 'Approved'
+                        WHERE id = ?
+                    """, (user_id, document_id))
+
+                db.commit()
+
+            return jsonify({'success': True, 'message': 'Approval recorded'})
+
+        approval = get_one("""
+            SELECT a.*, d.title, d.document_code, d.description
+            FROM dms_document_approvals a
+            JOIN documents d ON a.document_id = d.id
+            WHERE a.document_id = ? AND a.approver_user_id = ?
+        """, (document_id, user_id))
+
+        return render_template('documents/approval_form.html',
+            approval=approval,
+            page_title='Approve Document')
+
+    # =========================================================================
+    # ACCESS CONTROL
+    # =========================================================================
+
+    @app.route('/documents/access-control')
+    @require_login
+    def documents_access_control():
+        """Document access control management."""
+        user_id = get_current_user_id()
+
+        acls = get_all("""
+            SELECT acl.*, d.title as document_title, d.document_code,
+                   u.username as user_name, r.name as role_name
+            FROM dms_document_acl acl
+            JOIN documents d ON acl.document_id = d.id
+            LEFT JOIN users u ON acl.user_id = u.id
+            LEFT JOIN roles r ON acl.role_id = r.id
+            ORDER BY d.title, acl.created_at DESC
+        """)
+
+        available_documents = get_all("SELECT id, title, document_code FROM documents ORDER BY title LIMIT 100")
+        users = get_all("SELECT id, username FROM users WHERE is_active = 1 ORDER BY username")
+        roles = get_all("SELECT id, name FROM roles WHERE is_active = 1 ORDER BY name")
+
+        return render_template('documents/access_control.html',
+            acls=acls,
+            available_documents=available_documents,
+            users=users,
+            roles=roles,
+            page_title='Document Access Control')
+
+    @app.route('/documents/<int:document_id>/acl', methods=['GET', 'POST'])
+    @require_login
+    def documents_document_acl(document_id):
+        """Manage document ACL."""
+        user_id = get_current_user_id()
+
+        if request.method == 'POST':
+            user_id_target = request.form.get('user_id')
+            role_id = request.form.get('role_id')
+            permission_type = request.form.get('permission_type')
+            permission_level = request.form.get('permission_level', 'Read')
+
+            with get_db_context() as db:
+                db.execute("""
+                    INSERT INTO dms_document_acl
+                    (document_id, user_id, role_id, permission_type, permission_level, granted_by_user_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (document_id, user_id_target, role_id, permission_type, permission_level, user_id))
+                db.commit()
+
+            return jsonify({'success': True, 'message': 'ACL entry added'})
+
+        acl_entries = get_all("""
+            SELECT acl.*, u.username, r.name as role_name
+            FROM dms_document_acl acl
+            LEFT JOIN users u ON acl.user_id = u.id
+            LEFT JOIN roles r ON acl.role_id = r.id
+            WHERE acl.document_id = ?
+            ORDER BY acl.created_at DESC
+        """, (document_id,))
+
+        document = get_one("SELECT * FROM documents WHERE id = ?", (document_id,))
+        users = get_all("SELECT id, username FROM users WHERE is_active = 1")
+        roles = get_all("SELECT * FROM roles WHERE is_active = 1")
+
+        return render_template('documents/document_acl.html',
+            document=document,
+            acl_entries=acl_entries,
+            users=users,
+            roles=roles,
+            page_title='Document Access Control')
+
+    @app.route('/documents/acl/<int:acl_id>/delete', methods=['POST'])
+    @require_login
+    def documents_delete_acl(acl_id):
+        """Delete an ACL entry."""
+        user_id = get_current_user_id()
+
+        with get_db_context() as db:
+            db.execute("DELETE FROM dms_document_acl WHERE id = ?", (acl_id,))
+            db.commit()
+
+        return jsonify({'success': True, 'message': 'ACL entry deleted'})
+
+    @app.route('/documents/acl/add', methods=['POST'])
+    @require_login
+    def documents_add_acl():
+        """Add a new ACL entry from the access control page."""
+        user_id = get_current_user_id()
+
+        document_id = request.form.get('document_id')
+        user_id_target = request.form.get('user_id') or None
+        role_id = request.form.get('role_id') or None
+        permission_type = request.form.get('permission_type', 'User')
+        permission_level = request.form.get('permission_level', 'Read')
+
+        if not document_id:
+            flash('Please select a document.', 'error')
+            return redirect(url_for('documents_access_control'))
+
+        with get_db_context() as db:
+            db.execute("""
+                INSERT INTO dms_document_acl (document_id, user_id, role_id, permission_type, permission_level, granted_by_user_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (document_id, user_id_target, role_id, permission_type, permission_level, user_id))
+            db.commit()
+
+        flash('ACL entry added successfully.', 'success')
+        return redirect(url_for('documents_access_control'))
+
+    # =========================================================================
+    # RETENTION POLICIES
+    # =========================================================================
+
+    @app.route('/documents/retention-policies')
+    @require_login
+    def documents_retention_policies():
+        """Document retention policies."""
+        user_id = get_current_user_id()
+
+        policies = get_all("""
+            SELECT p.*,
+                   (SELECT COUNT(*) FROM document_retention_schedules WHERE policy_id = p.id) as document_count
+            FROM document_retention_policies p
+            ORDER BY p.policy_name
+        """)
+
+        return render_template('documents/retention_policies.html',
+            policies=policies,
+            page_title='Document Retention Policies')
+
+    @app.route('/documents/retention-policies/create', methods=['GET', 'POST'])
+    @require_login
+    def documents_create_retention_policy():
+        """Create a retention policy."""
+        user_id = get_current_user_id()
+
+        if request.method == 'POST':
+            policy_name = request.form.get('policy_name')
+            policy_code = request.form.get('policy_code')
+            description = request.form.get('description')
+            retention_days = request.form.get('retention_period_days')
+            retention_basis = request.form.get('retention_basis', 'creation_date')
+            archive_before = 1 if request.form.get('archive_before_delete') else 0
+            review_required = 1 if request.form.get('review_required') else 0
+
+            with get_db_context() as db:
+                db.execute("""
+                    INSERT INTO document_retention_policies
+                    (policy_name, policy_code, description, retention_period_days,
+                     retention_basis, archive_before_delete, review_required)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (policy_name, policy_code, description, retention_days,
+                      retention_basis, archive_before, review_required))
+                db.commit()
+
+            return jsonify({'success': True, 'message': 'Policy created'})
+
+        return render_template('documents/retention_policy_form.html',
+            page_title='Create Retention Policy')
+
+    @app.route('/documents/retention-policies/<int:policy_id>/edit', methods=['GET', 'POST'])
+    @require_login
+    def documents_edit_retention_policy(policy_id):
+        """Edit a retention policy."""
+        user_id = get_current_user_id()
+
+        policy = get_one("SELECT * FROM document_retention_policies WHERE id = ?", (policy_id,))
+
+        if request.method == 'POST':
+            policy_name = request.form.get('policy_name')
+            description = request.form.get('description')
+            retention_days = request.form.get('retention_period_days')
+
+            with get_db_context() as db:
+                db.execute("""
+                    UPDATE document_retention_policies
+                    SET policy_name = ?, description = ?, retention_period_days = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                """, (policy_name, description, retention_days, policy_id))
+                db.commit()
+
+            return jsonify({'success': True, 'message': 'Policy updated'})
+
+        return render_template('documents/retention_policy_form.html',
+            policy=policy,
+            page_title='Edit Retention Policy')
+
+    @app.route('/documents/retention-schedules')
+    @require_login
+    def documents_retention_schedules():
+        """View retention schedules."""
+        user_id = get_current_user_id()
+
+        schedules = get_all("""
+            SELECT s.*, p.policy_name, d.title as document_title, d.document_code,
+                   u.username as reviewed_by_username
+            FROM document_retention_schedules s
+            JOIN document_retention_policies p ON s.policy_id = p.id
+            JOIN documents d ON s.document_id = d.id
+            LEFT JOIN users u ON s.reviewed_by_user_id = u.id
+            ORDER BY s.expires_at ASC
+        """)
+
+        return render_template('documents/retention_schedules.html',
+            schedules=schedules,
+            page_title='Retention Schedules')
+
+    # =========================================================================
+    # LEGAL HOLDS
+    # =========================================================================
+
+    @app.route('/documents/legal-holds')
+    @require_login
+    def documents_legal_holds():
+        """Legal holds management."""
+        user_id = get_current_user_id()
+
+        holds = get_all("""
+            SELECT h.*,
+                   (SELECT COUNT(*) FROM dms_legal_hold_documents WHERE hold_id = h.id) as document_count,
+                   u.username as requested_by_username
+            FROM dms_legal_holds h
+            LEFT JOIN users u ON h.requested_by_user_id = u.id
+            ORDER BY h.created_at DESC
+        """)
+
+        return render_template('documents/legal_holds.html',
+            holds=holds,
+            page_title='Legal Holds')
+
+    @app.route('/documents/legal-holds/create', methods=['GET', 'POST'])
+    @require_login
+    def documents_create_legal_hold():
+        """Create a legal hold."""
+        user_id = get_current_user_id()
+
+        if request.method == 'POST':
+            hold_name = request.form.get('hold_name')
+            hold_ref = request.form.get('hold_reference')
+            hold_type = request.form.get('hold_type', 'Legal')
+            description = request.form.get('description')
+            reason = request.form.get('reason')
+            case_ref = request.form.get('legal_case_ref')
+            start_date = request.form.get('start_date')
+            end_date = request.form.get('end_date')
+            permanent = 1 if request.form.get('is_permanent') else 0
+
+            with get_db_context() as db:
+                db.execute("""
+                    INSERT INTO dms_legal_holds
+                    (hold_name, hold_reference, hold_type, description, reason,
+                     legal_case_ref, start_date, end_date, is_permanent, requested_by_user_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (hold_name, hold_ref, hold_type, description, reason,
+                      case_ref, start_date, end_date, permanent, user_id))
+                db.commit()
+
+            return jsonify({'success': True, 'message': 'Legal hold created'})
+
+        return render_template('documents/legal_hold_form.html',
+            page_title='Create Legal Hold')
+
+    @app.route('/documents/legal-holds/<int:hold_id>')
+    @require_login
+    def documents_legal_hold_detail(hold_id):
+        """View legal hold details."""
+        user_id = get_current_user_id()
+
+        hold = get_one("""
+            SELECT h.*, u.username as requested_by_username
+            FROM dms_legal_holds h
+            LEFT JOIN users u ON h.requested_by_user_id = u.id
+            WHERE h.id = ?
+        """, (hold_id,))
+
+        documents = get_all("""
+            SELECT d.*, hd.added_at, hd.notes, u.username as added_by_username
+            FROM dms_legal_hold_documents hd
+            JOIN documents d ON hd.document_id = d.id
+            LEFT JOIN users u ON hd.added_by_user_id = u.id
+            WHERE hd.hold_id = ?
+        """, (hold_id,))
+
+        return render_template('documents/legal_hold_detail.html',
+            hold=hold,
+            documents=documents,
+            page_title='Legal Hold Details')
+
+    @app.route('/documents/legal-holds/<int:hold_id>/add-document', methods=['POST'])
+    @require_login
+    def documents_add_to_legal_hold(hold_id):
+        """Add a document to legal hold."""
+        user_id = get_current_user_id()
+        document_id = request.form.get('document_id')
+        notes = request.form.get('notes', '')
+
+        with get_db_context() as db:
+            db.execute("""
+                INSERT INTO dms_legal_hold_documents (hold_id, document_id, added_by_user_id, notes)
+                VALUES (?, ?, ?, ?)
+            """, (hold_id, document_id, user_id, notes))
+            db.commit()
+
+        return jsonify({'success': True, 'message': 'Document added to legal hold'})
+
+    @app.route('/documents/legal-holds/<int:hold_id>/release', methods=['POST'])
+    @require_login
+    def documents_release_legal_hold(hold_id):
+        """Release a legal hold."""
+        user_id = get_current_user_id()
+
+        with get_db_context() as db:
+            db.execute("""
+                UPDATE dms_legal_holds SET status = 'Released', updated_at = datetime('now')
+                WHERE id = ?
+            """, (hold_id,))
+            db.commit()
+
+        return jsonify({'success': True, 'message': 'Legal hold released'})
+
+    # =========================================================================
+    # EXPORT CENTER
+    # =========================================================================
+
+    @app.route('/documents/export-center')
+    @require_login
+    def documents_export_center():
+        """Document export center."""
+        user_id = get_current_user_id()
+
+        presets = get_all("""
+            SELECT e.*, u.username as created_by_username
+            FROM dms_export_presets e
+            LEFT JOIN users u ON e.created_by_user_id = u.id
+            ORDER BY e.usage_count DESC
+        """)
+
+        return render_template('documents/export_center.html',
+            presets=presets,
+            page_title='Document Export Center')
+
+    @app.route('/documents/export', methods=['GET', 'POST'])
+    @require_login
+    def documents_export():
+        """Export documents."""
+        user_id = get_current_user_id()
+
+        if request.method == 'POST':
+            export_format = request.form.get('format', 'csv')
+            document_ids = request.form.getlist('document_ids')
+            include_columns = request.form.get('columns', '')
+
+            if not document_ids:
+                flash('Please select at least one document to export.', 'warning')
+                return redirect(url_for('documents_export_center'))
+
+            placeholders = ','.join('?' * len(document_ids))
+            docs = get_all(f"""
+                SELECT d.*, c.name as category_name
+                FROM documents d
+                LEFT JOIN document_categories c ON d.category_id = c.id
+                WHERE d.id IN ({placeholders})
+            """, document_ids)
+
+            if not docs:
+                flash('No documents found for export.', 'warning')
+                return redirect(url_for('documents_export_center'))
+
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+            if export_format == 'csv':
+                import csv
+                import io
+                output = io.StringIO()
+                columns = ['document_code', 'title', 'category_name', 'status', 'visibility', 'owner_user_id', 'created_at', 'updated_at']
+                if include_columns:
+                    columns = [c.strip() for c in include_columns.split(',')]
+                writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore')
+                writer.writeheader()
+                for doc in docs:
+                    row = {col: doc.get(col, '') for col in columns}
+                    writer.writerow(row)
+
+                output.seek(0)
+                return send_file(
+                    io.BytesIO(output.getvalue().encode('utf-8')),
+                    mimetype='text/csv',
+                    as_attachment=True,
+                    download_name=f'documents_export_{timestamp}.csv'
+                )
+
+            elif export_format == 'excel':
+                try:
+                    import openpyxl
+                    from openpyxl.styles import Font, Alignment, PatternFill
+
+                    wb = openpyxl.Workbook()
+                    ws = wb.active
+                    ws.title = 'Documents'
+
+                    # Headers
+                    headers = ['Code', 'Title', 'Category', 'Status', 'Visibility', 'Owner', 'Created', 'Updated']
+                    header_fill = PatternFill(start_color='4F46E5', end_color='4F46E5', fill_type='solid')
+                    header_font = Font(color='FFFFFF', bold=True)
+
+                    for col, header in enumerate(headers, 1):
+                        cell = ws.cell(row=1, column=col, value=header)
+                        cell.fill = header_fill
+                        cell.font = header_font
+                        cell.alignment = Alignment(horizontal='center')
+
+                    # Data
+                    for row_idx, doc in enumerate(docs, 2):
+                        ws.cell(row=row_idx, column=1, value=doc.get('document_code', ''))
+                        ws.cell(row=row_idx, column=2, value=doc.get('title', ''))
+                        ws.cell(row=row_idx, column=3, value=doc.get('category_name', ''))
+                        ws.cell(row=row_idx, column=4, value=doc.get('status', ''))
+                        ws.cell(row=row_idx, column=5, value=doc.get('visibility', ''))
+                        ws.cell(row=row_idx, column=6, value=doc.get('owner_user_id', ''))
+                        ws.cell(row=row_idx, column=7, value=str(doc.get('created_at', ''))[:10])
+                        ws.cell(row=row_idx, column=8, value=str(doc.get('updated_at', ''))[:10])
+
+                    # Auto column width
+                    for col in ws.columns:
+                        max_length = 0
+                        column = col[0].column_letter
+                        for cell in col:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)
+                        ws.column_dimensions[column].width = adjusted_width
+
+                    output = io.BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+
+                    return send_file(
+                        output,
+                        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        as_attachment=True,
+                        download_name=f'documents_export_{timestamp}.xlsx'
+                    )
+                except ImportError:
+                    flash('Excel export requires openpyxl library. Using CSV instead.', 'warning')
+                    return redirect(url_for('documents_export'))
+
+            elif export_format == 'excel_general':
+                try:
+                    import openpyxl
+                    from openpyxl.styles import Font, Alignment, PatternFill
+                    wb = openpyxl.Workbook()
+                    ws = wb.active
+                    ws.title = 'Documents'
+                    headers = ['Code', 'Title', 'Category', 'Status', 'Visibility', 'Owner', 'Created', 'Updated']
+                    header_fill = PatternFill(start_color='4F46E5', end_color='4F46E5', fill_type='solid')
+                    header_font = Font(color='FFFFFF', bold=True)
+                    for col, header in enumerate(headers, 1):
+                        cell = ws.cell(row=1, column=col, value=header)
+                        cell.fill = header_fill
+                        cell.font = header_font
+                        cell.alignment = Alignment(horizontal='center')
+                    for row_idx, doc in enumerate(docs, 2):
+                        ws.cell(row=row_idx, column=1, value=doc.get('document_code', ''))
+                        ws.cell(row=row_idx, column=2, value=doc.get('title', ''))
+                        ws.cell(row=row_idx, column=3, value=doc.get('category_name', ''))
+                        ws.cell(row=row_idx, column=4, value=doc.get('status', ''))
+                        ws.cell(row=row_idx, column=5, value=doc.get('visibility', ''))
+                        ws.cell(row=row_idx, column=6, value=doc.get('owner_user_id', ''))
+                        ws.cell(row=row_idx, column=7, value=str(doc.get('created_at', ''))[:10])
+                        ws.cell(row=row_idx, column=8, value=str(doc.get('updated_at', ''))[:10])
+                    for col in ws.columns:
+                        max_length = 0
+                        column = col[0].column_letter
+                        for cell in col:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)
+                        ws.column_dimensions[column].width = adjusted_width
+                    output = io.BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+                    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=f'documents_export_{timestamp}.xlsx')
+                except ImportError:
+                    flash('Excel export requires openpyxl.', 'error')
+                    return redirect(url_for('documents_export_center'))
+
+            elif export_format == 'pdf':
+                try:
+                    from reportlab.lib.pagesizes import letter, A4
+                    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+                    from reportlab.lib.units import inch
+                    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+                    from reportlab.lib import colors
+
+                    output = io.BytesIO()
+                    doc = SimpleDocTemplate(output, pagesize=A4)
+                    elements = []
+                    styles = getSampleStyleSheet()
+
+                    # Title
+                    title_style = ParagraphStyle(
+                        'CustomTitle',
+                        parent=styles['Heading1'],
+                        fontSize=18,
+                        spaceAfter=30,
+                        textColor=colors.HexColor('#4F46E5')
+                    )
+                    elements.append(Paragraph('Document Export Report', title_style))
+                    elements.append(Spacer(1, 0.25 * inch))
+
+                    # Table data
+                    table_data = [['Code', 'Title', 'Category', 'Status', 'Created']]
+                    for doc_item in docs:
+                        table_data.append([
+                            doc_item.get('document_code', '')[:20],
+                            doc_item.get('title', '')[:40],
+                            doc_item.get('category_name', '')[:20],
+                            doc_item.get('status', ''),
+                            str(doc_item.get('created_at', ''))[:10]
+                        ])
+
+                    table = Table(table_data, colWidths=[1.2*inch, 2.5*inch, 1.2*inch, 0.8*inch, 1*inch])
+                    table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F46E5')),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, 0), 10),
+                        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+                        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+                        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                        ('FONTSIZE', (0, 1), (-1, -1), 8),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E5E7EB')),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F9FAFB')]),
+                    ]))
+                    elements.append(table)
+
+                    # Footer
+                    elements.append(Spacer(1, 0.5 * inch))
+                    footer_style = ParagraphStyle(
+                        'Footer',
+                        parent=styles['Normal'],
+                        fontSize=8,
+                        textColor=colors.gray
+                    )
+                    elements.append(Paragraph(f'Generated on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | Total documents: {len(docs)}', footer_style))
+
+                    doc.build(elements)
+                    output.seek(0)
+
+                    return send_file(
+                        output,
+                        mimetype='application/pdf',
+                        as_attachment=True,
+                        download_name=f'documents_export_{timestamp}.pdf'
+                    )
+                except ImportError:
+                    flash('PDF export requires reportlab library. Using CSV instead.', 'warning')
+                    return redirect(url_for('documents_export'))
+
+            elif export_format == 'json':
+                import json
+                export_data = []
+                for doc_item in docs:
+                    export_data.append({
+                        'code': doc_item.get('document_code', ''),
+                        'title': doc_item.get('title', ''),
+                        'category': doc_item.get('category_name', ''),
+                        'status': doc_item.get('status', ''),
+                        'visibility': doc_item.get('visibility', ''),
+                        'created_at': str(doc_item.get('created_at', '')),
+                        'updated_at': str(doc_item.get('updated_at', ''))
+                    })
+
+                output = io.BytesIO()
+                output.write(json.dumps(export_data, indent=2).encode('utf-8'))
+                output.seek(0)
+
+                return send_file(
+                    output,
+                    mimetype='application/json',
+                    as_attachment=True,
+                    download_name=f'documents_export_{timestamp}.json'
+                )
+
+        # GET request - show export center
+        documents = get_all("""
+            SELECT d.*, c.name as category_name
+            FROM documents d
+            LEFT JOIN document_categories c ON d.category_id = c.id
+            ORDER BY d.updated_at DESC
+            LIMIT 500
+        """)
+
+        presets = get_all("""
+            SELECT e.*, u.username as created_by_username
+            FROM dms_export_presets e
+            LEFT JOIN users u ON e.created_by_user_id = u.id
+            ORDER BY e.usage_count DESC
+        """)
+
+        categories = get_all("SELECT * FROM document_categories WHERE is_active = 1")
+
+        return render_template('documents/export_center.html',
+            documents=documents,
+            presets=presets,
+            categories=categories,
+            page_title='Document Export Center')
+
+    @app.route('/documents/export/preset/create', methods=['GET', 'POST'])
+    @require_login
+    def documents_create_export_preset():
+        """Create export preset."""
+        user_id = get_current_user_id()
+
+        if request.method == 'POST':
+            preset_name = request.form.get('preset_name')
+            preset_code = request.form.get('preset_code')
+            export_format = request.form.get('export_format', 'CSV')
+            columns = request.form.get('include_columns', '')
+            date_from = request.form.get('date_range_start')
+            date_to = request.form.get('date_range_end')
+
+            with get_db_context() as db:
+                db.execute("""
+                    INSERT INTO dms_export_presets
+                    (preset_name, preset_code, export_format, include_columns,
+                     date_range_start, date_range_end, created_by_user_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (preset_name, preset_code, export_format, columns, date_from, date_to, user_id))
+                db.commit()
+
+            return jsonify({'success': True, 'message': 'Preset created'})
+
+        return render_template('documents/export_preset_form.html',
+            page_title='Create Export Preset')
+
+    @app.route('/documents/export/preset/<int:preset_id>', methods=['GET', 'POST'])
+    @require_login
+    def documents_run_export_preset(preset_id):
+        """Run an export preset."""
+        user_id = get_current_user_id()
+
+        preset = get_one("SELECT * FROM dms_export_presets WHERE id = ?", (preset_id,))
+        if not preset:
+            flash('Export preset not found.', 'error')
+            return redirect(url_for('documents_export_center'))
+
+        if request.method == 'POST':
+            export_format = preset['export_format'] if preset['export_format'] else 'csv'
+            include_columns = preset['include_columns'] if preset['include_columns'] else ''
+            filter_criteria = preset.get('filter_criteria')
+
+            where_clause = "1=1"
+            params = []
+            if filter_criteria:
+                try:
+                    import json
+                    fc = json.loads(filter_criteria)
+                    if fc.get('status'):
+                        where_clause += " AND d.status = ?"
+                        params.append(fc['status'])
+                    if fc.get('category_id'):
+                        where_clause += " AND d.category_id = ?"
+                        params.append(fc['category_id'])
+                except:
+                    pass
+
+            docs = get_all(f"""
+                SELECT d.*, c.name as category_name
+                FROM documents d
+                LEFT JOIN document_categories c ON d.category_id = c.id
+                WHERE {where_clause}
+                ORDER BY d.updated_at DESC
+                LIMIT 500
+            """, params)
+
+            if not docs:
+                flash('No documents found matching the preset filter.', 'warning')
+                return redirect(url_for('documents_export_center'))
+
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+            if export_format == 'csv':
+                import csv
+                import io
+                output = io.StringIO()
+                columns = ['document_code', 'title', 'category_name', 'status', 'visibility', 'owner_user_id', 'created_at', 'updated_at']
+                if include_columns:
+                    columns = [c.strip() for c in include_columns.split(',')]
+                writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore')
+                writer.writeheader()
+                for doc in docs:
+                    row = {col: doc.get(col, '') for col in columns}
+                    writer.writerow(row)
+                output.seek(0)
+                return send_file(
+                    io.BytesIO(output.getvalue().encode('utf-8')),
+                    mimetype='text/csv',
+                    as_attachment=True,
+                    download_name=f'documents_export_{timestamp}.csv'
+                )
+            elif export_format in ['excel', 'Excel']:
+                try:
+                    import openpyxl
+                    from openpyxl.styles import Font, Alignment, PatternFill
+                    wb = openpyxl.Workbook()
+                    ws = wb.active
+                    ws.title = 'Documents'
+                    headers = ['Code', 'Title', 'Category', 'Status', 'Visibility', 'Owner', 'Created', 'Updated']
+                    header_fill = PatternFill(start_color='4F46E5', end_color='4F46E5', fill_type='solid')
+                    header_font = Font(color='FFFFFF', bold=True)
+                    for col, header in enumerate(headers, 1):
+                        cell = ws.cell(row=1, column=col, value=header)
+                        cell.fill = header_fill
+                        cell.font = header_font
+                        cell.alignment = Alignment(horizontal='center')
+                    for row_idx, doc in enumerate(docs, 2):
+                        ws.cell(row=row_idx, column=1, value=doc.get('document_code', ''))
+                        ws.cell(row=row_idx, column=2, value=doc.get('title', ''))
+                        ws.cell(row=row_idx, column=3, value=doc.get('category_name', ''))
+                        ws.cell(row=row_idx, column=4, value=doc.get('status', ''))
+                        ws.cell(row=row_idx, column=5, value=doc.get('visibility', ''))
+                        ws.cell(row=row_idx, column=6, value=doc.get('owner_user_id', ''))
+                        ws.cell(row=row_idx, column=7, value=str(doc.get('created_at', ''))[:10])
+                        ws.cell(row=row_idx, column=8, value=str(doc.get('updated_at', ''))[:10])
+                    output = io.BytesIO()
+                    wb.save(output)
+                    output.seek(0)
+                    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=f'documents_export_{timestamp}.xlsx')
+                except ImportError:
+                    flash('Excel export requires openpyxl.', 'error')
+                    return redirect(url_for('documents_export_center'))
+            elif export_format == 'json':
+                import json
+                export_data = [{'code': d.get('document_code', ''), 'title': d.get('title', ''), 'category': d.get('category_name', ''), 'status': d.get('status', ''), 'visibility': d.get('visibility', ''), 'created_at': str(d.get('created_at', '')), 'updated_at': str(d.get('updated_at', ''))} for d in docs]
+                output = io.BytesIO()
+                output.write(json.dumps(export_data, indent=2).encode('utf-8'))
+                output.seek(0)
+                return send_file(output, mimetype='application/json', as_attachment=True, download_name=f'documents_export_{timestamp}.json')
+            else:
+                flash(f'Format {export_format} not supported.', 'error')
+                return redirect(url_for('documents_export_center'))
+
+        return redirect(url_for('documents_export_center'))
+
+    @app.route('/documents/export/preset/<int:preset_id>/delete', methods=['POST'])
+    @require_login
+    def documents_delete_export_preset(preset_id):
+        """Delete an export preset."""
+        with get_db_context() as db:
+            db.execute("DELETE FROM dms_export_presets WHERE id = ?", (preset_id,))
+            db.commit()
+        flash('Export preset deleted.', 'success')
+        return redirect(url_for('documents_export_center'))
+
+    # =========================================================================
+    # CATEGORIES METADATA
+    # =========================================================================
+
+    @app.route('/documents/categories-metadata')
+    @require_login
+    def documents_categories_metadata():
+        """Document categories metadata management."""
+        user_id = get_current_user_id()
+
+        definitions = get_all("""
+            SELECT md.*, c.name as category_name
+            FROM dms_metadata_definitions md
+            LEFT JOIN document_categories c ON md.category_id = c.id
+            ORDER BY md.field_code
+        """)
+
+        categories = get_all("SELECT * FROM document_categories WHERE is_active = 1")
+
+        return render_template('documents/categories_metadata.html',
+            definitions=definitions,
+            categories=categories,
+            page_title='Categories Metadata')
+
+    @app.route('/documents/categories-metadata/create', methods=['GET', 'POST'])
+    @require_login
+    def documents_create_metadata_definition():
+        """Create metadata field definition."""
+        user_id = get_current_user_id()
+
+        if request.method == 'POST':
+            field_code = request.form.get('field_code')
+            field_name = request.form.get('field_name')
+            field_type = request.form.get('field_type', 'text')
+            category_id = request.form.get('category_id')
+            required = 1 if request.form.get('is_required') else 0
+            searchable = 1 if request.form.get('is_searchable') else 0
+            exportable = 1 if request.form.get('is_exportable') else 0
+            default_value = request.form.get('default_value', '')
+            options = request.form.get('options_json', '')
+            help_text = request.form.get('help_text', '')
+
+            with get_db_context() as db:
+                db.execute("""
+                    INSERT INTO dms_metadata_definitions
+                    (field_code, field_name, field_type, category_id, is_required,
+                     is_searchable, is_exportable, default_value, options_json, help_text)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (field_code, field_name, field_type, category_id, required,
+                      searchable, exportable, default_value, options, help_text))
+                db.commit()
+
+            return jsonify({'success': True, 'message': 'Metadata field created'})
+
+        categories = get_all("SELECT * FROM document_categories WHERE is_active = 1")
+
+        return render_template('documents/metadata_definition_form.html',
+            categories=categories,
+            page_title='Create Metadata Field')
+
+    @app.route('/documents/categories-metadata/<int:field_id>/edit', methods=['GET', 'POST'])
+    @require_login
+    def documents_edit_metadata_definition(field_id):
+        """Edit metadata field definition."""
+        user_id = get_current_user_id()
+
+        definition = get_one("SELECT * FROM dms_metadata_definitions WHERE id = ?", (field_id,))
+
+        if request.method == 'POST':
+            field_name = request.form.get('field_name')
+            field_type = request.form.get('field_type', 'text')
+            required = 1 if request.form.get('is_required') else 0
+
+            with get_db_context() as db:
+                db.execute("""
+                    UPDATE dms_metadata_definitions
+                    SET field_name = ?, field_type = ?, is_required = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                """, (field_name, field_type, required, field_id))
+                db.commit()
+
+            return jsonify({'success': True, 'message': 'Metadata field updated'})
+
+        categories = get_all("SELECT * FROM document_categories WHERE is_active = 1")
+
+        return render_template('documents/metadata_definition_form.html',
+            definition=definition,
+            categories=categories,
+            page_title='Edit Metadata Field')
+
+    @app.route('/documents/<int:document_id>/metadata')
+    @require_login
+    def documents_document_metadata(document_id):
+        """View document metadata."""
+        user_id = get_current_user_id()
+
+        document = get_one("SELECT * FROM documents WHERE id = ?", (document_id,))
+        metadata_values = get_all("""
+            SELECT mv.*, md.field_name, md.field_type
+            FROM dms_metadata_values mv
+            JOIN dms_metadata_definitions md ON mv.field_id = md.id
+            WHERE mv.document_id = ?
+        """, (document_id,))
+
+        return render_template('documents/document_metadata.html',
+            document=document,
+            metadata_values=metadata_values,
+            page_title='Document Metadata')
+
+    @app.route('/documents/<int:document_id>/metadata/update', methods=['POST'])
+    @require_login
+    def documents_update_metadata(document_id):
+        """Update document metadata."""
+        user_id = get_current_user_id()
+
+        field_id = request.form.get('field_id')
+        value = request.form.get('field_value', '')
+
+        with get_db_context() as db:
+            db.execute("""
+                INSERT INTO dms_metadata_values (document_id, field_id, field_value)
+                VALUES (?, ?, ?)
+                ON CONFLICT(document_id, field_id) DO UPDATE SET field_value = ?
+            """, (document_id, field_id, value, value))
+            db.commit()
+
+        return jsonify({'success': True, 'message': 'Metadata updated'})
+
+    # =========================================================================
+    # COMMENTS
+    # =========================================================================
+
+    @app.route('/documents/<int:document_id>/comments')
+    @require_login
+    def documents_document_comments(document_id):
+        """View document comments."""
+        user_id = get_current_user_id()
+
+        document = get_one("SELECT * FROM documents WHERE id = ?", (document_id,))
+        comments = get_all("""
+            SELECT c.*, u.username, u.full_name,
+                   (SELECT COUNT(*) FROM dms_document_comments WHERE parent_comment_id = c.id) as reply_count
+            FROM dms_document_comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            WHERE c.document_id = ? AND c.parent_comment_id IS NULL
+            ORDER BY c.created_at DESC
+        """, (document_id,))
+
+        return render_template('documents/document_comments.html',
+            document=document,
+            comments=comments,
+            page_title='Document Comments')
+
+    @app.route('/documents/<int:document_id>/comments/add', methods=['POST'])
+    @require_login
+    def documents_add_comment(document_id):
+        """Add a comment to a document."""
+        user_id = get_current_user_id()
+
+        comment_text = request.form.get('comment_text', '')
+        parent_id = request.form.get('parent_comment_id')
+
+        if not comment_text:
+            return jsonify({'success': False, 'message': 'Comment text is required'})
+
+        with get_db_context() as db:
+            db.execute("""
+                INSERT INTO dms_document_comments (document_id, user_id, comment_text, parent_comment_id)
+                VALUES (?, ?, ?, ?)
+            """, (document_id, user_id, comment_text, parent_id))
+            db.commit()
+
+        return jsonify({'success': True, 'message': 'Comment added'})
+
+    @app.route('/documents/comments/<int:comment_id>/resolve', methods=['POST'])
+    @require_login
+    def documents_resolve_comment(comment_id):
+        """Resolve a comment."""
+        user_id = get_current_user_id()
+
+        with get_db_context() as db:
+            db.execute("""
+                UPDATE dms_document_comments
+                SET is_resolved = 1, resolved_by_user_id = ?, resolved_at = datetime('now')
+                WHERE id = ?
+            """, (user_id, comment_id))
+            db.commit()
+
+        return jsonify({'success': True, 'message': 'Comment resolved'})
+
+    @app.route('/documents/comments/<int:comment_id>/delete', methods=['POST'])
+    @require_login
+    def documents_delete_comment(comment_id):
+        """Delete a comment."""
+        user_id = get_current_user_id()
+
+        with get_db_context() as db:
+            db.execute("DELETE FROM dms_document_comments WHERE id = ?", (comment_id,))
+            db.commit()
+
+        return jsonify({'success': True, 'message': 'Comment deleted'})
+
+    # =========================================================================
+    # DOCUMENT PRINT
+    # =========================================================================
+
+    @app.route('/documents/<int:document_id>/print')
+    @require_login
+    def documents_print(document_id):
+        """Print a document."""
+        user_id = get_current_user_id()
+
+        document = get_one("""
+            SELECT d.*, v.file_path, v.file_name, v.mime_type
+            FROM documents d
+            LEFT JOIN document_versions v ON d.current_version_id = v.id
+            WHERE d.id = ?
+        """, (document_id,))
+
+        if not document:
+            flash("Document not found.", "error")
+            return redirect(url_for('documents_all'))
+
+        log_document_access(document_id, user_id, 'Print', 'Print')
+
+        return render_template('documents/print_view.html',
+            document=document,
+            page_title='Print Document')
+
+    # =========================================================================
+    # DOCUMENT LINK/UNLINK
+    # =========================================================================
+
+    @app.route('/documents/link/add', methods=['POST'])
+    @require_login
+    def documents_add_link_only():
+        """Add a link to a document (without being on document page)."""
+        user_id = get_current_user_id()
+
+        document_id = request.form.get('document_id')
+        linked_module = request.form.get('linked_module')
+        linked_record_id = request.form.get('linked_record_id')
+        link_type = request.form.get('link_type', 'Related')
+
+        if not all([document_id, linked_module, linked_record_id]):
+            return jsonify({'success': False, 'message': 'Missing required fields'})
+
+        with get_db_context() as db:
+            db.execute("""
+                INSERT INTO document_links (document_id, linked_module, linked_record_id, link_type, created_by_user_id)
+                VALUES (?, ?, ?, ?, ?)
+            """, (document_id, linked_module, linked_record_id, link_type, user_id))
+            db.commit()
+
+        return jsonify({'success': True, 'message': 'Link added'})
+
+    @app.route('/documents/link/<int:link_id>/remove', methods=['POST'])
+    @require_login
+    def documents_remove_link_only(link_id):
+        """Remove a link from a document."""
+        user_id = get_current_user_id()
+
+        with get_db_context() as db:
+            db.execute("DELETE FROM document_links WHERE id = ?", (link_id,))
+            db.commit()
+
+        return jsonify({'success': True, 'message': 'Link removed'})
+
+    # =========================================================================
+    # DOCUMENT DISPOSE
+    # =========================================================================
+
+    @app.route('/documents/<int:document_id>/dispose', methods=['GET', 'POST'])
+    @require_login
+    def documents_dispose(document_id):
+        """Dispose of a document."""
+        user_id = get_current_user_id()
+
+        document = get_one("SELECT * FROM documents WHERE id = ?", (document_id,))
+
+        if request.method == 'POST':
+            disposal_method = request.form.get('disposal_method', 'Shredded')
+            approval_notes = request.form.get('approval_notes', '')
+
+            with get_db_context() as db:
+                db.execute("""
+                    INSERT INTO dms_disposal_log
+                    (document_id, disposed_by_user_id, disposal_method, disposal_approval_user_id, approval_notes)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (document_id, user_id, disposal_method, user_id, approval_notes))
+
+                db.execute("DELETE FROM documents WHERE id = ?", (document_id,))
+                db.commit()
+
+            return jsonify({'success': True, 'message': 'Document disposed'})
+
+        return render_template('documents/dispose_form.html',
+            document=document,
+            page_title='Dispose Document')
+
+    # =========================================================================
+    # FORCE CHECK-IN
+    # =========================================================================
+
+    @app.route('/documents/<int:document_id>/force-checkin', methods=['POST'])
+    @require_login
+    def documents_force_checkin(document_id):
+        """Force check-in a document (admin)."""
+        user_id = get_current_user_id()
+
+        reason = request.form.get('reason', 'Administrative force check-in')
+
+        result = force_check_in(document_id, user_id, reason)
+        if result[0]:
+            return jsonify({'success': True, 'message': result[1]})
+        else:
+            return jsonify({'success': False, 'message': result[1]})

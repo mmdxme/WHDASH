@@ -1,382 +1,563 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ page_title }} - MMDx</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #4F46E5;
-            --success: #10B981;
-            --warning: #F59E0B;
-            --danger: #EF4444;
-            --info: #3B82F6;
-            --dark: #1F2937;
-            --light-bg: #F9FAFB;
-        }
-        body { background: var(--light-bg); font-family: 'Segoe UI', system-ui, sans-serif; }
-        .stat-card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: transform 0.2s; }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-        .stat-card .icon { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; }
-        .stat-card .number { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
-        .stat-card .label { font-size: 0.875rem; color: #6B7280; }
-        .stat-primary { background: linear-gradient(135deg, var(--primary), #4338CA); color: white; }
-        .stat-success { background: linear-gradient(135deg, var(--success), #059669); color: white; }
-        .stat-warning { background: linear-gradient(135deg, var(--warning), #D97706); color: white; }
-        .stat-danger { background: linear-gradient(135deg, var(--danger), #DC2626); color: white; }
-        .stat-info { background: linear-gradient(135deg, var(--info), #2563EB); color: white; }
-        .card-header-custom { background: white; border-bottom: 2px solid #E5E7EB; font-weight: 600; padding: 1rem 1.25rem; }
-        .table-responsive { border-radius: 8px; overflow: hidden; }
-        .table thead th { background: #F3F4F6; font-weight: 600; font-size: 0.8125rem; text-transform: uppercase; color: #6B7280; border: none; }
-        .badge-status { font-weight: 500; padding: 0.375rem 0.625rem; }
-        .badge-Draft { background: #F3F4F6; color: #374151; }
-        .badge-Under_Review { background: #DBEAFE; color: #1E40AF; }
-        .badge-Approved { background: #D1FAE5; color: #065F46; }
-        .badge-Published { background: #D1FAE5; color: #065F46; }
-        .badge-Obsolete { background: #FEE2E2; color: #991B1B; }
-        .badge-Pending { background: #FEF3C7; color: #92400E; }
-        .badge-Signed { background: #D1FAE5; color: #065F46; }
-        .badge-Rejected { background: #FEE2E2; color: #991B1B; }
-        .badge-Expired { background: #F3F4F6; color: #6B7280; }
-        .quick-actions .btn { border-radius: 8px; padding: 0.75rem 1rem; font-weight: 500; }
-        .activity-item { padding: 0.75rem 0; border-bottom: 1px solid #E5E7EB; }
-        .activity-item:last-child { border-bottom: none; }
-        .activity-icon { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-    </style>
-</head>
-<body>
-    {% include 'base.html' %}
+{% extends "base.html" %}
 
-    {% block content %}
-    <div class="container-fluid py-4">
-        <!-- Page Header -->
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h1 class="h3 mb-1"><i class="fas fa-file-alt me-2 text-primary"></i>Document Management</h1>
-                <p class="text-muted mb-0">Centralized document storage, versioning, and e-signature management</p>
-            </div>
-            <div class="quick-actions d-flex gap-2">
-                <a href="{{ url_for('documents_create') }}" class="btn btn-primary">
-                    <i class="fas fa-upload me-1"></i> Upload Document
-                </a>
-                <a href="{{ url_for('documents_create_template') }}" class="btn btn-outline-primary">
-                    <i class="fas fa-file-code me-1"></i> New Template
-                </a>
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1"><i class="fas fa-file-alt me-2 text-primary"></i>{{ t('document_management') or 'Document Management' }}</h1>
+            <p class="text-muted mb-0">{{ t('document_management_subtitle') or 'Centralized document storage, versioning, and e-signature management' }}</p>
+        </div>
+        <div class="quick-actions d-flex gap-2">
+            <a href="{{ url_for('documents_create') }}" class="btn btn-primary">
+                <i class="fas fa-upload me-1"></i> {{ t('upload_document') or 'Upload Document' }}
+            </a>
+            <a href="{{ url_for('documents_templates') }}" class="btn btn-outline-primary">
+                <i class="fas fa-file-code me-1"></i> {{ t('new_template') or 'New Template' }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Key Metrics Row -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card stat-primary h-100 position-relative">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: rgba(255,255,255,0.2);">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <div>
+                        <div class="number">{{ stats.total_documents }}</div>
+                        <div class="label">{{ t('total_documents') or 'Total Documents' }}</div>
+                        <div class="kpi-trend kpi-up"><i class="fas fa-arrow-up"></i> {{ t('active') or 'Active' }}</div>
+                    </div>
+                </div>
+                {% if stats.pending_review > 0 %}
+                <span class="alert-badge">{{ stats.pending_review }}</span>
+                {% endif %}
             </div>
         </div>
 
-        <!-- Key Metrics Row -->
-        <div class="row g-4 mb-4">
-            <div class="col-md-3">
-                <div class="card stat-card stat-primary h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3" style="background: rgba(255,255,255,0.2);">
-                            <i class="fas fa-file-alt"></i>
-                        </div>
-                        <div>
-                            <div class="number">{{ stats.total_documents }}</div>
-                            <div class="label">Total Documents</div>
-                        </div>
+        <div class="col-md-3">
+            <div class="card stat-card stat-success h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: rgba(255,255,255,0.2);">
+                        <i class="fas fa-user"></i>
                     </div>
-                </div>
-            </div>
-
-            <div class="col-md-3">
-                <div class="card stat-card stat-success h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3" style="background: rgba(255,255,255,0.2);">
-                            <i class="fas fa-user"></i>
-                        </div>
-                        <div>
-                            <div class="number">{{ stats.my_documents }}</div>
-                            <div class="label">My Documents</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-3">
-                <div class="card stat-card stat-warning h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3" style="background: rgba(255,255,255,0.2);">
-                            <i class="fas fa-signature"></i>
-                        </div>
-                        <div>
-                            <div class="number">{{ stats.pending_signatures }}</div>
-                            <div class="label">Pending Signatures</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-3">
-                <div class="card stat-card stat-danger h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3" style="background: rgba(255,255,255,0.2);">
-                            <i class="fas fa-archive"></i>
-                        </div>
-                        <div>
-                            <div class="number">{{ stats.archived_documents }}</div>
-                            <div class="label">Archived</div>
-                        </div>
+                    <div>
+                        <div class="number">{{ stats.my_documents }}</div>
+                        <div class="label">{{ t('my_documents') or 'My Documents' }}</div>
+                        <div class="kpi-trend text-white-50">{{ t('owned_by_you') or 'Owned by you' }}</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Second Row -->
-        <div class="row g-4 mb-4">
-            <div class="col-md-4">
-                <div class="card stat-card h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3 stat-info">
-                            <i class="fas fa-share-alt"></i>
-                        </div>
-                        <div>
-                            <div class="number">{{ stats.shared_with_me }}</div>
-                            <div class="label">Shared with Me</div>
-                        </div>
+        <div class="col-md-3">
+            <div class="card stat-card stat-warning h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: rgba(255,255,255,0.2);">
+                        <i class="fas fa-clipboard-check"></i>
                     </div>
-                </div>
-            </div>
-
-            <div class="col-md-4">
-                <div class="card stat-card h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3" style="background: #F3F4F6;">
-                            <i class="fas fa-pen" style="color: var(--warning);"></i>
-                        </div>
-                        <div>
-                            <div class="number">{{ stats.draft_documents }}</div>
-                            <div class="label">Drafts</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-md-4">
-                <div class="card stat-card h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3 stat-success">
-                            <i class="fas fa-check-double"></i>
-                        </div>
-                        <div>
-                            <div class="number">{{ stats.published_documents }}</div>
-                            <div class="label">Published</div>
-                        </div>
+                    <div>
+                        <div class="number">{{ stats.pending_review }}</div>
+                        <div class="label">{{ t('pending_review') or 'Pending Review' }}</div>
+                        <div class="kpi-trend kpi-down"><i class="fas fa-exclamation-circle"></i> {{ t('needs_attention') or 'Needs attention' }}</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Main Content Row -->
-        <div class="row g-4">
-            <!-- Recent Documents -->
-            <div class="col-lg-8">
-                <div class="card">
-                    <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-clock me-2"></i>Recent Documents</span>
-                        <a href="{{ url_for('documents_recent') }}" class="btn btn-sm btn-outline-primary">View All</a>
+        <div class="col-md-3">
+            <div class="card stat-card stat-info h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: rgba(255,255,255,0.2);">
+                        <i class="fas fa-gavel"></i>
                     </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Document</th>
-                                        <th>Category</th>
-                                        <th>Status</th>
-                                        <th>Modified</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for doc in recent_docs %}
-                                    <tr>
-                                        <td>
-                                            <div class="d-flex align-items-center">
-                                                <i class="fas fa-file-alt text-secondary me-2"></i>
-                                                <div>
-                                                    <a href="{{ url_for('documents_detail', document_id=doc.id) }}" class="text-decoration-none">{{ doc.title }}</a>
-                                                    <div class="small text-muted">{{ doc.document_code }}</div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>{{ doc.category_name or 'Uncategorized' }}</td>
-                                        <td>
-                                            <span class="badge badge-{{ doc.status.replace(' ', '_') }}">{{ doc.status }}</span>
-                                        </td>
-                                        <td class="small text-muted">
-                                            {% if doc.updated_at %}
-                                            {{ doc.updated_at[:10] }}
-                                            {% else %}
-                                            -
-                                            {% endif %}
-                                        </td>
-                                        <td>
-                                            <div class="btn-group btn-group-sm">
-                                                <a href="{{ url_for('documents_detail', document_id=doc.id) }}" class="btn btn-outline-secondary" title="View">
-                                                    <i class="fas fa-eye"></i>
-                                                </a>
-                                                <a href="{{ url_for('documents_download', document_id=doc.id) }}" class="btn btn-outline-secondary" title="Download">
-                                                    <i class="fas fa-download"></i>
-                                                </a>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    {% else %}
-                                    <tr>
-                                        <td colspan="5" class="text-center py-4 text-muted">
-                                            <i class="fas fa-folder-open fa-2x mb-2"></i>
-                                            <p class="mb-0">No documents yet. Upload your first document to get started.</p>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                        </div>
+                    <div>
+                        <div class="number">{{ stats.pending_approval }}</div>
+                        <div class="label">{{ t('pending_approval') or 'Pending Approval' }}</div>
+                        <div class="kpi-trend kpi-down"><i class="fas fa-exclamation-circle"></i> {{ t('awaiting') or 'Awaiting' }}</div>
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
 
-            <!-- Pending Signatures -->
-            <div class="col-lg-4">
-                <div class="card">
-                    <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-signature me-2"></i>Pending Signatures</span>
-                        <a href="{{ url_for('documents_pending_signature') }}" class="btn btn-sm btn-outline-primary">View All</a>
+    <!-- Second Row -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-2">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: #F3F4F6; color: var(--warning);">
+                        <i class="fas fa-clock"></i>
                     </div>
-                    <div class="card-body p-0">
-                        {% if pending_sigs %}
-                        <ul class="list-group list-group-flush">
-                            {% for sig in pending_sigs %}
-                            <li class="list-group-item">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <a href="{{ url_for('documents_signature_detail', request_id=sig.id) }}" class="text-decoration-none fw-medium">{{ sig.request_title }}</a>
-                                        <div class="small text-muted">{{ sig.document_title }}</div>
-                                        {% if sig.due_date %}
-                                        <div class="small text-{% if sig.due_date < today %}danger{% else %}muted{% endif %}">
-                                            Due: {{ sig.due_date[:10] }}
-                                        </div>
-                                        {% endif %}
-                                    </div>
-                                    <span class="badge badge-Pending">{{ sig.status }}</span>
+                    <div>
+                        <div class="number">{{ stats.expiring_soon }}</div>
+                        <div class="label">{{ t('expiring_soon') or 'Expiring Soon' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: #FEE2E2; color: var(--danger);">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div>
+                        <div class="number">{{ stats.expired }}</div>
+                        <div class="label">{{ t('expired') or 'Expired' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: #DBEAFE; color: var(--info);">
+                        <i class="fas fa-lock"></i>
+                    </div>
+                    <div>
+                        <div class="number">{{ stats.checked_out }}</div>
+                        <div class="label">{{ t('checked_out') or 'Checked Out' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: #D1FAE5; color: var(--success);">
+                        <i class="fas fa-history"></i>
+                    </div>
+                    <div>
+                        <div class="number">{{ stats.total_versions }}</div>
+                        <div class="label">{{ t('versions') or 'Versions' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: #FEF3C7; color: var(--warning);">
+                        <i class="fas fa-file-code"></i>
+                    </div>
+                    <div>
+                        <div class="number">{{ stats.total_templates }}</div>
+                        <div class="label">{{ t('templates') or 'Templates' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-2">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: #F3F4F6; color: var(--dark);">
+                        <i class="fas fa-folder"></i>
+                    </div>
+                    <div>
+                        <div class="number">{{ stats.total_folders }}</div>
+                        <div class="label">{{ t('folders') or 'Folders' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-chart-pie me-2"></i>{{ t('documents_by_status') or 'Documents by Status' }}</span>
+                    <span class="badge bg-primary">{{ stats.total_documents }} {{ t('total') or 'total' }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-chart-bar me-2"></i>{{ t('documents_by_category') or 'Documents by Category' }}</span>
+                    <span class="badge bg-success">{{ stats.by_category|length }} {{ t('categories') or 'categories' }}</span>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts Row -->
+    {% if stats.expiring_soon > 0 or stats.pending_review > 0 or stats.pending_approval > 0 or stats.legal_holds_active > 0 %}
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <i class="fas fa-exclamation-triangle me-2"></i>{{ t('attention_required') or 'Attention Required' }}
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        {% if stats.expiring_soon > 0 %}
+                        <div class="col-md-3">
+                            <a href="{{ url_for('documents_report_expiring') }}" class="text-decoration-none">
+                                <div class="mini-stat border border-warning">
+                                    <div class="number text-warning">{{ stats.expiring_soon }}</div>
+                                    <div class="label">{{ t('expiring_30_days') or 'Expiring within 30 days' }}</div>
                                 </div>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                        {% else %}
-                        <div class="text-center py-4 text-muted">
-                            <i class="fas fa-check-circle fa-2x mb-2 text-success"></i>
-                            <p class="mb-0">No pending signatures</p>
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% if stats.pending_review > 0 %}
+                        <div class="col-md-3">
+                            <a href="{{ url_for('documents_pending_review') }}" class="text-decoration-none">
+                                <div class="mini-stat border border-warning">
+                                    <div class="number text-warning">{{ stats.pending_review }}</div>
+                                    <div class="label">{{ t('pending_review_docs') or 'Documents pending review' }}</div>
+                                </div>
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% if stats.pending_approval > 0 %}
+                        <div class="col-md-3">
+                            <a href="{{ url_for('documents_pending_approval') }}" class="text-decoration-none">
+                                <div class="mini-stat border border-warning">
+                                    <div class="number text-warning">{{ stats.pending_approval }}</div>
+                                    <div class="label">{{ t('awaiting_approval') or 'Awaiting approval' }}</div>
+                                </div>
+                            </a>
+                        </div>
+                        {% endif %}
+                        {% if stats.legal_holds_active > 0 %}
+                        <div class="col-md-3">
+                            <a href="{{ url_for('documents_legal_holds') }}" class="text-decoration-none">
+                                <div class="mini-stat border border-danger">
+                                    <div class="number text-danger">{{ stats.legal_holds_active }}</div>
+                                    <div class="label">{{ t('active_legal_holds') or 'Active legal holds' }}</div>
+                                </div>
+                            </a>
                         </div>
                         {% endif %}
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
 
-                <!-- Recent Activity -->
-                <div class="card mt-4">
-                    <div class="card-header card-header-custom">
-                        <i class="fas fa-history me-2"></i>Recent Activity
-                    </div>
-                    <div class="card-body p-0">
-                        {% for activity in recent_activity %}
-                        <div class="activity-item px-3">
-                            <div class="d-flex align-items-start">
-                                <div class="activity-icon me-2 {% if activity.access_action == 'Download' %}bg-success-subtle text-success{% elif activity.access_action == 'Upload' %}bg-primary-subtle text-primary{% else %}bg-secondary-subtle text-secondary{% endif %}">
-                                    <i class="fas fa {% if activity.access_action == 'Download' %}fa-download{% elif activity.access_action == 'Upload' %}fa-upload{% elif activity.access_action == 'View' %}fa-eye{% else %}fa-file{% endif %}"></i>
-                                </div>
-                                <div class="flex-grow-1">
-                                    <div class="small">{{ activity.username or 'System' }}</div>
-                                    <div class="fw-medium">{{ activity.access_action }} {{ activity.document_title }}</div>
-                                    <div class="small text-muted">{{ activity.created_at[:16] if activity.created_at else '' }}</div>
-                                </div>
-                            </div>
-                        </div>
-                        {% else %}
-                        <div class="text-center py-3 text-muted">
-                            <p class="mb-0 small">No recent activity</p>
-                        </div>
-                        {% endfor %}
+    <!-- Main Content Row -->
+    <div class="row g-4">
+        <!-- Recent Documents -->
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-clock me-2"></i>{{ t('recent_documents') or 'Recent Documents' }}</span>
+                    <a href="{{ url_for('documents_recent') }}" class="btn btn-sm btn-outline-primary">{{ t('view_all') or 'View All' }}</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table mb-0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('document') or 'Document' }}</th>
+                                    <th>{{ t('category') or 'Category' }}</th>
+                                    <th>{{ t('status') or 'Status' }}</th>
+                                    <th>{{ t('modified') or 'Modified' }}</th>
+                                    <th>{{ t('actions') or 'Actions' }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for doc in recent_docs %}
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <i class="fas fa-file-alt text-secondary me-2"></i>
+                                            <div>
+                                                <a href="{{ url_for('documents_detail', document_id=doc.id) }}" class="text-decoration-none">{{ doc.title }}</a>
+                                                <div class="small text-muted">{{ doc.document_code }}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{{ doc.category_name or t('uncategorized') or 'Uncategorized' }}</td>
+                                    <td>
+                                        <span class="badge badge-{{ doc.status.replace(' ', '_') }}">{{ doc.status }}</span>
+                                    </td>
+                                    <td class="small text-muted">
+                                        {% if doc.updated_at %}
+                                        {{ doc.updated_at[:10] }}
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('documents_detail', document_id=doc.id) }}" class="btn btn-outline-secondary" title="{{ t('view') or 'View' }}">
+                                                <i class="fas fa-eye"></i>
+                                            </a>
+                                            <a href="{{ url_for('documents_download', document_id=doc.id) }}" class="btn btn-outline-secondary" title="{{ t('download') or 'Download' }}">
+                                                <i class="fas fa-download"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-4 text-muted">
+                                        <i class="fas fa-folder-open fa-2x mb-2"></i>
+                                        <p class="mb-0">{{ t('no_documents_yet') or 'No documents yet. Upload your first document to get started.' }}</p>
+                                        <a href="{{ url_for('documents_create') }}" class="btn btn-primary btn-sm mt-2">
+                                            <i class="fas fa-upload me-1"></i>{{ t('upload_document') or 'Upload Document' }}
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Quick Links Row -->
-        <div class="row g-4 mt-2">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header card-header-custom">
-                        <i class="fas fa-th-large me-2"></i>Quick Actions
+        <!-- Right Column -->
+        <div class="col-lg-4">
+            <!-- Pending Signatures -->
+            <div class="card">
+                <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-signature me-2"></i>{{ t('pending_signatures') or 'Pending Signatures' }}</span>
+                    <a href="{{ url_for('documents_pending_signature') }}" class="btn btn-sm btn-outline-primary">{{ t('view_all') or 'View All' }}</a>
+                </div>
+                <div class="card-body p-0">
+                    {% if pending_sigs %}
+                    <ul class="list-group list-group-flush">
+                        {% for sig in pending_sigs %}
+                        <li class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <a href="{{ url_for('documents_signature_detail', request_id=sig.id) }}" class="text-decoration-none fw-medium">{{ sig.request_title }}</a>
+                                    <div class="small text-muted">{{ sig.document_title }}</div>
+                                    {% if sig.due_date %}
+                                    <div class="small text-{% if sig.due_date < today %}danger{% else %}muted{% endif %}">
+                                        {{ t('due') or 'Due' }}: {{ sig.due_date[:10] }}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <span class="badge badge-Pending">{{ sig.status }}</span>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="fas fa-check-circle fa-2x mb-2 text-success"></i>
+                        <p class="mb-0">{{ t('no_pending_signatures') or 'No pending signatures' }}</p>
                     </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-2">
-                                <a href="{{ url_for('documents_all') }}" class="text-decoration-none">
-                                    <div class="p-3 border rounded text-center hover-bg-light">
-                                        <i class="fas fa-folder-open fa-2x mb-2 text-primary"></i>
-                                        <div class="fw-medium">All Documents</div>
-                                        <div class="small text-muted">Browse library</div>
-                                    </div>
-                                </a>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="card mt-4">
+                <div class="card-header card-header-custom">
+                    <i class="fas fa-history me-2"></i>{{ t('recent_activity') or 'Recent Activity' }}
+                </div>
+                <div class="card-body p-0">
+                    {% for activity in recent_activity %}
+                    <div class="activity-item px-3">
+                        <div class="d-flex align-items-start">
+                            <div class="activity-icon me-2 {% if activity.access_action == 'Download' %}bg-success-subtle text-success{% elif activity.access_action == 'Upload' %}bg-primary-subtle text-primary{% else %}bg-secondary-subtle text-secondary{% endif %}">
+                                <i class="fas fa {% if activity.access_action == 'Download' %}fa-download{% elif activity.access_action == 'Upload' %}fa-upload{% elif activity.access_action == 'View' %}fa-eye{% else %}fa-file{% endif %}"></i>
                             </div>
-                            <div class="col-md-2">
-                                <a href="{{ url_for('documents_my') }}" class="text-decoration-none">
-                                    <div class="p-3 border rounded text-center hover-bg-light">
-                                        <i class="fas fa-user fa-2x mb-2 text-info"></i>
-                                        <div class="fw-medium">My Documents</div>
-                                        <div class="small text-muted">Personal files</div>
-                                    </div>
-                                </a>
+                            <div class="flex-grow-1">
+                                <div class="small">{{ activity.username or t('system') or 'System' }}</div>
+                                <div class="fw-medium">{{ activity.access_action }} {{ activity.document_title }}</div>
+                                <div class="small text-muted">{{ activity.created_at[:16] if activity.created_at else '' }}</div>
                             </div>
-                            <div class="col-md-2">
-                                <a href="{{ url_for('documents_shared') }}" class="text-decoration-none">
-                                    <div class="p-3 border rounded text-center hover-bg-light">
-                                        <i class="fas fa-share-alt fa-2x mb-2 text-success"></i>
-                                        <div class="fw-medium">Shared</div>
-                                        <div class="small text-muted">With me</div>
-                                    </div>
-                                </a>
-                            </div>
-                            <div class="col-md-2">
-                                <a href="{{ url_for('documents_templates') }}" class="text-decoration-none">
-                                    <div class="p-3 border rounded text-center hover-bg-light">
-                                        <i class="fas fa-file-code fa-2x mb-2 text-warning"></i>
-                                        <div class="fw-medium">Templates</div>
-                                        <div class="small text-muted">{{ stats.total_templates }} available</div>
-                                    </div>
-                                </a>
-                            </div>
-                            <div class="col-md-2">
-                                <a href="{{ url_for('documents_search') }}" class="text-decoration-none">
-                                    <div class="p-3 border rounded text-center hover-bg-light">
-                                        <i class="fas fa-search fa-2x mb-2 text-secondary"></i>
-                                        <div class="fw-medium">Search</div>
-                                        <div class="small text-muted">Find documents</div>
-                                    </div>
-                                </a>
-                            </div>
-                            <div class="col-md-2">
-                                <a href="{{ url_for('documents_settings') }}" class="text-decoration-none">
-                                    <div class="p-3 border rounded text-center hover-bg-light">
-                                        <i class="fas fa-cog fa-2x mb-2 text-dark"></i>
-                                        <div class="fw-medium">Settings</div>
-                                        <div class="small text-muted">Configuration</div>
-                                    </div>
-                                </a>
-                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-3 text-muted">
+                        <p class="mb-0 small">{{ t('no_recent_activity') or 'No recent activity' }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Links Row -->
+    <div class="row g-4 mt-2">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header card-header-custom">
+                    <i class="fas fa-th-large me-2"></i>{{ t('quick_actions') or 'Quick Actions' }}
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-2">
+                            <a href="{{ url_for('documents_all') }}" class="text-decoration-none">
+                                <div class="p-3 border rounded text-center hover-bg-light">
+                                    <i class="fas fa-folder-open fa-2x mb-2 text-primary"></i>
+                                    <div class="fw-medium">{{ t('all_documents') or 'All Documents' }}</div>
+                                    <div class="small text-muted">{{ t('browse_library') or 'Browse library' }}</div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="{{ url_for('documents_my') }}" class="text-decoration-none">
+                                <div class="p-3 border rounded text-center hover-bg-light">
+                                    <i class="fas fa-user fa-2x mb-2 text-info"></i>
+                                    <div class="fw-medium">{{ t('my_documents') or 'My Documents' }}</div>
+                                    <div class="small text-muted">{{ t('personal_files') or 'Personal files' }}</div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="{{ url_for('documents_pending_review') }}" class="text-decoration-none">
+                                <div class="p-3 border rounded text-center hover-bg-light position-relative">
+                                    <i class="fas fa-clipboard-check fa-2x mb-2 text-warning"></i>
+                                    {% if stats.pending_review > 0 %}
+                                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">{{ stats.pending_review }}</span>
+                                    {% endif %}
+                                    <div class="fw-medium">{{ t('pending_review') or 'Pending Review' }}</div>
+                                    <div class="small text-muted">{{ t('review_items') or 'Review items' }}</div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="{{ url_for('documents_templates') }}" class="text-decoration-none">
+                                <div class="p-3 border rounded text-center hover-bg-light">
+                                    <i class="fas fa-file-code fa-2x mb-2 text-success"></i>
+                                    <div class="fw-medium">{{ t('templates') or 'Templates' }}</div>
+                                    <div class="small text-muted">{{ stats.total_templates }} {{ t('available') or 'available' }}</div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="{{ url_for('documents_export_center') }}" class="text-decoration-none">
+                                <div class="p-3 border rounded text-center hover-bg-light">
+                                    <i class="fas fa-file-export fa-2x mb-2 text-secondary"></i>
+                                    <div class="fw-medium">{{ t('export_center') or 'Export Center' }}</div>
+                                    <div class="small text-muted">{{ t('export_data') or 'Export data' }}</div>
+                                </div>
+                            </a>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="{{ url_for('documents_reports_center') }}" class="text-decoration-none">
+                                <div class="p-3 border rounded text-center hover-bg-light">
+                                    <i class="fas fa-chart-bar fa-2x mb-2 text-dark"></i>
+                                    <div class="fw-medium">{{ t('reports') or 'Reports' }}</div>
+                                    <div class="small text-muted">{{ t('analytics') or 'Analytics' }}</div>
+                                </div>
+                            </a>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    {% endblock %}
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+<script>
+    // Chart.js Configuration
+    Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+    Chart.defaults.color = '#6B7280';
+
+    // Documents by Status Chart
+    const statusCtx = document.getElementById('statusChart').getContext('2d');
+    const statusData = {{ stats.by_status|tojson }};
+    const statusLabels = Object.keys(statusData);
+    const statusValues = Object.values(statusData);
+    const statusColors = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#6C757D', '#3B82F6', '#8B5CF6'];
+
+    new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: statusLabels.length ? statusLabels : ['No Data'],
+            datasets: [{
+                data: statusValues.length ? statusValues : [1],
+                backgroundColor: statusColors.slice(0, statusLabels.length || 1),
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'right',
+                    labels: { usePointStyle: true, padding: 15 }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const value = context.raw;
+                            const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                            return `${context.label}: ${value} (${percent}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Documents by Category Chart
+    const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+    const categoryData = {{ stats.by_category|tojson }};
+    const categoryLabels = Object.keys(categoryData);
+    const categoryValues = Object.values(categoryData);
+
+    new Chart(categoryCtx, {
+        type: 'bar',
+        data: {
+            labels: categoryLabels.length ? categoryLabels : ['No Data'],
+            datasets: [{
+                label: 'Documents',
+                data: categoryValues.length ? categoryValues : [0],
+                backgroundColor: '#4F46E5',
+                borderRadius: 6,
+                barThickness: 30
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.raw} documents`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { stepSize: 5 }
+                },
+                y: {
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

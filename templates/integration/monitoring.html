@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('monitoring', 'Monitoring Center') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-chart-line fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('monitoring_center', 'Monitoring Center') }}
+        </h1>
+    </div>
+
+    <!-- KPI Row -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white shadow">
+                <div class="card-body">
+                    <div class="text-white-50 small">{{ t('total_connectors', 'Total Connectors') }}</div>
+                    <div class="h3 mb-0">{{ stats.connectors.total }}</div>
+                    <div class="text-white-50 small mt-2">
+                        <span class="text-success">{{ stats.connectors.healthy }} {{ t('healthy', 'Healthy') }}</span> | 
+                        <span class="text-danger">{{ stats.connectors.unhealthy }} {{ t('unhealthy', 'Unhealthy') }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white shadow">
+                <div class="card-body">
+                    <div class="text-white-50 small">{{ t('queue_depth', 'Queue Depth') }}</div>
+                    <div class="h3 mb-0">{{ stats.queue_depth }}</div>
+                    <div class="text-white-50 small mt-2">{{ t('messages_pending', 'messages pending') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white shadow">
+                <div class="card-body">
+                    <div class="text-white-50 small">{{ t('dlq_items', 'DLQ Items') }}</div>
+                    <div class="h3 mb-0">{{ stats.dlq_count }}</div>
+                    <div class="text-white-50 small mt-2">{{ t('require_attention', 'require attention') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-secondary text-white shadow">
+                <div class="card-body">
+                    <div class="text-white-50 small">{{ t('log_volume_7d', 'Log Volume (7 days)') }}</div>
+                    <div class="h3 mb-0">{{ stats.log_volume_7d|length }}</div>
+                    <div class="text-white-50 small mt-2">{{ t('data_points', 'data points') }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Connector Health by Type -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('connector_health_by_type', 'Connector Health by Type') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('connector_type', 'Connector Type') }}</th>
+                                    <th class="text-center">{{ t('total', 'Total') }}</th>
+                                    <th class="text-center">{{ t('healthy', 'Healthy') }}</th>
+                                    <th class="text-center">{{ t('unhealthy', 'Unhealthy') }}</th>
+                                    <th class="text-center">{{ t('unknown', 'Unknown') }}</th>
+                                    <th class="text-center">{{ t('health_rate', 'Health Rate') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for type_name, type_data in stats.by_type.items() %}
+                                <tr>
+                                    <td>{{ type_name }}</td>
+                                    <td class="text-center">{{ type_data.healthy + type_data.unhealthy + type_data.unknown }}</td>
+                                    <td class="text-center text-success">{{ type_data.healthy }}</td>
+                                    <td class="text-center text-danger">{{ type_data.unhealthy }}</td>
+                                    <td class="text-center text-secondary">{{ type_data.unknown }}</td>
+                                    <td class="text-center">
+                                        {% set total = type_data.healthy + type_data.unhealthy + type_data.unknown %}
+                                        {% if total > 0 %}
+                                            {% set rate = (type_data.healthy / total * 100)|round|int %}
+                                            <div class="progress" style="height: 20px; width: 100px;">
+                                                <div class="progress-bar bg-success" style="width: {{ rate }}%">{{ rate }}%</div>
+                                            </div>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs by Level -->
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('logs_by_level_24h', 'Logs by Level (24h)') }}</h6>
+                </div>
+                <div class="card-body">
+                    {% if stats.logs_by_level_24h %}
+                    <div class="mb-2">
+                        {% for level, count in stats.logs_by_level_24h.items() %}
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="badge {% if level == 'error' %}bg-danger{% elif level == 'warning' %}bg-warning{% elif level == 'info' %}bg-info{% else %}bg-secondary{% endif %}">{{ level|upper }}</span>
+                            <span>{{ count }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">{{ t('no_logs_24h', 'No logs in the last 24 hours') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('quick_links', 'Quick Links') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        <a href="{{ url_for('integration_connectors') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-plug me-2"></i> {{ t('view_all_connectors', 'View All Connectors') }}
+                        </a>
+                        <a href="{{ url_for('integration_queue') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-list me-2"></i> {{ t('view_queue', 'View Message Queue') }}
+                        </a>
+                        <a href="{{ url_for('integration_dlq') }}" class="list-group-item list-group-item-action text-danger">
+                            <i class="fas fa-exclamation-circle me-2"></i> {{ t('view_dlq', 'View Dead Letter Queue') }}
+                        </a>
+                        <a href="{{ url_for('integration_errors') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-exclamation-triangle me-2"></i> {{ t('view_errors', 'View Error Queue') }}
+                        </a>
+                        <a href="{{ url_for('integration_alerts') }}" class="list-group-item list-group-item-action">
+                            <i class="fas fa-bell me-2"></i> {{ t('view_alerts', 'View Alerts') }}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

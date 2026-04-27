@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <a href="{{ url_for('marketing.ab_tests_list') }}" class="p-2 hover:bg-white/10 rounded-lg transition-all">
+                    <i class="fa-solid fa-arrow-left text-slate-400"></i>
+                </a>
+                <h1 class="text-2xl font-extrabold text-white">{{ test.test_name }}</h1>
+            </div>
+            <p class="text-slate-400 ml-10">{{ test.test_code }} | {{ test.test_type|title }} | {{ test.channel or 'Multi-channel' }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="px-4 py-2 rounded-full text-sm font-bold {% if test.status == 'Active' %}bg-emerald-400/20 text-emerald-400{% elif test.status == 'Completed' %}bg-blue-400/20 text-blue-400{% else %}bg-slate-400/20 text-slate-400{% endif %}">
+                {{ test.status }}
+            </span>
+            <a href="{{ url_for('marketing.ab_tests_edit', id=test.id) }}" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-pen mr-2"></i>{{ t('edit', 'Edit') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Test Summary -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-white mb-1">{{ test.actual_sample_size or 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('sample_size', 'Sample Size') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-emerald-400 mb-1">
+                {% if test.winning_variant %}{{ test.winning_variant }}{% else %}-{% endif %}
+            </div>
+            <div class="text-sm text-slate-400">{{ t('winner', 'Winner') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold {% if test.uplift_percentage and test.uplift_percentage > 0 %}text-emerald-400{% else %}text-rose-400{% endif %} mb-1">
+                {% if test.uplift_percentage %}{% if test.uplift_percentage > 0 %}+{% endif %}{{ "%.1f"|format(test.uplift_percentage) }}%{% else %}N/A{% endif %}
+            </div>
+            <div class="text-sm text-slate-400">{{ t('uplift', 'Uplift') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-cyan-400 mb-1">
+                {% if test.confidence_level %}{{ "%.0f"|format(test.confidence_level) }}%{% else %}N/A{% endif %}
+            </div>
+            <div class="text-sm text-slate-400">{{ t('confidence', 'Confidence') }}</div>
+        </div>
+    </div>
+
+    <!-- Hypothesis & Description -->
+    {% if test.hypothesis or test.description %}
+    <div class="glass-panel rounded-2xl p-6 mb-8">
+        {% if test.hypothesis %}
+        <div class="mb-4">
+            <h3 class="text-sm font-bold text-slate-400 uppercase mb-2">{{ t('hypothesis', 'Hypothesis') }}</h3>
+            <p class="text-white">{{ test.hypothesis }}</p>
+        </div>
+        {% endif %}
+        {% if test.description %}
+        <div>
+            <h3 class="text-sm font-bold text-slate-400 uppercase mb-2">{{ t('description', 'Description') }}</h3>
+            <p class="text-white">{{ test.description }}</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Variant Comparison -->
+    <div class="glass-panel rounded-2xl overflow-hidden mb-8">
+        <div class="p-6 border-b border-white/10">
+            <h3 class="text-lg font-bold text-white">{{ t('variant_comparison', 'Variant Comparison') }}</h3>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
+            {% for variant in variants %}
+            <div class="p-6 rounded-xl {% if test.winning_variant == variant.variant_name %}bg-emerald-400/10 border-2 border-emerald-400{% else %}bg-white/5{% endif %}">
+                <div class="flex items-center justify-between mb-4">
+                    <h4 class="text-xl font-bold text-white">{{ variant.variant_name }}</h4>
+                    <span class="px-3 py-1 rounded-full text-xs font-bold {% if variant.variant_type == 'control' %}bg-blue-400/20 text-blue-400{% else %}bg-purple-400/20 text-purple-400{% endif %}">
+                        {{ variant.variant_type|title }}
+                    </span>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="text-center p-3 bg-white/5 rounded-xl">
+                        <div class="text-2xl font-bold text-white">{{ variant.impressions or 0 }}</div>
+                        <div class="text-xs text-slate-400">{{ t('impressions', 'Impressions') }}</div>
+                    </div>
+                    <div class="text-center p-3 bg-white/5 rounded-xl">
+                        <div class="text-2xl font-bold text-cyan-400">{{ "%.1f"|format(variant.conversion_rate or 0) }}%</div>
+                        <div class="text-xs text-slate-400">{{ t('conversion_rate', 'Conv. Rate') }}</div>
+                    </div>
+                    <div class="text-center p-3 bg-white/5 rounded-xl">
+                        <div class="text-2xl font-bold text-blue-400">{{ variant.clicks or 0 }}</div>
+                        <div class="text-xs text-slate-400">{{ t('clicks', 'Clicks') }}</div>
+                    </div>
+                    <div class="text-center p-3 bg-white/5 rounded-xl">
+                        <div class="text-2xl font-bold text-emerald-400">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(variant.revenue_generated or 0) }}</div>
+                        <div class="text-xs text-slate-400">{{ t('revenue', 'Revenue') }}</div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Traffic Split -->
+    <div class="glass-panel rounded-2xl p-6 mb-8">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('traffic_split', 'Traffic Split') }}</h3>
+        <div class="flex items-center gap-4">
+            <div class="flex-1">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm text-slate-400">{{ test.control_variant or 'Control' }} ({{ test.control_percentage or 50 }}%)</span>
+                </div>
+                <div class="h-4 bg-blue-500 rounded-full" style="width: {{ test.control_percentage or 50 }}%"></div>
+            </div>
+            <div class="flex-1">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm text-slate-400">{{ test.challenger_variant or 'Challenger' }} ({{ 100 - (test.control_percentage or 50) }}%)</span>
+                </div>
+                <div class="h-4 bg-purple-500 rounded-full" style="width: {{ 100 - (test.control_percentage or 50) }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule -->
+    {% if test.start_date or test.end_date %}
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('schedule', 'Schedule') }}</h3>
+        <div class="grid grid-cols-2 gap-6">
+            <div>
+                <span class="text-sm text-slate-400">{{ t('start_date', 'Start Date') }}</span>
+                <p class="text-white font-semibold">{{ test.start_date or '-' }}</p>
+            </div>
+            <div>
+                <span class="text-sm text-slate-400">{{ t('end_date', 'End Date') }}</span>
+                <p class="text-white font-semibold">{{ test.end_date or '-' }}</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

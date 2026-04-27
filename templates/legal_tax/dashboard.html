@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">{{ title }}</h1>
+            <p class="text-gray-600 mt-1">Legal / Tax Reporting Module Dashboard</p>
+        </div>
+        <div class="flex space-x-3">
+            <a href="/legal-tax/filing-calendar" class="btn btn-outline btn-sm">
+                <i class="fas fa-calendar-alt mr-2"></i> Filing Calendar
+            </a>
+            <a href="/legal-tax/returns/create" class="btn btn-primary btn-sm">
+                <i class="fas fa-plus mr-2"></i> New Return
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <!-- Total Returns -->
+        <div class="bg-white rounded-lg shadow p-6 border-l-4 border-blue-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">Total Returns</p>
+                    <p class="text-2xl font-bold text-gray-900">{{ stats.returns_by_status|length if stats.returns_by_status else 0 }}</p>
+                </div>
+                <div class="bg-blue-100 p-3 rounded-full">
+                    <i class="fas fa-file-invoice text-blue-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="mt-4 flex space-x-2 text-xs">
+                {% if stats.returns_by_status %}
+                <span class="px-2 py-1 bg-green-100 text-green-800 rounded">{{ stats.returns_by_status.get('approved', 0) }} Approved</span>
+                <span class="px-2 py-1 bg-yellow-100 text-yellow-800 rounded">{{ stats.returns_by_status.get('draft', 0) }} Draft</span>
+                {% else %}
+                <span class="text-gray-500">No returns</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Pending Obligations -->
+        <div class="bg-white rounded-lg shadow p-6 border-l-4 border-orange-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">Overdue Obligations</p>
+                    <p class="text-2xl font-bold text-orange-600">{{ stats.overdue_obligations or 0 }}</p>
+                </div>
+                <div class="bg-orange-100 p-3 rounded-full">
+                    <i class="fas fa-exclamation-triangle text-orange-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="mt-4">
+                <a href="/legal-tax/obligations?status=overdue" class="text-orange-600 text-sm hover:underline">View overdue →</a>
+            </div>
+        </div>
+
+        <!-- Pending Reviews -->
+        <div class="bg-white rounded-lg shadow p-6 border-l-4 border-purple-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">Pending Reviews</p>
+                    <p class="text-2xl font-bold text-purple-600">{{ stats.pending_review_items or 0 }}</p>
+                </div>
+                <div class="bg-purple-100 p-3 rounded-full">
+                    <i class="fas fa-search text-purple-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="mt-4">
+                <a href="/legal-tax/transaction-review?status=pending" class="text-purple-600 text-sm hover:underline">Review items →</a>
+            </div>
+        </div>
+
+        <!-- Open Notices -->
+        <div class="bg-white rounded-lg shadow p-6 border-l-4 border-red-500">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-500 text-sm">Open Notices</p>
+                    <p class="text-2xl font-bold text-red-600">{{ stats.open_notices or 0 }}</p>
+                </div>
+                <div class="bg-red-100 p-3 rounded-full">
+                    <i class="fas fa-exclamation-circle text-red-500 text-xl"></i>
+                </div>
+            </div>
+            <div class="mt-4">
+                <a href="/legal-tax/notices" class="text-red-600 text-sm hover:underline">View all notices →</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Upcoming Obligations -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-900">Upcoming Obligations</h2>
+                <a href="/legal-tax/obligations" class="text-blue-600 text-sm hover:underline">View all</a>
+            </div>
+            <div class="p-6">
+                {% if upcoming_obligations %}
+                <div class="space-y-4">
+                    {% for obligation in upcoming_obligations %}
+                    <div class="flex items-start border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+                        <div class="flex-shrink-0 mr-4">
+                            {% if obligation.priority == 'high' %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">High</span>
+                            {% elif obligation.priority == 'medium' %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Medium</span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Low</span>
+                            {% endif %}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-900 truncate">{{ obligation.description }}</p>
+                            <p class="text-sm text-gray-500">Due: {{ obligation.due_date }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8 text-gray-500">
+                    <i class="fas fa-calendar-check text-4xl mb-3 text-gray-300"></i>
+                    <p>No upcoming obligations</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Overdue Obligations -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-900">Overdue Obligations</h2>
+                <a href="/legal-tax/obligations?status=overdue" class="text-orange-600 text-sm hover:underline">View all</a>
+            </div>
+            <div class="p-6">
+                {% if overdue_obligations %}
+                <div class="space-y-4">
+                    {% for obligation in overdue_obligations %}
+                    <div class="flex items-start border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+                        <div class="flex-shrink-0 mr-4">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Overdue</span>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-900 truncate">{{ obligation.description }}</p>
+                            <p class="text-sm text-red-600">Was due: {{ obligation.due_date }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8 text-gray-500">
+                    <i class="fas fa-check-circle text-4xl mb-3 text-green-300"></i>
+                    <p>No overdue obligations</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Returns and Quick Actions -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Recent Returns -->
+        <div class="lg:col-span-2 bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h2 class="text-lg font-semibold text-gray-900">Recent Returns</h2>
+                <a href="/legal-tax/returns" class="text-blue-600 text-sm hover:underline">View all</a>
+            </div>
+            <div class="p-6">
+                {% if recent_returns %}
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Return #</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tax Due</th>
+                                <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            {% for ret in recent_returns %}
+                            <tr>
+                                <td class="px-4 py-3 text-sm font-medium text-gray-900">{{ ret.return_number }}</td>
+                                <td class="px-4 py-3 text-sm text-gray-500">{{ ret.return_type|upper }}</td>
+                                <td class="px-4 py-3">
+                                    {% if ret.status == 'approved' %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Approved</span>
+                                    {% elif ret.status == 'draft' %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">Draft</span>
+                                    {% elif ret.status == 'submitted' %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Submitted</span>
+                                    {% else %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{{ ret.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3 text-sm text-gray-900">{{ "${:,.2f}".format(ret.total_tax_due or 0) }}</td>
+                                <td class="px-4 py-3 text-sm">
+                                    <a href="/legal-tax/returns/{{ ret.id }}" class="text-blue-600 hover:underline">View</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-8 text-gray-500">
+                    <i class="fas fa-file-invoice text-4xl mb-3 text-gray-300"></i>
+                    <p>No returns yet</p>
+                    <a href="/legal-tax/returns/create" class="text-blue-600 hover:underline mt-2 inline-block">Create first return</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-lg font-semibold text-gray-900">Quick Actions</h2>
+            </div>
+            <div class="p-6 space-y-3">
+                <a href="/legal-tax/returns/create" class="block w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-100 rounded-lg transition">
+                    <i class="fas fa-plus text-blue-600 mr-3"></i>
+                    <span class="text-blue-900">Create New Return</span>
+                </a>
+                <a href="/legal-tax/obligations/create" class="block w-full text-left px-4 py-3 bg-green-50 hover:bg-green-100 rounded-lg transition">
+                    <i class="fas fa-calendar-plus text-green-600 mr-3"></i>
+                    <span class="text-green-900">Add Obligation</span>
+                </a>
+                <a href="/legal-tax/transaction-review" class="block w-full text-left px-4 py-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition">
+                    <i class="fas fa-search text-purple-600 mr-3"></i>
+                    <span class="text-purple-900">Review Transactions</span>
+                </a>
+                <a href="/legal-tax/reconciliations/create" class="block w-full text-left px-4 py-3 bg-orange-50 hover:bg-orange-100 rounded-lg transition">
+                    <i class="fas fa-balance-scale text-orange-600 mr-3"></i>
+                    <span class="text-orange-900">Start Reconciliation</span>
+                </a>
+                <a href="/legal-tax/notices/create" class="block w-full text-left px-4 py-3 bg-red-50 hover:bg-red-100 rounded-lg transition">
+                    <i class="fas fa-exclamation-circle text-red-600 mr-3"></i>
+                    <span class="text-red-900">Log New Notice</span>
+                </a>
+                <a href="/legal-tax/reports" class="block w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition">
+                    <i class="fas fa-chart-bar text-gray-600 mr-3"></i>
+                    <span class="text-gray-900">View Reports</span>
+                </a>
+                <a href="/legal-tax/export-center" class="block w-full text-left px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition">
+                    <i class="fas fa-download text-gray-600 mr-3"></i>
+                    <span class="text-gray-900">Export Center</span>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+        <!-- Filing Status Chart Placeholder -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Filing Status</h3>
+            <div class="h-48 flex items-center justify-center bg-gray-50 rounded">
+                <canvas id="filingStatusChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Tax Position Trend Placeholder -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Tax Position Trend</h3>
+            <div class="h-48 flex items-center justify-center bg-gray-50 rounded">
+                <canvas id="taxTrendChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Risk Distribution -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Risk Distribution</h3>
+            <div class="h-48 flex items-center justify-center bg-gray-50 rounded">
+                <canvas id="riskChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Filing Status Pie Chart
+    const filingStatusCtx = document.getElementById('filingStatusChart');
+    if (filingStatusCtx) {
+        new Chart(filingStatusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Draft', 'Submitted', 'Approved', 'Filed'],
+                datasets: [{
+                    data: [
+                        {{ stats.returns_by_status.get('draft', 0) }},
+                        {{ stats.returns_by_status.get('submitted', 0) }},
+                        {{ stats.returns_by_status.get('approved', 0) }},
+                        {{ stats.returns_by_status.get('filed', 0) }}
+                    ],
+                    backgroundColor: ['#9CA3AF', '#FCD34D', '#34D399', '#3B82F6']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+    }
+
+    // Tax Trend Line Chart
+    const taxTrendCtx = document.getElementById('taxTrendChart');
+    if (taxTrendCtx) {
+        new Chart(taxTrendCtx, {
+            type: 'line',
+            data: {
+                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                datasets: [{
+                    label: 'Output Tax',
+                    data: [12000, 15000, 17500, 21000, 19000, 22500],
+                    borderColor: '#3B82F6',
+                    tension: 0.3
+                }, {
+                    label: 'Input Tax',
+                    data: [8000, 9500, 10400, 12800, 11500, 13200],
+                    borderColor: '#10B981',
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+    }
+
+    // Risk Distribution Bar Chart
+    const riskCtx = document.getElementById('riskChart');
+    if (riskCtx) {
+        new Chart(riskCtx, {
+            type: 'bar',
+            data: {
+                labels: ['High', 'Medium', 'Low'],
+                datasets: [{
+                    label: 'Obligations',
+                    data: [
+                        {{ stats.overdue_obligations or 0 }},
+                        {{ stats.upcoming_obligations_7d or 0 }},
+                        5
+                    ],
+                    backgroundColor: ['#EF4444', '#F59E0B', '#10B981']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

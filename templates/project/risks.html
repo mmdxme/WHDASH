@@ -1,0 +1,314 @@
+{% extends "project/base.html" %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="mb-8 flex justify-between items-center">
+    <div>
+        <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ t('risk_register', 'Risk Register') }}</h1>
+        <p class="text-slate-600 dark:text-slate-400 mt-1">{{ t('risks_subtitle', 'Identify, assess, and mitigate project risks') }}</p>
+    </div>
+    <div class="flex gap-3">
+        <button onclick="exportRisks()" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-download mr-2"></i>{{ t('export', 'Export') }}
+        </button>
+        <button onclick="showAddRiskModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-plus mr-2"></i>{{ t('add_risk', 'Add Risk') }}
+        </button>
+    </div>
+</div>
+
+<!-- Risk Matrix Summary -->
+<div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+    <div class="card stat-card p-4 text-center">
+        <p class="text-sm text-slate-500 mb-1">{{ t('critical', 'Critical') }}</p>
+        <p class="text-3xl font-bold text-red-600">{{ risk_counts.critical }}</p>
+    </div>
+    <div class="card stat-card p-4 text-center">
+        <p class="text-sm text-slate-500 mb-1">{{ t('high', 'High') }}</p>
+        <p class="text-3xl font-bold text-orange-600">{{ risk_counts.high }}</p>
+    </div>
+    <div class="card stat-card p-4 text-center">
+        <p class="text-sm text-slate-500 mb-1">{{ t('medium', 'Medium') }}</p>
+        <p class="text-3xl font-bold text-amber-600">{{ risk_counts.medium }}</p>
+    </div>
+    <div class="card stat-card p-4 text-center">
+        <p class="text-sm text-slate-500 mb-1">{{ t('low', 'Low') }}</p>
+        <p class="text-3xl font-bold text-green-600">{{ risk_counts.low }}</p>
+    </div>
+    <div class="card stat-card p-4 text-center">
+        <p class="text-sm text-slate-500 mb-1">{{ t('total', 'Total') }}</p>
+        <p class="text-3xl font-bold text-slate-800 dark:text-white">{{ risk_counts.total }}</p>
+    </div>
+</div>
+
+<!-- Risk Matrix Visualization -->
+<div class="card mb-6">
+    <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+        <h2 class="font-semibold text-slate-800 dark:text-white">{{ t('risk_matrix', 'Risk Matrix') }}</h2>
+    </div>
+    <div class="p-5">
+        <canvas id="riskMatrixChart" height="300"></canvas>
+    </div>
+</div>
+
+<!-- Risk List -->
+<div class="card">
+    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+        <h2 class="font-semibold text-slate-800 dark:text-white">{{ t('risk_list', 'Risk List') }}</h2>
+        <div class="flex items-center gap-2">
+            <select id="projectFilter" onchange="loadRisks()" class="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm">
+                <option value="">{{ t('all_projects', 'All Projects') }}</option>
+                {% for p in projects %}
+                <option value="{{ p.id }}">{{ p.code }} - {{ p.name }}</option>
+                {% endfor %}
+            </select>
+            <select id="severityFilter" onchange="loadRisks()" class="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm">
+                <option value="">{{ t('all_severities', 'All Severities') }}</option>
+                <option value="Critical">{{ t('critical', 'Critical') }}</option>
+                <option value="High">{{ t('high', 'High') }}</option>
+                <option value="Medium">{{ t('medium', 'Medium') }}</option>
+                <option value="Low">{{ t('low', 'Low') }}</option>
+            </select>
+        </div>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-slate-50 dark:bg-slate-700/50">
+                <tr>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('id', 'ID') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('title', 'Title') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('project', 'Project') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('severity', 'Severity') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('probability', 'Probability') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('impact', 'Impact') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('status', 'Status') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('owner', 'Owner') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('actions', 'Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                {% for risk in risks %}
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                    <td class="px-5 py-4">
+                        <a href="{{ url_for('project_risk_detail', risk_id=risk.id) }}" class="font-medium text-indigo-600 hover:underline">{{ risk.code }}</a>
+                    </td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300">
+                        <p class="font-medium">{{ risk.title }}</p>
+                        <p class="text-sm text-slate-500">{{ risk.category }}</p>
+                    </td>
+                    <td class="px-5 py-4 text-slate-500 dark:text-slate-400 text-sm">{{ risk.project_name }}</td>
+                    <td class="px-5 py-4">
+                        <span class="px-2 py-1 text-xs rounded {% if risk.severity == 'Critical' %}bg-red-100 text-red-700{% elif risk.severity == 'High' %}bg-orange-100 text-orange-700{% elif risk.severity == 'Medium' %}bg-amber-100 text-amber-700{% else %}bg-green-100 text-green-700{% endif %}">
+                            {{ risk.severity }}
+                        </span>
+                    </td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ risk.probability }}%</td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ risk.impact }}</td>
+                    <td class="px-5 py-4">
+                        <span class="status-badge status-{{ risk.status|lower }}">{{ risk.status }}</span>
+                    </td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ risk.owner_name }}</td>
+                    <td class="px-5 py-4">
+                        <div class="flex items-center gap-2">
+                            <button onclick="editRisk('{{ risk.id }}')" class="p-2 text-slate-500 hover:text-indigo-600">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="deleteRisk('{{ risk.id }}')" class="p-2 text-slate-500 hover:text-red-600">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add/Edit Risk Modal -->
+<div id="riskModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50" onclick="closeRiskModal()"></div>
+        <div class="relative bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-slate-800 dark:text-white" id="riskModalTitle">{{ t('add_risk', 'Add Risk') }}</h3>
+                <button onclick="closeRiskModal()" class="p-2 text-slate-500 hover:text-slate-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="riskForm" method="POST" action="{{ url_for('project_save_risk') }}">
+                <input type="hidden" name="risk_id" id="riskId">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('title', 'Title') }} *</label>
+                        <input type="text" id="riskTitle" name="title" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('project', 'Project') }} *</label>
+                        <select id="riskProject" name="project_id" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">{{ t('select_project', 'Select project') }}</option>
+                            {% for p in projects %}
+                            <option value="{{ p.id }}">{{ p.code }} - {{ p.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('category', 'Category') }}</label>
+                        <select id="riskCategory" name="category" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="Technical">Technical</option>
+                            <option value="Resource">Resource</option>
+                            <option value="Budget">Budget</option>
+                            <option value="Schedule">Schedule</option>
+                            <option value="External">External</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('severity', 'Severity') }} *</label>
+                        <select id="riskSeverity" name="severity" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                            <option value="Critical">Critical</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('probability', 'Probability') }} *</label>
+                        <select id="riskProbability" name="probability" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="10">10% - Rare</option>
+                            <option value="30">30% - Unlikely</option>
+                            <option value="50">50% - Possible</option>
+                            <option value="70">70% - Likely</option>
+                            <option value="90">90% - Almost Certain</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('impact', 'Impact') }} *</label>
+                        <select id="riskImpact" name="impact" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="Negligible">Negligible</option>
+                            <option value="Minor">Minor</option>
+                            <option value="Moderate">Moderate</option>
+                            <option value="Major">Major</option>
+                            <option value="Severe">Severe</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('status', 'Status') }}</label>
+                        <select id="riskStatus" name="status" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="Open">Open</option>
+                            <option value="Mitigated">Mitigated</option>
+                            <option value="Accepted">Accepted</option>
+                            <option value="Closed">Closed</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('owner', 'Owner') }} *</label>
+                        <select id="riskOwner" name="owner_id" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">{{ t('select_owner', 'Select owner') }}</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('mitigation_plan', 'Mitigation Plan') }}</label>
+                        <textarea id="riskMitigation" name="mitigation_plan" rows="3" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="closeRiskModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium">{{ t('cancel', 'Cancel') }}</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">{{ t('save', 'Save') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function loadRisks() {
+    const params = new URLSearchParams();
+    const projectId = document.getElementById('projectFilter').value;
+    const severity = document.getElementById('severityFilter').value;
+    if (projectId) params.set('project_id', projectId);
+    if (severity) params.set('severity', severity);
+    window.location.href = '{{ url_for("project_risks") }}?' + params.toString();
+}
+
+function showAddRiskModal() {
+    document.getElementById('riskModalTitle').textContent = '{{ t("add_risk", "Add Risk") }}';
+    document.getElementById('riskForm').reset();
+    document.getElementById('riskId').value = '';
+    document.getElementById('riskModal').classList.remove('hidden');
+}
+
+function editRisk(riskId) {
+    fetch('/api/project/risk/' + riskId)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('riskModalTitle').textContent = '{{ t("edit_risk", "Edit Risk") }}';
+            document.getElementById('riskId').value = data.id;
+            document.getElementById('riskTitle').value = data.title;
+            document.getElementById('riskProject').value = data.project_id;
+            document.getElementById('riskCategory').value = data.category;
+            document.getElementById('riskSeverity').value = data.severity;
+            document.getElementById('riskProbability').value = data.probability;
+            document.getElementById('riskImpact').value = data.impact;
+            document.getElementById('riskStatus').value = data.status;
+            document.getElementById('riskOwner').value = data.owner_id;
+            document.getElementById('riskMitigation').value = data.mitigation_plan || '';
+            document.getElementById('riskModal').classList.remove('hidden');
+        });
+}
+
+function closeRiskModal() {
+    document.getElementById('riskModal').classList.add('hidden');
+}
+
+function deleteRisk(riskId) {
+    Swal.fire({
+        title: '{{ t("delete_risk", "Delete Risk") }}',
+        text: '{{ t("confirm_delete_risk", "Are you sure you want to delete this risk?") }}',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '{{ t("yes_delete", "Yes, Delete") }}',
+        cancelButtonText: '{{ t("cancel", "Cancel") }}',
+        confirmButtonColor: '#ef4444'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            fetch('/api/project/risk/' + riskId, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || '' }
+            }).then(() => location.reload());
+        }
+    });
+}
+
+function exportRisks() {
+    window.location.href = '/api/project/risks/export';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const riskCtx = document.getElementById('riskMatrixChart').getContext('2d');
+    new Chart(riskCtx, {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                label: '{{ t("risks", "Risks") }}',
+                data: {{ risk_scatter_data|tojson }},
+                backgroundColor: {{ risk_colors|tojson }}
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { title: { display: true, text: '{{ t("probability", "Probability") }}' }, min: 0, max: 100 },
+                y: { title: { display: true, text: '{{ t("impact", "Impact") }}' }, min: 0, max: 5 }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

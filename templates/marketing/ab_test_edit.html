@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[900px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="mb-8">
+        <div class="flex items-center gap-3 mb-4">
+            <a href="{{ url_for('marketing.ab_tests_list') }}" class="p-2 hover:bg-white/10 rounded-lg transition-all">
+                <i class="fa-solid fa-arrow-left text-slate-400"></i>
+            </a>
+            <h1 class="text-2xl font-extrabold text-white">{{ title }}</h1>
+        </div>
+        <p class="text-slate-400">{{ t('ab_test_edit_desc', 'Configure A/B test parameters and variants') }}</p>
+    </div>
+
+    <!-- Form -->
+    <form method="post" class="space-y-6">
+        <!-- Basic Info -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t('basic_info', 'Basic Information') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('test_name', 'Test Name') }} *</label>
+                    <input type="text" name="test_name" value="{{ test.test_name if test else '' }}" required
+                           class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('test_code', 'Test Code') }}</label>
+                    <input type="text" name="test_code" value="{{ test.test_code if test else '' }}"
+                           placeholder="Auto-generated if empty"
+                           class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('test_type', 'Test Type') }} *</label>
+                    <select name="test_type" required class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                        <option value="">{{ t('select_type', 'Select Type') }}</option>
+                        <option value="subject_line" {% if test and test.test_type == 'subject_line' %}selected{% endif %}>{{ t('subject_line', 'Subject Line') }}</option>
+                        <option value="cta" {% if test and test.test_type == 'cta' %}selected{% endif %}>{{ t('cta', 'Call to Action') }}</option>
+                        <option value="content" {% if test and test.test_type == 'content' %}selected{% endif %}>{{ t('content', 'Content') }}</option>
+                        <option value="audience" {% if test and test.test_type == 'audience' %}selected{% endif %}>{{ t('audience', 'Audience') }}</option>
+                        <option value="design" {% if test and test.test_type == 'design' %}selected{% endif %}>{{ t('design', 'Design/Layout') }}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('channel', 'Channel') }}</label>
+                    <select name="channel" class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                        <option value="">{{ t('multi_channel', 'Multi-channel') }}</option>
+                        <option value="email" {% if test and test.channel == 'email' %}selected{% endif %}>{{ t('email', 'Email') }}</option>
+                        <option value="sms" {% if test and test.channel == 'sms' %}selected{% endif %}>{{ t('sms', 'SMS') }}</option>
+                        <option value="whatsapp" {% if test and test.channel == 'whatsapp' %}selected{% endif %}>{{ t('whatsapp', 'WhatsApp') }}</option>
+                        <option value="push" {% if test and test.channel == 'push' %}selected{% endif %}>{{ t('push', 'Push') }}</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mt-6">
+                <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('hypothesis', 'Hypothesis') }}</label>
+                <textarea name="hypothesis" rows="2"
+                          class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">{{ test.hypothesis if test else '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Variants -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t('variants', 'Variants') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('control_variant', 'Control Variant') }}</label>
+                    <input type="text" name="control_variant" value="{{ test.control_variant if test else 'Control' }}"
+                           class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                    <p class="text-xs text-slate-500 mt-1">{{ t('control_desc', 'The baseline version (A)') }}</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('challenger_variant', 'Challenger Variant') }}</label>
+                    <input type="text" name="challenger_variant" value="{{ test.challenger_variant if test else 'Challenger' }}"
+                           class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                    <p class="text-xs text-slate-500 mt-1">{{ t('challenger_desc', 'The variant being tested (B)') }}</p>
+                </div>
+            </div>
+
+            <div class="mt-6">
+                <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('split_percentage', 'Traffic Split') }}</label>
+                <div class="grid grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">{{ t('control', 'Control') }}: {{ test.control_percentage if test else 50 }}%</label>
+                        <input type="range" name="control_percentage" min="10" max="90" value="{{ test.control_percentage if test else 50 }}"
+                               class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">{{ t('challenger', 'Challenger') }}: {{ 100 - (test.control_percentage if test else 50) }}%</label>
+                        <input type="range" name="challenger_percentage" min="10" max="90" value="{{ test.challenger_percentage if test else 50 }}"
+                               class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Campaign Linkage -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t('campaign_linkage', 'Campaign Linkage') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('linked_campaign', 'Linked Campaign') }}</label>
+                    <select name="campaign_id" class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                        <option value="">{{ t('no_campaign', 'No Specific Campaign') }}</option>
+                        {% for camp in campaigns %}
+                        <option value="{{ camp.id }}" {% if test and test.campaign_id == camp.id %}selected{% endif %}>{{ camp.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('target_segment', 'Target Segment') }}</label>
+                    <select name="target_segment_id" class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                        <option value="">{{ t('all_segments', 'All Segments') }}</option>
+                        {% for seg in segments %}
+                        <option value="{{ seg.id }}" {% if test and test.target_segment_id == seg.id %}selected{% endif %}>{{ seg.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule & Metrics -->
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t('schedule_metrics', 'Schedule & Success Metrics') }}</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('start_date', 'Start Date') }}</label>
+                    <input type="date" name="start_date" value="{{ test.start_date if test else '' }}"
+                           class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('end_date', 'End Date') }}</label>
+                    <input type="date" name="end_date" value="{{ test.end_date if test else '' }}"
+                           class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                </div>
+            </div>
+            <div class="mt-6">
+                <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('success_metric', 'Success Metric') }}</label>
+                <select name="success_metric" class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                    <option value="conversion_rate" {% if test and test.success_metric == 'conversion_rate' %}selected{% endif %}>{{ t('conversion_rate', 'Conversion Rate') }}</option>
+                    <option value="ctr" {% if test and test.success_metric == 'ctr' %}selected{% endif %}>{{ t('click_through_rate', 'Click-through Rate') }}</option>
+                    <option value="engagement" {% if test and test.success_metric == 'engagement' %}selected{% endif %}>{{ t('engagement', 'Engagement') }}</option>
+                    <option value="revenue" {% if test and test.success_metric == 'revenue' %}selected{% endif %}>{{ t('revenue', 'Revenue') }}</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="flex items-center justify-end gap-3">
+            <a href="{{ url_for('marketing.ab_tests_list') }}" class="px-6 py-3 text-slate-400 hover:text-white transition-all">
+                {{ t('cancel', 'Cancel') }}
+            </a>
+            <button type="submit" class="px-6 py-3 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-save mr-2"></i>{{ t('save_test', 'Save Test') }}
+            </button>
+        </div>
+    </form>
+
+</div>
+{% endblock %}

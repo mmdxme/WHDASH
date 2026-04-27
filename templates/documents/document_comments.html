@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background: #F9FAFB; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .comment-card { transition: transform 0.2s; }
+        .comment-card:hover { transform: translateY(-2px); }
+        .comment-resolved { opacity: 0.6; background: #F3F4F6; }
+        .avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; }
+        .comment-time { font-size: 0.75rem; color: #6B7280; }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+    {% block content %}
+    <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1"><i class="fas fa-comments me-2 text-primary"></i>Document Comments</h1>
+                <p class="text-muted mb-0">
+                    <a href="{{ url_for('documents_detail', document_id=document.id) }}">{{ document.title }}</a>
+                    <span class="text-muted">({{ document.document_code }})</span>
+                </p>
+            </div>
+        </div>
+
+        <!-- Add Comment Form -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <form action="{{ url_for('documents_add_comment', document_id=document.id) }}" method="POST">
+                    <div class="mb-3">
+                        <textarea name="comment_text" class="form-control" rows="3" placeholder="Add a comment..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-paper-plane me-2"></i>Post Comment
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Comments List -->
+        <div class="row">
+            {% for comment in comments %}
+            <div class="col-12">
+                <div class="card comment-card mb-3 {{ 'comment-resolved' if comment.is_resolved else '' }}">
+                    <div class="card-body">
+                        <div class="d-flex">
+                            <div class="avatar bg-primary text-white me-3">{{ comment.username[:1]|upper if comment.username else '?' }}</div>
+                            <div class="flex-grow-1">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong>{{ comment.username or 'Unknown' }}</strong>
+                                        {% if comment.full_name %}
+                                        <span class="text-muted">({{ comment.full_name }})</span>
+                                        {% endif %}
+                                        <span class="comment-time ms-2">{{ comment.created_at[:16] if comment.created_at else '' }}</span>
+                                    </div>
+                                    <div>
+                                        {% if comment.is_resolved %}
+                                        <span class="badge bg-success me-2"><i class="fas fa-check me-1"></i>Resolved</span>
+                                        {% endif %}
+                                        {% if comment.reply_count > 0 %}
+                                        <span class="badge bg-secondary me-2"><i class="fas fa-reply me-1"></i>{{ comment.reply_count }} replies</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <p class="mt-2 mb-3">{{ comment.comment_text }}</p>
+                                <div class="d-flex gap-2">
+                                    <form action="{{ url_for('documents_add_comment', document_id=document.id) }}" method="POST" class="d-inline">
+                                        <input type="hidden" name="parent_comment_id" value="{{ comment.id }}">
+                                        <input type="hidden" name="comment_text" value="">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="this.form.comment_text.value=prompt('Reply:'); if(this.form.comment_text.value) this.form.submit();">
+                                            <i class="fas fa-reply me-1"></i>Reply
+                                        </button>
+                                    </form>
+                                    {% if not comment.is_resolved %}
+                                    <form action="{{ url_for('documents_resolve_comment', comment_id=comment.id) }}" method="POST" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-outline-success">
+                                            <i class="fas fa-check me-1"></i>Resolve
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                    <form action="{{ url_for('documents_delete_comment', comment_id=comment.id) }}" method="POST" class="d-inline">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this comment?')">
+                                            <i class="fas fa-trash me-1"></i>Delete
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="col-12 text-center py-5">
+                <i class="fas fa-comments fa-3x text-muted mb-3"></i>
+                <h4>No Comments Yet</h4>
+                <p class="text-muted">Be the first to add a comment to this document.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endblock %}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

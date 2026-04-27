@@ -41,7 +41,37 @@ from logistics_models import (
 )
 from flow_models import send_channel_message, get_flow_profile
 
+# Import export utilities
+from export_utils import (
+    send_export_response,
+    get_export_columns
+)
+
 logistics_bp = Blueprint('logistics', __name__, url_prefix='/logistics')
+
+
+# =============================================================================
+# EXPORT TYPES AND COLUMNS
+# =============================================================================
+
+LOGISTICS_EXPORT_TYPES = [
+    'csv', 'excel_text', 'excel_general', 'json', 'xml', 'txt',
+    'pdf', 'docx', 'html', 'printable', 'barcode', 'api',
+    'email', 'zip', 'backup', 'sql_dump', 'dashboard',
+    'summary', 'detailed', 'audit_log'
+]
+
+LOGISTICS_EXPORT_COLUMNS = {
+    'shipments': ['shipment_id', 'origin', 'destination', 'status', 'carrier', 'cost'],
+    'delivery_orders': ['do_number', 'shipment_id', 'customer', 'address', 'status', 'delivery_date'],
+    'pickup_orders': ['pickup_number', 'customer', 'address', 'status', 'pickup_date'],
+    'trips': ['trip_id', 'vehicle', 'driver', 'route', 'status', 'start_time'],
+    'routes': ['route_id', 'route_name', 'stops', 'distance', 'estimated_time'],
+    'vehicles': ['vehicle_id', 'plate_number', 'type', 'status', 'capacity'],
+    'drivers': ['driver_id', 'name', 'license', 'phone', 'status', 'vehicle_assigned'],
+    'incidents': ['incident_id', 'shipment_id', 'type', 'severity', 'status', 'reported_at'],
+    'costs': ['cost_id', 'trip_id', 'type', 'amount', 'invoice_number', 'date']
+}
 
 
 # =============================================================================
@@ -876,9 +906,29 @@ def shipments_list():
 
         query += " ORDER BY s.priority DESC, s.created_at DESC"
 
-        # Count total
-        count_query = query.replace("SELECT s.*, c.name as customer_name, d.full_name as driver_name, v.plate_number, w.name as warehouse_name", "SELECT COUNT(*) as cnt")
-        total = db.execute(count_query, params).fetchone()['cnt']
+        # Count total - build a separate count query
+        count_params = list(params)
+        count_query = "SELECT COUNT(*) as cnt FROM logistics_shipments s"
+        count_query += " LEFT JOIN sdad_customers c ON s.customer_id = c.id"
+        count_query += " LEFT JOIN logistics_drivers d ON s.driver_id = d.id"
+        count_query += " LEFT JOIN logistics_vehicles v ON s.vehicle_id = v.id"
+        count_query += " LEFT JOIN warehouses w ON s.warehouse_id = w.id"
+        count_query += " WHERE 1=1"
+
+        if search:
+            count_query += " AND (s.shipment_code LIKE ? OR s.consignee_name LIKE ? OR s.delivery_address LIKE ?)"
+        if status:
+            count_query += " AND s.status = ?"
+        if shipment_type:
+            count_query += " AND s.shipment_type = ?"
+        if priority:
+            count_query += " AND s.priority = ?"
+        if date_from:
+            count_query += " AND date(s.created_at) >= ?"
+        if date_to:
+            count_query += " AND date(s.created_at) <= ?"
+
+        total = db.execute(count_query, count_params).fetchone()['cnt']
 
         # Paginate
         offset = (page - 1) * per_page
@@ -10243,6 +10293,140 @@ def api_vehicles_available():
         return jsonify([dict(v) for v in vehicles])
     finally:
         db.close()
+
+
+# =============================================================================
+# API EXPORT ENDPOINTS
+# =============================================================================
+
+@logistics_bp.route('/api/export/<export_type>', methods=['GET', 'POST'])
+@logistics_bp.route('/api/export/<data_type>/<export_type>', methods=['GET', 'POST'])
+@logistics_login_required
+def api_logistics_export(export_type, data_type=None):
+    """Export logistics data in all 20 formats."""
+    if export_type not in LOGISTICS_EXPORT_TYPES:
+        return jsonify({
+            'error': f'Invalid export type. Valid types: {LOGISTICS_EXPORT_TYPES}'
+        }), 400
+
+    db = get_db()
+    try:
+        company_id = session.get('company_id', 0)
+
+        # Determine data type from URL or default
+        if data_type is None:
+            data_type = request.args.get('type', 'shipments')
+
+        # Get data based on type
+        if data_type == 'shipments':
+            data = db.execute("""
+                SELECT * FROM logistics_shipments
+                WHERE company_id = ?
+                ORDER BY created_at DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = LOGISTICS_EXPORT_COLUMNS['shipments']
+            title = 'Logistics Shipments'
+        elif data_type == 'delivery_orders':
+            data = db.execute("""
+                SELECT * FROM logistics_delivery_orders
+                WHERE company_id = ?
+                ORDER BY created_at DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = LOGISTICS_EXPORT_COLUMNS['delivery_orders']
+            title = 'Delivery Orders'
+        elif data_type == 'pickup_orders':
+            data = db.execute("""
+                SELECT * FROM logistics_pickup_orders
+                WHERE company_id = ?
+                ORDER BY created_at DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = LOGISTICS_EXPORT_COLUMNS['pickup_orders']
+            title = 'Pickup Orders'
+        elif data_type == 'trips':
+            data = db.execute("""
+                SELECT * FROM logistics_trips
+                WHERE company_id = ?
+                ORDER BY created_at DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = LOGISTICS_EXPORT_COLUMNS['trips']
+            title = 'Logistics Trips'
+        elif data_type == 'routes':
+            data = db.execute("""
+                SELECT * FROM logistics_routes
+                WHERE company_id = ?
+                ORDER BY route_name
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = LOGISTICS_EXPORT_COLUMNS['routes']
+            title = 'Logistics Routes'
+        elif data_type == 'vehicles':
+            data = db.execute("""
+                SELECT * FROM logistics_vehicles
+                WHERE company_id = ?
+                ORDER BY plate_number
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = LOGISTICS_EXPORT_COLUMNS['vehicles']
+            title = 'Fleet Vehicles'
+        elif data_type == 'drivers':
+            data = db.execute("""
+                SELECT * FROM logistics_drivers
+                WHERE company_id = ?
+                ORDER BY driver_name
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = LOGISTICS_EXPORT_COLUMNS['drivers']
+            title = 'Drivers'
+        elif data_type == 'incidents':
+            data = db.execute("""
+                SELECT * FROM logistics_incidents
+                WHERE company_id = ?
+                ORDER BY created_at DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = LOGISTICS_EXPORT_COLUMNS['incidents']
+            title = 'Logistics Incidents'
+        elif data_type == 'costs':
+            data = db.execute("""
+                SELECT * FROM logistics_trip_costs
+                WHERE company_id = ?
+                ORDER BY cost_date DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = LOGISTICS_EXPORT_COLUMNS['costs']
+            title = 'Trip Costs'
+        else:
+            return jsonify({'error': f'Data type {data_type} not supported'}), 400
+
+        filename = f'logistics_{data_type}_{datetime.now().strftime("%Y%m%d")}'
+
+        return send_export_response(data, export_type, filename, columns, title)
+    finally:
+        db.close()
+
+
+@logistics_bp.route('/api/export/list')
+@logistics_login_required
+def list_logistics_export_types():
+    """List available export types for logistics module."""
+    return jsonify({
+        'module': 'logistics',
+        'data_types': list(LOGISTICS_EXPORT_COLUMNS.keys()),
+        'export_types': [{'type': t} for t in LOGISTICS_EXPORT_TYPES]
+    })
 
 
 def register_logistics_routes(app):

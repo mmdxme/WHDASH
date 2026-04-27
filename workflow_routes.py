@@ -20,7 +20,7 @@ USAGE:
     register_workflow_routes(app)
 """
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask import Flask, Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 from functools import wraps
 from datetime import datetime, timedelta
 import json
@@ -59,6 +59,162 @@ from workflow_models import (
     get_delegation_rules, create_delegation_rule, update_delegation_rule,
     get_workflow_stats, get_workflow_reports
 )
+
+# Import export utilities
+from export_utils import (
+    send_export_response,
+    get_export_columns
+)
+
+# Create workflow blueprint
+workflow_bp = Blueprint('workflow', __name__, url_prefix='/workflow')
+
+
+# =============================================================================
+# HELPER DECORATORS
+# =============================================================================
+
+def workflow_require_login(f):
+    """Decorator requiring authentication."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def workflow_require_permission(resource, action):
+    """Decorator requiring specific permission."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            user_id = session.get('user_id')
+            if not user_id:
+                return redirect(url_for('login'))
+            if not user_has_permission(user_id, 'workflow', resource, action):
+                flash(f"Access denied. You need '{action}' permission on '{resource}'.", "error")
+                return redirect(url_for('index'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+# =============================================================================
+# EXPORT TYPES AND COLUMNS
+# =============================================================================
+
+WORKFLOW_EXPORT_TYPES = [
+    'csv', 'excel_text', 'excel_general', 'json', 'xml', 'txt',
+    'pdf', 'docx', 'html', 'printable', 'barcode', 'api',
+    'email', 'zip', 'backup', 'sql_dump', 'dashboard',
+    'summary', 'detailed', 'audit_log'
+]
+
+WORKFLOW_EXPORT_COLUMNS = {
+    'definitions': ['definition_id', 'name', 'version', 'status', 'created_by', 'created_at'],
+    'instances': ['instance_id', 'definition_name', 'status', 'current_step', 'assignee', 'created_at'],
+    'steps': ['step_id', 'instance_id', 'step_name', 'status', 'assignee', 'completed_at'],
+    'transitions': ['transition_id', 'from_step', 'to_step', 'condition', 'created_at'],
+    'tasks': ['task_id', 'instance_id', 'task_name', 'assignee', 'due_date', 'status'],
+    'notifications': ['notification_id', 'template_name', 'channel', 'recipient', 'sent_at']
+}
+
+
+# =============================================================================
+# API EXPORT ENDPOINTS
+# =============================================================================
+
+@workflow_bp.route('/api/export/<export_type>', methods=['GET', 'POST'])
+@workflow_bp.route('/api/export/<data_type>/<export_type>', methods=['GET', 'POST'])
+@workflow_require_permission('reports', 'view')
+def api_workflow_export(export_type, data_type=None):
+    """Export workflow data in all 20 formats."""
+    if export_type not in WORKFLOW_EXPORT_TYPES:
+        return jsonify({
+            'error': f'Invalid export type. Valid types: {WORKFLOW_EXPORT_TYPES}'
+        }), 400
+
+    company_id = session.get('company_id', 0)
+
+    # Determine data type from URL or default
+    if data_type is None:
+        data_type = request.args.get('type', 'definitions')
+
+    # Get data based on type
+    if data_type == 'definitions':
+        data = get_all("""
+            SELECT * FROM workflow_definitions
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = WORKFLOW_EXPORT_COLUMNS['definitions']
+        title = 'Workflow Definitions'
+    elif data_type == 'instances':
+        data = get_all("""
+            SELECT wi.*, wd.name as definition_name
+            FROM workflow_instances wi
+            LEFT JOIN workflow_definitions wd ON wi.definition_id = wd.id
+            WHERE wi.company_id = ?
+            ORDER BY wi.created_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = WORKFLOW_EXPORT_COLUMNS['instances']
+        title = 'Workflow Instances'
+    elif data_type == 'steps':
+        data = get_all("""
+            SELECT * FROM workflow_steps
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = WORKFLOW_EXPORT_COLUMNS['steps']
+        title = 'Workflow Steps'
+    elif data_type == 'transitions':
+        data = get_all("""
+            SELECT * FROM workflow_transitions
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = WORKFLOW_EXPORT_COLUMNS['transitions']
+        title = 'Workflow Transitions'
+    elif data_type == 'tasks':
+        data = get_all("""
+            SELECT * FROM workflow_tasks
+            WHERE company_id = ?
+            ORDER BY due_date DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = WORKFLOW_EXPORT_COLUMNS['tasks']
+        title = 'Workflow Tasks'
+    elif data_type == 'notifications':
+        data = get_all("""
+            SELECT * FROM workflow_notifications
+            WHERE company_id = ?
+            ORDER BY sent_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = WORKFLOW_EXPORT_COLUMNS['notifications']
+        title = 'Workflow Notifications'
+    else:
+        return jsonify({'error': f'Data type {data_type} not supported'}), 400
+
+    filename = f'workflow_{data_type}_{datetime.now().strftime("%Y%m%d")}'
+
+    return send_export_response(data, export_type, filename, columns, title)
+
+
+@workflow_bp.route('/api/export/list')
+@workflow_require_permission('reports', 'view')
+def list_workflow_export_types():
+    """List available export types for workflow module."""
+    return jsonify({
+        'module': 'workflow',
+        'data_types': list(WORKFLOW_EXPORT_COLUMNS.keys()),
+        'export_types': [{'type': t} for t in WORKFLOW_EXPORT_TYPES]
+    })
 
 
 def register_workflow_routes(app):
@@ -128,8 +284,8 @@ def register_workflow_routes(app):
     # A. WORKFLOW DASHBOARD
     # =====================================================================
 
-    @app.route('/workflow')
-    @app.route('/workflow/dashboard')
+    @workflow_bp.route('/')
+    @workflow_bp.route('/dashboard')
     @workflow_require_login
     def workflow_dashboard():
         """Main workflow dashboard with stats."""
@@ -155,7 +311,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/dashboard.html', **context)
 
-    @app.route('/workflow/api/dashboard/stats')
+    @workflow_bp.route('/api/dashboard/stats')
     @workflow_require_login
     def workflow_api_dashboard_stats():
         """API endpoint for dashboard statistics."""
@@ -167,7 +323,7 @@ def register_workflow_routes(app):
     # B. MY WORK (User's Personal Workflow Inbox)
     # =====================================================================
 
-    @app.route('/workflow/my-work')
+    @workflow_bp.route('/my-work')
     @workflow_require_login
     def workflow_my_work():
         """My Work main page - all items assigned to user."""
@@ -192,7 +348,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/my_work.html', **context)
 
-    @app.route('/workflow/my-approvals')
+    @workflow_bp.route('/my-approvals')
     @workflow_require_login
     def workflow_my_approvals():
         """Pending approvals assigned to user."""
@@ -207,7 +363,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/my_approvals.html', **context)
 
-    @app.route('/workflow/my-pending')
+    @workflow_bp.route('/my-pending')
     @workflow_require_login
     def workflow_my_pending():
         """Pending actions for user."""
@@ -222,7 +378,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/my_pending.html', **context)
 
-    @app.route('/workflow/delegated-to-me')
+    @workflow_bp.route('/delegated-to-me')
     @workflow_require_login
     def workflow_delegated_to_me():
         """Items delegated to user by others."""
@@ -237,7 +393,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/delegated_to_me.html', **context)
 
-    @app.route('/workflow/my-completed')
+    @workflow_bp.route('/my-completed')
     @workflow_require_login
     def workflow_my_completed():
         """Completed actions by user."""
@@ -255,7 +411,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/my_completed.html', **context)
 
-    @app.route('/workflow/returned')
+    @workflow_bp.route('/returned')
     @workflow_require_login
     def workflow_returned():
         """Returned/rejected items for user."""
@@ -270,7 +426,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/returned.html', **context)
 
-    @app.route('/workflow/<int:instance_id>/approve', methods=['POST'])
+    @workflow_bp.route('/<int:instance_id>/approve', methods=['POST'])
     @workflow_require_login
     @workflow_require_permission('requests', 'approve')
     def workflow_approve(instance_id):
@@ -300,7 +456,7 @@ def register_workflow_routes(app):
         flash("Item approved successfully.", "success")
         return redirect(url_for('workflow_my_work'))
 
-    @app.route('/workflow/<int:instance_id>/reject', methods=['POST'])
+    @workflow_bp.route('/<int:instance_id>/reject', methods=['POST'])
     @workflow_require_login
     @workflow_require_permission('requests', 'reject')
     def workflow_reject(instance_id):
@@ -326,7 +482,7 @@ def register_workflow_routes(app):
         flash("Item rejected.", "warning")
         return redirect(url_for('workflow_my_work'))
 
-    @app.route('/workflow/<int:instance_id>/return', methods=['POST'])
+    @workflow_bp.route('/<int:instance_id>/return', methods=['POST'])
     @workflow_require_login
     @workflow_require_permission('requests', 'return')
     def workflow_return(instance_id):
@@ -351,7 +507,7 @@ def register_workflow_routes(app):
         flash("Item returned for correction.", "info")
         return redirect(url_for('workflow_my_work'))
 
-    @app.route('/workflow/<int:instance_id>/reassign', methods=['POST'])
+    @workflow_bp.route('/<int:instance_id>/reassign', methods=['POST'])
     @workflow_require_login
     @workflow_require_permission('requests', 'reassign')
     def workflow_reassign(instance_id):
@@ -382,7 +538,7 @@ def register_workflow_routes(app):
         flash("Item reassigned successfully.", "success")
         return redirect(url_for('workflow_my_work'))
 
-    @app.route('/workflow/<int:instance_id>/escalate', methods=['POST'])
+    @workflow_bp.route('/<int:instance_id>/escalate', methods=['POST'])
     @workflow_require_login
     @workflow_require_permission('requests', 'escalate')
     def workflow_escalate(instance_id):
@@ -408,7 +564,7 @@ def register_workflow_routes(app):
         flash("Item escalated.", "warning")
         return redirect(url_for('workflow_my_work'))
 
-    @app.route('/workflow/<int:instance_id>/submit', methods=['POST'])
+    @workflow_bp.route('/<int:instance_id>/submit', methods=['POST'])
     @workflow_require_login
     @workflow_require_permission('requests', 'submit')
     def workflow_submit(instance_id):
@@ -431,7 +587,7 @@ def register_workflow_routes(app):
         flash("Workflow submitted for approval.", "success")
         return redirect(url_for('workflow_my_work'))
 
-    @app.route('/workflow/<int:instance_id>/cancel', methods=['POST'])
+    @workflow_bp.route('/<int:instance_id>/cancel', methods=['POST'])
     @workflow_require_login
     @workflow_require_permission('requests', 'cancel')
     def workflow_cancel(instance_id):
@@ -456,7 +612,7 @@ def register_workflow_routes(app):
         flash("Workflow cancelled.", "info")
         return redirect(url_for('workflow_my_work'))
 
-    @app.route('/workflow/<int:instance_id>/detail')
+    @workflow_bp.route('/<int:instance_id>/detail')
     @workflow_require_login
     def workflow_instance_detail(instance_id):
         """View workflow instance detail."""
@@ -505,7 +661,7 @@ def register_workflow_routes(app):
     # C. WORKFLOW DESIGNER
     # =====================================================================
 
-    @app.route('/workflow/designer')
+    @workflow_bp.route('/designer')
     @workflow_require_login
     def workflow_designer():
         """Workflow Designer main page."""
@@ -523,7 +679,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/designer/index.html', **context)
 
-    @app.route('/workflow/designer/definitions')
+    @workflow_bp.route('/designer/definitions')
     @workflow_require_login
     def workflow_designer_definitions():
         """List workflow definitions."""
@@ -540,7 +696,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/designer/definitions.html', **context)
 
-    @app.route('/workflow/designer/definitions/new', methods=['GET', 'POST'])
+    @workflow_bp.route('/designer/definitions/new', methods=['GET', 'POST'])
     @workflow_require_login
     def workflow_designer_definition_new():
         """New workflow definition form."""
@@ -582,7 +738,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/designer/definition_form.html', **context)
 
-    @app.route('/workflow/designer/definitions/<int:definition_id>/edit', methods=['GET', 'POST'])
+    @workflow_bp.route('/designer/definitions/<int:definition_id>/edit', methods=['GET', 'POST'])
     @workflow_require_login
     def workflow_designer_definition_edit(definition_id):
         """Edit workflow definition form."""
@@ -633,7 +789,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/designer/definition_form.html', **context)
 
-    @app.route('/workflow/designer/definitions/<int:definition_id>/delete', methods=['POST'])
+    @workflow_bp.route('/designer/definitions/<int:definition_id>/delete', methods=['POST'])
     @workflow_require_login
     def workflow_designer_definition_delete(definition_id):
         """Delete workflow definition."""
@@ -652,7 +808,7 @@ def register_workflow_routes(app):
         flash("Workflow definition deleted.", "success")
         return redirect(url_for('workflow_designer_definitions'))
 
-    @app.route('/workflow/designer/definitions/<int:definition_id>/activate', methods=['POST'])
+    @workflow_bp.route('/designer/definitions/<int:definition_id>/activate', methods=['POST'])
     @workflow_require_login
     def workflow_designer_definition_activate(definition_id):
         """Activate a workflow definition."""
@@ -674,7 +830,7 @@ def register_workflow_routes(app):
         flash("Workflow activated.", "success")
         return redirect(url_for('workflow_designer_definition_edit', definition_id=definition_id))
 
-    @app.route('/workflow/designer/definitions/<int:definition_id>/deactivate', methods=['POST'])
+    @workflow_bp.route('/designer/definitions/<int:definition_id>/deactivate', methods=['POST'])
     @workflow_require_login
     def workflow_designer_definition_deactivate(definition_id):
         """Deactivate a workflow definition."""
@@ -696,7 +852,7 @@ def register_workflow_routes(app):
         flash("Workflow deactivated.", "info")
         return redirect(url_for('workflow_designer_definition_edit', definition_id=definition_id))
 
-    @app.route('/workflow/designer/definitions/<int:definition_id>/duplicate', methods=['POST'])
+    @workflow_bp.route('/designer/definitions/<int:definition_id>/duplicate', methods=['POST'])
     @workflow_require_login
     def workflow_designer_definition_duplicate(definition_id):
         """Clone/duplicate a workflow definition."""
@@ -732,7 +888,7 @@ def register_workflow_routes(app):
     # C.1 STEP DESIGNER
     # =====================================================================
 
-    @app.route('/workflow/designer/steps/<int:definition_id>')
+    @workflow_bp.route('/designer/steps/<int:definition_id>')
     @workflow_require_login
     def workflow_designer_steps(definition_id):
         """Step designer for a workflow definition."""
@@ -756,7 +912,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/designer/steps.html', **context)
 
-    @app.route('/workflow/designer/steps', methods=['POST'])
+    @workflow_bp.route('/designer/steps', methods=['POST'])
     @workflow_require_login
     def workflow_designer_step_create():
         """Create a new step."""
@@ -807,7 +963,7 @@ def register_workflow_routes(app):
         flash("Step created.", "success")
         return redirect(url_for('workflow_designer_steps', definition_id=definition_id))
 
-    @app.route('/workflow/designer/steps/<int:step_id>', methods=['PUT', 'POST'])
+    @workflow_bp.route('/designer/steps/<int:step_id>', methods=['PUT', 'POST'])
     @workflow_require_login
     def workflow_designer_step_update(step_id):
         """Update a step."""
@@ -838,7 +994,7 @@ def register_workflow_routes(app):
         return redirect(url_for('workflow_designer_steps',
                                definition_id=request.form.get('definition_id', type=int)))
 
-    @app.route('/workflow/designer/steps/<int:step_id>/delete', methods=['POST'])
+    @workflow_bp.route('/designer/steps/<int:step_id>/delete', methods=['POST'])
     @workflow_require_login
     def workflow_designer_step_delete(step_id):
         """Delete a step."""
@@ -856,7 +1012,7 @@ def register_workflow_routes(app):
         flash("Step deleted.", "success")
         return redirect(url_for('workflow_designer_steps', definition_id=definition_id))
 
-    @app.route('/workflow/designer/steps/reorder', methods=['POST'])
+    @workflow_bp.route('/designer/steps/reorder', methods=['POST'])
     @workflow_require_login
     def workflow_designer_steps_reorder():
         """Reorder steps in a workflow."""
@@ -881,7 +1037,7 @@ def register_workflow_routes(app):
     # C.2 TRANSITION DESIGNER
     # =====================================================================
 
-    @app.route('/workflow/designer/transitions/<int:definition_id>')
+    @workflow_bp.route('/designer/transitions/<int:definition_id>')
     @workflow_require_login
     def workflow_designer_transitions(definition_id):
         """Transition rules designer."""
@@ -907,7 +1063,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/designer/transitions.html', **context)
 
-    @app.route('/workflow/designer/transitions', methods=['POST'])
+    @workflow_bp.route('/designer/transitions', methods=['POST'])
     @workflow_require_login
     def workflow_designer_transition_create():
         """Create a new transition."""
@@ -936,7 +1092,7 @@ def register_workflow_routes(app):
         flash("Transition created.", "success")
         return redirect(url_for('workflow_designer_transitions', definition_id=definition_id))
 
-    @app.route('/workflow/designer/transitions/<int:transition_id>', methods=['PUT', 'POST'])
+    @workflow_bp.route('/designer/transitions/<int:transition_id>', methods=['PUT', 'POST'])
     @workflow_require_login
     def workflow_designer_transition_update(transition_id):
         """Update a transition."""
@@ -964,7 +1120,7 @@ def register_workflow_routes(app):
         flash("Transition updated.", "success")
         return redirect(url_for('workflow_designer_transitions', definition_id=definition_id))
 
-    @app.route('/workflow/designer/transitions/<int:transition_id>/delete', methods=['POST'])
+    @workflow_bp.route('/designer/transitions/<int:transition_id>/delete', methods=['POST'])
     @workflow_require_login
     def workflow_designer_transition_delete(transition_id):
         """Delete a transition."""
@@ -989,7 +1145,7 @@ def register_workflow_routes(app):
     # C.3 CONDITION DESIGNER
     # =====================================================================
 
-    @app.route('/workflow/designer/conditions/<int:transition_id>')
+    @workflow_bp.route('/designer/conditions/<int:transition_id>')
     @workflow_require_login
     def workflow_designer_conditions(transition_id):
         """Conditions for a transition."""
@@ -1009,7 +1165,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/designer/conditions.html', **context)
 
-    @app.route('/workflow/designer/conditions', methods=['POST'])
+    @workflow_bp.route('/designer/conditions', methods=['POST'])
     @workflow_require_login
     def workflow_designer_condition_create():
         """Create a new condition."""
@@ -1038,7 +1194,7 @@ def register_workflow_routes(app):
         flash("Condition created.", "success")
         return redirect(url_for('workflow_designer_conditions', transition_id=transition_id))
 
-    @app.route('/workflow/designer/conditions/<int:condition_id>/delete', methods=['POST'])
+    @workflow_bp.route('/designer/conditions/<int:condition_id>/delete', methods=['POST'])
     @workflow_require_login
     def workflow_designer_condition_delete(condition_id):
         """Delete a condition."""
@@ -1060,7 +1216,7 @@ def register_workflow_routes(app):
     # C.4 TEMPLATES
     # =====================================================================
 
-    @app.route('/workflow/designer/templates')
+    @workflow_bp.route('/designer/templates')
     @workflow_require_login
     def workflow_designer_templates():
         """Workflow templates list."""
@@ -1081,7 +1237,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/designer/templates.html', **context)
 
-    @app.route('/workflow/designer/templates/<int:template_id>/clone', methods=['POST'])
+    @workflow_bp.route('/designer/templates/<int:template_id>/clone', methods=['POST'])
     @workflow_require_login
     def workflow_designer_template_clone(template_id):
         """Clone a template to a new definition."""
@@ -1120,7 +1276,7 @@ def register_workflow_routes(app):
     # D. PROCESS MODELING
     # =====================================================================
 
-    @app.route('/workflow/processes')
+    @workflow_bp.route('/processes')
     @workflow_require_login
     def workflow_processes():
         """Process list."""
@@ -1137,7 +1293,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/processes/index.html', **context)
 
-    @app.route('/workflow/processes/<int:process_id>')
+    @workflow_bp.route('/processes/<int:process_id>')
     @workflow_require_login
     def workflow_process_detail(process_id):
         """Process detail view."""
@@ -1169,7 +1325,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/processes/detail.html', **context)
 
-    @app.route('/workflow/processes/<int:process_id>/map')
+    @workflow_bp.route('/processes/<int:process_id>/map')
     @workflow_require_login
     def workflow_process_map(process_id):
         """Process map (visual representation as JSON)."""
@@ -1211,7 +1367,7 @@ def register_workflow_routes(app):
 
         return jsonify(map_data)
 
-    @app.route('/workflow/processes/states/<int:definition_id>')
+    @workflow_bp.route('/processes/states/<int:definition_id>')
     @workflow_require_login
     def workflow_process_states(definition_id):
         """State model for a process."""
@@ -1237,7 +1393,7 @@ def register_workflow_routes(app):
     # D.1 ESCALATION RULES
     # =====================================================================
 
-    @app.route('/workflow/escalation-rules')
+    @workflow_bp.route('/escalation-rules')
     @workflow_require_login
     def workflow_escalation_rules():
         """SLA/escalation rules list."""
@@ -1256,7 +1412,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/escalation_rules.html', **context)
 
-    @app.route('/workflow/escalation-rules', methods=['POST'])
+    @workflow_bp.route('/escalation-rules', methods=['POST'])
     @workflow_require_login
     def workflow_escalation_rule_create():
         """Create escalation rule."""
@@ -1291,7 +1447,7 @@ def register_workflow_routes(app):
         flash("Escalation rule created.", "success")
         return redirect(url_for('workflow_escalation_rules'))
 
-    @app.route('/workflow/escalation-rules/<int:rule_id>', methods=['PUT', 'POST'])
+    @workflow_bp.route('/escalation-rules/<int:rule_id>', methods=['PUT', 'POST'])
     @workflow_require_login
     def workflow_escalation_rule_update(rule_id):
         """Update escalation rule."""
@@ -1317,7 +1473,7 @@ def register_workflow_routes(app):
         flash("Escalation rule updated.", "success")
         return redirect(url_for('workflow_escalation_rules'))
 
-    @app.route('/workflow/escalation-rules/<int:rule_id>/delete', methods=['POST'])
+    @workflow_bp.route('/escalation-rules/<int:rule_id>/delete', methods=['POST'])
     @workflow_require_login
     def workflow_escalation_rule_delete(rule_id):
         """Delete escalation rule."""
@@ -1340,7 +1496,7 @@ def register_workflow_routes(app):
     # E. AUTOMATION RULES
     # =====================================================================
 
-    @app.route('/workflow/automation')
+    @workflow_bp.route('/automation')
     @workflow_require_login
     def workflow_automation():
         """Automation rules list."""
@@ -1359,7 +1515,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/automation/index.html', **context)
 
-    @app.route('/workflow/automation/new', methods=['GET', 'POST'])
+    @workflow_bp.route('/automation/new', methods=['GET', 'POST'])
     @workflow_require_login
     def workflow_automation_new():
         """New automation rule form."""
@@ -1399,7 +1555,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/automation/rule_form.html', **context)
 
-    @app.route('/workflow/automation/<int:rule_id>/edit', methods=['GET', 'POST'])
+    @workflow_bp.route('/automation/<int:rule_id>/edit', methods=['GET', 'POST'])
     @workflow_require_login
     def workflow_automation_edit(rule_id):
         """Edit automation rule form."""
@@ -1437,7 +1593,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/automation/rule_form.html', **context)
 
-    @app.route('/workflow/automation/<int:rule_id>/delete', methods=['POST'])
+    @workflow_bp.route('/automation/<int:rule_id>/delete', methods=['POST'])
     @workflow_require_login
     def workflow_automation_delete(rule_id):
         """Delete automation rule."""
@@ -1456,7 +1612,7 @@ def register_workflow_routes(app):
         flash("Automation rule deleted.", "success")
         return redirect(url_for('workflow_automation'))
 
-    @app.route('/workflow/automation/<int:rule_id>/activate', methods=['POST'])
+    @workflow_bp.route('/automation/<int:rule_id>/activate', methods=['POST'])
     @workflow_require_login
     def workflow_automation_activate(rule_id):
         """Activate automation rule."""
@@ -1475,7 +1631,7 @@ def register_workflow_routes(app):
         flash("Automation rule activated.", "success")
         return redirect(url_for('workflow_automation'))
 
-    @app.route('/workflow/automation/<int:rule_id>/deactivate', methods=['POST'])
+    @workflow_bp.route('/automation/<int:rule_id>/deactivate', methods=['POST'])
     @workflow_require_login
     def workflow_automation_deactivate(rule_id):
         """Deactivate automation rule."""
@@ -1494,7 +1650,7 @@ def register_workflow_routes(app):
         flash("Automation rule deactivated.", "info")
         return redirect(url_for('workflow_automation'))
 
-    @app.route('/workflow/automation/<int:rule_id>/test', methods=['GET', 'POST'])
+    @workflow_bp.route('/automation/<int:rule_id>/test', methods=['GET', 'POST'])
     @workflow_require_login
     def workflow_automation_test(rule_id):
         """Test automation rule (dry run)."""
@@ -1522,7 +1678,7 @@ def register_workflow_routes(app):
 
         return jsonify(test_result)
 
-    @app.route('/workflow/automation/failed')
+    @workflow_bp.route('/automation/failed')
     @workflow_require_login
     def workflow_automation_failed():
         """Failed automations log."""
@@ -1548,7 +1704,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/automation/failed.html', **context)
 
-    @app.route('/workflow/automation/<int:rule_id>/retry', methods=['POST'])
+    @workflow_bp.route('/automation/<int:rule_id>/retry', methods=['POST'])
     @workflow_require_login
     def workflow_automation_retry(rule_id):
         """Retry failed automation."""
@@ -1570,7 +1726,7 @@ def register_workflow_routes(app):
         flash("Automation retry queued.", "info")
         return redirect(url_for('workflow_automation_failed'))
 
-    @app.route('/workflow/automation/logs')
+    @workflow_bp.route('/automation/logs')
     @workflow_require_login
     def workflow_automation_logs():
         """Automation execution logs."""
@@ -1610,7 +1766,7 @@ def register_workflow_routes(app):
     # F. NOTIFICATIONS
     # =====================================================================
 
-    @app.route('/workflow/notifications/templates')
+    @workflow_bp.route('/notifications/templates')
     @workflow_require_login
     def workflow_notification_templates():
         """Notification templates list."""
@@ -1629,7 +1785,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/notifications/templates.html', **context)
 
-    @app.route('/workflow/notifications/templates/new', methods=['GET', 'POST'])
+    @workflow_bp.route('/notifications/templates/new', methods=['GET', 'POST'])
     @workflow_require_login
     def workflow_notification_template_new():
         """New notification template form."""
@@ -1667,7 +1823,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/notifications/template_form.html', **context)
 
-    @app.route('/workflow/notifications/templates/<int:template_id>/edit', methods=['GET', 'POST'])
+    @workflow_bp.route('/notifications/templates/<int:template_id>/edit', methods=['GET', 'POST'])
     @workflow_require_login
     def workflow_notification_template_edit(template_id):
         """Edit notification template form."""
@@ -1711,7 +1867,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/notifications/template_form.html', **context)
 
-    @app.route('/workflow/notifications/templates/<int:template_id>/delete', methods=['POST'])
+    @workflow_bp.route('/notifications/templates/<int:template_id>/delete', methods=['POST'])
     @workflow_require_login
     def workflow_notification_template_delete(template_id):
         """Delete notification template."""
@@ -1730,7 +1886,7 @@ def register_workflow_routes(app):
         flash("Notification template deleted.", "success")
         return redirect(url_for('workflow_notification_templates'))
 
-    @app.route('/workflow/notifications/delivery-rules')
+    @workflow_bp.route('/notifications/delivery-rules')
     @workflow_require_login
     def workflow_notification_delivery_rules():
         """Delivery rules list."""
@@ -1751,7 +1907,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/notifications/delivery_rules.html', **context)
 
-    @app.route('/workflow/notifications/delivery-rules', methods=['POST'])
+    @workflow_bp.route('/notifications/delivery-rules', methods=['POST'])
     @workflow_require_login
     def workflow_notification_delivery_rule_create():
         """Create delivery rule."""
@@ -1778,7 +1934,7 @@ def register_workflow_routes(app):
         flash("Delivery rule created.", "success")
         return redirect(url_for('workflow_notification_delivery_rules'))
 
-    @app.route('/workflow/notifications/delivery-rules/<int:rule_id>', methods=['PUT', 'POST'])
+    @workflow_bp.route('/notifications/delivery-rules/<int:rule_id>', methods=['PUT', 'POST'])
     @workflow_require_login
     def workflow_notification_delivery_rule_update(rule_id):
         """Update delivery rule."""
@@ -1808,7 +1964,7 @@ def register_workflow_routes(app):
         flash("Delivery rule updated.", "success")
         return redirect(url_for('workflow_notification_delivery_rules'))
 
-    @app.route('/workflow/notifications/delivery-rules/<int:rule_id>/delete', methods=['POST'])
+    @workflow_bp.route('/notifications/delivery-rules/<int:rule_id>/delete', methods=['POST'])
     @workflow_require_login
     def workflow_notification_delivery_rule_delete(rule_id):
         """Delete delivery rule."""
@@ -1825,7 +1981,7 @@ def register_workflow_routes(app):
         flash("Delivery rule deleted.", "success")
         return redirect(url_for('workflow_notification_delivery_rules'))
 
-    @app.route('/workflow/notifications/logs')
+    @workflow_bp.route('/notifications/logs')
     @workflow_require_login
     def workflow_notification_logs():
         """Notification logs."""
@@ -1854,7 +2010,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/notifications/logs.html', **context)
 
-    @app.route('/workflow/notifications/<int:notification_id>/resend', methods=['POST'])
+    @workflow_bp.route('/notifications/<int:notification_id>/resend', methods=['POST'])
     @workflow_require_login
     def workflow_notification_resend(notification_id):
         """Resend a notification."""
@@ -1873,7 +2029,7 @@ def register_workflow_routes(app):
     # G. MONITORING
     # =====================================================================
 
-    @app.route('/workflow/monitoring/instances')
+    @workflow_bp.route('/monitoring/instances')
     @workflow_require_login
     def workflow_monitoring_instances():
         """All workflow instances monitoring."""
@@ -1920,7 +2076,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/monitoring/instances.html', **context)
 
-    @app.route('/workflow/monitoring/instances/<int:instance_id>')
+    @workflow_bp.route('/monitoring/instances/<int:instance_id>')
     @workflow_require_login
     def workflow_monitoring_instance_detail(instance_id):
         """Instance detail for monitoring."""
@@ -1957,7 +2113,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/monitoring/instance_detail.html', **context)
 
-    @app.route('/workflow/monitoring/delayed')
+    @workflow_bp.route('/monitoring/delayed')
     @workflow_require_login
     def workflow_monitoring_delayed():
         """Delayed items monitoring."""
@@ -1985,7 +2141,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/monitoring/delayed.html', **context)
 
-    @app.route('/workflow/monitoring/escalation-queue')
+    @workflow_bp.route('/monitoring/escalation-queue')
     @workflow_require_login
     def workflow_monitoring_escalation_queue():
         """Escalation queue monitoring."""
@@ -2012,7 +2168,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/monitoring/escalation_queue.html', **context)
 
-    @app.route('/workflow/monitoring/automation-logs')
+    @workflow_bp.route('/monitoring/automation-logs')
     @workflow_require_login
     def workflow_monitoring_automation_logs():
         """Automation logs for monitoring."""
@@ -2041,7 +2197,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/monitoring/automation_logs.html', **context)
 
-    @app.route('/workflow/monitoring/notification-logs')
+    @workflow_bp.route('/monitoring/notification-logs')
     @workflow_require_login
     def workflow_monitoring_notification_logs():
         """Notification logs for monitoring."""
@@ -2074,7 +2230,7 @@ def register_workflow_routes(app):
     # H. REPORTS
     # =====================================================================
 
-    @app.route('/workflow/reports/performance')
+    @workflow_bp.route('/reports/performance')
     @workflow_require_login
     def workflow_reports_performance():
         """Workflow performance report."""
@@ -2094,7 +2250,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/reports/performance.html', **context)
 
-    @app.route('/workflow/reports/approval-cycle-time')
+    @workflow_bp.route('/reports/approval-cycle-time')
     @workflow_require_login
     def workflow_reports_approval_cycle_time():
         """Approval cycle time analysis."""
@@ -2123,7 +2279,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/reports/cycle_time.html', **context)
 
-    @app.route('/workflow/reports/rejection-analysis')
+    @workflow_bp.route('/reports/rejection-analysis')
     @workflow_require_login
     def workflow_reports_rejection_analysis():
         """Rejection analysis report."""
@@ -2150,7 +2306,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/reports/rejection_analysis.html', **context)
 
-    @app.route('/workflow/reports/escalation')
+    @workflow_bp.route('/reports/escalation')
     @workflow_require_login
     def workflow_reports_escalation():
         """Escalation report."""
@@ -2177,7 +2333,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/reports/escalation.html', **context)
 
-    @app.route('/workflow/reports/user-load')
+    @workflow_bp.route('/reports/user-load')
     @workflow_require_login
     def workflow_reports_user_load():
         """User/department approval load report."""
@@ -2206,7 +2362,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/reports/user_load.html', **context)
 
-    @app.route('/workflow/reports/sla-compliance')
+    @workflow_bp.route('/reports/sla-compliance')
     @workflow_require_login
     def workflow_reports_sla_compliance():
         """SLA compliance report."""
@@ -2234,7 +2390,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/reports/sla_compliance.html', **context)
 
-    @app.route('/workflow/reports/export')
+    @workflow_bp.route('/reports/export')
     @workflow_require_login
     def workflow_reports_export():
         """Export report in Excel/CSV format."""
@@ -2279,7 +2435,7 @@ def register_workflow_routes(app):
     # I. SETTINGS
     # =====================================================================
 
-    @app.route('/workflow/settings')
+    @workflow_bp.route('/settings')
     @workflow_require_login
     def workflow_settings():
         """Workflow settings page."""
@@ -2295,7 +2451,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/settings/index.html', **context)
 
-    @app.route('/workflow/settings/types')
+    @workflow_bp.route('/settings/types')
     @workflow_require_login
     def workflow_settings_types():
         """Workflow types management."""
@@ -2318,7 +2474,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/settings/types.html', **context)
 
-    @app.route('/workflow/settings/types', methods=['POST'])
+    @workflow_bp.route('/settings/types', methods=['POST'])
     @workflow_require_login
     def workflow_settings_type_create():
         """Create workflow type."""
@@ -2337,7 +2493,7 @@ def register_workflow_routes(app):
         flash("Workflow type created.", "success")
         return redirect(url_for('workflow_settings_types'))
 
-    @app.route('/workflow/settings/types/<type_id>', methods=['PUT', 'POST'])
+    @workflow_bp.route('/settings/types/<type_id>', methods=['PUT', 'POST'])
     @workflow_require_login
     def workflow_settings_type_update(type_id):
         """Update workflow type."""
@@ -2350,7 +2506,7 @@ def register_workflow_routes(app):
         flash("Workflow type updated.", "success")
         return redirect(url_for('workflow_settings_types'))
 
-    @app.route('/workflow/settings/types/<type_id>/delete', methods=['POST'])
+    @workflow_bp.route('/settings/types/<type_id>/delete', methods=['POST'])
     @workflow_require_login
     def workflow_settings_type_delete(type_id):
         """Delete workflow type."""
@@ -2363,7 +2519,7 @@ def register_workflow_routes(app):
         flash("Workflow type deleted.", "success")
         return redirect(url_for('workflow_settings_types'))
 
-    @app.route('/workflow/settings/status-rules')
+    @workflow_bp.route('/settings/status-rules')
     @workflow_require_login
     def workflow_settings_status_rules():
         """Status rules management."""
@@ -2384,7 +2540,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/settings/status_rules.html', **context)
 
-    @app.route('/workflow/settings/status-rules', methods=['POST'])
+    @workflow_bp.route('/settings/status-rules', methods=['POST'])
     @workflow_require_login
     def workflow_settings_status_rule_create():
         """Create status rule."""
@@ -2411,7 +2567,7 @@ def register_workflow_routes(app):
         flash("Status rule created.", "success")
         return redirect(url_for('workflow_settings_status_rules'))
 
-    @app.route('/workflow/settings/status-rules/<int:rule_id>', methods=['PUT', 'POST'])
+    @workflow_bp.route('/settings/status-rules/<int:rule_id>', methods=['PUT', 'POST'])
     @workflow_require_login
     def workflow_settings_status_rule_update(rule_id):
         """Update status rule."""
@@ -2435,7 +2591,7 @@ def register_workflow_routes(app):
         flash("Status rule updated.", "success")
         return redirect(url_for('workflow_settings_status_rules'))
 
-    @app.route('/workflow/settings/status-rules/<int:rule_id>/delete', methods=['POST'])
+    @workflow_bp.route('/settings/status-rules/<int:rule_id>/delete', methods=['POST'])
     @workflow_require_login
     def workflow_settings_status_rule_delete(rule_id):
         """Delete status rule."""
@@ -2452,7 +2608,7 @@ def register_workflow_routes(app):
         flash("Status rule deleted.", "success")
         return redirect(url_for('workflow_settings_status_rules'))
 
-    @app.route('/workflow/settings/assignment-rules')
+    @workflow_bp.route('/settings/assignment-rules')
     @workflow_require_login
     def workflow_settings_assignment_rules():
         """Assignment rules management."""
@@ -2474,7 +2630,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/settings/assignment_rules.html', **context)
 
-    @app.route('/workflow/settings/approval-policies')
+    @workflow_bp.route('/settings/approval-policies')
     @workflow_require_login
     def workflow_settings_approval_policies():
         """Approval policies management."""
@@ -2495,7 +2651,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/settings/approval_policies.html', **context)
 
-    @app.route('/workflow/settings/delegation-rules')
+    @workflow_bp.route('/settings/delegation-rules')
     @workflow_require_login
     def workflow_settings_delegation_rules():
         """Delegation rules management."""
@@ -2514,7 +2670,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/settings/delegation_rules.html', **context)
 
-    @app.route('/workflow/settings/delegation-rules', methods=['POST'])
+    @workflow_bp.route('/settings/delegation-rules', methods=['POST'])
     @workflow_require_login
     def workflow_settings_delegation_rule_create():
         """Create delegation rule."""
@@ -2543,7 +2699,7 @@ def register_workflow_routes(app):
         flash("Delegation rule created.", "success")
         return redirect(url_for('workflow_settings_delegation_rules'))
 
-    @app.route('/workflow/settings/delegation-rules/<int:rule_id>', methods=['PUT', 'POST'])
+    @workflow_bp.route('/settings/delegation-rules/<int:rule_id>', methods=['PUT', 'POST'])
     @workflow_require_login
     def workflow_settings_delegation_rule_update(rule_id):
         """Update delegation rule."""
@@ -2566,7 +2722,7 @@ def register_workflow_routes(app):
         flash("Delegation rule updated.", "success")
         return redirect(url_for('workflow_settings_delegation_rules'))
 
-    @app.route('/workflow/settings/delegation-rules/<int:rule_id>/delete', methods=['POST'])
+    @workflow_bp.route('/settings/delegation-rules/<int:rule_id>/delete', methods=['POST'])
     @workflow_require_login
     def workflow_settings_delegation_rule_delete(rule_id):
         """Delete delegation rule."""
@@ -2589,7 +2745,7 @@ def register_workflow_routes(app):
     # J. AUDIT/LOGS
     # =====================================================================
 
-    @app.route('/workflow/audit/history')
+    @workflow_bp.route('/audit/history')
     @workflow_require_login
     def workflow_audit_history():
         """Workflow history."""
@@ -2632,7 +2788,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/audit/history.html', **context)
 
-    @app.route('/workflow/audit/approvals')
+    @workflow_bp.route('/audit/approvals')
     @workflow_require_login
     def workflow_audit_approvals():
         """Approval history."""
@@ -2665,7 +2821,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/audit/approvals.html', **context)
 
-    @app.route('/workflow/audit/changes')
+    @workflow_bp.route('/audit/changes')
     @workflow_require_login
     def workflow_audit_changes():
         """Change logs."""
@@ -2690,7 +2846,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/audit/changes.html', **context)
 
-    @app.route('/workflow/audit/errors')
+    @workflow_bp.route('/audit/errors')
     @workflow_require_login
     def workflow_audit_errors():
         """Error logs."""
@@ -2716,7 +2872,7 @@ def register_workflow_routes(app):
 
         return render_template('workflow/audit/errors.html', **context)
 
-    @app.route('/workflow/audit/export')
+    @workflow_bp.route('/audit/export')
     @workflow_require_login
     def workflow_audit_export():
         """Export audit logs."""
@@ -2759,7 +2915,7 @@ def register_workflow_routes(app):
     # K. API ENDPOINTS (JSON)
     # =====================================================================
 
-    @app.route('/api/workflow/instances')
+    @workflow_bp.route('/api/workflow/instances')
     @workflow_require_login
     def api_workflow_instances():
         """List workflow instances (JSON API)."""
@@ -2787,7 +2943,7 @@ def register_workflow_routes(app):
             'per_page': per_page
         })
 
-    @app.route('/api/workflow/instances/<int:instance_id>')
+    @workflow_bp.route('/api/workflow/instances/<int:instance_id>')
     @workflow_require_login
     def api_workflow_instance(instance_id):
         """Get workflow instance (JSON API)."""
@@ -2802,7 +2958,7 @@ def register_workflow_routes(app):
 
         return jsonify(instance)
 
-    @app.route('/api/workflow/pending')
+    @workflow_bp.route('/api/workflow/pending')
     @workflow_require_login
     def api_workflow_pending():
         """Get pending items for current user (JSON API)."""
@@ -2815,7 +2971,7 @@ def register_workflow_routes(app):
             'items': pending
         })
 
-    @app.route('/api/workflow/stats')
+    @workflow_bp.route('/api/workflow/stats')
     @workflow_require_login
     def api_workflow_stats():
         """Get dashboard stats (JSON API)."""
@@ -2825,7 +2981,7 @@ def register_workflow_routes(app):
 
         return jsonify(stats)
 
-    @app.route('/api/workflow/instances/<int:instance_id>/action', methods=['POST'])
+    @workflow_bp.route('/api/workflow/instances/<int:instance_id>/action', methods=['POST'])
     @workflow_require_login
     def api_workflow_instance_action(instance_id):
         """Perform action on workflow instance (JSON API)."""
@@ -2873,3 +3029,5 @@ def register_workflow_routes(app):
             'action': action,
             'new_status': status_map.get(action)
         })
+
+    app.register_blueprint(workflow_bp)

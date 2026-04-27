@@ -1,41 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="space-y-6 fade-in">
-    <h1 class="text-2xl font-bold text-white">{{ title }}</h1>
-
-    <div class="glass-panel rounded-2xl overflow-hidden">
-        <table class="w-full text-sm">
-            <thead>
-                <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
-                    <th class="text-left py-3 px-4 font-semibold">Shipment #</th>
-                    <th class="text-left py-3 px-4 font-semibold">Order</th>
-                    <th class="text-left py-3 px-4 font-semibold">Warehouse</th>
-                    <th class="text-left py-3 px-4 font-semibold">Carrier</th>
-                    <th class="text-left py-3 px-4 font-semibold">Tracking</th>
-                    <th class="text-left py-3 px-4 font-semibold">Departure</th>
-                    <th class="text-center py-3 px-4 font-semibold">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for s in shipments %}
-                <tr class="border-b border-white/5 hover:bg-white/5">
-                    <td class="py-3 px-4 text-brand-400 font-medium">{{ s.shipment_number }}</td>
-                    <td class="py-3 px-4 text-slate-300">{{ s.order_number or '-' }}</td>
-                    <td class="py-3 px-4 text-slate-400">{{ s.warehouse_name }}</td>
-                    <td class="py-3 px-4 text-slate-400">{{ s.carrier_name or '-' }}</td>
-                    <td class="py-3 px-4 text-slate-400">{{ s.tracking_number or '-' }}</td>
-                    <td class="py-3 px-4 text-slate-400">{{ s.departure_date[:10] if s.departure_date else '-' }}</td>
-                    <td class="py-3 px-4 text-center">
-                        <span class="px-3 py-1 rounded-lg text-xs font-bold uppercase {% if s.status == 'DELIVERED' %}bg-emerald-500/10 text-emerald-400{% elif s.status == 'IN_TRANSIT' %}bg-cyan-500/10 text-cyan-400{% elif s.status == 'PREPARING' %}bg-amber-500/10 text-amber-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
-                            {{ s.status }}
-                        </span>
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="7" class="py-16 text-center text-slate-500"><i class="fa-solid fa-truck-fast text-4xl mb-3 block opacity-20"></i>No shipments</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    <div class="flex items-center justify-between"><h1 class="text-2xl font-bold text-white">{{ t('dispatch_shipping', 'Dispatch / Shipping') }}</h1><a href="{{ url_for('wms_dispatch_schedule') }}" class="px-4 py-2 bg-brand-500/10 border border-brand-500/20 rounded-xl text-brand-400 text-sm">{{ t('schedule', 'Schedule') }}</a></div>
+    <div class="glass-panel rounded-2xl p-4"><form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-3"><select name="status" class="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-white"><option value="">{{ t('all_statuses', 'All Statuses') }}</option>{% for s in ['PREPARING','PACKED','DISPATCHED','IN_TRANSIT','DELIVERED'] %}<option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select><select name="warehouse_id" class="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-white"><option value="">{{ t('all_warehouses', 'All Warehouses') }}</option>{% for w in warehouses %}<option value="{{ w.id }}" {% if warehouse_id == w.id|string %}selected{% endif %}>{{ w.name }}</option>{% endfor %}</select><button class="px-4 py-2 bg-brand-500 text-white rounded-xl text-sm">{{ t('filter', 'Filter') }}</button><a href="{{ url_for('wms_dispatch') }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-slate-400 text-sm text-center">{{ t('clear', 'Clear') }}</a></form></div>
+    <div class="glass-panel rounded-2xl overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase"><th class="text-left py-3 px-4">{{ t('shipment', 'Shipment') }}</th><th class="text-left py-3 px-4">{{ t('order', 'Order') }}</th><th class="text-left py-3 px-4">{{ t('warehouse', 'Warehouse') }}</th><th class="text-left py-3 px-4">{{ t('carrier', 'Carrier') }}</th><th class="text-left py-3 px-4">{{ t('tracking', 'Tracking') }}</th><th class="text-center py-3 px-4">{{ t('status', 'Status') }}</th><th class="text-center py-3 px-4">{{ t('actions', 'Actions') }}</th></tr></thead><tbody>{% for s in shipments %}<tr class="border-b border-white/5 hover:bg-white/5"><td class="py-3 px-4 text-brand-400 font-medium">{{ s.shipment_number }}</td><td class="py-3 px-4 text-slate-300">{{ s.order_number or '-' }}</td><td class="py-3 px-4 text-slate-400">{{ s.warehouse_name }}</td><td class="py-3 px-4 text-slate-400">{{ s.carrier_name or '-' }}</td><td class="py-3 px-4 text-slate-400">{{ s.tracking_number or '-' }}</td><td class="py-3 px-4 text-center"><span class="px-2 py-1 rounded-lg text-xs font-bold bg-slate-500/10 text-slate-300">{{ s.status }}</span></td><td class="py-3 px-4">{% if s.status not in ['DISPATCHED','IN_TRANSIT','DELIVERED'] %}<form method="POST" action="{{ url_for('wms_dispatch_gate_out', shipment_id=s.id) }}" class="flex justify-center gap-1"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input name="carrier_name" placeholder="{{ t('carrier', 'Carrier') }}" class="w-24 px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-white"><input name="tracking_number" placeholder="{{ t('tracking', 'Tracking') }}" class="w-24 px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-white"><button class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs">{{ t('gate_out', 'Gate Out') }}</button></form>{% endif %}</td></tr>{% else %}<tr><td colspan="7" class="py-16 text-center text-slate-500">{{ t('no_shipments', 'No shipments') }}</td></tr>{% endfor %}</tbody></table></div></div>
 </div>
 {% endblock %}

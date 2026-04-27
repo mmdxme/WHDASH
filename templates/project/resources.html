@@ -1,0 +1,300 @@
+{% extends "project/base.html" %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="mb-8 flex justify-between items-center">
+    <div>
+        <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ t('resource_planning', 'Resource Planning') }}</h1>
+        <p class="text-slate-600 dark:text-slate-400 mt-1">{{ t('resources_subtitle', 'Manage resource allocation and capacity') }}</p>
+    </div>
+    <div class="flex gap-3">
+        <button onclick="exportResources()" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-download mr-2"></i>{{ t('export', 'Export') }}
+        </button>
+        <button onclick="showAddResourceModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-plus mr-2"></i>{{ t('add_resource', 'Add Resource') }}
+        </button>
+    </div>
+</div>
+
+<!-- Capacity Overview Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('total_resources', 'Total Resources') }}</p>
+                <p class="text-2xl font-bold text-slate-800 dark:text-white mt-1">{{ stats.total_resources }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                <i class="fas fa-users text-indigo-600 dark:text-indigo-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('allocated_resources', 'Allocated') }}</p>
+                <p class="text-2xl font-bold text-slate-800 dark:text-white mt-1">{{ stats.allocated_resources }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <i class="fas fa-user-check text-blue-600 dark:text-blue-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('avg_utilization', 'Avg Utilization') }}</p>
+                <p class="text-2xl font-bold {% if stats.avg_utilization > 100 %}text-red-600{% elif stats.avg_utilization > 85 %}text-amber-600{% else %}text-green-600{% endif %} mt-1">{{ stats.avg_utilization }}%</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <i class="fas fa-chart-pie text-green-600 dark:text-green-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('overloaded_resources', 'Overloaded') }}</p>
+                <p class="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{{ stats.overloaded_resources }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <i class="fas fa-exclamation-triangle text-red-600 dark:text-red-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Two Column Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Resource Allocation Table -->
+    <div class="card lg:col-span-2">
+        <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+            <h2 class="font-semibold text-slate-800 dark:text-white">{{ t('resource_allocation', 'Resource Allocation') }}</h2>
+            <div class="flex items-center gap-2">
+                <select id="projectFilter" onchange="loadResources()" class="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm">
+                    <option value="">{{ t('all_projects', 'All Projects') }}</option>
+                    {% for p in projects %}
+                    <option value="{{ p.id }}">{{ p.code }} - {{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-50 dark:bg-slate-700/50">
+                    <tr>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('resource', 'Resource') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('role', 'Role') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('projects', 'Projects') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('allocation', 'Allocation') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('capacity', 'Capacity') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('utilization', 'Utilization') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                    {% for resource in resources %}
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                        <td class="px-5 py-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                                    <i class="fas fa-user text-indigo-600 dark:text-indigo-400"></i>
+                                </div>
+                                <div>
+                                    <p class="font-medium text-slate-800 dark:text-white">{{ resource.name }}</p>
+                                    <p class="text-sm text-slate-500">{{ resource.email }}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ resource.role }}</td>
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ resource.project_count }}</td>
+                        <td class="px-5 py-4">
+                            <div class="flex items-center gap-2">
+                                <div class="progress-bar w-20 h-2">
+                                    <div class="progress-fill {% if resource.allocation > 100 %}bg-red-500{% elif resource.allocation > 85 %}bg-amber-500{% else %}bg-green-500{% endif %}" style="width: {{ [resource.allocation, 100]|min }}%"></div>
+                                </div>
+                                <span class="text-sm text-slate-600">{{ resource.allocation }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ resource.capacity }}h</td>
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ resource.utilized }}h</td>
+                        <td class="px-5 py-4">
+                            <div class="flex items-center gap-2">
+                                <button onclick="editResource('{{ resource.id }}')" class="p-2 text-slate-500 hover:text-indigo-600">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="viewResourceHistory('{{ resource.id }}')" class="p-2 text-slate-500 hover:text-indigo-600">
+                                    <i class="fas fa-history"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Capacity Planning View -->
+<div class="card">
+    <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+        <h2 class="font-semibold text-slate-800 dark:text-white">{{ t('capacity_planning', 'Capacity Planning') }}</h2>
+    </div>
+    <div class="p-5">
+        <canvas id="capacityChart" height="200"></canvas>
+    </div>
+</div>
+
+<!-- Utilization Charts -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+    <div class="card">
+        <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+            <h2 class="font-semibold text-slate-800 dark:text-white">{{ t('utilization_by_department', 'Utilization by Department') }}</h2>
+        </div>
+        <div class="p-5">
+            <canvas id="deptChart" height="250"></canvas>
+        </div>
+    </div>
+    <div class="card">
+        <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+            <h2 class="font-semibold text-slate-800 dark:text-white">{{ t('resource_availability', 'Resource Availability') }}</h2>
+        </div>
+        <div class="p-5">
+            <canvas id="availabilityChart" height="250"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Add/Edit Resource Modal -->
+<div id="resourceModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50" onclick="closeResourceModal()"></div>
+        <div class="relative bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-slate-800 dark:text-white" id="resourceModalTitle">{{ t('add_resource', 'Add Resource') }}</h3>
+                <button onclick="closeResourceModal()" class="p-2 text-slate-500 hover:text-slate-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="resourceForm" method="POST" action="{{ url_for('project_save_resource') }}">
+                <input type="hidden" name="resource_id" id="resourceId">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('user', 'User') }} *</label>
+                        <select id="resourceUser" name="user_id" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">{{ t('select_user', 'Select user') }}</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.name }} - {{ user.role }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('capacity_hours', 'Capacity (hours)') }} *</label>
+                            <input type="number" id="resourceCapacity" name="capacity" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('cost_per_hour', 'Cost/Hour') }}</label>
+                            <input type="number" id="resourceCost" name="cost_per_hour" step="0.01" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('notes', 'Notes') }}</label>
+                        <textarea id="resourceNotes" name="notes" rows="2" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="closeResourceModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium">{{ t('cancel', 'Cancel') }}</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">{{ t('save', 'Save') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function loadResources() {
+    const projectId = document.getElementById('projectFilter').value;
+    if (projectId) {
+        window.location.href = '{{ url_for("project_resources") }}?project_id=' + projectId;
+    } else {
+        window.location.href = '{{ url_for("project_resources") }}';
+    }
+}
+
+function showAddResourceModal() {
+    document.getElementById('resourceModalTitle').textContent = '{{ t("add_resource", "Add Resource") }}';
+    document.getElementById('resourceForm').reset();
+    document.getElementById('resourceId').value = '';
+    document.getElementById('resourceModal').classList.remove('hidden');
+}
+
+function editResource(resourceId) {
+    fetch('/api/project/resource/' + resourceId)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('resourceModalTitle').textContent = '{{ t("edit_resource", "Edit Resource") }}';
+            document.getElementById('resourceId').value = data.id;
+            document.getElementById('resourceUser').value = data.user_id;
+            document.getElementById('resourceCapacity').value = data.capacity;
+            document.getElementById('resourceCost').value = data.cost_per_hour;
+            document.getElementById('resourceNotes').value = data.notes || '';
+            document.getElementById('resourceModal').classList.remove('hidden');
+        });
+}
+
+function closeResourceModal() {
+    document.getElementById('resourceModal').classList.add('hidden');
+}
+
+function viewResourceHistory(resourceId) {
+    window.location.href = '/project/resource/' + resourceId + '/history';
+}
+
+function exportResources() {
+    window.location.href = '/api/project/resources/export';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Capacity Chart
+    const capacityCtx = document.getElementById('capacityChart').getContext('2d');
+    new Chart(capacityCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ capacity_labels|tojson }},
+            datasets: [
+                { label: '{{ t("allocated", "Allocated") }}', data: {{ allocated_values|tojson }}, backgroundColor: '#3b82f6' },
+                { label: '{{ t("available", "Available") }}', data: {{ available_values|tojson }}, backgroundColor: '#10b981' }
+            ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
+
+    // Department Chart
+    const deptCtx = document.getElementById('deptChart').getContext('2d');
+    new Chart(deptCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ dept_labels|tojson }},
+            datasets: [{ label: '{{ t("utilization", "Utilization") }}', data: {{ dept_values|tojson }}, backgroundColor: '#6366f1' }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', scales: { x: { beginAtZero: true, max: 100 } } }
+    });
+
+    // Availability Chart
+    const availCtx = document.getElementById('availabilityChart').getContext('2d');
+    new Chart(availCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['{{ t("allocated", "Allocated") }}', '{{ t("available", "Available") }}', '{{ t("offline", "Offline") }}'],
+            datasets: [{ data: {{ availability_values|tojson }}, backgroundColor: ['#3b82f6', '#10b981', '#6b7280'], borderWidth: 0 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '60%' }
+    });
+});
+</script>
+{% endblock %}

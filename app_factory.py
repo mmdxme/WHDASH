@@ -153,6 +153,7 @@ def register_all_routes(app: Flask):
     from bi_advanced_routes import register_advanced_bi_routes
     from api_gateway_routes import register_api_gateway_routes
     from rest_api import register_rest_api
+    from multi_entity_routes import register_multi_entity_routes
     
     # Create require_login decorator
     from functools import wraps
@@ -194,6 +195,7 @@ def register_all_routes(app: Flask):
     register_advanced_bi_routes(app)
     register_api_gateway_routes(app, require_login, user_has_permission, get_db)
     register_rest_api(app)
+    register_multi_entity_routes(app)
 
 
 # =============================================================================
@@ -249,7 +251,10 @@ def register_context_processors(app: Flask):
         import secrets
         if 'csrf_token' not in session:
             session['csrf_token'] = secrets.token_hex(32)
-        return {'csrf_token': session.get('csrf_token')}
+        class CSRFToken(str):
+            def __call__(self):
+                return str(self)
+        return {'csrf_token': CSRFToken(session.get('csrf_token'))}
 
     @app.context_processor
     def inject_format_time():

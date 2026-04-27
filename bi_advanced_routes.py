@@ -388,6 +388,85 @@ def export_to_json(data: List[Dict], filename: str) -> Response:
     )
 
 
+def export_to_pdf(data: List[Dict], columns: List[str], filename: str, title: str = None) -> Response:
+    """Generate PDF export response using CSV as intermediate."""
+    try:
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import letter, landscape
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+    except ImportError:
+        return jsonify({'error': 'PDF export requires reportlab library'}), 500
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=landscape(letter), 
+                           leftMargin=0.5*inch, rightMargin=0.5*inch,
+                           topMargin=0.5*inch, bottomMargin=0.5*inch)
+    
+    elements = []
+    styles = getSampleStyleSheet()
+    
+    if title:
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=18,
+            spaceAfter=20,
+            alignment=1
+        )
+        elements.append(Paragraph(title, title_style))
+        elements.append(Spacer(1, 10))
+    
+    header_labels = [col.replace('_', ' ').title() for col in columns]
+    table_data = [header_labels]
+    
+    for row in data[:1000]:
+        table_data.append([str(row.get(col, ''))[:50] for col in columns])
+    
+    col_widths = [letter[0] - inch] / len(columns) * len(columns)
+    table = Table(table_data, colWidths=col_widths)
+    
+    table_style = TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whiteness),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
+        ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
+        ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F3F4F6')]),
+    ])
+    table.setStyle(table_style)
+    elements.append(table)
+    
+    elements.append(Spacer(1, 20))
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.grey,
+        alignment=1
+    )
+    elements.append(Paragraph(
+        f"Generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | Business Intelligence Module | Total rows: {len(data)}",
+        footer_style
+    ))
+    
+    doc.build(elements)
+    buffer.seek(0)
+    
+    return Response(
+        buffer.getvalue(),
+        mimetype='application/pdf',
+        headers={'Content-Disposition': f'attachment; filename={filename}.pdf'}
+    )
+
+
 # =============================================================================
 # ROUTE REGISTRATION
 # =============================================================================
@@ -400,6 +479,11 @@ def register_advanced_bi_routes(app: Flask):
     # =========================================================================
     # BI DASHBOARD
     # =========================================================================
+
+    @app.route('/bi')
+    def bi_dashboard():
+        """Main BI Dashboard - overview of all reporting activities."""
+        return redirect(url_for('bi_advanced_dashboard'))
 
     @app.route('/bi/dashboard')
     @require_login
@@ -1412,7 +1496,7 @@ def register_advanced_bi_routes(app: Flask):
     @app.route('/bi/settings')
     @require_login
     @bi_permission_required('view')
-    def bi_settings_advanced():
+    def bi_settings():
         """BI Settings page."""
         if not is_bi_admin():
             return redirect(url_for('bi_advanced_dashboard'))

@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('security_sessions', 'Active Sessions') }}</h1>
+        <p class="text-gray-600 dark:text-gray-400">{{ t('security_sessions_desc', 'Manage your active login sessions') }}</p>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="mb-4 p-4 rounded-lg {% if 'error' in message.category %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('security_active_sessions', 'Active Sessions') }} ({{ sessions|length }})</h2>
+            <form action="{{ url_for('security.sessions_revoke_all') }}" method="POST" onsubmit="return confirm('{{ t('security_revoke_all_confirm', 'Revoke all other sessions?') }}');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900 transition">
+                    <i class="fa-solid fa-ban mr-1"></i>{{ t('security_revoke_all', 'Revoke All Others') }}
+                </button>
+            </form>
+        </div>
+        <div class="p-6">
+            {% if sessions %}
+            <div class="space-y-4">
+                {% for session in sessions %}
+                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg {% if session.session_id == current_session_id %}border-2 border-blue-500{% endif %}">
+                    <div class="flex items-center">
+                        <div class="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                            <i class="fa-solid {% if session.device_type == 'mobile' %}fa-mobile-alt{% else %}fa-laptop{% endif %} text-blue-600 dark:text-blue-400 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <div class="flex items-center">
+                                <p class="font-medium text-gray-900 dark:text-white">{{ session.browser|default('Unknown') }} on {{ session.os|default('Unknown OS') }}</p>
+                                {% if session.session_id == current_session_id %}
+                                <span class="ml-2 px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded">{{ t('security_current', 'Current') }}</span>
+                                {% endif %}
+                            </div>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                <i class="fa-solid fa-globe mr-1"></i>{{ session.ip_address|default('Unknown IP') }}
+                                <span class="mx-2">|</span>
+                                <i class="fa-solid fa-clock mr-1"></i>{{ session.last_activity }}
+                            </p>
+                            {% if session.mfa_verified %}
+                            <span class="inline-flex items-center text-xs text-green-600 dark:text-green-400">
+                                <i class="fa-solid fa-shield-alt mr-1"></i>{{ t('security_mfa_verified', 'MFA Verified') }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="px-2 py-1 text-xs font-medium rounded {% if session.is_active %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300{% endif %} mr-2">
+                            {{ t('security_active', 'Active') if session.is_active else t('security_inactive', 'Inactive') }}
+                        </span>
+                        {% if session.session_id != current_session_id %}
+                        <form action="{{ url_for('security.session_revoke', session_id=session.session_id) }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900 transition">
+                                {{ t('security_revoke', 'Revoke') }}
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fa-solid fa-laptop text-gray-300 dark:text-gray-600 text-4xl mb-3"></i>
+                <p class="text-gray-500 dark:text-gray-400">{{ t('security_no_active_sessions', 'No active sessions') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Security Tips -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+        <h3 class="font-semibold text-gray-900 dark:text-white mb-3">{{ t('security_session_tips', 'Session Security Tips') }}</h3>
+        <ul class="text-sm text-gray-600 dark:text-gray-400 space-y-2">
+            <li><i class="fa-solid fa-check text-green-500 mr-2"></i>{{ t('security_session_tip1', 'Review your sessions regularly and revoke any you don\'t recognize') }}</li>
+            <li><i class="fa-solid fa-check text-green-500 mr-2"></i>{{ t('security_session_tip2', 'Enable MFA for additional security') }}</li>
+            <li><i class="fa-solid fa-check text-green-500 mr-2"></i>{{ t('security_session_tip3', 'Use trusted devices only and avoid public computers') }}</li>
+            <li><i class="fa-solid fa-check text-green-500 mr-2"></i>{{ t('security_session_tip4', 'Report suspicious activity immediately to your security team') }}</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

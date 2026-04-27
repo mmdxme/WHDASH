@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('btp_job_detail', 'Job Detail') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-sync fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ job.name }}
+        </h1>
+        <div class="btn-group">
+            {% if job.status == 'failed' %}
+            <a href="{{ url_for('btp_job_retry', job_id=job.id) }}" class="btn btn-outline-success btn-sm">
+                <i class="fas fa-redo me-1"></i> {{ t('retry', 'Retry') }}
+            </a>
+            {% endif %}
+            <a href="{{ url_for('btp_jobs') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back', 'Back') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Job Info -->
+    <div class="row">
+        <div class="col-lg-8 mb-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_job_detail', 'Job Details') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm table-borderless">
+                                <tr>
+                                    <td class="text-muted">{{ t('btp_job_id', 'Job ID') }}</td>
+                                    <td><code>{{ job.job_id }}</code></td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">{{ t('btp_job_type', 'Job Type') }}</td>
+                                    <td>{{ job.job_type }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">{{ t('btp_trigger_type', 'Trigger') }}</td>
+                                    <td>{{ job.trigger_source }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">{{ t('status', 'Status') }}</td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if job.status == 'completed' else 'danger' if job.status == 'failed' else 'warning' if job.status == 'queued' else 'info' }}">
+                                            {{ job.status }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-sm table-borderless">
+                                <tr>
+                                    <td class="text-muted">{{ t('btp_owner', 'Owner') }}</td>
+                                    <td>{{ job.owner or 'N/A' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">{{ t('btp_attempts', 'Attempts') }}</td>
+                                    <td>{{ job.attempts }}/{{ job.max_attempts }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">{{ t('btp_duration', 'Duration') }}</td>
+                                    <td>{{ job.duration_seconds or 0 }}s</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    {% if job.last_error %}
+                    <hr>
+                    <div class="alert alert-danger mb-0">
+                        <strong>{{ t('btp_last_error', 'Last Error') }}:</strong>
+                        <pre class="mb-0 mt-2">{{ job.last_error }}</pre>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('timing', 'Timing') }}</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-borderless">
+                        <tr>
+                            <td class="text-muted">{{ t('btp_queued_at', 'Queued At') }}</td>
+                            <td>{{ job.queued_at or 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('btp_started_at', 'Started At') }}</td>
+                            <td>{{ job.started_at or 'N/A' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('btp_finished_at', 'Finished At') }}</td>
+                            <td>{{ job.finished_at or 'N/A' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Job Attempts -->
+    {% if attempts %}
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_attempts', 'Job Attempts') }}</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>{{ t('status', 'Status') }}</th>
+                            <th>{{ t('btp_duration', 'Duration (ms)') }}</th>
+                            <th>{{ t('btp_error_message', 'Error') }}</th>
+                            <th>{{ t('btp_started_at', 'Started At') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for attempt in attempts %}
+                        <tr>
+                            <td>{{ attempt.attempt_number }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if attempt.status == 'completed' else 'danger' if attempt.status == 'failed' else 'warning' }}">
+                                    {{ attempt.status }}
+                                </span>
+                            </td>
+                            <td>{{ attempt.duration_ms or 0 }}</td>
+                            <td><small>{{ attempt.error_message or '-' }}</small></td>
+                            <td><small>{{ attempt.started_at or 'N/A' }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

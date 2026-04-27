@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - {{ get_setting('platform_name', 'MMDx') }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#f0f9ff', 100: '#e0f2fe', 400: '#38bdf8', 500: '#0ea5e9', 600: '#0284c7', 900: '#0c4a6e' },
+                        surface: { 800: '#1e293b', 900: '#0f172a' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --info: #3b82f6;
+        }
+        body { background: #f1f5f9; color: #334155; font-family: 'Outfit', sans-serif; }
+        .card { background: white; border-radius: 0.75rem; border: 1px solid #e2e8f0; }
+        .stat-card { transition: transform 0.2s, box-shadow 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); }
+        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #e2e8f0; color: #64748b; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+        td { padding: 0.75rem 1rem; border-bottom: 1px solid #e2e8f0; }
+        tr:hover { background: #f8fafc; }
+        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-outline { border: 1px solid #cbd5e1; color: #475569; }
+        .btn-outline:hover { background: #f1f5f9; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-success:hover { background: #059669; }
+        .text-success { color: var(--success); }
+        .text-danger { color: var(--danger); }
+        .text-warning { color: var(--warning); }
+        .text-info { color: var(--info); }
+        .bg-success { background: rgba(16, 185, 129, 0.1); }
+        .bg-danger { background: rgba(239, 68, 68, 0.1); }
+        .bg-warning { background: rgba(245, 158, 11, 0.1); }
+        .bg-info { background: rgba(59, 130, 246, 0.1); }
+        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
+        .severity-critical { color: #ef4444; }
+        .severity-high { color: #f97316; }
+        .severity-medium { color: #f59e0b; }
+        .severity-low { color: #6b7280; }
+        .status-badge { padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 500; }
+        .status-active { background: #10b98120; color: #10b981; }
+        .status-pending { background: #f59e0b20; color: #f59e0b; }
+        .status-on-hold { background: #6366f120; color: #6366f1; }
+        .status-completed { background: #3b82f620; color: #3b82f6; }
+        .status-cancelled { background: #ef444420; color: #ef4444; }
+        [dir="rtl"] .ml-64 { margin-left: 0; margin-right: 16rem; }
+        [dir="rtl"] .sidebar { left: auto; right: 0; }
+        .progress-bar { height: 8px; border-radius: 4px; background: #e2e8f0; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+        .tab-active { border-bottom: 2px solid var(--primary); color: var(--primary); }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-slate-100 dark:bg-slate-900">
+    <!-- Sidebar -->
+    <div class="fixed sidebar left-0 top-0 h-screen w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 z-40">
+        <!-- Logo -->
+        <div class="h-16 flex items-center px-6 border-b border-slate-200 dark:border-slate-700">
+            <a href="{{ url_for('project_dashboard') }}" class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-lg flex items-center justify-center">
+                    <i class="fas fa-project-diagram text-white text-sm"></i>
+                </div>
+                <span class="text-lg font-bold text-slate-800 dark:text-white">{{ get_setting('platform_name', 'MMDx') }}</span>
+            </a>
+        </div>
+
+        <!-- Navigation -->
+        <nav class="p-4 space-y-1 overflow-y-auto h-[calc(100vh-4rem)]">
+            <a href="{{ url_for('project_dashboard') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if request.path == url_for('project_dashboard') %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-th-large w-5"></i>
+                <span>{{ t('project_dashboard', 'Dashboard') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_executive') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if request.path == url_for('project_executive') %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-chart-pie w-5"></i>
+                <span>{{ t('executive_dashboard', 'Executive') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_pmo') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if request.path == url_for('project_pmo') %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-briefcase w-5"></i>
+                <span>{{ t('pmo_workspace', 'PMO') }}</span>
+            </a>
+
+            <!-- Projects Section -->
+            <div class="pt-4 pb-2">
+                <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{{ t('projects', 'Projects') }}</p>
+            </div>
+
+            <a href="{{ url_for('project_list') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/list' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-list w-5"></i>
+                <span>{{ t('all_projects', 'All Projects') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_create') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/create' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-plus-circle w-5"></i>
+                <span>{{ t('new_project', 'New Project') }}</span>
+            </a>
+
+            <!-- Planning Section -->
+            <div class="pt-4 pb-2">
+                <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{{ t('planning', 'Planning') }}</p>
+            </div>
+
+            <a href="{{ url_for('project_wbs') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/wbs' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-sitemap w-5"></i>
+                <span>{{ t('wbs_builder', 'WBS') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_phases') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/phases' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-layer-group w-5"></i>
+                <span>{{ t('phases', 'Phases') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_milestones') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/milestones' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-flag w-5"></i>
+                <span>{{ t('milestones', 'Milestones') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_tasks') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/tasks' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-tasks w-5"></i>
+                <span>{{ t('tasks', 'Tasks') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_resources') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/resources' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-users w-5"></i>
+                <span>{{ t('resources', 'Resources') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_budget') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/budget' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-dollar-sign w-5"></i>
+                <span>{{ t('budget', 'Budget') }}</span>
+            </a>
+
+            <!-- Risk & Issues Section -->
+            <div class="pt-4 pb-2">
+                <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{{ t('risk_management', 'Risk Management') }}</p>
+            </div>
+
+            <a href="{{ url_for('project_risks') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/risks' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-exclamation-triangle w-5"></i>
+                <span>{{ t('risks', 'Risks') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_issues') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/issues' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-bug w-5"></i>
+                <span>{{ t('issues', 'Issues') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_changes') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/changes' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-exchange-alt w-5"></i>
+                <span>{{ t('change_requests', 'Changes') }}</span>
+            </a>
+
+            <!-- Documents & Governance Section -->
+            <div class="pt-4 pb-2">
+                <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{{ t('documents_governance', 'Documents & Governance') }}</p>
+            </div>
+
+            <a href="{{ url_for('project_documents') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/documents' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-file-alt w-5"></i>
+                <span>{{ t('documents', 'Documents') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_governance') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/governance' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-gavel w-5"></i>
+                <span>{{ t('governance', 'Governance') }}</span>
+            </a>
+
+            <a href="{{ url_for('project_reports') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/reports' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-chart-bar w-5"></i>
+                <span>{{ t('reports', 'Reports') }}</span>
+            </a>
+
+            <!-- Settings Section -->
+            <div class="pt-4 pb-2">
+                <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">{{ t('settings', 'Settings') }}</p>
+            </div>
+
+            <a href="{{ url_for('project_settings') }}" class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                {% if '/project/settings' in request.path %}bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400{% else %}text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700{% endif %}">
+                <i class="fas fa-cog w-5"></i>
+                <span>{{ t('project_settings', 'Settings') }}</span>
+            </a>
+        </nav>
+    </div>
+
+    <!-- Main Content -->
+    <div class="ml-64 min-h-screen">
+        <!-- Header -->
+        <header class="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-6">
+            <!-- Left: Breadcrumb -->
+            <div class="flex items-center gap-4">
+                <nav class="flex items-center text-sm">
+                    <a href="{{ url_for('project_dashboard') }}" class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+                        <i class="fas fa-project-diagram mr-1"></i>{{ t('projects', 'Projects') }}
+                    </a>
+                    <span class="text-slate-400 mx-2">/</span>
+                    <span class="text-slate-700 dark:text-slate-200 font-medium">{{ page_title }}</span>
+                </nav>
+            </div>
+
+            <!-- Right: Actions -->
+            <div class="flex items-center gap-4">
+                <!-- Quick Search -->
+                <div class="relative">
+                    <input type="text" id="quickSearch" placeholder="{{ t('search_projects', 'Search projects...') }}"
+                           class="w-64 pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-700 border-0 rounded-lg text-sm text-slate-600 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                </div>
+
+                <!-- Language Selector -->
+                <div class="relative">
+                    <select id="languageSelector" class="appearance-none bg-slate-100 dark:bg-slate-700 border-0 rounded-lg px-3 py-2 text-sm text-slate-600 dark:text-slate-300 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="en" {% if language == 'en' %}selected{% endif %}>English</option>
+                        <option value="ar" {% if language == 'ar' %}selected{% endif %}>العربية</option>
+                        <option value="fa" {% if language == 'fa' %}selected{% endif %}>فارسی</option>
+                    </select>
+                    <i class="fas fa-globe absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"></i>
+                </div>
+
+                <!-- Notifications -->
+                <button id="notificationBtn" class="relative p-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                    <i class="fas fa-bell text-lg"></i>
+                    {% if notifications|length > 0 %}
+                    <span class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+                    {% endif %}
+                </button>
+
+                <!-- User Dropdown -->
+                <div class="flex items-center gap-3 pl-4 border-l border-slate-200 dark:border-slate-700">
+                    <div class="text-right">
+                        <p class="text-sm font-medium text-slate-800 dark:text-white">{{ username }}</p>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Project Manager</p>
+                    </div>
+                    <div class="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-full flex items-center justify-center">
+                        <i class="fas fa-user text-white text-sm"></i>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Notifications Dropdown -->
+        <div id="notificationDropdown" class="hidden absolute right-6 top-16 w-80 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 z-50">
+            <div class="p-4 border-b border-slate-200 dark:border-slate-700">
+                <h3 class="font-semibold text-slate-800 dark:text-white">{{ t('notifications', 'Notifications') }}</h3>
+            </div>
+            <div class="max-h-64 overflow-y-auto">
+                {% if notifications %}
+                    {% for notif in notifications %}
+                    <div class="p-3 border-b border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700">
+                        <p class="text-sm text-slate-700 dark:text-slate-300">{{ notif.message }}</p>
+                        <span class="text-xs text-slate-500">{{ notif.created_at }}</span>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="p-4 text-center text-slate-500">
+                        <i class="fas fa-bell-slash text-2xl mb-2"></i>
+                        <p class="text-sm">{{ t('no_notifications', 'No notifications') }}</p>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="p-3 border-t border-slate-200 dark:border-slate-700">
+                <a href="{{ url_for('project_notifications') }}" class="text-sm text-indigo-600 hover:text-indigo-700">{{ t('view_all_notifications', 'View all notifications') }}</a>
+            </div>
+        </div>
+
+        <!-- Page Content -->
+        <main class="p-6">
+            {% block content %}{% endblock %}
+        </main>
+
+        <!-- Footer -->
+        <footer class="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-6 py-4">
+            <div class="flex justify-between items-center text-sm text-slate-500 dark:text-slate-400">
+                <p>&copy; {{ current_year }} {{ get_setting('platform_name', 'MMDx') }}. {{ t('all_rights_reserved', 'All rights reserved.') }}</p>
+                <div class="flex items-center gap-4">
+                    <a href="{{ url_for('project_help') }}" class="hover:text-slate-700 dark:hover:text-slate-300">{{ t('help', 'Help') }}</a>
+                    <a href="{{ url_for('project_privacy') }}" class="hover:text-slate-700 dark:hover:text-slate-300">{{ t('privacy', 'Privacy') }}</a>
+                    <a href="{{ url_for('project_terms') }}" class="hover:text-slate-700 dark:hover:text-slate-300">{{ t('terms', 'Terms') }}</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script>
+        // Initialize dark mode
+        if (localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark');
+        }
+
+        // Toggle sidebar
+        document.getElementById('sidebar-toggle')?.addEventListener('click', function() {
+            document.getElementById('sidebar').classList.toggle('-translate-x-full');
+        });
+
+        // Notifications dropdown
+        document.getElementById('notificationBtn').addEventListener('click', function(e) {
+            e.stopPropagation();
+            document.getElementById('notificationDropdown').classList.toggle('hidden');
+        });
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('#notificationBtn') && !e.target.closest('#notificationDropdown')) {
+                document.getElementById('notificationDropdown').classList.add('hidden');
+            }
+        });
+
+        // Language selector
+        document.getElementById('languageSelector')?.addEventListener('change', function() {
+            const lang = this.value;
+            fetch('/api/set-language', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || '' },
+                body: JSON.stringify({ language: lang })
+            }).then(() => location.reload());
+        });
+
+        // Auto-save indicator
+        function showSaveIndicator() {
+            const indicator = document.getElementById('save-indicator');
+            if (indicator) {
+                indicator.classList.remove('opacity-0');
+                setTimeout(() => indicator.classList.add('opacity-0'), 2000);
+            }
+        }
+
+        // Form validation
+        document.querySelectorAll('form[data-validate]').forEach(form => {
+            form.addEventListener('submit', function(e) {
+                if (!form.checkValidity()) {
+                    e.preventDefault();
+                    form.classList.add('was-validated');
+                }
+            });
+        });
+
+        // Delete confirmation
+        document.querySelectorAll('[data-confirm]').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                if (!confirm(this.dataset.confirm || '{{ t('are_you_sure', 'Are you sure?') }}')) {
+                    e.preventDefault();
+                }
+            });
+        });
+
+        // SweetAlert helpers
+        function showSuccess(message) {
+            Swal.fire({ icon: 'success', title: message, timer: 2000, showConfirmButton: false });
+        }
+        function showError(message) {
+            Swal.fire({ icon: 'error', title: message, confirmButtonText: '{{ t('ok', 'OK') }}' });
+        }
+        function showConfirm(message, callback) {
+            Swal.fire({ icon: 'question', title: message, showCancelButton: true, confirmButtonText: '{{ t('yes', 'Yes') }}', cancelButtonText: '{{ t('no', 'No') }}' }).then(callback);
+        }
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

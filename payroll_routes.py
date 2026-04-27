@@ -1874,7 +1874,7 @@ def processing_run_view(id):
             ORDER BY pe.severity DESC, pe.created_at DESC
         """, (id,)).fetchall()
         
-        # Summary
+        # Get summary
         summary = db.execute("""
             SELECT 
                 COUNT(*) as total_records,
@@ -1882,7 +1882,7 @@ def processing_run_view(id):
                 SUM(CASE WHEN status = 'Calculated' THEN 1 ELSE 0 END) as calculated,
                 SUM(CASE WHEN status = 'Approved' THEN 1 ELSE 0 END) as approved,
                 SUM(CASE WHEN has_exceptions = 1 THEN 1 ELSE 0 END) as with_exceptions,
-                SUM(total_gross) as total_gross,
+                SUM(gross_salary) as total_gross,
                 SUM(total_deductions) as total_deductions,
                 SUM(net_salary) as total_net
             FROM payroll_employee_records

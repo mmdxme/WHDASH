@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white">{{ t('lead_scoring', 'Lead Scoring') }}</h1>
+            <p class="text-slate-400 mt-1">{{ t('lead_scoring_desc', 'Configure and monitor lead scoring rules') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('marketing.lead_scoring_new') }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-plus mr-2"></i>{{ t('new_scoring_rule', 'New Rule') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Score Summary Cards -->
+    {% if score_summary %}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-white mb-1">{{ score_summary.total_leads or 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('total_leads', 'Total Leads') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-blue-400 mb-1">{{ score_summary.mql_count or 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('mql_count', 'MQLs') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-emerald-400 mb-1">{{ score_summary.sql_count or 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('sql_count', 'SQLs') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-cyan-400 mb-1">{{ "%.0f"|format(score_summary.avg_score or 0) }}</div>
+            <div class="text-sm text-slate-400">{{ t('avg_score', 'Avg Score') }}</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Scoring Rules Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-6 border-b border-white/10">
+            <h3 class="text-lg font-bold text-white">{{ t('scoring_rules', 'Scoring Rules') }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('rule', 'Rule') }}</th>
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('type', 'Type') }}</th>
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('category', 'Category') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('score_change', 'Score') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('priority', 'Priority') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('status', 'Status') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for rule in rules %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-all">
+                        <td class="py-4 px-6">
+                            <div class="font-semibold text-white">{{ rule.rule_name }}</div>
+                            <div class="text-xs text-slate-500">{{ rule.rule_code }}</div>
+                        </td>
+                        <td class="py-4 px-6">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {% if rule.rule_type == 'positive' %}bg-emerald-400/20 text-emerald-400{% elif rule.rule_type == 'negative' %}bg-rose-400/20 text-rose-400{% else %}bg-blue-400/20 text-blue-400{% endif %}">
+                                {{ rule.rule_type|title }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-slate-300">{{ rule.category|title }}</td>
+                        <td class="py-4 px-6 text-center">
+                            <span class="{% if rule.score_change > 0 %}text-emerald-400{% elif rule.score_change < 0 %}text-rose-400{% else %}text-slate-400{% endif %} font-bold">
+                                {% if rule.score_change > 0 %}+{% endif %}{{ rule.score_change }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-center text-slate-400">{{ rule.priority }}</td>
+                        <td class="py-4 px-6 text-center">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {% if rule.is_active %}bg-emerald-400/20 text-emerald-400{% else %}bg-slate-400/20 text-slate-400{% endif %}">
+                                {{ t('active', 'Active') if rule.is_active else t('inactive', 'Inactive') }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <a href="{{ url_for('marketing.lead_scoring_edit', id=rule.id) }}" class="p-2 hover:bg-white/10 rounded-lg transition-all" title="{{ t('edit', 'Edit') }}">
+                                    <i class="fa-solid fa-pen text-amber-400"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="py-16 text-center text-slate-500">
+                            <i class="fa-solid fa-list-check text-5xl mb-4 text-slate-600"></i>
+                            <p class="text-lg">{{ t('no_scoring_rules', 'No scoring rules configured') }}</p>
+                            <a href="{{ url_for('marketing.lead_scoring_new') }}" class="mt-4 inline-block px-4 py-2 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold transition-all">
+                                {{ t('create_first_rule', 'Create your first rule') }}
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

@@ -1,613 +1,318 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title }} - MMDx</title>
-    <link href="/static/css/tailwind.min.css" rel="stylesheet">
-    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --info: #3b82f6;
-            --gray-700: #374151;
-            --gray-800: #1f2937;
-            --gray-900: #111827;
-        }
-        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
-        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; transition: transform 0.2s, box-shadow 0.2s; }
-        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); }
-        .stat-card { transition: transform 0.2s, box-shadow 0.2s; }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); }
-        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
-        .table-container { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
-        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
-        tr:hover { background: #293548; }
-        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-primary:hover { background: var(--primary-dark); }
-        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
-        .btn-outline:hover { background: #334155; }
-        .btn-success { background: var(--success); color: white; }
-        .btn-danger { background: var(--danger); color: white; }
-        .btn-warning { background: var(--warning); color: white; }
-        .text-success { color: var(--success); }
-        .text-danger { color: var(--danger); }
-        .text-warning { color: var(--warning); }
-        .text-info { color: var(--info); }
-        .bg-success { background: rgba(16, 185, 129, 0.1); }
-        .bg-danger { background: rgba(239, 68, 68, 0.1); }
-        .bg-warning { background: rgba(245, 158, 11, 0.1); }
-        .bg-info { background: rgba(59, 130, 246, 0.1); }
-        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
-        .amount-positive { color: var(--success); }
-        .amount-negative { color: var(--danger); }
-        .chart-container { position: relative; min-height: 300px; }
-        .trend-up { color: var(--success); }
-        .trend-down { color: var(--danger); }
-        .progress-bar { height: 8px; background: #334155; border-radius: 4px; overflow: hidden; }
-        .progress-fill { height: 100%; border-radius: 4px; transition: width 0.5s ease; }
-        .alert-card { border-left: 4px solid; }
-        .alert-danger { border-left-color: var(--danger); background: rgba(239, 68, 68, 0.05); }
-        .alert-warning { border-left-color: var(--warning); background: rgba(245, 158, 11, 0.05); }
-        .alert-info { border-left-color: var(--info); background: rgba(59, 130, 246, 0.05); }
-        .alert-success { border-left-color: var(--success); background: rgba(16, 185, 129, 0.05); }
-        .kpi-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; }
-    </style>
-</head>
-<body>
-    {% extends "base.html" %}
+{% extends "base.html" %}
+{% from "menu_macros.html" import render_menu_item, render_sidebar_menu %}
 
-    {% block content %}
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="flex justify-between items-center mb-8">
-            <div>
-                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
-                <p class="text-gray-400 mt-1">Financial overview and key metrics</p>
+{% block title %}{{ t('finance_dashboard', 'Finance Dashboard') }} - {{ platform_name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <!-- Header -->
+    <div class="bg-slate-800/80 backdrop-blur-lg border-b border-slate-700">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-white">{{ t('finance_dashboard', 'Finance Dashboard') }}</h1>
+                    <p class="text-slate-400 text-sm">{{ t('welcome_back', 'Welcome back') }}, {{ user_name }}</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/finance/accounts/create" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors flex items-center space-x-2">
+                        <i class="fa fa-plus"></i>
+                        <span>{{ t('add_transaction', 'Add Transaction') }}</span>
+                    </a>
+                </div>
             </div>
-            <div class="flex gap-3">
-                <a href="/finance/dashboard/cfo" class="btn btn-outline">
-                    <i class="fas fa-chart-pie"></i> CFO View
-                </a>
-                <a href="/finance/journals/create" class="btn btn-primary">
-                    <i class="fas fa-plus"></i> New Journal
-                </a>
+        </div>
+    </div>
+
+    <div class="p-6">
+        <!-- KPI Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Monthly Income -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700 hover:border-emerald-500/50 transition-colors">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="p-3 bg-emerald-500/20 rounded-lg">
+                        <i class="fa fa-arrow-down text-emerald-400 text-xl"></i>
+                    </div>
+                    <span class="text-xs text-emerald-400 font-medium">{{ t('this_month', 'This Month') }}</span>
+                </div>
+                <p class="text-slate-400 text-sm">{{ t('monthly_income', 'Monthly Income') }}</p>
+                <p class="text-2xl font-bold text-white mt-1">{{ kpis.currency if kpis else 'USD' }} {{ "{:,.2f}".format(kpis.monthly_income if kpis else 0) }}</p>
+            </div>
+
+            <!-- Monthly Expenses -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700 hover:border-red-500/50 transition-colors">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="p-3 bg-red-500/20 rounded-lg">
+                        <i class="fa fa-arrow-up text-red-400 text-xl"></i>
+                    </div>
+                    <span class="text-xs text-red-400 font-medium">{{ t('this_month', 'This Month') }}</span>
+                </div>
+                <p class="text-slate-400 text-sm">{{ t('monthly_expenses', 'Monthly Expenses') }}</p>
+                <p class="text-2xl font-bold text-white mt-1">{{ kpis.currency if kpis else 'USD' }} {{ "{:,.2f}".format(kpis.monthly_expenses if kpis else 0) }}</p>
+            </div>
+
+            <!-- Net Cash Flow -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700 hover:border-blue-500/50 transition-colors">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="p-3 bg-blue-500/20 rounded-lg">
+                        <i class="fa fa-exchange-alt text-blue-400 text-xl"></i>
+                    </div>
+                    <span class="text-xs text-blue-400 font-medium">{{ t('net', 'Net') }}</span>
+                </div>
+                <p class="text-slate-400 text-sm">{{ t('net_cash_flow', 'Net Cash Flow') }}</p>
+                <p class="text-2xl font-bold text-white mt-1 {% if kpis and kpis.net_cash_flow < 0 %}text-red-400{% else %}text-emerald-400{% endif %}">
+                    {{ kpis.currency if kpis else 'USD' }} {{ "{:,.2f}".format(kpis.net_cash_flow if kpis else 0) }}
+                </p>
+            </div>
+
+            <!-- Savings Rate -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700 hover:border-purple-500/50 transition-colors">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="p-3 bg-purple-500/20 rounded-lg">
+                        <i class="fa fa-piggy-bank text-purple-400 text-xl"></i>
+                    </div>
+                    <span class="text-xs text-purple-400 font-medium">{{ t('rate', 'Rate') }}</span>
+                </div>
+                <p class="text-slate-400 text-sm">{{ t('savings_rate', 'Savings Rate') }}</p>
+                <p class="text-2xl font-bold text-white mt-1">{{ "{:.1f}".format(kpis.savings_rate if kpis else 0) }}%</p>
             </div>
         </div>
 
-        <!-- KPI Row 1: Total Assets, Total Liabilities, Total Equity, Revenue YTD, Expenses YTD, Net Income -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
-            <!-- Total Assets -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="kpi-icon bg-info/20 text-info">
-                        <i class="fas fa-landmark"></i>
+        <!-- Second Row KPIs -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Total Savings -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700 hover:border-emerald-500/50 transition-colors">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="p-3 bg-emerald-500/20 rounded-lg">
+                        <i class="fa fa-wallet text-emerald-400 text-xl"></i>
                     </div>
-                    <span class="text-xs text-gray-400">Assets</span>
                 </div>
-                <p class="text-2xl font-bold text-white amount mb-1">{{ "%.2f"|format(summary.total_assets) }}</p>
-                <p class="text-xs text-gray-500">Total Assets</p>
+                <p class="text-slate-400 text-sm">{{ t('total_savings', 'Total Savings') }}</p>
+                <p class="text-2xl font-bold text-white mt-1">{{ kpis.currency if kpis else 'USD' }} {{ "{:,.2f}".format(kpis.total_savings if kpis else 0) }}</p>
             </div>
 
-            <!-- Total Liabilities -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="kpi-icon bg-danger/20 text-danger">
-                        <i class="fas fa-file-invoice-dollar"></i>
+            <!-- Total Debts -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700 hover:border-orange-500/50 transition-colors">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="p-3 bg-orange-500/20 rounded-lg">
+                        <i class="fa fa-credit-card text-orange-400 text-xl"></i>
                     </div>
-                    <span class="text-xs text-gray-400">Liabilities</span>
                 </div>
-                <p class="text-2xl font-bold text-white amount mb-1">{{ "%.2f"|format(summary.total_liabilities) }}</p>
-                <p class="text-xs text-gray-500">Total Liabilities</p>
+                <p class="text-slate-400 text-sm">{{ t('total_debts', 'Total Debts') }}</p>
+                <p class="text-2xl font-bold text-white mt-1">{{ kpis.currency if kpis else 'USD' }} {{ "{:,.2f}".format(kpis.total_debts if kpis else 0) }}</p>
             </div>
 
-            <!-- Total Equity -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="kpi-icon bg-success/20 text-success">
-                        <i class="fas fa-scale-balanced"></i>
+            <!-- Net Worth -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700 hover:border-cyan-500/50 transition-colors">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="p-3 bg-cyan-500/20 rounded-lg">
+                        <i class="fa fa-gem text-cyan-400 text-xl"></i>
                     </div>
-                    <span class="text-xs text-gray-400">Equity</span>
                 </div>
-                <p class="text-2xl font-bold text-white amount mb-1">{{ "%.2f"|format(summary.total_equity) }}</p>
-                <p class="text-xs text-gray-500">Total Equity</p>
+                <p class="text-slate-400 text-sm">{{ t('net_worth', 'Net Worth') }}</p>
+                <p class="text-2xl font-bold text-white mt-1 {% if kpis and kpis.net_worth < 0 %}text-red-400{% else %}text-emerald-400{% endif %}">
+                    {{ kpis.currency if kpis else 'USD' }} {{ "{:,.2f}".format(kpis.net_worth if kpis else 0) }}
+                </p>
             </div>
 
-            <!-- Revenue YTD -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="kpi-icon bg-success/20 text-success">
-                        <i class="fas fa-chart-line"></i>
+            <!-- Financial Health Score -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl p-6 border border-slate-700 hover:border-pink-500/50 transition-colors">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="p-3 bg-pink-500/20 rounded-lg">
+                        <i class="fa fa-heartbeat text-pink-400 text-xl"></i>
                     </div>
-                    <span class="text-xs text-success">YTD</span>
                 </div>
-                <p class="text-2xl font-bold text-success amount mb-1">{{ "%.2f"|format(summary.total_revenue) }}</p>
-                <p class="text-xs text-gray-500">Revenue YTD</p>
+                <p class="text-slate-400 text-sm">{{ t('health_score', 'Health Score') }}</p>
+                <p class="text-2xl font-bold {% if health and health.total_score >= 70 %}text-emerald-400{% elif health and health.total_score >= 40 %}text-yellow-400{% else %}text-red-400{% endif %} mt-1">
+                    {{ "{:.0f}".format(health.total_score if health else 0) }}/100
+                </p>
             </div>
+        </div>
 
-            <!-- Expenses YTD -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="kpi-icon bg-warning/20 text-warning">
-                        <i class="fas fa-arrow-down"></i>
-                    </div>
-                    <span class="text-xs text-warning">YTD</span>
+        <!-- Main Content Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Recent Transactions -->
+            <div class="lg:col-span-2 bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700">
+                <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+                    <h2 class="text-lg font-semibold text-white">{{ t('recent_transactions', 'Recent Transactions') }}</h2>
+                    <a href="/finance/transactions" class="text-emerald-400 hover:text-emerald-300 text-sm">{{ t('view_all', 'View All') }}</a>
                 </div>
-                <p class="text-2xl font-bold text-warning amount mb-1">{{ "%.2f"|format(summary.total_expenses) }}</p>
-                <p class="text-xs text-gray-500">Expenses YTD</p>
-            </div>
-
-            <!-- Net Income -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between mb-3">
-                    <div class="kpi-icon bg-primary/20 text-primary">
-                        <i class="fas fa-coins"></i>
+                <div class="p-6">
+                    {% if recent_transactions %}
+                    <div class="space-y-4">
+                        {% for txn in recent_transactions[:5] %}
+                        <div class="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg hover:bg-slate-700/50 transition-colors">
+                            <div class="flex items-center space-x-4">
+                                <div class="w-10 h-10 rounded-full flex items-center justify-center {% if txn.transaction_type == 'income' %}bg-emerald-500/20 text-emerald-400{% elif txn.transaction_type == 'expense' %}bg-red-500/20 text-red-400{% else %}bg-blue-500/20 text-blue-400{% endif %}">
+                                    <i class="fa {% if txn.transaction_type == 'income' %}fa-arrow-down{% elif txn.transaction_type == 'expense' %}fa-arrow-up{% else %}fa-exchange-alt{% endif %}"></i>
+                                </div>
+                                <div>
+                                    <p class="text-white font-medium">{{ txn.merchant_payee or txn.description or txn.transaction_code }}</p>
+                                    <p class="text-slate-400 text-sm">{{ txn.category_name or txn.transaction_type | title }} • {{ txn.transaction_date }}</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-semibold {% if txn.transaction_type == 'income' %}text-emerald-400{% elif txn.transaction_type == 'expense' %}text-red-400{% else %}text-blue-400{% endif %}">
+                                    {% if txn.transaction_type == 'income' %}+{% elif txn.transaction_type == 'expense' %}-{% endif %}{{ txn.currency }} {{ "{:,.2f}".format(txn.amount) }}
+                                </p>
+                                <p class="text-slate-400 text-sm">{{ txn.account_name or 'Cash' }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
-                    {% if summary.net_profit >= 0 %}
-                    <span class="text-xs text-success"><i class="fas fa-arrow-up"></i> Profit</span>
                     {% else %}
-                    <span class="text-xs text-danger"><i class="fas fa-arrow-down"></i> Loss</span>
+                    <div class="text-center py-8">
+                        <i class="fa fa-receipt text-slate-600 text-4xl mb-3"></i>
+                        <p class="text-slate-400">{{ t('no_transactions', 'No transactions yet') }}</p>
+                        <a href="/finance/transactions/create" class="inline-block mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors">
+                            {{ t('add_first_transaction', 'Add Your First Transaction') }}
+                        </a>
+                    </div>
                     {% endif %}
                 </div>
-                <p class="text-2xl font-bold {% if summary.net_profit >= 0 %}text-success{% else %}text-danger{% endif %} amount mb-1">
-                    {{ "%.2f"|format(summary.net_profit) }}
-                </p>
-                <p class="text-xs text-gray-500">Net Income YTD</p>
-            </div>
-        </div>
-
-        <!-- KPI Row 2: Mini Charts - Revenue Trend, Expense Trend, Cash Position -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <!-- Revenue Trend -->
-            <div class="card">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">Revenue Trend</h3>
-                    <span class="text-xs text-gray-400">Last 12 Months</span>
-                </div>
-                <div class="chart-container" style="min-height: 200px;">
-                    <canvas id="revenueChart"></canvas>
-                </div>
             </div>
 
-            <!-- Expense Trend -->
-            <div class="card">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">Expense Trend</h3>
-                    <span class="text-xs text-gray-400">Last 12 Months</span>
+            <!-- Budget Status -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700">
+                <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+                    <h2 class="text-lg font-semibold text-white">{{ t('budget_status', 'Budget Status') }}</h2>
+                    <a href="/finance/budgets" class="text-emerald-400 hover:text-emerald-300 text-sm">{{ t('manage', 'Manage') }}</a>
                 </div>
-                <div class="chart-container" style="min-height: 200px;">
-                    <canvas id="expenseChart"></canvas>
-                </div>
-            </div>
-
-            <!-- Cash Position -->
-            <div class="card">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">Cash Position</h3>
-                    <span class="text-xs text-gray-400">By Currency</span>
-                </div>
-                <div class="chart-container" style="min-height: 200px;">
-                    <canvas id="cashChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Row 3: AR Aging Summary (Left) and AP Due Summary (Right) -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <!-- AR Aging Summary -->
-            <div class="card">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">AR Aging Summary</h3>
-                    <a href="/finance/reports/ar-aging" class="text-primary hover:text-primary-dark text-sm">View Details</a>
-                </div>
-
-                <!-- Overdue Highlights -->
-                <div class="grid grid-cols-2 gap-4 mb-6">
-                    <div class="bg-danger/10 rounded-lg p-4 border border-danger/20">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-gray-400 text-sm">Total Overdue</span>
-                            <span class="badge bg-danger text-danger">{{ overdue_ar_count }}</span>
+                <div class="p-6">
+                    {% if budget_statuses %}
+                    <div class="space-y-4">
+                        {% for budget in budget_statuses[:4] %}
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-white text-sm">{{ budget.budget_name }}</span>
+                                <span class="text-slate-400 text-sm">{{ "{:.0f}".format(budget.percent_used) }}%</span>
+                            </div>
+                            <div class="h-2 bg-slate-700 rounded-full overflow-hidden">
+                                <div class="h-full rounded-full transition-all {% if budget.percent_used >= 100 %}bg-red-500{% elif budget.percent_used >= budget.warning_threshold|default(80) %}bg-yellow-500{% else %}bg-emerald-500{% endif %}" style="width: {{ [budget.percent_used, 100] | min }}%"></div>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-slate-400">{{ kpis.currency if kpis else 'USD' }} {{ "{:,.2f}".format(budget.total_spent) }} {{ t('spent', 'spent') }}</span>
+                                <span class="text-slate-400">{{ kpis.currency if kpis else 'USD' }} {{ "{:,.2f}".format(budget.total_budget) }} {{ t('budget', 'budget') }}</span>
+                            </div>
                         </div>
-                        <p class="text-xl font-bold text-danger amount">
-                            {% set overdue_ar_total = namespace(total=0) %}
-                            {% for c in ar_aging %}
-                                {% set overdue_ar_total.total = overdue_ar_total.total + (c.days_over_90 or 0) %}
-                            {% endfor %}
-                            {{ "%.2f"|format(overdue_ar_total.total) }}
-                        </p>
-                    </div>
-                    <div class="bg-warning/10 rounded-lg p-4 border border-warning/20">
-                        <div class="flex items-center justify-between mb-2">
-                            <span class="text-gray-400 text-sm">1-30 Days</span>
-                        </div>
-                        <p class="text-xl font-bold text-warning amount">
-                            {% set ar_30_total = namespace(total=0) %}
-                            {% for c in ar_aging %}
-                                {% set ar_30_total.total = ar_30_total.total + (c.days_1_to_30 or 0) %}
-                            {% endfor %}
-                            {{ "%.2f"|format(ar_30_total.total) }}
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Top 5 Overdue Customers -->
-                <h4 class="text-sm font-semibold text-gray-400 mb-3">Top 5 Overdue Customers</h4>
-                <div class="table-container">
-                    <table class="text-sm">
-                        <thead>
-                            <tr>
-                                <th>Customer</th>
-                                <th class="text-right">Amount</th>
-                                <th class="text-right">Days</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for c in ar_aging[:5] %}
-                            <tr>
-                                <td>{{ c.customer_name }}</td>
-                                <td class="text-right amount text-danger">{{ "%.2f"|format(c.days_over_90 or 0) }}</td>
-                                <td class="text-right text-danger">90+</td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="3" class="text-center text-gray-500 py-4">No overdue AR</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- AP Due Summary -->
-            <div class="card">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">AP Due Summary</h3>
-                    <a href="/finance/reports/ap-aging" class="text-primary hover:text-primary-dark text-sm">View Details</a>
-                </div>
-
-                <!-- Due Highlights -->
-                <div class="grid grid-cols-4 gap-3 mb-6">
-                    <div class="bg-gray-800/50 rounded-lg p-3 text-center">
-                        <p class="text-xs text-gray-400 mb-1">Total Due</p>
-                        <p class="text-lg font-bold text-white amount">{{ "%.2f"|format(summary.total_payables) }}</p>
-                    </div>
-                    <div class="bg-warning/10 rounded-lg p-3 text-center border border-warning/20">
-                        <p class="text-xs text-gray-400 mb-1">Due This Week</p>
-                        <p class="text-lg font-bold text-warning amount">
-                            {% set ap_week = namespace(total=0) %}
-                            {% for s in ap_aging %}
-                                {% set ap_week.total = ap_week.total + (s.current or 0) %}
-                            {% endfor %}
-                            {{ "%.2f"|format(ap_week.total) }}
-                        </p>
-                    </div>
-                    <div class="bg-info/10 rounded-lg p-3 text-center border border-info/20">
-                        <p class="text-xs text-gray-400 mb-1">Due This Month</p>
-                        <p class="text-lg font-bold text-info amount">
-                            {% set ap_month = namespace(total=0) %}
-                            {% for s in ap_aging %}
-                                {% set ap_month.total = ap_month.total + (s.days_1_to_30 or 0) %}
-                            {% endfor %}
-                            {{ "%.2f"|format(ap_month.total) }}
-                        </p>
-                    </div>
-                    <div class="bg-danger/10 rounded-lg p-3 text-center border border-danger/20">
-                        <p class="text-xs text-gray-400 mb-1">Overdue</p>
-                        <p class="text-lg font-bold text-danger amount">
-                            {% set ap_overdue = namespace(total=0) %}
-                            {% for s in ap_aging %}
-                                {% set ap_overdue.total = ap_overdue.total + (s.days_over_90 or 0) %}
-                            {% endfor %}
-                            {{ "%.2f"|format(ap_overdue.total) }}
-                        </p>
-                    </div>
-                </div>
-
-                <!-- Aging by Period Chart -->
-                <div class="chart-container" style="min-height: 150px;">
-                    <canvas id="apAgingChart"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <!-- Row 4: Recent Journal Entries and Quick Actions -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <!-- Recent Journal Entries -->
-            <div class="card">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">Recent Journal Entries</h3>
-                    <a href="/finance/journals" class="text-primary hover:text-primary-dark text-sm">View All</a>
-                </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Number</th>
-                                <th>Date</th>
-                                <th>Description</th>
-                                <th class="text-right">Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for journal in recent_journals %}
-                            <tr>
-                                <td><a href="/finance/journals/{{ journal.id }}" class="text-primary hover:underline">{{ journal.journal_number }}</a></td>
-                                <td>{{ journal.journal_date }}</td>
-                                <td class="max-w-xs truncate">{{ journal.description or journal.journal_type }}</td>
-                                <td class="text-right amount">{{ "%.2f"|format(journal.total_debit) }}</td>
-                            </tr>
-                            {% else %}
-                            <tr>
-                                <td colspan="4" class="text-center text-gray-500 py-8">No journal entries yet</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Quick Actions -->
-            <div class="card">
-                <h3 class="text-lg font-semibold text-white mb-4">Quick Actions</h3>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <a href="/finance/ar/invoices/create" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
-                        <i class="fas fa-file-invoice text-2xl text-success mb-2"></i>
-                        <span class="text-sm text-gray-300">New Invoice</span>
-                    </a>
-                    <a href="/finance/ap/bills/create" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
-                        <i class="fas fa-file-invoice-dollar text-2xl text-warning mb-2"></i>
-                        <span class="text-sm text-gray-300">New Bill</span>
-                    </a>
-                    <a href="/finance/journals/create" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
-                        <i class="fas fa-book text-2xl text-primary mb-2"></i>
-                        <span class="text-sm text-gray-300">New Journal</span>
-                    </a>
-                    <a href="/finance/depreciation/run" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
-                        <i class="fas fa-chart-line text-2xl text-info mb-2"></i>
-                        <span class="text-sm text-gray-300">Run Depreciation</span>
-                    </a>
-                </div>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-                    <a href="/finance/ar/receipts/create" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
-                        <i class="fas fa-hand-holding-usd text-2xl text-info mb-2"></i>
-                        <span class="text-sm text-gray-300">New Receipt</span>
-                    </a>
-                    <a href="/finance/ap/payments/create" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
-                        <i class="fas fa-money-bill text-2xl text-success mb-2"></i>
-                        <span class="text-sm text-gray-300">New Payment</span>
-                    </a>
-                    <a href="/finance/assets/create" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
-                        <i class="fas fa-building text-2xl text-purple-500 mb-2"></i>
-                        <span class="text-sm text-gray-300">New Asset</span>
-                    </a>
-                    <a href="/finance/reports/trial-balance" class="flex flex-col items-center p-4 bg-gray-800/50 rounded-lg hover:bg-gray-700/50 transition">
-                        <i class="fas fa-balance-scale text-2xl text-pink-500 mb-2"></i>
-                        <span class="text-sm text-gray-300">Trial Balance</span>
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Row 5: Budget vs Actual Summary -->
-        <div class="card mb-8">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-white">Budget vs Actual</h3>
-                <a href="/finance/budgets" class="text-primary hover:text-primary-dark text-sm">View All Budgets</a>
-            </div>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Cost Center</th>
-                            <th class="text-right">Budget</th>
-                            <th class="text-right">Actual</th>
-                            <th class="text-right">Variance</th>
-                            <th>Consumption</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for bc in budget_vs_actual[:5] %}
-                        <tr>
-                            <td>{{ bc.cost_center_name }}</td>
-                            <td class="text-right amount">{{ "%.2f"|format(bc.budget_amount) }}</td>
-                            <td class="text-right amount">{{ "%.2f"|format(bc.actual_amount) }}</td>
-                            <td class="text-right amount {% if bc.variance >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                {{ "%.2f"|format(bc.variance) }}
-                            </td>
-                            <td>
-                                {% set pct = ((bc.actual_amount / bc.budget_amount) * 100) if bc.budget_amount > 0 else 0 %}
-                                <div class="flex items-center gap-2">
-                                    <div class="progress-bar flex-1">
-                                        <div class="progress-fill {% if pct > 100 %}bg-danger{% elif pct > 80 %}bg-warning{% else %}bg-success{% endif %}" style="width: {{ [pct, 100] | min }}%"></div>
-                                    </div>
-                                    <span class="text-xs text-gray-400">{{ "%.0f"|format(pct) }}%</span>
-                                </div>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="5" class="text-center text-gray-500 py-8">No budget data available</td>
-                        </tr>
                         {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Row 6: Cash Position Summary -->
-        <div class="card mb-8">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-white">Cash Position by Currency</h3>
-                <a href="/finance/dashboard/treasury" class="text-primary hover:text-primary-dark text-sm">Treasury Dashboard</a>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {% for cash in cash_positions %}
-                <div class="bg-gray-800/50 rounded-lg p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <span class="text-2xl font-bold text-white">{{ cash.currency }}</span>
-                        <span class="text-xs px-2 py-1 rounded {% if cash.trend == 'up' %}bg-success/20 text-success{% else %}bg-danger/20 text-danger{% endif %}">
-                            <i class="fas fa-{{ 'arrow-up' if cash.trend == 'up' else 'arrow-down' }}"></i>
-                        </span>
                     </div>
-                    <p class="text-xl font-semibold text-white amount">{{ "%.2f"|format(cash.balance) }}</p>
-                    <p class="text-xs text-gray-400">{{ cash.bank_name }}</p>
+                    {% else %}
+                    <div class="text-center py-8">
+                        <i class="fa fa-calculator text-slate-600 text-4xl mb-3"></i>
+                        <p class="text-slate-400">{{ t('no_budgets', 'No budgets set') }}</p>
+                        <a href="/finance/budgets/create" class="inline-block mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors">
+                            {{ t('create_budget', 'Create Budget') }}
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
-                {% else %}
-                <div class="col-span-5 text-center text-gray-500 py-8">No cash position data available</div>
-                {% endfor %}
             </div>
         </div>
 
-        <!-- Row 7: Alerts Section -->
-        {% if alerts | length > 0 %}
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <div class="card alert-card alert-danger">
-                <h3 class="text-lg font-semibold text-white mb-4"><i class="fas fa-exclamation-circle text-danger mr-2"></i>Urgent Alerts</h3>
-                <ul class="space-y-3">
-                    {% for alert in alerts %}
-                    <li class="flex items-start gap-3">
-                        <i class="fas fa-circle text-xs mt-1.5 text-danger"></i>
-                        <span>{{ alert.message }}</span>
-                    </li>
-                    {% endfor %}
-                </ul>
+        <!-- Third Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Category Spending -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700">
+                <div class="px-6 py-4 border-b border-slate-700">
+                    <h2 class="text-lg font-semibold text-white">{{ t('category_spending', 'Spending by Category') }}</h2>
+                </div>
+                <div class="p-6">
+                    {% if category_spending %}
+                    <div class="space-y-3">
+                        {% for cat in category_spending[:6] %}
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-3 h-3 rounded-full" style="background-color: {{ cat.color }}"></div>
+                                <span class="text-white text-sm">{{ cat.category_name }}</span>
+                            </div>
+                            <span class="text-slate-400 text-sm">{{ kpis.currency if kpis else 'USD' }} {{ "{:,.2f}".format(cat.total) }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-slate-400 text-center py-4">{{ t('no_data', 'No data available') }}</p>
+                    {% endif %}
+                </div>
             </div>
 
-            <div class="card alert-card alert-warning">
-                <h3 class="text-lg font-semibold text-white mb-4"><i class="fas fa-exclamation-triangle text-warning mr-2"></i>Warnings</h3>
-                <ul class="space-y-3">
-                    {% for warning in warnings %}
-                    <li class="flex items-start gap-3">
-                        <i class="fas fa-circle text-xs mt-1.5 text-warning"></i>
-                        <span>{{ warning.message }}</span>
-                    </li>
+            <!-- Upcoming Payments -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700">
+                <div class="px-6 py-4 border-b border-slate-700">
+                    <h2 class="text-lg font-semibold text-white">{{ t('upcoming_payments', 'Upcoming Payments') }}</h2>
+                </div>
+                <div class="p-6">
+                    {% if upcoming_subs %}
+                    <div class="space-y-3">
+                        {% for sub in upcoming_subs[:4] %}
+                        <div class="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg">
+                            <div>
+                                <p class="text-white text-sm">{{ sub.provider }}</p>
+                                <p class="text-slate-400 text-xs">{{ sub.renewal_date }}</p>
+                            </div>
+                            <span class="text-orange-400 font-medium">{{ sub.currency }} {{ "{:,.2f}".format(sub.amount) }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-slate-400 text-center py-4">{{ t('no_upcoming', 'No upcoming payments') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Goals Progress -->
+            <div class="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700">
+                <div class="px-6 py-4 border-b border-slate-700">
+                    <h2 class="text-lg font-semibold text-white">{{ t('goals_progress', 'Goals Progress') }}</h2>
+                </div>
+                <div class="p-6">
+                    {% if goal_progress %}
+                    <div class="space-y-4">
+                        {% for goal in goal_progress[:3] %}
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-white text-sm">{{ goal.goal_name }}</span>
+                                <span class="text-slate-400 text-sm">{{ "{:.0f}".format(goal.percent_complete) }}%</span>
+                            </div>
+                            <div class="h-2 bg-slate-700 rounded-full overflow-hidden">
+                                <div class="h-full bg-emerald-500 rounded-full" style="width: {{ [goal.percent_complete, 100] | min }}%"></div>
+                            </div>
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="text-slate-400">{{ kpis.currency if kpis else 'USD' }} {{ "{:,.2f}".format(goal.current_progress) }}</span>
+                                <span class="text-slate-400">{{ kpis.currency if kpis else 'USD' }} {{ "{:,.2f}".format(goal.target_amount) }}</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-slate-400 text-center py-4">{{ t('no_goals', 'No goals set') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Alerts Section -->
+        {% if alerts %}
+        <div class="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700">
+            <div class="px-6 py-4 border-b border-slate-700 flex items-center justify-between">
+                <h2 class="text-lg font-semibold text-white">{{ t('alerts', 'Alerts') }}</h2>
+                <a href="/finance/alerts" class="text-emerald-400 hover:text-emerald-300 text-sm">{{ t('view_all', 'View All') }}</a>
+            </div>
+            <div class="p-6">
+                <div class="space-y-3">
+                    {% for alert in alerts %}
+                    <div class="flex items-start space-x-4 p-4 bg-slate-700/30 rounded-lg border-l-4 {% if alert.severity == 'danger' %}border-red-500{% elif alert.severity == 'warning' %}border-yellow-500{% else %}border-blue-500{% endif %}">
+                        <i class="fa {% if alert.severity == 'danger' %}fa-exclamation-circle text-red-400{% elif alert.severity == 'warning' %}fa-exclamation-triangle text-yellow-400{% else %}fa-info-circle text-blue-400{% endif %} mt-1"></i>
+                        <div class="flex-1">
+                            <p class="text-white font-medium">{{ alert.title }}</p>
+                            <p class="text-slate-400 text-sm">{{ alert.message }}</p>
+                        </div>
+                        <span class="text-slate-500 text-xs">{{ alert.created_at[:10] }}</span>
+                    </div>
                     {% endfor %}
-                </ul>
+                </div>
             </div>
         </div>
         {% endif %}
     </div>
-
-    <script>
-        // Revenue Chart (Line Chart - Last 12 Months)
-        const revenueCtx = document.getElementById('revenueChart').getContext('2d');
-        new Chart(revenueCtx, {
-            type: 'line',
-            data: {
-                labels: {{ revenue_labels | tojson }},
-                datasets: [{
-                    label: 'Revenue',
-                    data: {{ revenue_data | tojson }},
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
-                },
-                scales: {
-                    x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
-                    y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', callback: function(v) { return v.toLocaleString(); } } }
-                }
-            }
-        });
-
-        // Expense Chart (Line Chart - Last 12 Months)
-        const expenseCtx = document.getElementById('expenseChart').getContext('2d');
-        new Chart(expenseCtx, {
-            type: 'line',
-            data: {
-                labels: {{ expense_labels | tojson }},
-                datasets: [{
-                    label: 'Expenses',
-                    data: {{ expense_data | tojson }},
-                    borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
-                },
-                scales: {
-                    x: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
-                    y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', callback: function(v) { return v.toLocaleString(); } } }
-                }
-            }
-        });
-
-        // Cash Position Chart (Bar Chart by Currency)
-        const cashCtx = document.getElementById('cashChart').getContext('2d');
-        new Chart(cashCtx, {
-            type: 'bar',
-            data: {
-                labels: {{ cash_labels | tojson }},
-                datasets: [{
-                    label: 'Cash Balance',
-                    data: {{ cash_data | tojson }},
-                    backgroundColor: ['#6366f1', '#8b5cf6', '#a855f7', '#d946ef'],
-                    borderRadius: 8,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
-                },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
-                    y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8', callback: function(v) { return v.toLocaleString(); } } }
-                }
-            }
-        });
-
-        // AP Aging Chart (Doughnut)
-        const apAgingCtx = document.getElementById('apAgingChart').getContext('2d');
-        new Chart(apAgingCtx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Current', '1-30 Days', '31-60 Days', '61-90 Days', '90+ Days'],
-                datasets: [{
-                    data: {{ ap_aging_data | tojson }},
-                    backgroundColor: ['#10b981', '#38bdf8', '#f59e0b', '#f97316', '#ef4444'],
-                    borderWidth: 0,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'right',
-                        labels: { color: '#94a3b8', boxWidth: 12, padding: 10 }
-                    }
-                },
-                cutout: '60%',
-            }
-        });
-    </script>
-    {% endblock %}
-</body>
-</html>
+</div>
+{% endblock %}

@@ -38,6 +38,32 @@ from form_models import (
 
 from database import get_db_context, log_audit
 
+# Import export utilities
+from export_utils import (
+    send_export_response,
+    get_export_columns
+)
+
+
+# =============================================================================
+# EXPORT TYPES AND COLUMNS
+# =============================================================================
+
+FORM_EXPORT_TYPES = [
+    'csv', 'excel_text', 'excel_general', 'json', 'xml', 'txt',
+    'pdf', 'docx', 'html', 'printable', 'barcode', 'api',
+    'email', 'zip', 'backup', 'sql_dump', 'dashboard',
+    'summary', 'detailed', 'audit_log'
+]
+
+FORM_EXPORT_COLUMNS = {
+    'templates': ['template_id', 'name', 'form_type', 'status', 'sections', 'fields', 'created_at'],
+    'submissions': ['submission_id', 'template_name', 'status', 'submitter', 'submitted_at'],
+    'drafts': ['draft_id', 'template_name', 'user', 'last_modified'],
+    'approvals': ['approval_id', 'submission_id', 'step_name', 'approver', 'status', 'action_at']
+}
+
+
 # ============================================================================
 # BLUEPRINT SETUP
 # ============================================================================
@@ -2250,6 +2276,96 @@ def api_reorder_fields():
 # ============================================================================
 # REGISTRATION FUNCTION
 # ============================================================================
+
+# =============================================================================
+# API EXPORT ENDPOINTS
+# =============================================================================
+
+@form_bp.route('/api/export/<export_type>', methods=['GET', 'POST'])
+@form_bp.route('/api/export/<data_type>/<export_type>', methods=['GET', 'POST'])
+@require_login
+def api_form_export(export_type, data_type=None):
+    """Export form builder data in all 20 formats."""
+    if export_type not in FORM_EXPORT_TYPES:
+        return jsonify({
+            'error': f'Invalid export type. Valid types: {FORM_EXPORT_TYPES}'
+        }), 400
+
+    company_id = session.get('company_id', 0)
+
+    # Determine data type from URL or default
+    if data_type is None:
+        data_type = request.args.get('type', 'templates')
+
+    db = get_db_context()
+    try:
+        # Get data based on type
+        if data_type == 'templates':
+            data = db.execute("""
+                SELECT * FROM form_templates
+                WHERE company_id = ?
+                ORDER BY created_at DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = FORM_EXPORT_COLUMNS['templates']
+            title = 'Form Templates'
+        elif data_type == 'submissions':
+            data = db.execute("""
+                SELECT s.*, t.template_name
+                FROM form_submissions s
+                LEFT JOIN form_templates t ON s.template_id = t.id
+                WHERE s.company_id = ?
+                ORDER BY s.submitted_at DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = FORM_EXPORT_COLUMNS['submissions']
+            title = 'Form Submissions'
+        elif data_type == 'drafts':
+            data = db.execute("""
+                SELECT d.*, t.template_name
+                FROM form_drafts d
+                LEFT JOIN form_templates t ON d.template_id = t.id
+                WHERE d.company_id = ?
+                ORDER BY d.last_modified DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = FORM_EXPORT_COLUMNS['drafts']
+            title = 'Form Drafts'
+        elif data_type == 'approvals':
+            data = db.execute("""
+                SELECT a.*, s.submission_id as ref_id
+                FROM form_approvals a
+                LEFT JOIN form_submissions s ON a.submission_id = s.id
+                WHERE a.company_id = ?
+                ORDER BY a.action_at DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = FORM_EXPORT_COLUMNS['approvals']
+            title = 'Form Approvals'
+        else:
+            return jsonify({'error': f'Data type {data_type} not supported'}), 400
+
+        filename = f'form_{data_type}_{datetime.now().strftime("%Y%m%d")}'
+
+        return send_export_response(data, export_type, filename, columns, title)
+    finally:
+        db.close()
+
+
+@form_bp.route('/api/export/list')
+@require_login
+def list_form_export_types():
+    """List available export types for form builder module."""
+    return jsonify({
+        'module': 'forms',
+        'data_types': list(FORM_EXPORT_COLUMNS.keys()),
+        'export_types': [{'type': t} for t in FORM_EXPORT_TYPES]
+    })
+
 
 def register_form_routes(app):
     """Register form routes with the Flask app."""

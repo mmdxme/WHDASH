@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6 fade-in">
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('quality_hold_detail', 'Quality Hold') }}: {{ hold.hold_number }}</h1>
+            <p class="text-slate-400 text-sm mt-1">
+                <span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider {% if hold.status == 'ACTIVE' %}bg-amber-500/10 text-amber-400{% else %}bg-emerald-500/10 text-emerald-400{% endif %}">
+                    {{ hold.status }}
+                </span>
+            </p>
+        </div>
+        <a href="{{ url_for('wms_quality_holds') }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-slate-400 hover:text-white transition-all text-sm">
+            <i class="fa-solid fa-arrow-left mr-2"></i>{{ t('back', 'Back') }}
+        </a>
+    </div>
+
+    <!-- Hold Information -->
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('hold_information', 'Hold Information') }}</h3>
+        <div class="grid grid-cols-2 md:grid-cols-3 gap-6">
+            <div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('warehouse', 'Warehouse') }}</div>
+                <p class="text-white font-medium">{{ hold.warehouse_name }}</p>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('item', 'Item') }}</div>
+                <p class="text-white font-medium">{{ hold.item_code }}</p>
+                <p class="text-slate-400 text-sm">{{ hold.item_name }}</p>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('location', 'Location') }}</div>
+                <p class="text-white font-medium">{{ hold.location_code or '-' }}</p>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('quantity_held', 'Quantity Held') }}</div>
+                <p class="text-red-400 font-bold text-xl">{{ hold.quantity_held|int }}</p>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('hold_type', 'Hold Type') }}</div>
+                <span class="px-2 py-1 rounded text-xs font-bold {% if hold.hold_type == 'INSPECTION' %}bg-amber-500/10 text-amber-400{% elif hold.hold_type == 'NCR' %}bg-red-500/10 text-red-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
+                    {{ hold.hold_type }}
+                </span>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('hold_reason', 'Reason') }}</div>
+                <p class="text-slate-300 text-sm">{{ hold.hold_reason }}</p>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('held_by', 'Held By') }}</div>
+                <p class="text-white">{{ hold.held_by_name or '-' }}</p>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('held_date', 'Held Date') }}</div>
+                <p class="text-white">{{ hold.created_at[:16] if hold.created_at else '-' }}</p>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('source_inspection', 'Source Inspection') }}</div>
+                <p class="text-slate-300 text-sm">{% if hold.source_inspection_id %}#{{ hold.source_inspection_id }}{% else %}—{% endif %}</p>
+            </div>
+            {% if hold.status == 'RELEASED' %}
+            <div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('released_by', 'Released By') }}</div>
+                <p class="text-emerald-400">{{ hold.released_by_name or '-' }}</p>
+            </div>
+            <div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('released_at', 'Released At') }}</div>
+                <p class="text-white">{{ hold.released_at[:16] if hold.released_at else '-' }}</p>
+            </div>
+            <div class="md:col-span-2">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('release_reason', 'Release Reason') }}</div>
+                <p class="text-slate-300 text-sm">{{ hold.release_reason or '-' }}</p>
+            </div>
+            {% endif %}
+            {% if hold.hold_notes %}
+            <div class="md:col-span-3">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">{{ t('notes', 'Notes') }}</div>
+                <p class="text-slate-300 text-sm">{{ hold.hold_notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Release Form (only for ACTIVE holds) -->
+    {% if hold.status == 'ACTIVE' %}
+    <div id="release-form" class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('release_hold', 'Release Hold') }}</h3>
+        <form method="POST" action="{{ url_for('wms_quality_hold_release', hold_id=hold.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2">{{ t('disposition', 'Disposition') }}</label>
+                    <select name="disposition" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                        <option value="RELEASED">{{ t('released_to_stock', 'Released to Stock') }}</option>
+                        <option value="SCRAPPED">{{ t('scrapped', 'Scrapped') }}</option>
+                        <option value="RETURNED_TO_VENDOR">{{ t('returned_to_vendor', 'Returned to Vendor') }}</option>
+                        <option value="REWORK">{{ t('rework', 'Rework') }}</option>
+                        <option value="DEMO">{{ t('demo_sample', 'Demo/Sample') }}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-2">{{ t('release_reason', 'Release Reason') }} *</label>
+                    <input type="text" name="release_reason" required placeholder="{{ t('reason_for_release', 'Explain why this hold is being released...') }}" class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <button type="submit" class="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 rounded-xl text-white text-sm font-medium transition-all">
+                    <i class="fa-solid fa-unlock mr-2"></i>{{ t('release_hold', 'Release Hold') }}
+                </button>
+                <a href="{{ url_for('wms_quality_holds') }}" class="px-5 py-2.5 bg-white/5 border border-white/10 rounded-xl text-slate-400 hover:text-white text-sm">{{ t('cancel', 'Cancel') }}</a>
+            </div>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Audit Log -->
+    {% if audit_log %}
+    <div class="glass-panel rounded-2xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">{{ t('audit_history', 'Audit History') }}</h3>
+        <div class="space-y-3">
+            {% for log in audit_log %}
+            <div class="flex items-start gap-3 py-3 border-b border-white/5 last:border-0">
+                <div class="w-2 h-2 rounded-full mt-1.5 {% if log.action_type == 'CREATE' %}bg-emerald-400{% elif log.action_type == 'RELEASE' %}bg-amber-400{% elif log.action_type == 'DELETE' %}bg-red-400{% else %}bg-slate-400{% endif %}"></div>
+                <div>
+                    <p class="text-white text-sm font-medium">{{ log.action_type }} {{ log.entity_type }}</p>
+                    <p class="text-slate-400 text-xs">{{ log.created_at[:19] if log.created_at else '-' }}</p>
+                    {% if log.details %}
+                    <p class="text-slate-500 text-xs mt-1">{{ log.details }}</p>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Delete (only for RELEASED holds, admin only) -->
+    {% if hold.status == 'RELEASED' %}
+    <div class="flex items-center justify-between">
+        <form method="POST" action="{{ url_for('wms_quality_hold_delete', hold_id=hold.id) }}" onsubmit="return confirm('Delete this hold record permanently?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+            <button type="submit" class="px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 hover:bg-red-500/20 text-sm">
+                <i class="fa-solid fa-trash mr-2"></i>{{ t('delete_hold_record', 'Delete Hold Record') }}
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

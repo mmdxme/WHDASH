@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6 fade-in">
+    <div class="flex items-center justify-between">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('wms_picking') }}" class="text-slate-400 hover:text-white"><i class="fa-solid fa-arrow-left"></i></a>
+                <h1 class="text-2xl font-bold text-white ltr-content">{{ order.order_number }}</h1>
+                <span class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-500/10 text-slate-300">{{ order.status }}</span>
+            </div>
+            <p class="text-sm text-slate-400 mt-1">{{ order.warehouse_name }}{% if order.customer_name %} / {{ order.customer_name }}{% endif %}</p>
+        </div>
+        <a href="{{ url_for('wms_print_pick_list', order_id=order.id) }}" target="_blank" class="px-4 py-2 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 text-sm">
+            <i class="fa-solid fa-print mr-2"></i>{{ t('pick_list', 'Pick List') }}
+        </a>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="glass-panel rounded-2xl p-5"><p class="text-xs text-slate-400">{{ t('priority', 'Priority') }}</p><p class="text-2xl font-bold text-white">{{ order.priority }}</p></div>
+        <div class="glass-panel rounded-2xl p-5"><p class="text-xs text-slate-400">{{ t('required_date', 'Required Date') }}</p><p class="text-lg font-bold text-white">{{ order.required_date or '-' }}</p></div>
+        <div class="glass-panel rounded-2xl p-5"><p class="text-xs text-slate-400">{{ t('order_type', 'Order Type') }}</p><p class="text-lg font-bold text-white">{{ order.order_type }}</p></div>
+        <div class="glass-panel rounded-2xl p-5"><p class="text-xs text-slate-400">{{ t('created_by', 'Created By') }}</p><p class="text-lg font-bold text-white">{{ order.created_by_name or '-' }}</p></div>
+    </div>
+
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-5 border-b border-white/5"><h3 class="text-lg font-bold text-white">{{ t('order_lines', 'Order Lines') }}</h3></div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead><tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase"><th class="text-left py-3 px-4">{{ t('item', 'Item') }}</th><th class="text-center py-3 px-4">{{ t('ordered', 'Ordered') }}</th><th class="text-center py-3 px-4">{{ t('allocated', 'Allocated') }}</th><th class="text-center py-3 px-4">{{ t('picked', 'Picked') }}</th><th class="text-center py-3 px-4">{{ t('packed', 'Packed') }}</th><th class="text-center py-3 px-4">{{ t('status', 'Status') }}</th></tr></thead>
+                <tbody>
+                    {% for line in lines %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-3 px-4"><div class="font-medium text-white ltr-content">{{ line.item_code }}</div><div class="text-xs text-slate-500">{{ line.item_name }}</div></td>
+                        <td class="py-3 px-4 text-center text-slate-300">{{ line.ordered_quantity or 0 }}</td>
+                        <td class="py-3 px-4 text-center text-cyan-400">{{ line.allocated_quantity or 0 }}</td>
+                        <td class="py-3 px-4 text-center text-emerald-400">{{ line.picked_quantity or 0 }}</td>
+                        <td class="py-3 px-4 text-center text-violet-400">{{ line.packed_quantity or 0 }}</td>
+                        <td class="py-3 px-4 text-center"><span class="px-2 py-1 rounded-lg text-xs bg-slate-500/10 text-slate-300">{{ line.status }}</span></td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="py-10 text-center text-slate-500">{{ t('no_order_lines', 'No order lines') }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <div class="glass-panel rounded-2xl overflow-hidden xl:col-span-2">
+            <div class="p-5 border-b border-white/5"><h3 class="text-lg font-bold text-white">{{ t('pick_tasks', 'Pick Tasks') }}</h3></div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead><tr class="text-slate-400 border-b border-white/5"><th class="text-left py-3 px-4">{{ t('task', 'Task') }}</th><th class="text-left py-3 px-4">{{ t('location', 'Location') }}</th><th class="text-center py-3 px-4">{{ t('quantity', 'Quantity') }}</th><th class="text-center py-3 px-4">{{ t('status', 'Status') }}</th></tr></thead>
+                    <tbody>
+                        {% for pick in picks %}
+                        <tr class="border-b border-white/5 hover:bg-white/5">
+                            <td class="py-3 px-4"><a href="{{ url_for('wms_pickup_detail', task_id=pick.id) }}" class="text-brand-400 hover:text-brand-300 font-medium ltr-content">{{ pick.task_number }}</a></td>
+                            <td class="py-3 px-4 text-slate-300 ltr-content">{{ pick.source_location_code or '-' }}</td>
+                            <td class="py-3 px-4 text-center text-white">{{ pick.picked_quantity or 0 }} / {{ pick.quantity }}</td>
+                            <td class="py-3 px-4 text-center"><span class="px-2 py-1 rounded-lg text-xs bg-slate-500/10 text-slate-300">{{ pick.status }}</span></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="py-10 text-center text-slate-500">{{ t('no_pick_tasks', 'No pick tasks') }}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="space-y-6">
+            <div class="glass-panel rounded-2xl p-5">
+                <h3 class="text-lg font-bold text-white mb-3">{{ t('packing', 'Packing') }}</h3>
+                {% for pack in packs %}
+                <div class="flex items-center justify-between border-b border-white/5 py-2"><span class="text-slate-300 ltr-content">{{ pack.task_number }}</span><span class="text-xs text-slate-400">{{ pack.status }}</span></div>
+                {% else %}
+                <p class="text-sm text-slate-500">{{ t('no_pack_tasks', 'No pack tasks') }}</p>
+                {% endfor %}
+            </div>
+            <div class="glass-panel rounded-2xl p-5">
+                <h3 class="text-lg font-bold text-white mb-3">{{ t('shipments', 'Shipments') }}</h3>
+                {% for shipment in shipments %}
+                <div class="flex items-center justify-between border-b border-white/5 py-2"><span class="text-slate-300 ltr-content">{{ shipment.shipment_number }}</span><span class="text-xs text-slate-400">{{ shipment.status }}</span></div>
+                {% else %}
+                <p class="text-sm text-slate-500">{{ t('no_shipments', 'No shipments') }}</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

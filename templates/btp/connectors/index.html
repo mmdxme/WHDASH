@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('btp_connectors', 'BTP Connectors') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-plug fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('btp_connectors', 'Connectors') }}
+        </h1>
+        <div class="btn-group">
+            <a href="{{ url_for('btp_connector_create') }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-plus me-1"></i> {{ t('btp_create_connector', 'Create Connector') }}
+            </a>
+            <div class="dropdown">
+                <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-download me-1"></i> {{ t('export', 'Export') }}
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="{{ url_for('btp_connectors_export', format='csv') }}">
+                        <i class="fas fa-file-csv me-2"></i> {{ t('export_csv', 'Export CSV') }}
+                    </a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('btp_connectors_export', format='excel-text') }}">
+                        <i class="fas fa-file-excel me-2"></i> {{ t('btp_export_text_excel', 'Excel (Text Cells)') }}
+                    </a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('btp_connectors_export', format='excel-general') }}">
+                        <i class="fas fa-file-excel me-2"></i> {{ t('btp_export_general_excel', 'Excel (General Cells)') }}
+                    </a></li>
+                    <li><a class="dropdown-item" href="{{ url_for('btp_connectors_export', format='json') }}">
+                        <i class="fas fa-file-code me-2"></i> {{ t('btp_export_json', 'Export JSON') }}
+                    </a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters Card -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ t('filters', 'Filters') }}</h6>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">{{ t('search', 'Search') }}</label>
+                    <input type="text" name="search" class="form-control" placeholder="{{ t('search_placeholder', 'Search...') }}" value="{{ request.args.get('search', '') }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ t('btp_category', 'Category') }}</label>
+                    <select name="category" class="form-select">
+                        <option value="">{{ t('all_types', 'All') }}</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}" {{ 'selected' if request.args.get('category') == cat else '' }}>{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">{{ t('status', 'Status') }}</label>
+                    <select name="status" class="form-select">
+                        <option value="">{{ t('all_statuses', 'All') }}</option>
+                        <option value="active" {{ 'selected' if request.args.get('status') == 'active' else '' }}>{{ t('active', 'Active') }}</option>
+                        <option value="inactive" {{ 'selected' if request.args.get('status') == 'inactive' else '' }}>{{ t('inactive', 'Inactive') }}</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter me-1"></i> {{ t('apply', 'Apply') }}
+                    </button>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">&nbsp;</label>
+                    <a href="{{ url_for('btp_connectors') }}" class="btn btn-outline-secondary w-100">
+                        <i class="fas fa-times me-1"></i> {{ t('clear', 'Clear') }}
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Connectors Table -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+            <h6 class="m-0 font-weight-bold text-primary">
+                {{ t('btp_connectors', 'Connectors') }} ({{ total }})
+            </h6>
+        </div>
+        <div class="card-body">
+            {% if connectors %}
+            <div class="table-responsive">
+                <table class="table table-hover" id="connectorsTable">
+                    <thead>
+                        <tr>
+                            <th><a href="?sort=name&order={{ 'desc' if request.args.get('sort') == 'name' and request.args.get('order') == 'asc' else 'asc' }}">{{ t('btp_connector_name', 'Name') }}</a></th>
+                            <th>{{ t('btp_connector_code', 'Code') }}</th>
+                            <th>{{ t('btp_category', 'Category') }}</th>
+                            <th>{{ t('btp_direction', 'Direction') }}</th>
+                            <th>{{ t('btp_health_score', 'Health') }}</th>
+                            <th>{{ t('btp_owner', 'Owner') }}</th>
+                            <th>{{ t('btp_team', 'Team') }}</th>
+                            <th>{{ t('status', 'Status') }}</th>
+                            <th>{{ t('actions', 'Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for connector in connectors %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('btp_connector_detail', connector_id=connector.id) }}">
+                                    <strong>{{ connector.name }}</strong>
+                                </a>
+                            </td>
+                            <td><code>{{ connector.code }}</code></td>
+                            <td>{{ connector.category }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'info' if connector.direction == 'bidirectional' else 'primary' if connector.direction == 'inbound' else 'warning' }}">
+                                    {{ connector.direction }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="progress" style="height: 18px; min-width: 80px;">
+                                    <div class="progress-bar bg-{{ 'success' if connector.health_score >= 80 else 'warning' if connector.health_score >= 50 else 'danger' }}"
+                                         role="progressbar" style="width: {{ connector.health_score }}%">
+                                        {{ connector.health_score }}%
+                                    </div>
+                                </div>
+                            </td>
+                            <td>{{ connector.owner or 'N/A' }}</td>
+                            <td>{{ connector.team or 'N/A' }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if connector.status == 'active' else 'secondary' }}">
+                                    {{ connector.status }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('btp_connector_detail', connector_id=connector.id) }}" class="btn btn-outline-primary" title="{{ t('view_details', 'View Details') }}">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="{{ url_for('btp_connector_edit', connector_id=connector.id) }}" class="btn btn-outline-secondary" title="{{ t('edit', 'Edit') }}">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="{{ url_for('btp_connector_test', connector_id=connector.id) }}" class="btn btn-outline-success" title="{{ t('test_connection', 'Test Connection') }}">
+                                        <i class="fas fa-plug"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if total > per_page %}
+            <nav aria-label="Connectors pagination">
+                <ul class="pagination justify-content-center">
+                    {% set total_pages = ((total / per_page)|round(0, 'ceil'))|int %}
+                    {% for p in range(1, total_pages + 1) %}
+                    <li class="page-item {{ 'active' if p == page else '' }}">
+                        <a class="page-link" href="?page={{ p }}&status={{ request.args.get('status', '') }}&category={{ request.args.get('category', '') }}&search={{ request.args.get('search', '') }}">{{ p }}</a>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </nav>
+            {% endif %}
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-plug fa-4x text-gray-300 mb-3"></i>
+                <h5 class="text-gray-500">{{ t('btp_no_connectors', 'No connectors configured yet') }}</h5>
+                <a href="{{ url_for('btp_connector_create') }}" class="btn btn-primary mt-3">
+                    <i class="fas fa-plus me-2"></i>{{ t('btp_create_connector', 'Create Your First Connector') }}
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

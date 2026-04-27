@@ -27,10 +27,40 @@ Usage:
     register_sales_routes(app, require_login)
 """
 
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file, Response
 from functools import wraps
 from datetime import datetime
 import json
+import csv
+import io
+
+# Import export utilities
+from export_utils import (
+    send_export_response,
+    get_export_columns
+)
+
+
+# =============================================================================
+# EXPORT TYPES AND COLUMNS
+# =============================================================================
+
+SALES_EXPORT_TYPES = [
+    'csv', 'excel_text', 'excel_general', 'json', 'xml', 'txt',
+    'pdf', 'docx', 'html', 'printable', 'barcode', 'api',
+    'email', 'zip', 'backup', 'sql_dump', 'dashboard',
+    'summary', 'detailed', 'audit_log'
+]
+
+SALES_EXPORT_COLUMNS = {
+    'orders': ['order_number', 'customer', 'date', 'total_amount', 'status', 'salesperson'],
+    'customers': ['customer_id', 'name', 'email', 'phone', 'total_orders', 'total_value'],
+    'quotations': ['quotation_number', 'customer', 'date', 'amount', 'valid_until', 'status'],
+    'deliveries': ['delivery_number', 'order_number', 'customer', 'date', 'status'],
+    'returns': ['return_number', 'order_number', 'customer', 'date', 'amount', 'reason'],
+    'targets': ['salesperson', 'period', 'target_amount', 'achieved_amount', 'achievement_pct'],
+    'activities': ['activity_id', 'salesperson', 'type', 'date', 'description', 'result']
+}
 
 
 def register_sales_routes(app: Flask, require_login, require_permission, get_db):
@@ -2005,5 +2035,133 @@ def register_sales_routes(app: Flask, require_login, require_permission, get_db)
                              salespersons=[dict(s) for s in salespersons],
                              customers=[],
                              statuses=get_order_statuses())
+
+    # =============================================================================
+    # API EXPORT ENDPOINTS
+    # =============================================================================
+
+    @app.route('/api/export/<export_type>', methods=['GET', 'POST'])
+    @app.route('/api/export/<data_type>/<export_type>', methods=['GET', 'POST'])
+    @sales_permission_required('reports', 'view')
+    def api_sales_export(export_type, data_type=None):
+        """Export sales data in all 20 formats."""
+        if export_type not in SALES_EXPORT_TYPES:
+            return jsonify({
+                'error': f'Invalid export type. Valid types: {SALES_EXPORT_TYPES}'
+            }), 400
+
+        company_id = session.get('company_id', 0)
+
+        # Determine data type from URL or default
+        if data_type is None:
+            data_type = request.args.get('type', 'orders')
+
+        # Get data based on type
+        if data_type == 'orders':
+            db = get_db()
+            data = db.execute("""
+                SELECT o.*, c.customer_name
+                FROM sales_orders o
+                LEFT JOIN sales_customers c ON o.customer_id = c.id
+                WHERE o.company_id = ?
+                ORDER BY o.order_date DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = SALES_EXPORT_COLUMNS['orders']
+            title = 'Sales Orders'
+        elif data_type == 'customers':
+            db = get_db()
+            data = db.execute("""
+                SELECT c.*, COUNT(o.id) as total_orders,
+                       COALESCE(SUM(o.total_amount), 0) as total_value
+                FROM sales_customers c
+                LEFT JOIN sales_orders o ON c.id = o.customer_id
+                WHERE c.company_id = ?
+                GROUP BY c.id
+                ORDER BY total_value DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = SALES_EXPORT_COLUMNS['customers']
+            title = 'Sales Customers'
+        elif data_type == 'quotations':
+            db = get_db()
+            data = db.execute("""
+                SELECT q.*, c.customer_name
+                FROM sales_quotations q
+                LEFT JOIN sales_customers c ON q.customer_id = c.id
+                WHERE q.company_id = ?
+                ORDER BY q.quotation_date DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = SALES_EXPORT_COLUMNS['quotations']
+            title = 'Sales Quotations'
+        elif data_type == 'deliveries':
+            db = get_db()
+            data = db.execute("""
+                SELECT d.*, o.order_number
+                FROM sales_deliveries d
+                LEFT JOIN sales_orders o ON d.order_id = o.id
+                WHERE d.company_id = ?
+                ORDER BY d.delivery_date DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = SALES_EXPORT_COLUMNS['deliveries']
+            title = 'Sales Deliveries'
+        elif data_type == 'returns':
+            db = get_db()
+            data = db.execute("""
+                SELECT r.*, o.order_number, c.customer_name
+                FROM sales_returns r
+                LEFT JOIN sales_orders o ON r.order_id = o.id
+                LEFT JOIN sales_customers c ON o.customer_id = c.id
+                WHERE r.company_id = ?
+                ORDER BY r.return_date DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = SALES_EXPORT_COLUMNS['returns']
+            title = 'Sales Returns'
+        elif data_type == 'targets':
+            db = get_db()
+            data = db.execute("""
+                SELECT * FROM sales_targets
+                WHERE company_id = ?
+                ORDER BY period DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = SALES_EXPORT_COLUMNS['targets']
+            title = 'Sales Targets'
+        elif data_type == 'activities':
+            db = get_db()
+            data = db.execute("""
+                SELECT * FROM sales_activities
+                WHERE company_id = ?
+                ORDER BY activity_date DESC
+                LIMIT 5000
+            """, (company_id,)).fetchall()
+            data = [dict(row) for row in data]
+            columns = SALES_EXPORT_COLUMNS['activities']
+            title = 'Sales Activities'
+        else:
+            return jsonify({'error': f'Data type {data_type} not supported'}), 400
+
+        filename = f'sales_{data_type}_{datetime.now().strftime("%Y%m%d")}'
+
+        return send_export_response(data, export_type, filename, columns, title)
+
+    @app.route('/api/export/list')
+    @sales_permission_required('reports', 'view')
+    def list_sales_export_types():
+        """List available export types for sales module."""
+        return jsonify({
+            'module': 'sales',
+            'data_types': list(SALES_EXPORT_COLUMNS.keys()),
+            'export_types': [{'type': t} for t in SALES_EXPORT_TYPES]
+        })
 
     return app

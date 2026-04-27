@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-bold">{{ title }}</h1>
+        <div class="flex space-x-2">
+            <a href="/legal-tax/reports" class="btn btn-outline"><i class="fas fa-arrow-left mr-2"></i>Back to Reports</a>
+            <button onclick="window.print()" class="btn btn-outline"><i class="fas fa-print mr-2"></i>Print</button>
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div><label class="block text-sm">Company</label><select name="company_id" class="w-full rounded border-gray-300">{% for c in companies %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
+            <div><label class="block text-sm">Year</label><select name="year" class="w-full rounded border-gray-300">{% for y in years %}<option value="{{ y }}">{{ y }}</option>{% endfor %}</select></div>
+            <div><label class="block text-sm">Status</label><select name="status" class="w-full rounded border-gray-300"><option value="">All</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="approved">Approved</option><option value="filed">Filed</option></select></div>
+            <div class="flex items-end"><button type="submit" class="btn btn-primary w-full">Apply</button></div>
+        </form>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="font-semibold mb-4">Filing Status Distribution</h3>
+            <canvas id="statusChart" height="200"></canvas>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="font-semibold mb-4">Tax Liability by Quarter</h3>
+            <canvas id="liabilityChart" height="200"></canvas>
+        </div>
+    </div>
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50"><tr><th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Return ID</th><th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th><th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Period</th><th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Tax</th><th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th><th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Filed Date</th></tr></thead>
+            <tbody class="divide-y divide-gray-200">
+            {% for row in data %}
+            <tr>
+                <td class="px-4 py-3">{{ row.return_id }}</td>
+                <td class="px-4 py-3">{{ row.company }}</td>
+                <td class="px-4 py-3">{{ row.period }}</td>
+                <td class="px-4 py-3 text-right">{{ row.total_tax|format_currency }}</td>
+                <td class="px-4 py-3"><span class="badge badge-{{ 'success' if row.status == 'filed' else 'warning' }}">{{ row.status }}</span></td>
+                <td class="px-4 py-3">{{ row.filed_date or 'N/A' }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+new Chart(document.getElementById('statusChart'), {type: 'doughnut', data: {labels: ['Draft', 'Submitted', 'Approved', 'Filed'], datasets: [{data: [{{ status_counts.draft }}, {{ status_counts.submitted }}, {{ status_counts.approved }}, {{ status_counts.filed }}], backgroundColor: ['#f87171', '#fbbf24', '#60a5fa', '#34d399']}]}});
+new Chart(document.getElementById('liabilityChart'), {type: 'bar', data: {labels: ['Q1', 'Q2', 'Q3', 'Q4'], datasets: [{label: 'Tax Liability', data: [{{ liability.Q1 }}, {{ liability.Q2 }}, {{ liability.Q3 }}, {{ liability.Q4 }}], backgroundColor: '#3b82f6'}]}});
+</script>
+{% endblock %}

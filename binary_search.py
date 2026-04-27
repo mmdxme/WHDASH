@@ -1,28 +1,22 @@
-# Test by binary search - find the smallest prefix that fails to parse
+#!/usr/bin/env python3
 import ast
 
-with open('quality_models_backup.py', 'r', encoding='utf-8', errors='replace') as f:
+with open('translations.py', encoding='utf-8') as f:
     content = f.read()
 
 lines = content.split('\n')
-total_lines = len(lines)
 
-print(f'Total lines: {total_lines}')
-
-# Binary search for the failure point
+# Binary search to find where it breaks
 def can_parse_up_to(line_num):
-    snippet = '\n'.join(lines[:line_num])
     try:
-        ast.parse(snippet)
+        prefix = '\n'.join(lines[:line_num])
+        ast.parse(prefix)
         return True
     except SyntaxError:
         return False
 
-# Test around the middle
-mid = total_lines // 2
-print(f'Line {mid}: {can_parse_up_to(mid)}')
-
-# The failure is at line 2612 (reported at 2602)
-# Let's check around 1400-1500 where we know get_inspections is
-for test_line in [1389, 1390, 1400, 1450, 1460, 1470, 1500]:
-    print(f'Line {test_line}: {can_parse_up_to(test_line)}')
+# Test some key points
+test_points = [8000, 10000, 12000, 14000, 14700, 14739, 14740, 14741, 20000, 21089]
+for tp in test_points:
+    result = can_parse_up_to(tp)
+    print(f"Lines 1-{tp}: {'OK' if result else 'FAIL'}")

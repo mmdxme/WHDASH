@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="mb-6 flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('security_emergency_access', 'Emergency Access') }}</h1>
+            <p class="text-gray-600 dark:text-gray-400">{{ t('security_emergency_access_desc', 'Break-glass emergency access management') }}</p>
+        </div>
+    </div>
+
+    <!-- Emergency Accounts -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6">
+        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('security_emergency_accounts', 'Emergency Access Accounts') }}</h2>
+        </div>
+        <div class="p-6">
+            {% if accounts %}
+            <div class="space-y-4">
+                {% for account in accounts %}
+                <div class="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-start">
+                            <div class="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center mr-3">
+                                <i class="fa-solid fa-skull-crossbones text-red-600 dark:text-red-400 text-xl"></i>
+                            </div>
+                            <div>
+                                <div class="flex items-center">
+                                    <h3 class="font-medium text-gray-900 dark:text-white">{{ account.username }}</h3>
+                                    {% if account.is_active %}
+                                    <span class="ml-2 px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded">{{ t('security_active', 'Active') }}</span>
+                                    {% else %}
+                                    <span class="ml-2 px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300 rounded">{{ t('security_inactive', 'Inactive') }}</span>
+                                    {% endif %}
+                                </div>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                    <i class="fa-solid fa-user-shield mr-1"></i>{{ account.emergency_role_name }}
+                                    <span class="mx-2">|</span>
+                                    <i class="fa-solid fa-clock mr-1"></i>Max {{ account.max_duration_hours }}h
+                                </p>
+                            </div>
+                        </div>
+                        {% if account.is_active %}
+                        <form action="{{ url_for('security.emergency_access_activate', account_id=account.id) }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="reason" value="Emergency access activation">
+                            <button type="submit" class="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900 transition">
+                                {{ t('security_activate', 'Activate') }}
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fa-solid fa-skull-crossbones text-gray-300 dark:text-gray-600 text-4xl mb-3"></i>
+                <p class="text-gray-500 dark:text-gray-400">{{ t('security_no_emergency_accounts', 'No emergency access accounts configured') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('security_emergency_log', 'Recent Emergency Access Log') }}</h2>
+        </div>
+        <div class="p-6">
+            {% if logs %}
+            <div class="space-y-3">
+                {% for log in logs %}
+                <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div class="flex items-center">
+                        <div class="w-8 h-8 rounded-full {% if log.status == 'active' %}bg-red-100 text-red-600{% elif log.status == 'approved_expost' %}bg-green-100 text-green-600{% else %}bg-gray-100 text-gray-600{% endif %} flex items-center justify-center mr-3">
+                            <i class="fa-solid {% if log.status == 'active' %}fa-fire{% elif log.status == 'approved_expost' %}fa-check{% else %}fa-clock{% endif %} text-sm"></i>
+                        </div>
+                        <div>
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">{{ log.username }}</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">
+                                {{ log.activated_at }} - {{ log.reason_given }}
+                            </p>
+                        </div>
+                    </div>
+                    <span class="px-2 py-1 text-xs font-medium rounded {% if log.status == 'active' %}bg-red-100 text-red-800{% elif log.status == 'approved_expost' %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                        {{ log.status|replace('_', ' ')|title }}
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fa-solid fa-history text-gray-300 dark:text-gray-600 text-4xl mb-3"></i>
+                <p class="text-gray-500 dark:text-gray-400">{{ t('security_no_logs', 'No emergency access logs') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

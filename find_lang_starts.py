@@ -1,12 +1,13 @@
-# Find line numbers in translations.py
-import re
+#!/usr/bin/env python3
 
-with open('C:/Users/sdads/WHDASH/translations.py', 'r', encoding='utf-8', errors='replace') as f:
+# Find where each language dict starts and ends
+with open('translations.py', 'r', encoding='utf-8') as f:
     lines = f.readlines()
 
-# Find all language dict starts
-for i, line in enumerate(lines):
-    stripped = line.strip()
-    if stripped.startswith("'en':") or stripped.startswith("'fa':") or stripped.startswith("'ar':") or stripped.startswith("'ru':") or stripped.startswith("'zh':") or stripped.startswith("'es':") or stripped.startswith("'hi':") or stripped.startswith("'de':"):
-        indent = len(line) - len(line.lstrip())
-        print(f"Line {i+1}: indent={indent} spaces: {repr(stripped[:50])}")
+langs = ['en', 'fa', 'ar', 'ru', 'zh', 'es', 'hi', 'de']
+for lang in langs:
+    for i, line in enumerate(lines):
+        search = "'" + lang + "':"
+        if search in line and '{' in line:
+            print(f'{lang} starts at line {i+1}')
+            break

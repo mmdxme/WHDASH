@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6 fade-in">
+    <div class="flex items-center justify-between">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('wms_picking') }}" class="text-slate-400 hover:text-white"><i class="fa-solid fa-arrow-left"></i></a>
+                <h1 class="text-2xl font-bold text-white ltr-content">{{ task.task_number }}</h1>
+                <span class="px-3 py-1 rounded-lg text-xs font-bold bg-slate-500/10 text-slate-300">{{ task.status }}</span>
+            </div>
+            <p class="text-sm text-slate-400 mt-1">{{ task.warehouse_name or '-' }}{% if task.order_number %} / {{ task.order_number }}{% endif %}</p>
+        </div>
+        {% if task.order_id %}
+        <a href="{{ url_for('wms_outbound_order_detail', order_id=task.order_id) }}" class="px-4 py-2 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400 text-sm">
+            <i class="fa-solid fa-box mr-2"></i>{{ t('order_detail', 'Order Detail') }}
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="glass-panel rounded-2xl p-5"><p class="text-xs text-slate-400">{{ t('item', 'Item') }}</p><p class="text-lg font-bold text-white ltr-content">{{ task.item_code }}</p><p class="text-xs text-slate-500">{{ task.item_name }}</p></div>
+        <div class="glass-panel rounded-2xl p-5"><p class="text-xs text-slate-400">{{ t('source_location', 'Source Location') }}</p><p class="text-lg font-bold text-white ltr-content">{{ task.source_location_code or '-' }}</p></div>
+        <div class="glass-panel rounded-2xl p-5"><p class="text-xs text-slate-400">{{ t('quantity', 'Quantity') }}</p><p class="text-lg font-bold text-white">{{ task.picked_quantity or 0 }} / {{ task.quantity }}</p></div>
+        <div class="glass-panel rounded-2xl p-5"><p class="text-xs text-slate-400">{{ t('assigned_to', 'Assigned To') }}</p><p class="text-lg font-bold text-white">{{ task.assigned_to_name or '-' }}</p></div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('execution', 'Execution') }}</h3>
+            <dl class="space-y-3 text-sm">
+                <div class="flex justify-between gap-4"><dt class="text-slate-400">{{ t('priority', 'Priority') }}</dt><dd class="text-white">{{ task.priority }}</dd></div>
+                <div class="flex justify-between gap-4"><dt class="text-slate-400">{{ t('started_at', 'Started At') }}</dt><dd class="text-white ltr-content">{{ task.started_at or '-' }}</dd></div>
+                <div class="flex justify-between gap-4"><dt class="text-slate-400">{{ t('completed_at', 'Completed At') }}</dt><dd class="text-white ltr-content">{{ task.completed_at or '-' }}</dd></div>
+                <div class="flex justify-between gap-4"><dt class="text-slate-400">{{ t('completed_by', 'Completed By') }}</dt><dd class="text-white">{{ task.completed_by_name or '-' }}</dd></div>
+                <div class="flex justify-between gap-4"><dt class="text-slate-400">{{ t('short_pick_reason', 'Short Pick Reason') }}</dt><dd class="text-white">{{ task.short_pick_reason or '-' }}</dd></div>
+            </dl>
+        </div>
+
+        <div class="glass-panel rounded-2xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">{{ t('actions', 'Actions') }}</h3>
+            <div class="flex flex-wrap gap-3">
+                {% if task.status == 'PENDING' %}
+                <form method="POST" action="{{ url_for('wms_picking_start', task_id=task.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="px-4 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-sm">{{ t('start_pick', 'Start Pick') }}</button>
+                </form>
+                {% endif %}
+                {% if task.status in ['PENDING', 'ASSIGNED', 'IN_PROGRESS'] %}
+                <form method="POST" action="{{ url_for('wms_picking_complete', task_id=task.id) }}" class="flex flex-wrap gap-2">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="number" step="0.01" min="0" name="picked_quantity" value="{{ task.quantity }}" class="w-28 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <input type="text" name="short_pick_reason" placeholder="{{ t('reason', 'Reason') }}" class="w-40 px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                    <button class="px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">{{ t('complete_pick', 'Complete Pick') }}</button>
+                </form>
+                {% endif %}
+            </div>
+            {% if task.notes %}
+            <div class="mt-5 pt-5 border-t border-white/5">
+                <p class="text-xs text-slate-400 mb-1">{{ t('notes', 'Notes') }}</p>
+                <p class="text-sm text-slate-300">{{ task.notes }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

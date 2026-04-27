@@ -1,453 +1,396 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ page_title }} - MMDx</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #4F46E5;
-            --success: #10B981;
-            --warning: #F59E0B;
-            --danger: #EF4444;
-            --info: #3B82F6;
-            --dark: #1F2937;
-            --light-bg: #F9FAFB;
-        }
-        body { background: var(--light-bg); font-family: 'Segoe UI', system-ui, sans-serif; }
-        .stat-card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: transform 0.2s; }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-        .stat-card .icon { width: 48px; height: 48px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; }
-        .stat-card .number { font-size: 1.75rem; font-weight: 700; line-height: 1.2; }
-        .stat-card .label { font-size: 0.875rem; color: #6B7280; }
-        .pass-rate { background: linear-gradient(135deg, var(--success), #059669); color: white; }
-        .stat-danger { background: linear-gradient(135deg, var(--danger), #DC2626); color: white; }
-        .stat-warning { background: linear-gradient(135deg, var(--warning), #D97706); color: white; }
-        .stat-info { background: linear-gradient(135deg, var(--info), #2563EB); color: white; }
-        .stat-dark { background: linear-gradient(135deg, var(--dark), #111827); color: white; }
-        .card-header-custom { background: white; border-bottom: 2px solid #E5E7EB; font-weight: 600; padding: 1rem 1.25rem; }
-        .table-responsive { border-radius: 8px; overflow: hidden; }
-        .table thead th { background: #F3F4F6; font-weight: 600; font-size: 0.8125rem; text-transform: uppercase; color: #6B7280; border: none; }
-        .badge-status { font-weight: 500; padding: 0.375rem 0.625rem; }
-        .badge-OPEN { background: #FEF3C7; color: #92400E; }
-        .badge-IN_PROGRESS { background: #DBEAFE; color: #1E40AF; }
-        .badge-COMPLETED { background: #D1FAE5; color: #065F46; }
-        .badge-FAIL { background: #FEE2E2; color: #991B1B; }
-        .badge-PASS { background: #D1FAE5; color: #065F46; }
-        .badge-HOLD { background: #FEF3C7; color: #92400E; }
-        .badge-PENDING { background: #F3F4F6; color: #374151; }
-        .badge-EFFECTIVENESS_REVIEW { background: #E0E7FF; color: #3730A3; }
-        .badge-CRITICAL { background: #FEE2E2; color: #991B1B; }
-        .badge-MAJOR { background: #FEF3C7; color: #92400E; }
-        .badge-MINOR { background: #F3F4F6; color: #374151; }
-        .text-critical { color: #DC2626; }
-        .text-major { color: #D97706; }
-        .text-overdue { color: #DC2626; font-weight: 600; }
-        .quick-actions .btn { border-radius: 8px; padding: 0.75rem 1rem; font-weight: 500; }
-        .chart-container { position: relative; height: 250px; }
-        .badge-action { font-size: 0.75rem; }
-    </style>
-</head>
-<body>
-    {% include 'base.html' %}
+{% extends "base.html" %}
 
-    {% block content %}
-    <div class="container-fluid py-4">
-        <!-- Page Header -->
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div>
-                <h1 class="h3 mb-1"><i class="fas fa-clipboard-check me-2 text-primary"></i>Quality Dashboard</h1>
-                <p class="text-muted mb-0">Real-time quality management overview</p>
-            </div>
-            <div class="quick-actions d-flex gap-2">
-                <a href="{{ url_for('quality.inspections_create') }}" class="btn btn-primary">
-                    <i class="fas fa-plus me-1"></i> New Inspection
-                </a>
-                <a href="{{ url_for('quality.ncr_create') }}" class="btn btn-outline-danger">
-                    <i class="fas fa-exclamation-circle me-1"></i> New NCR
-                </a>
-                <a href="{{ url_for('quality.capa_create') }}" class="btn btn-outline-warning">
-                    <i class="fas fa-clipboard-list me-1"></i> New CAPA
-                </a>
-            </div>
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1"><i class="fas fa-clipboard-check me-2 text-primary"></i>{{ t('quality_dashboard') or 'Quality Dashboard' }}</h1>
+            <p class="text-muted mb-0">{{ t('quality_dashboard_subtitle') or 'Real-time quality management overview' }}</p>
         </div>
-
-        <!-- Key Metrics Row -->
-        <div class="row g-4 mb-4">
-            <!-- Pass Rate -->
-            <div class="col-md-3">
-                <div class="card stat-card pass-rate h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3" style="background: rgba(255,255,255,0.2);">
-                            <i class="fas fa-check-circle"></i>
-                        </div>
-                        <div>
-                            <div class="number">{{ stats.pass_rate }}%</div>
-                            <div class="label">Pass Rate</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Open NCRs -->
-            <div class="col-md-3">
-                <div class="card stat-card h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3 stat-danger">
-                            <i class="fas fa-exclamation-triangle"></i>
-                        </div>
-                        <div>
-                            <div class="number text-dark">{{ stats.open_ncrs }}</div>
-                            <div class="label">Open NCRs</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Overdue NCRs -->
-            <div class="col-md-3">
-                <div class="card stat-card h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3 stat-warning">
-                            <i class="fas fa-clock"></i>
-                        </div>
-                        <div>
-                            <div class="number text-dark">{{ stats.overdue_ncrs }}</div>
-                            <div class="label text-muted">Overdue NCRs</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Open CAPAs -->
-            <div class="col-md-3">
-                <div class="card stat-card h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3 stat-info">
-                            <i class="fas fa-clipboard-list"></i>
-                        </div>
-                        <div>
-                            <div class="number text-dark">{{ stats.open_capas }}</div>
-                            <div class="label">Open CAPAs</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <div class="quick-actions d-flex gap-2">
+            <a href="{{ url_for('quality.inspections_create') }}" class="btn btn-primary">
+                <i class="fas fa-plus me-1"></i> {{ t('new_inspection') or 'New Inspection' }}
+            </a>
+            <a href="{{ url_for('quality.ncr_create') }}" class="btn btn-outline-danger">
+                <i class="fas fa-exclamation-circle me-1"></i> {{ t('new_ncr') or 'New NCR' }}
+            </a>
+            <a href="{{ url_for('quality.capa_create') }}" class="btn btn-outline-warning">
+                <i class="fas fa-clipboard-list me-1"></i> {{ t('new_capa') or 'New CAPA' }}
+            </a>
         </div>
+    </div>
 
-        <!-- Second Row Metrics -->
-        <div class="row g-4 mb-4">
-            <!-- Pending Inspections -->
-            <div class="col-md-3">
-                <div class="card stat-card h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3" style="background: #E0E7FF; color: #4F46E5;">
-                            <i class="fas fa-search"></i>
-                        </div>
-                        <div>
-                            <div class="number text-dark">{{ stats.pending_inspections }}</div>
-                            <div class="label">Pending Inspections</div>
-                        </div>
+    <!-- Key Metrics Row -->
+    <div class="row g-4 mb-4">
+        <!-- Pass Rate -->
+        <div class="col-md-3">
+            <div class="card stat-card pass-rate h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: rgba(255,255,255,0.2);">
+                        <i class="fas fa-check-circle"></i>
                     </div>
-                </div>
-            </div>
-
-            <!-- Overdue CAPAs -->
-            <div class="col-md-3">
-                <div class="card stat-card h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3 stat-warning">
-                            <i class="fas fa-exclamation-circle"></i>
-                        </div>
-                        <div>
-                            <div class="number text-dark">{{ stats.overdue_capas }}</div>
-                            <div class="label text-muted">Overdue CAPAs</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Active Audits -->
-            <div class="col-md-3">
-                <div class="card stat-card h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3" style="background: #D1FAE5; color: #059669;">
-                            <i class="fas fa-user-check"></i>
-                        </div>
-                        <div>
-                            <div class="number text-dark">{{ stats.active_audits }}</div>
-                            <div class="label">Active Audits</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Open Findings -->
-            <div class="col-md-3">
-                <div class="card stat-card h-100">
-                    <div class="card-body d-flex align-items-center">
-                        <div class="icon me-3 stat-dark">
-                            <i class="fas fa-flag"></i>
-                        </div>
-                        <div>
-                            <div class="number text-white">{{ stats.open_findings }}</div>
-                            <div class="label" style="color: rgba(255,255,255,0.8);">Open Findings</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Main Content Row -->
-        <div class="row g-4">
-            <!-- Recent Inspections -->
-            <div class="col-lg-6">
-                <div class="card h-100">
-                    <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-search me-2"></i>Recent Inspections</span>
-                        <a href="{{ url_for('quality.inspections_list') }}" class="btn btn-sm btn-outline-primary">View All</a>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Number</th>
-                                        <th>Type</th>
-                                        <th>Item</th>
-                                        <th>Result</th>
-                                        <th>Date</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% if stats.recent_inspections %}
-                                        {% for insp in stats.recent_inspections[:8] %}
-                                        <tr>
-                                            <td><a href="{{ url_for('quality.inspections_view', inspection_id=insp.id) }}">{{ insp.inspection_number }}</a></td>
-                                            <td>{{ insp.type_name or insp.inspection_type_id or 'N/A' }}</td>
-                                            <td>{{ insp.item_name or 'N/A' }}</td>
-                                            <td>
-                                                {% if insp.result %}
-                                                    <span class="badge badge-status badge-{{ insp.result }}">{{ insp.result }}</span>
-                                                {% else %}
-                                                    <span class="badge badge-status badge-{{ insp.status }}">{{ insp.status }}</span>
-                                                {% endif %}
-                                            </td>
-                                            <td>{{ insp.inspection_date or insp.created_at[:10] }}</td>
-                                        </tr>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr>
-                                            <td colspan="5" class="text-center text-muted py-4">No inspections found</td>
-                                        </tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Recent NCRs -->
-            <div class="col-lg-6">
-                <div class="card h-100">
-                    <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-exclamation-circle me-2 text-danger"></i>Recent NCRs</span>
-                        <a href="{{ url_for('quality.ncr_list') }}" class="btn btn-sm btn-outline-danger">View All</a>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>NCR #</th>
-                                        <th>Category</th>
-                                        <th>Severity</th>
-                                        <th>Status</th>
-                                        <th>Date</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% if stats.recent_ncrs %}
-                                        {% for ncr in stats.recent_ncrs[:8] %}
-                                        <tr>
-                                            <td><a href="{{ url_for('quality.ncr_view', ncr_id=ncr.id) }}">{{ ncr.ncr_number }}</a></td>
-                                            <td>{{ ncr.ncr_category or 'N/A' }}</td>
-                                            <td>
-                                                {% if ncr.severity %}
-                                                    <span class="badge badge-status badge-{{ ncr.severity }}">{{ ncr.severity }}</span>
-                                                {% else %}
-                                                    -
-                                                {% endif %}
-                                            </td>
-                                            <td>
-                                                <span class="badge badge-status badge-{{ ncr.status }}">{{ ncr.status }}</span>
-                                            </td>
-                                            <td>{{ ncr.detected_date or ncr.created_at[:10] }}</td>
-                                        </tr>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr>
-                                            <td colspan="5" class="text-center text-muted py-4">No NCRs found</td>
-                                        </tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Third Row -->
-        <div class="row g-4 mt-2">
-            <!-- Recent CAPAs -->
-            <div class="col-lg-6">
-                <div class="card h-100">
-                    <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-clipboard-list me-2 text-warning"></i>Recent CAPAs</span>
-                        <a href="{{ url_for('quality.capa_list') }}" class="btn btn-sm btn-outline-warning">View All</a>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>CAPA #</th>
-                                        <th>Title</th>
-                                        <th>Type</th>
-                                        <th>Status</th>
-                                        <th>Target</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% if stats.recent_capas %}
-                                        {% for capa in stats.recent_capas[:8] %}
-                                        <tr>
-                                            <td><a href="{{ url_for('quality.capa_view', capa_id=capa.id) }}">{{ capa.capa_number }}</a></td>
-                                            <td>{{ capa.title[:40] }}{% if capa.title|length > 40 %}...{% endif %}</td>
-                                            <td>{{ capa.capa_type or 'N/A' }}</td>
-                                            <td>
-                                                <span class="badge badge-status badge-{{ capa.status }}">{{ capa.status }}</span>
-                                            </td>
-                                            <td class="{% if capa.target_date and capa.target_date < today and capa.status not in ['CLOSED', 'CANCELLED'] %}text-overdue{% endif %}">
-                                                {{ capa.target_date or 'N/A' }}
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr>
-                                            <td colspan="5" class="text-center text-muted py-4">No CAPAs found</td>
-                                        </tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Upcoming Audits -->
-            <div class="col-lg-6">
-                <div class="card h-100">
-                    <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
-                        <span><i class="fas fa-calendar-alt me-2 text-success"></i>Upcoming Audits</span>
-                        <a href="{{ url_for('quality.audits_list') }}" class="btn btn-sm btn-outline-success">View All</a>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive">
-                            <table class="table table-hover mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Plan #</th>
-                                        <th>Type</th>
-                                        <th>Scope</th>
-                                        <th>Status</th>
-                                        <th>Scheduled</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% if stats.upcoming_audits %}
-                                        {% for audit in stats.upcoming_audits[:8] %}
-                                        <tr>
-                                            <td><a href="{{ url_for('quality.audits_view', plan_id=audit.id) }}">{{ audit.plan_number }}</a></td>
-                                            <td>{{ audit.audit_type or 'N/A' }}</td>
-                                            <td>{{ audit.scope[:30] }}{% if audit.scope|length > 30 %}...{% endif %}</td>
-                                            <td>
-                                                <span class="badge badge-status badge-{{ audit.status }}">{{ audit.status }}</span>
-                                            </td>
-                                            <td>{{ audit.scheduled_start_date or 'N/A' }}</td>
-                                        </tr>
-                                        {% endfor %}
-                                    {% else %}
-                                        <tr>
-                                            <td colspan="5" class="text-center text-muted py-4">No upcoming audits</td>
-                                        </tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Overdue Actions Alert -->
-        {% if stats.overdue_actions %}
-        <div class="row mt-4">
-            <div class="col-12">
-                <div class="alert alert-danger d-flex align-items-center" role="alert">
-                    <i class="fas fa-exclamation-triangle me-3 fs-4"></i>
                     <div>
-                        <strong>{{ stats.overdue_actions|length }} Overdue Action(s)</strong> require immediate attention.
-                        <a href="{{ url_for('quality.capa_list') }}?is_overdue=1" class="alert-link">View Overdue CAPAs</a>
+                        <div class="number">{{ stats.pass_rate }}%</div>
+                        <div class="label">{{ t('pass_rate') or 'Pass Rate' }}</div>
                     </div>
                 </div>
             </div>
         </div>
-        {% endif %}
 
-        <!-- Quick Links -->
-        <div class="row mt-4">
-            <div class="col-12">
-                <h5 class="mb-3"><i class="fas fa-link me-2"></i>Quick Links</h5>
+        <!-- Open NCRs -->
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3 stat-danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                    </div>
+                    <div>
+                        <div class="number text-dark">{{ stats.open_ncrs }}</div>
+                        <div class="label">{{ t('open_ncrs') or 'Open NCRs' }}</div>
+                    </div>
+                </div>
             </div>
-            <div class="col-md-2">
-                <a href="{{ url_for('quality.inspections_failed') }}" class="btn btn-outline-danger w-100 py-2">
-                    <i class="fas fa-times-circle me-1"></i>Failed Inspections
-                </a>
+        </div>
+
+        <!-- Overdue NCRs -->
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3 stat-warning">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div>
+                        <div class="number text-dark">{{ stats.overdue_ncrs }}</div>
+                        <div class="label text-muted">{{ t('overdue_ncrs') or 'Overdue NCRs' }}</div>
+                    </div>
+                </div>
             </div>
-            <div class="col-md-2">
-                <a href="{{ url_for('quality.ncr_overdue') }}" class="btn btn-outline-warning w-100 py-2">
-                    <i class="fas fa-clock me-1"></i>Overdue NCRs
-                </a>
-            </div>
-            <div class="col-md-2">
-                <a href="{{ url_for('quality.capa_overdue') }}" class="btn btn-outline-warning w-100 py-2">
-                    <i class="fas fa-exclamation-circle me-1"></i>Overdue CAPAs
-                </a>
-            </div>
-            <div class="col-md-2">
-                <a href="{{ url_for('quality.capa_pending_effectiveness') }}" class="btn btn-outline-info w-100 py-2">
-                    <i class="fas fa-clipboard-check me-1"></i>Pending Effectiveness
-                </a>
-            </div>
-            <div class="col-md-2">
-                <a href="{{ url_for('quality.audits_findings_list') }}" class="btn btn-outline-dark w-100 py-2">
-                    <i class="fas fa-flag me-1"></i>Open Findings
-                </a>
-            </div>
-            <div class="col-md-2">
-                <a href="{{ url_for('quality.reports_inspection') }}" class="btn btn-outline-primary w-100 py-2">
-                    <i class="fas fa-chart-bar me-1"></i>Reports
-                </a>
+        </div>
+
+        <!-- Open CAPAs -->
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3 stat-info">
+                        <i class="fas fa-clipboard-list"></i>
+                    </div>
+                    <div>
+                        <div class="number text-dark">{{ stats.open_capas }}</div>
+                        <div class="label">{{ t('open_capas') or 'Open CAPAs' }}</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-    {% endblock %}
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+    <!-- Second Row Metrics -->
+    <div class="row g-4 mb-4">
+        <!-- Pending Inspections -->
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: #E0E7FF; color: #4F46E5;">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <div>
+                        <div class="number text-dark">{{ stats.pending_inspections }}</div>
+                        <div class="label">{{ t('pending_inspections') or 'Pending Inspections' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Overdue CAPAs -->
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3 stat-warning">
+                        <i class="fas fa-exclamation-circle"></i>
+                    </div>
+                    <div>
+                        <div class="number text-dark">{{ stats.overdue_capas }}</div>
+                        <div class="label text-muted">{{ t('overdue_capas') or 'Overdue CAPAs' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Audits -->
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3" style="background: #D1FAE5; color: #059669;">
+                        <i class="fas fa-user-check"></i>
+                    </div>
+                    <div>
+                        <div class="number text-dark">{{ stats.active_audits }}</div>
+                        <div class="label">{{ t('active_audits') or 'Active Audits' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Open Findings -->
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="icon me-3 stat-dark">
+                        <i class="fas fa-flag"></i>
+                    </div>
+                    <div>
+                        <div class="number text-white">{{ stats.open_findings }}</div>
+                        <div class="label" style="color: rgba(255,255,255,0.8);">{{ t('open_findings') or 'Open Findings' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Row -->
+    <div class="row g-4">
+        <!-- Recent Inspections -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-search me-2"></i>{{ t('recent_inspections') or 'Recent Inspections' }}</span>
+                    <a href="{{ url_for('quality.inspections_list') }}" class="btn btn-sm btn-outline-primary">{{ t('view_all') or 'View All' }}</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('number') or 'Number' }}</th>
+                                    <th>{{ t('type') or 'Type' }}</th>
+                                    <th>{{ t('item') or 'Item' }}</th>
+                                    <th>{{ t('result') or 'Result' }}</th>
+                                    <th>{{ t('date') or 'Date' }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if stats.recent_inspections %}
+                                    {% for insp in stats.recent_inspections[:8] %}
+                                    <tr>
+                                        <td><a href="{{ url_for('quality.inspections_view', inspection_id=insp.id) }}">{{ insp.inspection_number }}</a></td>
+                                        <td>{{ insp.type_name or insp.inspection_type_id or 'N/A' }}</td>
+                                        <td>{{ insp.item_name or 'N/A' }}</td>
+                                        <td>
+                                            {% if insp.result %}
+                                                <span class="badge badge-status badge-{{ insp.result }}">{{ insp.result }}</span>
+                                            {% else %}
+                                                <span class="badge badge-status badge-{{ insp.status }}">{{ insp.status }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ insp.inspection_date or insp.created_at[:10] }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">{{ t('no_inspections_found') or 'No inspections found' }}</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent NCRs -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-exclamation-circle me-2 text-danger"></i>{{ t('recent_ncrs') or 'Recent NCRs' }}</span>
+                    <a href="{{ url_for('quality.ncr_list') }}" class="btn btn-sm btn-outline-danger">{{ t('view_all') or 'View All' }}</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('ncr_number') or 'NCR #' }}</th>
+                                    <th>{{ t('category') or 'Category' }}</th>
+                                    <th>{{ t('severity') or 'Severity' }}</th>
+                                    <th>{{ t('status') or 'Status' }}</th>
+                                    <th>{{ t('date') or 'Date' }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if stats.recent_ncrs %}
+                                    {% for ncr in stats.recent_ncrs[:8] %}
+                                    <tr>
+                                        <td><a href="{{ url_for('quality.ncr_view', ncr_id=ncr.id) }}">{{ ncr.ncr_number }}</a></td>
+                                        <td>{{ ncr.ncr_category or 'N/A' }}</td>
+                                        <td>
+                                            {% if ncr.severity %}
+                                                <span class="badge badge-status badge-{{ ncr.severity }}">{{ ncr.severity }}</span>
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-status badge-{{ ncr.status }}">{{ ncr.status }}</span>
+                                        </td>
+                                        <td>{{ ncr.detected_date or ncr.created_at[:10] }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">{{ t('no_ncrs_found') or 'No NCRs found' }}</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Third Row -->
+    <div class="row g-4 mt-2">
+        <!-- Recent CAPAs -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-clipboard-list me-2 text-warning"></i>{{ t('recent_capas') or 'Recent CAPAs' }}</span>
+                    <a href="{{ url_for('quality.capa_list') }}" class="btn btn-sm btn-outline-warning">{{ t('view_all') or 'View All' }}</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('capa_number') or 'CAPA #' }}</th>
+                                    <th>{{ t('title') or 'Title' }}</th>
+                                    <th>{{ t('type') or 'Type' }}</th>
+                                    <th>{{ t('status') or 'Status' }}</th>
+                                    <th>{{ t('target') or 'Target' }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if stats.recent_capas %}
+                                    {% for capa in stats.recent_capas[:8] %}
+                                    <tr>
+                                        <td><a href="{{ url_for('quality.capa_view', capa_id=capa.id) }}">{{ capa.capa_number }}</a></td>
+                                        <td>{{ capa.title[:40] }}{% if capa.title|length > 40 %}...{% endif %}</td>
+                                        <td>{{ capa.capa_type or 'N/A' }}</td>
+                                        <td>
+                                            <span class="badge badge-status badge-{{ capa.status }}">{{ capa.status }}</span>
+                                        </td>
+                                        <td class="{% if capa.target_date and capa.target_date < today and capa.status not in ['CLOSED', 'CANCELLED'] %}text-overdue{% endif %}">
+                                            {{ capa.target_date or 'N/A' }}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">{{ t('no_capas_found') or 'No CAPAs found' }}</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upcoming Audits -->
+        <div class="col-lg-6">
+            <div class="card h-100">
+                <div class="card-header card-header-custom d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-calendar-alt me-2 text-success"></i>{{ t('upcoming_audits') or 'Upcoming Audits' }}</span>
+                    <a href="{{ url_for('quality.audits_list') }}" class="btn btn-sm btn-outline-success">{{ t('view_all') or 'View All' }}</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('plan_number') or 'Plan #' }}</th>
+                                    <th>{{ t('type') or 'Type' }}</th>
+                                    <th>{{ t('scope') or 'Scope' }}</th>
+                                    <th>{{ t('status') or 'Status' }}</th>
+                                    <th>{{ t('scheduled') or 'Scheduled' }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if stats.upcoming_audits %}
+                                    {% for audit in stats.upcoming_audits[:8] %}
+                                    <tr>
+                                        <td><a href="{{ url_for('quality.audits_view', plan_id=audit.id) }}">{{ audit.plan_number }}</a></td>
+                                        <td>{{ audit.audit_type or 'N/A' }}</td>
+                                        <td>{{ audit.scope[:30] }}{% if audit.scope|length > 30 %}...{% endif %}</td>
+                                        <td>
+                                            <span class="badge badge-status badge-{{ audit.status }}">{{ audit.status }}</span>
+                                        </td>
+                                        <td>{{ audit.scheduled_start_date or 'N/A' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted py-4">{{ t('no_upcoming_audits') or 'No upcoming audits' }}</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overdue Actions Alert -->
+    {% if stats.overdue_actions %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="alert alert-danger d-flex align-items-center" role="alert">
+                <i class="fas fa-exclamation-triangle me-3 fs-4"></i>
+                <div>
+                    <strong>{{ stats.overdue_actions|length }} {{ t('overdue_actions') or 'Overdue Action(s)' }}</strong> {{ t('require_immediate_attention') or 'require immediate attention.' }}
+                    <a href="{{ url_for('quality.capa_list') }}?is_overdue=1" class="alert-link">{{ t('view_overdue_capas') or 'View Overdue CAPAs' }}</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Quick Links -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <h5 class="mb-3"><i class="fas fa-link me-2"></i>{{ t('quick_links') or 'Quick Links' }}</h5>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('quality.inspections_failed') }}" class="btn btn-outline-danger w-100 py-2">
+                <i class="fas fa-times-circle me-1"></i>{{ t('failed_inspections') or 'Failed Inspections' }}
+            </a>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('quality.ncr_overdue') }}" class="btn btn-outline-warning w-100 py-2">
+                <i class="fas fa-clock me-1"></i>{{ t('overdue_ncrs') or 'Overdue NCRs' }}
+            </a>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('quality.capa_overdue') }}" class="btn btn-outline-warning w-100 py-2">
+                <i class="fas fa-exclamation-circle me-1"></i>{{ t('overdue_capas') or 'Overdue CAPAs' }}
+            </a>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('quality.capa_pending_effectiveness') }}" class="btn btn-outline-info w-100 py-2">
+                <i class="fas fa-clipboard-check me-1"></i>{{ t('pending_effectiveness') or 'Pending Effectiveness' }}
+            </a>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('quality.audits_findings_list') }}" class="btn btn-outline-dark w-100 py-2">
+                <i class="fas fa-flag me-1"></i>{{ t('open_findings') or 'Open Findings' }}
+            </a>
+        </div>
+        <div class="col-md-2">
+            <a href="{{ url_for('quality.reports_inspection') }}" class="btn btn-outline-primary w-100 py-2">
+                <i class="fas fa-chart-bar me-1"></i>{{ t('reports') or 'Reports' }}
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

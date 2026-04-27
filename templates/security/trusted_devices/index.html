@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('security_trusted_devices', 'Trusted Devices') }}</h1>
+        <p class="text-gray-600 dark:text-gray-400">{{ t('security_trusted_devices_desc', 'Manage devices that remember your MFA') }}</p>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="mb-4 p-4 rounded-lg {% if 'error' in message.category %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="p-6">
+            {% if devices %}
+            <div class="space-y-4">
+                {% for device in devices %}
+                <div class="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                    <div class="flex items-center">
+                        <div class="w-12 h-12 rounded-full bg-purple-100 dark:bg-purple-900 flex items-center justify-center">
+                            <i class="fa-solid {% if device.device_type == 'mobile' %}fa-mobile-alt{% else %}fa-laptop{% endif %} text-purple-600 dark:text-purple-400 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="font-medium text-gray-900 dark:text-white">{{ device.device_name|default('Unknown Device') }}</p>
+                            <p class="text-sm text-gray-500 dark:text-gray-400">
+                                {{ device.browser|default('Unknown browser') }} on {{ device.os|default('Unknown OS') }}
+                            </p>
+                            <p class="text-xs text-gray-400 dark:text-gray-500">
+                                <i class="fa-solid fa-map-marker-alt mr-1"></i>{{ device.ip_address|default('Unknown IP') }}
+                                <span class="mx-2">|</span>
+                                {{ t('security_last_used', 'Last used') }}: {{ device.last_used_at|default('Never') }}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-center">
+                        {% if device.is_current %}
+                        <span class="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded mr-2">{{ t('security_current_device', 'Current') }}</span>
+                        {% endif %}
+                        <span class="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded mr-2">
+                            {{ t('security_trusted', 'Trusted') }}
+                        </span>
+                        {% if not device.is_current %}
+                        <form action="{{ url_for('security.trusted_device_revoke', device_id=device.id) }}" method="POST">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit" class="px-3 py-1 text-sm text-red-600 hover:text-red-700 border border-red-600 rounded hover:bg-red-50 dark:hover:bg-red-900 transition">
+                                {{ t('security_remove', 'Remove') }}
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <i class="fa-solid fa-mobile-screen-button text-gray-300 dark:text-gray-600 text-5xl mb-4"></i>
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">{{ t('security_no_trusted_devices', 'No Trusted Devices') }}</h3>
+                <p class="text-gray-500 dark:text-gray-400 mb-4">{{ t('security_no_trusted_devices_desc', 'Devices you mark as trusted will remember your MFA for 30 days') }}</p>
+                <p class="text-sm text-gray-400">{{ t('security_trusted_device_hint', 'When you log in with "Remember this device", it will appear here') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

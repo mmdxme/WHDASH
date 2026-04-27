@@ -1,0 +1,613 @@
+{% extends "project/base.html" %}
+
+{% block content %}
+<!-- Project Header -->
+<div class="card mb-6">
+    <div class="p-6">
+        <div class="flex justify-between items-start mb-6">
+            <div class="flex items-start gap-4">
+                <div class="w-16 h-16 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-700 flex items-center justify-center">
+                    <i class="fas fa-project-diagram text-white text-2xl"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-3 mb-2">
+                        <span class="px-3 py-1 text-sm rounded font-medium status-badge status-{{ project.status|lower|replace(' ', '-') }}">
+                            {{ project.status }}
+                        </span>
+                        <span class="px-3 py-1 text-sm rounded {% if project.priority == 'Critical' %}bg-red-100 text-red-700{% elif project.priority == 'High' %}bg-orange-100 text-orange-700{% elif project.priority == 'Medium' %}bg-amber-100 text-amber-700{% else %}bg-slate-100 text-slate-600{% endif %}">
+                            {{ project.priority }}
+                        </span>
+                    </div>
+                    <h1 class="text-2xl font-bold text-slate-800 dark:text-white">{{ project.name }}</h1>
+                    <p class="text-slate-500 dark:text-slate-400">{{ project.code }}</p>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <a href="{{ url_for('project_edit', project_id=project.id) }}" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors">
+                    <i class="fas fa-edit mr-2"></i>{{ t('edit', 'Edit') }}
+                </a>
+                <div class="relative">
+                    <button onclick="toggleActionsMenu()" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
+                    <div id="actionsMenu" class="hidden absolute right-0 top-12 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 z-50">
+                        <a href="{{ url_for('project_export', project_id=project.id) }}" class="flex items-center gap-2 px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+                            <i class="fas fa-download"></i>{{ t('export', 'Export') }}
+                        </a>
+                        <a href="{{ url_for('project_duplicate', project_id=project.id) }}" class="flex items-center gap-2 px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+                            <i class="fas fa-copy"></i>{{ t('duplicate', 'Duplicate') }}
+                        </a>
+                        <button onclick="archiveProject('{{ project.id }}')" class="w-full flex items-center gap-2 px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+                            <i class="fas fa-archive"></i>{{ t('archive', 'Archive') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="mb-6">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-sm font-medium text-slate-600 dark:text-slate-400">{{ t('overall_progress', 'Overall Progress') }}</span>
+                <span class="text-sm font-medium text-slate-800 dark:text-white">{{ project.progress }}%</span>
+            </div>
+            <div class="progress-bar h-3">
+                <div class="progress-fill {% if project.progress >= 100 %}bg-green-500{% elif project.progress >= 75 %}bg-indigo-500{% elif project.progress >= 50 %}bg-blue-500{% elif project.progress >= 25 %}bg-amber-500{% else %}bg-slate-400{% endif %}" style="width: {{ project.progress }}%"></div>
+            </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('start_date', 'Start Date') }}</p>
+                <p class="text-lg font-semibold text-slate-800 dark:text-white">{{ project.start_date }}</p>
+            </div>
+            <div class="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('end_date', 'End Date') }}</p>
+                <p class="text-lg font-semibold text-slate-800 dark:text-white {% if project.is_overdue %}text-red-600{% endif %}">{{ project.end_date }}</p>
+            </div>
+            <div class="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('budget', 'Budget') }}</p>
+                <p class="text-lg font-semibold text-slate-800 dark:text-white amount">${{ "%.2f"|format(project.budget) }}</p>
+            </div>
+            <div class="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('team_members', 'Team Members') }}</p>
+                <p class="text-lg font-semibold text-slate-800 dark:text-white">{{ project.team_count }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab Navigation -->
+<div class="card">
+    <div class="border-b border-slate-200 dark:border-slate-700">
+        <nav class="flex overflow-x-auto">
+            <button onclick="switchTab('overview')" class="tab-btn tab-active px-6 py-3 text-sm font-medium border-b-2 border-indigo-600 text-indigo-600" data-tab="overview">
+                <i class="fas fa-home mr-2"></i>{{ t('overview', 'Overview') }}
+            </button>
+            <button onclick="switchTab('phases')" class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" data-tab="phases">
+                <i class="fas fa-layer-group mr-2"></i>{{ t('phases', 'Phases') }}
+            </button>
+            <button onclick="switchTab('tasks')" class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" data-tab="tasks">
+                <i class="fas fa-tasks mr-2"></i>{{ t('tasks', 'Tasks') }}
+            </button>
+            <button onclick="switchTab('milestones')" class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" data-tab="milestones">
+                <i class="fas fa-flag mr-2"></i>{{ t('milestones', 'Milestones') }}
+            </button>
+            <button onclick="switchTab('resources')" class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" data-tab="resources">
+                <i class="fas fa-users mr-2"></i>{{ t('resources', 'Resources') }}
+            </button>
+            <button onclick="switchTab('budget')" class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" data-tab="budget">
+                <i class="fas fa-dollar-sign mr-2"></i>{{ t('budget', 'Budget') }}
+            </button>
+            <button onclick="switchTab('risks')" class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" data-tab="risks">
+                <i class="fas fa-exclamation-triangle mr-2"></i>{{ t('risks', 'Risks') }}
+            </button>
+            <button onclick="switchTab('issues')" class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" data-tab="issues">
+                <i class="fas fa-bug mr-2"></i>{{ t('issues', 'Issues') }}
+            </button>
+            <button onclick="switchTab('changes')" class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" data-tab="changes">
+                <i class="fas fa-exchange-alt mr-2"></i>{{ t('changes', 'Changes') }}
+            </button>
+            <button onclick="switchTab('documents')" class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" data-tab="documents">
+                <i class="fas fa-file-alt mr-2"></i>{{ t('documents', 'Documents') }}
+            </button>
+            <button onclick="switchTab('governance')" class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300" data-tab="governance">
+                <i class="fas fa-gavel mr-2"></i>{{ t('governance', 'Governance') }}
+            </button>
+        </nav>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="p-6">
+        <!-- Overview Tab -->
+        <div id="tab-overview" class="tab-content">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Description -->
+                <div class="card">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+                        <h3 class="font-semibold text-slate-800 dark:text-white">{{ t('description', 'Description') }}</h3>
+                    </div>
+                    <div class="p-5">
+                        <p class="text-slate-600 dark:text-slate-300">{{ project.description }}</p>
+                    </div>
+                </div>
+
+                <!-- Project Details -->
+                <div class="card">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+                        <h3 class="font-semibold text-slate-800 dark:text-white">{{ t('project_details', 'Project Details') }}</h3>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div class="flex justify-between">
+                            <span class="text-slate-500 dark:text-slate-400">{{ t('project_type', 'Project Type') }}</span>
+                            <span class="font-medium text-slate-800 dark:text-white">{{ project.type }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500 dark:text-slate-400">{{ t('category', 'Category') }}</span>
+                            <span class="font-medium text-slate-800 dark:text-white">{{ project.category }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500 dark:text-slate-400">{{ t('cost_center', 'Cost Center') }}</span>
+                            <span class="font-medium text-slate-800 dark:text-white">{{ project.cost_center }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500 dark:text-slate-400">{{ t('location', 'Location') }}</span>
+                            <span class="font-medium text-slate-800 dark:text-white">{{ project.location }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dates -->
+                <div class="card">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+                        <h3 class="font-semibold text-slate-800 dark:text-white">{{ t('important_dates', 'Important Dates') }}</h3>
+                    </div>
+                    <div class="p-5 space-y-4">
+                        <div class="flex justify-between">
+                            <span class="text-slate-500 dark:text-slate-400">{{ t('planned_start', 'Planned Start') }}</span>
+                            <span class="font-medium text-slate-800 dark:text-white">{{ project.planned_start }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500 dark:text-slate-400">{{ t('planned_end', 'Planned End') }}</span>
+                            <span class="font-medium text-slate-800 dark:text-white">{{ project.planned_end }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500 dark:text-slate-400">{{ t('target_completion', 'Target Completion') }}</span>
+                            <span class="font-medium text-slate-800 dark:text-white">{{ project.target_completion }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500 dark:text-slate-400">{{ t('actual_start', 'Actual Start') }}</span>
+                            <span class="font-medium text-slate-800 dark:text-white">{{ project.actual_start or '-' }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-slate-500 dark:text-slate-400">{{ t('actual_end', 'Actual End') }}</span>
+                            <span class="font-medium text-slate-800 dark:text-white">{{ project.actual_end or '-' }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Team -->
+                <div class="card">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                        <h3 class="font-semibold text-slate-800 dark:text-white">{{ t('team', 'Team') }}</h3>
+                        <a href="{{ url_for('project_add_resource', project_id=project.id) }}" class="text-sm text-indigo-600 hover:text-indigo-700">
+                            <i class="fas fa-plus mr-1"></i>{{ t('add_member', 'Add Member') }}
+                        </a>
+                    </div>
+                    <div class="p-5">
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                                        <i class="fas fa-user text-indigo-600 dark:text-indigo-400"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-slate-800 dark:text-white">{{ project.owner_name }}</p>
+                                        <p class="text-sm text-slate-500">{{ t('project_owner', 'Project Owner') }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                                        <i class="fas fa-user text-blue-600 dark:text-blue-400"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-slate-800 dark:text-white">{{ project.manager_name }}</p>
+                                        <p class="text-sm text-slate-500">{{ t('project_manager', 'Project Manager') }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            {% if project.sponsor_name %}
+                            <div class="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                                        <i class="fas fa-user text-green-600 dark:text-green-400"></i>
+                                    </div>
+                                    <div>
+                                        <p class="font-medium text-slate-800 dark:text-white">{{ project.sponsor_name }}</p>
+                                        <p class="text-sm text-slate-500">{{ t('sponsor', 'Sponsor') }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Objectives -->
+                <div class="card lg:col-span-2">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+                        <h3 class="font-semibold text-slate-800 dark:text-white">{{ t('objectives', 'Objectives') }}</h3>
+                    </div>
+                    <div class="p-5">
+                        <ul class="space-y-2">
+                            {% for objective in project.objectives %}
+                            <li class="flex items-start gap-3">
+                                <i class="fas fa-check-circle text-green-500 mt-1"></i>
+                                <span class="text-slate-600 dark:text-slate-300">{{ objective }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Baseline -->
+                <div class="card lg:col-span-2">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+                        <h3 class="font-semibold text-slate-800 dark:text-white">{{ t('baseline', 'Baseline') }}</h3>
+                    </div>
+                    <div class="p-5">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                                <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">{{ t('baseline_budget', 'Baseline Budget') }}</p>
+                                <p class="text-xl font-bold text-slate-800 dark:text-white amount">${{ "%.2f"|format(project.baseline_budget or project.budget) }}</p>
+                            </div>
+                            <div class="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                                <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">{{ t('baseline_start', 'Baseline Start') }}</p>
+                                <p class="text-xl font-bold text-slate-800 dark:text-white">{{ project.baseline_start or project.start_date }}</p>
+                            </div>
+                            <div class="p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                                <p class="text-sm text-slate-500 dark:text-slate-400 mb-1">{{ t('baseline_end', 'Baseline End') }}</p>
+                                <p class="text-xl font-bold text-slate-800 dark:text-white">{{ project.baseline_end or project.end_date }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stakeholders -->
+                <div class="card lg:col-span-2">
+                    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                        <h3 class="font-semibold text-slate-800 dark:text-white">{{ t('stakeholders', 'Stakeholders') }}</h3>
+                        <a href="{{ url_for('project_add_stakeholder', project_id=project.id) }}" class="text-sm text-indigo-600 hover:text-indigo-700">
+                            <i class="fas fa-plus mr-1"></i>{{ t('add_stakeholder', 'Add') }}
+                        </a>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-slate-50 dark:bg-slate-700/50">
+                                <tr>
+                                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('name', 'Name') }}</th>
+                                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('role', 'Role') }}</th>
+                                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('interest_level', 'Interest Level') }}</th>
+                                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('influence_level', 'Influence Level') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                                {% for stakeholder in project.stakeholders %}
+                                <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ stakeholder.name }}</td>
+                                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ stakeholder.role }}</td>
+                                    <td class="px-5 py-4">
+                                        <span class="px-2 py-1 text-xs rounded {% if stakeholder.interest_level == 'High' %}bg-red-100 text-red-700{% elif stakeholder.interest_level == 'Medium' %}bg-amber-100 text-amber-700{% else %}bg-slate-100 text-slate-600{% endif %}">
+                                            {{ stakeholder.interest_level }}
+                                        </span>
+                                    </td>
+                                    <td class="px-5 py-4">
+                                        <span class="px-2 py-1 text-xs rounded {% if stakeholder.influence_level == 'High' %}bg-red-100 text-red-700{% elif stakeholder.influence_level == 'Medium' %}bg-amber-100 text-amber-700{% else %}bg-slate-100 text-slate-600{% endif %}">
+                                            {{ stakeholder.influence_level }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Phases Tab -->
+        <div id="tab-phases" class="tab-content hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-semibold text-slate-800 dark:text-white">{{ t('project_phases', 'Project Phases') }}</h3>
+                <a href="{{ url_for('project_add_phase', project_id=project.id) }}" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+                    <i class="fas fa-plus mr-2"></i>{{ t('add_phase', 'Add Phase') }}
+                </a>
+            </div>
+            {% if phases %}
+            <div class="space-y-4">
+                {% for phase in phases %}
+                <div class="card p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <span class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-semibold">{{ loop.index }}</span>
+                            <div>
+                                <h4 class="font-semibold text-slate-800 dark:text-white">{{ phase.name }}</h4>
+                                <p class="text-sm text-slate-500">{{ phase.start_date }} - {{ phase.end_date }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <a href="{{ url_for('project_edit_phase', project_id=project.id, phase_id=phase.id) }}" class="p-2 text-slate-500 hover:text-indigo-600">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <button onclick="deletePhase('{{ phase.id }}')" class="p-2 text-slate-500 hover:text-red-600">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm text-slate-500">{{ t('progress', 'Progress') }}</span>
+                            <span class="text-sm font-medium text-slate-800 dark:text-white">{{ phase.progress }}%</span>
+                        </div>
+                        <div class="progress-bar h-2">
+                            <div class="progress-fill bg-indigo-500" style="width: {{ phase.progress }}%"></div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                        <div>
+                            <span class="text-slate-500">{{ t('tasks', 'Tasks') }}</span>
+                            <p class="font-medium text-slate-800 dark:text-white">{{ phase.task_count }}</p>
+                        </div>
+                        <div>
+                            <span class="text-slate-500">{{ t('completed', 'Completed') }}</span>
+                            <p class="font-medium text-slate-800 dark:text-white">{{ phase.completed_tasks }}</p>
+                        </div>
+                        <div>
+                            <span class="text-slate-500">{{ t('deliverables', 'Deliverables') }}</span>
+                            <p class="font-medium text-slate-800 dark:text-white">{{ phase.deliverable_count }}</p>
+                        </div>
+                        <div>
+                            <span class="text-slate-500">{{ t('status', 'Status') }}</span>
+                            <span class="status-badge status-{{ phase.status|lower }}">{{ phase.status }}</span>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-12">
+                <i class="fas fa-layer-group text-4xl text-slate-300 dark:text-slate-600 mb-3"></i>
+                <p class="text-slate-500 dark:text-slate-400">{{ t('no_phases_defined', 'No phases defined yet') }}</p>
+                <a href="{{ url_for('project_add_phase', project_id=project.id) }}" class="text-indigo-600 hover:underline mt-2 inline-block">{{ t('add_first_phase', 'Add your first phase') }}</a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Tasks Tab -->
+        <div id="tab-tasks" class="tab-content hidden">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center gap-2">
+                    <button onclick="setTaskView('list')" class="px-3 py-2 bg-indigo-600 text-white rounded-lg" id="taskListBtn">
+                        <i class="fas fa-list"></i>
+                    </button>
+                    <button onclick="setTaskView('board')" class="px-3 py-2 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg" id="taskBoardBtn">
+                        <i class="fas fa-columns"></i>
+                    </button>
+                </div>
+                <a href="{{ url_for('project_add_task', project_id=project.id) }}" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+                    <i class="fas fa-plus mr-2"></i>{{ t('add_task', 'Add Task') }}
+                </a>
+            </div>
+            <!-- Task List View -->
+            <div id="taskListView">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-slate-50 dark:bg-slate-700/50">
+                            <tr>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('code', 'Code') }}</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('name', 'Name') }}</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('assignee', 'Assignee') }}</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('due_date', 'Due Date') }}</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('status', 'Status') }}</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('progress', 'Progress') }}</th>
+                                <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('actions', 'Actions') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                            {% for task in tasks %}
+                            <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                <td class="px-5 py-4">
+                                    <a href="{{ url_for('project_task_detail', project_id=project.id, task_id=task.id) }}" class="font-medium text-indigo-600 hover:underline">{{ task.code }}</a>
+                                </td>
+                                <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ task.name }}</td>
+                                <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ task.assignee_name }}</td>
+                                <td class="px-5 py-4 text-slate-500 dark:text-slate-400 text-sm {% if task.is_overdue %}text-red-600{% endif %}">{{ task.due_date }}</td>
+                                <td class="px-5 py-4">
+                                    <span class="status-badge status-{{ task.status|lower }}">{{ task.status }}</span>
+                                </td>
+                                <td class="px-5 py-4">
+                                    <div class="flex items-center gap-2">
+                                        <div class="progress-bar w-16">
+                                            <div class="progress-fill bg-indigo-500" style="width: {{ task.progress }}%"></div>
+                                        </div>
+                                        <span class="text-sm">{{ task.progress }}%</span>
+                                    </div>
+                                </td>
+                                <td class="px-5 py-4">
+                                    <div class="flex items-center gap-2">
+                                        <a href="{{ url_for('project_edit_task', project_id=project.id, task_id=task.id) }}" class="p-2 text-slate-500 hover:text-indigo-600">
+                                            <i class="fas fa-edit"></i>
+                                        </a>
+                                        <button onclick="deleteTask('{{ task.id }}')" class="p-2 text-slate-500 hover:text-red-600">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <!-- Task Board View -->
+            <div id="taskBoardView" class="hidden">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {% for column in task_columns %}
+                    <div class="card p-4">
+                        <h4 class="font-semibold text-slate-800 dark:text-white mb-4 flex items-center justify-between">
+                            <span>{{ column.name }}</span>
+                            <span class="px-2 py-1 text-xs rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{{ column.count }}</span>
+                        </h4>
+                        <div class="space-y-3">
+                            {% for task in column.tasks %}
+                            <div class="p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                                <p class="font-medium text-slate-800 dark:text-white text-sm">{{ task.name }}</p>
+                                <div class="mt-2 flex items-center justify-between text-xs text-slate-500">
+                                    <span>{{ task.assignee_name }}</span>
+                                    <span>{{ task.due_date }}</span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Other tabs would follow similar patterns -->
+        <div id="tab-milestones" class="tab-content hidden">
+            <p class="text-slate-500 dark:text-slate-400">{{ t('milestones_content', 'Milestones content goes here') }}</p>
+        </div>
+        <div id="tab-resources" class="tab-content hidden">
+            <p class="text-slate-500 dark:text-slate-400">{{ t('resources_content', 'Resources content goes here') }}</p>
+        </div>
+        <div id="tab-budget" class="tab-content hidden">
+            <p class="text-slate-500 dark:text-slate-400">{{ t('budget_content', 'Budget content goes here') }}</p>
+        </div>
+        <div id="tab-risks" class="tab-content hidden">
+            <p class="text-slate-500 dark:text-slate-400">{{ t('risks_content', 'Risks content goes here') }}</p>
+        </div>
+        <div id="tab-issues" class="tab-content hidden">
+            <p class="text-slate-500 dark:text-slate-400">{{ t('issues_content', 'Issues content goes here') }}</p>
+        </div>
+        <div id="tab-changes" class="tab-content hidden">
+            <p class="text-slate-500 dark:text-slate-400">{{ t('changes_content', 'Changes content goes here') }}</p>
+        </div>
+        <div id="tab-documents" class="tab-content hidden">
+            <p class="text-slate-500 dark:text-slate-400">{{ t('documents_content', 'Documents content goes here') }}</p>
+        </div>
+        <div id="tab-governance" class="tab-content hidden">
+            <p class="text-slate-500 dark:text-slate-400">{{ t('governance_content', 'Governance content goes here') }}</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function toggleActionsMenu() {
+    document.getElementById('actionsMenu').classList.toggle('hidden');
+}
+
+function switchTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+    // Remove active class from all tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('tab-active', 'border-indigo-600', 'text-indigo-600');
+        btn.classList.add('border-transparent', 'text-slate-500');
+    });
+    // Show selected tab content
+    document.getElementById('tab-' + tabName).classList.remove('hidden');
+    // Add active class to selected tab button
+    const activeBtn = document.querySelector('[data-tab="' + tabName + '"]');
+    activeBtn.classList.add('tab-active', 'border-indigo-600', 'text-indigo-600');
+    activeBtn.classList.remove('border-transparent', 'text-slate-500');
+}
+
+function setTaskView(view) {
+    if (view === 'list') {
+        document.getElementById('taskListView').classList.remove('hidden');
+        document.getElementById('taskBoardView').classList.add('hidden');
+        document.getElementById('taskListBtn').classList.add('bg-indigo-600', 'text-white');
+        document.getElementById('taskListBtn').classList.remove('bg-slate-200', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+        document.getElementById('taskBoardBtn').classList.remove('bg-indigo-600', 'text-white');
+        document.getElementById('taskBoardBtn').classList.add('bg-slate-200', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+    } else {
+        document.getElementById('taskListView').classList.add('hidden');
+        document.getElementById('taskBoardView').classList.remove('hidden');
+        document.getElementById('taskBoardBtn').classList.add('bg-indigo-600', 'text-white');
+        document.getElementById('taskBoardBtn').classList.remove('bg-slate-200', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+        document.getElementById('taskListBtn').classList.remove('bg-indigo-600', 'text-white');
+        document.getElementById('taskListBtn').classList.add('bg-slate-200', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+    }
+}
+
+function archiveProject(id) {
+    Swal.fire({
+        title: '{{ t("archive_project", "Archive Project") }}',
+        text: '{{ t("confirm_archive_project", "Are you sure you want to archive this project?") }}',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '{{ t("yes_archive", "Yes, Archive") }}',
+        cancelButtonText: '{{ t("cancel", "Cancel") }}'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            fetch('/api/project/archive/' + id, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || '' }
+            }).then(() => location.reload());
+        }
+    });
+}
+
+function deletePhase(id) {
+    Swal.fire({
+        title: '{{ t("delete_phase", "Delete Phase") }}',
+        text: '{{ t("confirm_delete_phase", "Are you sure you want to delete this phase?") }}',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '{{ t("yes_delete", "Yes, Delete") }}',
+        cancelButtonText: '{{ t("cancel", "Cancel") }}',
+        confirmButtonColor: '#ef4444'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            fetch('/api/project/phase/' + id, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || '' }
+            }).then(() => location.reload());
+        }
+    });
+}
+
+function deleteTask(id) {
+    Swal.fire({
+        title: '{{ t("delete_task", "Delete Task") }}',
+        text: '{{ t("confirm_delete_task", "Are you sure you want to delete this task?") }}',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '{{ t("yes_delete", "Yes, Delete") }}',
+        cancelButtonText: '{{ t("cancel", "Cancel") }}',
+        confirmButtonColor: '#ef4444'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            fetch('/api/project/task/' + id, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || '' }
+            }).then(() => location.reload());
+        }
+    });
+}
+
+// Close actions menu when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('#actionsMenu') && !e.target.closest('button')) {
+        document.getElementById('actionsMenu').classList.add('hidden');
+    }
+});
+</script>
+{% endblock %}

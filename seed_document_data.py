@@ -647,3 +647,164 @@ def insert_access_log(db, document_id, action, user_id):
 
 if __name__ == '__main__':
     seed_document_demo_data()
+
+
+def seed_comprehensive_dms_data():
+    """Seed comprehensive DMS data including new tables."""
+    from document_models import initialize_document_tables
+    initialize_document_tables()
+
+    db = get_db()
+    try:
+        # Check if already seeded
+        existing = db.execute("SELECT COUNT(*) as cnt FROM documents").fetchone()
+        if existing['cnt'] < 5:
+            seed_document_demo_data()
+
+        print("Seeding comprehensive DMS data...")
+
+        # Seed retention policies
+        retention_policies = [
+            {'name': 'Financial Records', 'code': 'RET-FIN-001', 'days': 2555, 'basis': 'approval_date', 'description': 'Retain financial documents for 7 years after approval'},
+            {'name': 'HR Documents', 'code': 'RET-HR-001', 'days': 3650, 'basis': 'creation_date', 'description': 'Retain employee records for 10 years after termination'},
+            {'name': 'Contracts', 'code': 'RET-CON-001', 'days': 1825, 'basis': 'expiry_date', 'description': 'Retain contracts for 5 years after expiry'},
+            {'name': 'Quality Records', 'code': 'RET-QUAL-001', 'days': 1825, 'basis': 'creation_date', 'description': 'Retain quality records for 5 years'},
+            {'name': 'Tax Documents', 'code': 'RET-TAX-001', 'days': 2920, 'basis': 'creation_date', 'description': 'Retain tax documents for 8 years'},
+        ]
+        for policy in retention_policies:
+            existing = db.execute("SELECT id FROM document_retention_policies WHERE policy_code = ?", (policy['code'],)).fetchone()
+            if not existing:
+                db.execute("""
+                    INSERT INTO document_retention_policies (policy_name, policy_code, description, retention_period_days, retention_basis, archive_before_delete, review_required)
+                    VALUES (?, ?, ?, ?, ?, 1, 1)
+                """, (policy['name'], policy['code'], policy['description'], policy['days'], policy['basis']))
+
+        # Seed legal holds
+        legal_holds = [
+            {'name': 'HR Investigation Case 2026-001', 'ref': 'LH-2026-001', 'type': 'Legal', 'reason': 'HR investigation in progress', 'case_ref': 'HR-2026-001'},
+            {'name': 'Audit Hold Q1 2026', 'ref': 'LH-2026-002', 'type': 'Audit', 'reason': 'Annual audit documentation freeze', 'case_ref': 'AUDIT-2026-Q1'},
+            {'name': 'Contract Dispute - Client ABC', 'ref': 'LH-2026-003', 'type': 'Legal', 'reason': 'Ongoing contract dispute', 'case_ref': 'LIT-2026-042'},
+        ]
+        users = db.execute("SELECT id FROM users LIMIT 3").fetchall()
+        user_ids = [u['id'] for u in users] if users else [1]
+        for hold in legal_holds:
+            existing = db.execute("SELECT id FROM dms_legal_holds WHERE hold_reference = ?", (hold['ref'],)).fetchone()
+            if not existing:
+                db.execute("""
+                    INSERT INTO dms_legal_holds (hold_name, hold_reference, hold_type, description, reason, legal_case_ref, requested_by_user_id, status, start_date)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'Active', datetime('now'))
+                """, (hold['name'], hold['ref'], hold['type'], hold['reason'], hold['reason'], hold['case_ref'], user_ids[0]))
+
+        # Seed metadata definitions
+        metadata_fields = [
+            {'code': 'contract_value', 'name': 'Contract Value', 'type': 'decimal', 'required': 1, 'searchable': 1},
+            {'code': 'contract_start_date', 'name': 'Contract Start Date', 'type': 'date', 'required': 1, 'searchable': 1},
+            {'code': 'contract_end_date', 'name': 'Contract End Date', 'type': 'date', 'required': 1, 'searchable': 1},
+            {'code': 'supplier_name', 'name': 'Supplier Name', 'type': 'text', 'required': 0, 'searchable': 1},
+            {'code': 'contract_type', 'name': 'Contract Type', 'type': 'dropdown', 'options': '["Service", "Supply", "Lease", "License"]', 'required': 1, 'searchable': 1},
+            {'code': 'renewal_terms', 'name': 'Renewal Terms', 'type': 'textarea', 'required': 0, 'searchable': 0},
+            {'code': 'payment_terms', 'name': 'Payment Terms', 'type': 'dropdown', 'options': '["Net 30", "Net 60", "Net 90", "Immediate"]', 'required': 0, 'searchable': 1},
+            {'code': 'is_confidential', 'name': 'Confidential', 'type': 'boolean', 'required': 0, 'searchable': 1},
+            {'code': 'department', 'name': 'Department', 'type': 'dropdown', 'options': '["HR", "Finance", "Operations", "Quality", "Sales"]', 'required': 1, 'searchable': 1},
+        ]
+        categories = db.execute("SELECT id FROM document_categories LIMIT 5").fetchall()
+        cat_ids = [c['id'] for c in categories] if categories else [1]
+        for i, field in enumerate(metadata_fields):
+            existing = db.execute("SELECT id FROM dms_metadata_definitions WHERE field_code = ?", (field['code'],)).fetchone()
+            if not existing:
+                db.execute("""
+                    INSERT INTO dms_metadata_definitions (field_code, field_name, field_type, category_id, is_required, is_searchable, is_exportable, visible_in_list, options_json, display_order)
+                    VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?)
+                """, (field['code'], field['name'], field['type'], cat_ids[i % len(cat_ids)], field.get('required', 0), field.get('searchable', 1), field.get('options', None), i))
+
+        # Seed export presets
+        export_presets = [
+            {'name': 'Full Document Export', 'code': 'EXP-FULL', 'format': 'Excel General', 'columns': 'document_code,title,category_name,status,visibility,owner_user_id,created_at,updated_at'},
+            {'name': 'Financial Report', 'code': 'EXP-FIN', 'format': 'CSV', 'columns': 'document_code,title,status,created_at,file_size'},
+            {'name': 'HR Documents', 'code': 'EXP-HR', 'format': 'Excel', 'columns': 'document_code,title,status,owner_user_id,expiry_date'},
+        ]
+        for preset in export_presets:
+            existing = db.execute("SELECT id FROM dms_export_presets WHERE preset_code = ?", (preset['code'],)).fetchone()
+            if not existing:
+                db.execute("""
+                    INSERT INTO dms_export_presets (preset_name, preset_code, export_format, description, include_columns, created_by_user_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (preset['name'], preset['code'], preset['format'], 'Standard export preset', preset['columns'], user_ids[0]))
+
+        # Seed reviews for some documents
+        docs = db.execute("SELECT id FROM documents LIMIT 3").fetchall()
+        for doc in docs:
+            existing = db.execute("SELECT id FROM dms_document_reviews WHERE document_id = ?", (doc['id'],)).fetchone()
+            if not existing:
+                db.execute("""
+                    INSERT INTO dms_document_reviews (document_id, reviewer_user_id, review_status, due_date)
+                    VALUES (?, ?, 'Pending', datetime('now', '+7 days'))
+                """, (doc['id'], user_ids[0]))
+
+        # Seed approvals for some documents
+        docs = db.execute("SELECT id FROM documents LIMIT 3").fetchall()
+        for doc in docs:
+            existing = db.execute("SELECT id FROM dms_document_approvals WHERE document_id = ?", (doc['id'],)).fetchone()
+            if not existing:
+                db.execute("""
+                    INSERT INTO dms_document_approvals (document_id, approver_user_id, approval_status, approval_sequence, due_date)
+                    VALUES (?, ?, 'Pending', 1, datetime('now', '+14 days'))
+                """, (doc['id'], user_ids[0]))
+
+        # Seed ACL entries
+        docs = db.execute("SELECT id FROM documents LIMIT 3").fetchall()
+        for doc in docs:
+            db.execute("""
+                INSERT INTO dms_document_acl (document_id, user_id, permission_type, permission_level, granted_by_user_id)
+                VALUES (?, ?, 'User', 'Read', ?)
+            """, (doc['id'], user_ids[0], user_ids[0]))
+
+        # Seed comments
+        docs = db.execute("SELECT id FROM documents LIMIT 3").fetchall()
+        for doc in docs:
+            db.execute("""
+                INSERT INTO dms_document_comments (document_id, user_id, comment_text)
+                VALUES (?, ?, 'Document uploaded and reviewed. Please check the attachments.')
+            """, (doc['id'], user_ids[0]))
+
+        # Seed saved views
+        views = [
+            {'name': 'My Drafts', 'code': 'VIEW-DRAFTS', 'type': 'list', 'filter': '{"status": "Draft"}'},
+            {'name': 'Pending Approval', 'code': 'VIEW-PENDING', 'type': 'list', 'filter': '{"approval_status": "Pending"}'},
+            {'name': 'Expiring Soon', 'code': 'VIEW-EXPIRING', 'type': 'list', 'filter': '{"expiry_window": 30}'},
+        ]
+        for view in views:
+            existing = db.execute("SELECT id FROM dms_saved_views WHERE view_code = ?", (view['code'],)).fetchone()
+            if not existing:
+                db.execute("""
+                    INSERT INTO dms_saved_views (view_name, view_code, view_type, filter_config, created_by_user_id)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (view['name'], view['code'], view['type'], view['filter'], user_ids[0]))
+
+        # Seed required document rules
+        rules = [
+            {'name': 'Employee Contract Required', 'module': 'hr', 'rule_code': 'REQ-HR-001'},
+            {'name': 'Invoice Support Required', 'module': 'finance', 'rule_code': 'REQ-FIN-001'},
+            {'name': 'Quality Certificate Required', 'module': 'quality', 'rule_code': 'REQ-QUAL-001'},
+        ]
+        for rule in rules:
+            existing = db.execute("SELECT id FROM dms_required_document_rules WHERE rule_code = ?", (rule['rule_code'],)).fetchone()
+            if not existing:
+                db.execute("""
+                    INSERT INTO dms_required_document_rules (rule_name, rule_code, source_module, is_mandatory, validity_days)
+                    VALUES (?, ?, ?, 1, 365)
+                """, (rule['name'], rule['rule_code'], rule['module']))
+
+        db.commit()
+        print("Comprehensive DMS data seeded successfully!")
+
+    except Exception as e:
+        print(f"Error seeding comprehensive DMS data: {e}")
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+if __name__ == '__main__':
+    seed_comprehensive_dms_data()

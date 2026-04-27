@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('flow_detail', 'Flow Detail') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-project-diagram fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ flow.name }}
+        </h1>
+        <div class="btn-group">
+            {% if flow.flow_status == 'draft' %}
+                <form action="{{ url_for('integration_flow_publish', flow_id=flow.id) }}" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="fas fa-upload me-1"></i> {{ t('publish', 'Publish') }}
+                    </button>
+                </form>
+            {% endif %}
+            <a href="{{ url_for('integration_flow_edit', flow_id=flow.id) }}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-edit me-1"></i> {{ t('edit', 'Edit') }}
+            </a>
+            <a href="{{ url_for('integration_flows') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back', 'Back') }}
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('flow_info', 'Flow Information') }}</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr><th>{{ t('code', 'Code') }}:</th><td><code>{{ flow.code }}</code></td></tr>
+                        <tr><th>{{ t('version', 'Version') }}:</th><td>v{{ flow.version }}</td></tr>
+                        <tr><th>{{ t('source_system', 'Source') }}:</th><td>{{ flow.source_system }}</td></tr>
+                        <tr><th>{{ t('destination_system', 'Destination') }}:</th><td>{{ flow.destination_system }}</td></tr>
+                        <tr><th>{{ t('trigger', 'Trigger') }}:</th><td><span class="badge bg-info">{{ flow.trigger_type }}</span></td></tr>
+                        <tr><th>{{ t('direction', 'Direction') }}:</th><td>{{ flow.direction }}</td></tr>
+                        <tr><th>{{ t('status', 'Status') }}:</th>
+                            <td>
+                                {% if flow.flow_status == 'published' %}
+                                    <span class="badge bg-success">{{ t('published', 'Published') }}</span>
+                                {% elif flow.flow_status == 'draft' %}
+                                    <span class="badge bg-warning">{{ t('draft', 'Draft') }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ flow.flow_status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr><th>{{ t('published_at', 'Published') }}:</th><td>{{ flow.published_at or '-' }}</td></tr>
+                        <tr><th>{{ t('created_at', 'Created') }}:</th><td>{{ flow.created_at }}</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('execution_settings', 'Execution Settings') }}</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr><th>{{ t('retry_strategy', 'Retry Strategy') }}:</th><td>{{ flow.retry_strategy }}</td></tr>
+                        <tr><th>{{ t('logging_level', 'Logging') }}:</th><td>{{ flow.logging_level }}</td></tr>
+                        <tr><th>{{ t('alerting_level', 'Alerting') }}:</th><td>{{ flow.alerting_level }}</td></tr>
+                        <tr><th>{{ t('test_mode', 'Test Mode') }}:</th>
+                            <td>{% if flow.is_test_mode %}<span class="badge bg-warning">{{ t('enabled', 'Enabled') }}</span>{% else %}<span class="badge bg-secondary">{{ t('disabled', 'Disabled') }}</span>{% endif %}</td>
+                        </tr>
+                        <tr><th>{{ t('production_mode', 'Production Mode') }}:</th>
+                            <td>{% if flow.is_production_mode %}<span class="badge bg-success">{{ t('enabled', 'Enabled') }}</span>{% else %}<span class="badge bg-secondary">{{ t('disabled', 'Disabled') }}</span>{% endif %}</td>
+                        </tr>
+                    </table>
+                    <hr>
+                    <button onclick="runFlow({{ flow.id }})" class="btn btn-outline-success w-100">
+                        <i class="fas fa-play me-1"></i> {{ t('run_now', 'Run Now') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('schedules', 'Schedules') }}</h6>
+                </div>
+                <div class="card-body">
+                    {% if schedules %}
+                    <table class="table table-sm">
+                        <thead><tr><th>{{ t('name', 'Name') }}</th><th>{{ t('next_run', 'Next Run') }}</th><th>{{ t('status', 'Status') }}</th></tr></thead>
+                        <tbody>
+                            {% for sched in schedules %}
+                            <tr>
+                                <td>{{ sched.schedule_name }}</td>
+                                <td>{{ sched.next_run_at or '-' }}</td>
+                                <td>{% if sched.is_active %}<span class="badge bg-success">{{ t('active', 'Active') }}</span>{% else %}<span class="badge bg-secondary">{{ t('inactive', 'Inactive') }}</span>{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="text-muted text-center">{{ t('no_schedules', 'No schedules configured') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Description -->
+    {% if flow.description %}
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('description', 'Description') }}</h6>
+                </div>
+                <div class="card-body"><p>{{ flow.description }}</p></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Flow Steps -->
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('flow_steps', 'Flow Steps') }}</h6>
+                </div>
+                <div class="card-body">
+                    {% if steps %}
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead><tr><th>#</th><th>{{ t('type', 'Type') }}</th><th>{{ t('name', 'Name') }}</th><th>{{ t('status', 'Status') }}</th><th>{{ t('timeout', 'Timeout') }}</th><th>{{ t('retry', 'Retry') }}</th><th>{{ t('continue_on_error', 'Continue on Error') }}</th></tr></thead>
+                            <tbody>
+                                {% for step in steps %}
+                                <tr>
+                                    <td>{{ step.step_order }}</td>
+                                    <td><span class="badge bg-secondary">{{ step.step_type }}</span></td>
+                                    <td>{{ step.step_name }}</td>
+                                    <td>
+                                        {% if step.step_status == 'active' %}
+                                            <span class="badge bg-success">{{ t('active', 'Active') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ step.step_status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ step.timeout_seconds }}s</td>
+                                    <td>{{ step.retry_count }}</td>
+                                    <td>{% if step.continue_on_error %}<i class="fas fa-check text-success"></i>{% else %}<i class="fas fa-times text-danger"></i>{% endif %}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">{{ t('no_steps', 'No steps defined') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Runs -->
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('recent_runs', 'Recent Runs') }}</h6>
+                    <a href="{{ url_for('integration_job_runs') }}?flow={{ flow.id }}" class="btn btn-outline-primary btn-sm">
+                        {{ t('view_all', 'View All') }}
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if recent_runs %}
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead><tr><th>{{ t('job_id', 'Job ID') }}</th><th>{{ t('start_time', 'Start Time') }}</th><th>{{ t('duration', 'Duration') }}</th><th>{{ t('status', 'Status') }}</th><th>{{ t('processed', 'Processed') }}</th><th>{{ t('succeeded', 'Succeeded') }}</th><th>{{ t('failed', 'Failed') }}</th></tr></thead>
+                            <tbody>
+                                {% for run in recent_runs %}
+                                <tr>
+                                    <td><a href="{{ url_for('integration_job_run_detail', run_id=run.job_run_id) }}"><code>{{ run.job_run_id[:16] }}...</code></a></td>
+                                    <td>{{ run.start_time }}</td>
+                                    <td>{{ run.duration_ms }}ms</td>
+                                    <td>
+                                        {% if run.job_status == 'success' %}
+                                            <span class="badge bg-success">{{ t('success', 'Success') }}</span>
+                                        {% elif run.job_status == 'failed' %}
+                                            <span class="badge bg-danger">{{ t('failed', 'Failed') }}</span>
+                                        {% elif run.job_status == 'running' %}
+                                            <span class="badge bg-warning">{{ t('running', 'Running') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ run.job_status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ run.records_processed }}</td>
+                                    <td class="text-success">{{ run.records_succeeded }}</td>
+                                    <td class="text-danger">{{ run.records_failed }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center">{{ t('no_runs', 'No runs yet') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function runFlow(flowId) {
+    if (confirm('{{ t("confirm_run_flow", "Run this flow now?") }}')) {
+        fetch(`/integration/flows/${flowId}/run/`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('{{ t("flow_started", "Flow execution started:") }} ' + data.job_run_id);
+                    location.reload();
+                } else {
+                    alert('{{ t("flow_error", "Error:") }} ' + data.message);
+                }
+            });
+    }
+}
+</script>
+{% endblock %}

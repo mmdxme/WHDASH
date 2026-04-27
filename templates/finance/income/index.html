@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('income', 'Income') }} - {{ platform_name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div class="bg-slate-800/80 backdrop-blur-lg border-b border-slate-700">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-white">{{ t('income', 'Income') }}</h1>
+                    <p class="text-slate-400 text-sm">{{ t('track_income', 'Track all your income sources') }}</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/finance/income/export?format=csv" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors">
+                        <i class="fa fa-download mr-2"></i>{{ t('export', 'Export') }}
+                    </a>
+                    <a href="/finance/income/create" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors flex items-center space-x-2">
+                        <i class="fa fa-plus"></i>
+                        <span>{{ t('add_income', 'Add Income') }}</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="p-6">
+        <!-- Filters -->
+        <div class="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700 p-4 mb-6">
+            <form method="GET" class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">{{ t('category', 'Category') }}</label>
+                    <select name="category_id" class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                        <option value="">{{ t('all_categories', 'All Categories') }}</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}">{{ cat.category_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">{{ t('date_from', 'Date From') }}</label>
+                    <input type="date" name="date_from" class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">{{ t('date_to', 'Date To') }}</label>
+                    <input type="date" name="date_to" class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">{{ t('status', 'Status') }}</label>
+                    <select name="status" class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                        <option value="">{{ t('all', 'All') }}</option>
+                        <option value="received">{{ t('received', 'Received') }}</option>
+                        <option value="pending">{{ t('pending', 'Pending') }}</option>
+                        <option value="cancelled">{{ t('cancelled', 'Cancelled') }}</option>
+                    </select>
+                </div>
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors">
+                    {{ t('filter', 'Filter') }}
+                </button>
+            </form>
+        </div>
+
+        <!-- Records Table -->
+        <div class="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead class="bg-slate-700/50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">{{ t('income_number', 'Number') }}</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">{{ t('date', 'Date') }}</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">{{ t('source', 'Source') }}</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">{{ t('category', 'Category') }}</th>
+                            <th class="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase">{{ t('amount', 'Amount') }}</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-slate-400 uppercase">{{ t('status', 'Status') }}</th>
+                            <th class="px-6 py-3 text-center text-xs font-medium text-slate-400 uppercase">{{ t('actions', 'Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-700">
+                        {% for record in records %}
+                        <tr class="hover:bg-slate-700/30 transition-colors">
+                            <td class="px-6 py-4 whitespace-nowrap text-white">{{ record.income_number }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-slate-400">{{ record.income_date }}</td>
+                            <td class="px-6 py-4">
+                                <div>
+                                    <p class="text-white">{{ record.source_name or record.source }}</p>
+                                    <p class="text-slate-500 text-xs">{{ record.income_type | title }}</p>
+                                </div>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap">
+                                <span class="px-2 py-1 text-xs rounded-full" style="background-color: {{ record.category_color }}20; color: {{ record.category_color }}">{{ record.category_name or 'Uncategorized' }}</span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-right text-emerald-400 font-semibold">{{ record.currency }} {{ "{:,.2f}".format(record.amount) }}</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <span class="px-2 py-1 text-xs rounded-full {% if record.status == 'received' %}bg-emerald-500/20 text-emerald-400{% elif record.status == 'pending' %}bg-yellow-500/20 text-yellow-400{% else %}bg-red-500/20 text-red-400{% endif %}">
+                                    {{ record.status | title }}
+                                </span>
+                            </td>
+                            <td class="px-6 py-4 whitespace-nowrap text-center">
+                                <div class="flex items-center justify-center space-x-2">
+                                    <a href="/finance/income/{{ record.id }}/edit" class="p-2 hover:bg-slate-600 rounded-lg"><i class="fa fa-edit text-slate-400"></i></a>
+                                    <form action="/finance/income/{{ record.id }}/delete" method="POST" class="inline" onsubmit="return confirm('{{ t('confirm_delete', 'Are you sure?') }}')">
+                                        <button type="submit" class="p-2 hover:bg-red-500/20 rounded-lg"><i class="fa fa-trash text-red-400"></i></button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if not records %}
+            <div class="text-center py-12">
+                <i class="fa fa-arrow-down text-slate-600 text-5xl mb-4"></i>
+                <p class="text-slate-400">{{ t('no_income_records', 'No income records found') }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Pagination -->
+        {% if total_count > per_page %}
+        <div class="mt-4 flex justify-center">
+            <div class="flex space-x-2">
+                {% for p in range(1, (total_count // per_page) + 2) %}
+                <a href="?page={{ p }}" class="px-3 py-1 rounded-lg {% if p == page %}bg-emerald-600 text-white{% else %}bg-slate-700 text-slate-300{% endif %}">{{ p }}</a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

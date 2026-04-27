@@ -1,0 +1,155 @@
+<!-- Legal Entities List -->
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1 text-gray-800">
+                <i class="fas fa-building mr-2 text-success"></i>
+                Legal Entities
+            </h1>
+            <p class="text-muted mb-0">Manage company legal entities and registrations</p>
+        </div>
+        <a href="{{ url_for('multi_entity.entity_create') }}" class="btn btn-success">
+            <i class="fas fa-plus mr-1"></i> Create Entity
+        </a>
+    </div>
+
+    <!-- Filters -->
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <form method="GET" class="form-inline">
+                <div class="mr-3">
+                    <label class="mr-2">Group:</label>
+                    <select name="group_id" class="form-control form-control-sm">
+                        <option value="">All Groups</option>
+                        {% for g in groups %}
+                        <option value="{{ g.id }}" {{ 'selected' if selected_group_id == g.id else '' }}>
+                            {{ g.legal_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mr-3">
+                    <label class="mr-2">Status:</label>
+                    <select name="status" class="form-control form-control-sm">
+                        <option value="">All</option>
+                        <option value="active" {{ 'selected' if status_filter == 'active' else '' }}>Active</option>
+                        <option value="archived" {{ 'selected' if status_filter == 'archived' else '' }}>Archived</option>
+                        <option value="suspended" {{ 'selected' if status_filter == 'suspended' else '' }}>Suspended</option>
+                    </select>
+                </div>
+                <div class="mr-3">
+                    <label class="mr-2">Search:</label>
+                    <input type="text" name="q" class="form-control form-control-sm" 
+                           placeholder="Name or code..." value="{{ search_query or '' }}">
+                </div>
+                <button type="submit" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-search"></i> Filter
+                </button>
+                <a href="{{ url_for('multi_entity.entity_list') }}" class="btn btn-sm btn-link ml-2">
+                    Clear
+                </a>
+            </form>
+        </div>
+    </div>
+
+    <!-- Entities Table -->
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Code</th>
+                            <th>Legal Name</th>
+                            <th>Type</th>
+                            <th>Group</th>
+                            <th>Country</th>
+                            <th>Branches</th>
+                            <th>Sites</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entity in entities %}
+                        <tr>
+                            <td>
+                                <a href="{{ url_for('multi_entity.entity_detail', entity_id=entity.id) }}" class="font-weight-bold">
+                                    {{ entity.entity_code }}
+                                </a>
+                            </td>
+                            <td>
+                                <div>{{ entity.legal_name }}</div>
+                                {% if entity.trade_name %}
+                                <small class="text-muted">{{ entity.trade_name }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-{{ 'success' if entity.entity_type == 'subsidiary' else 'info' }}">
+                                    {{ entity.entity_type|title }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if entity.group_name %}
+                                <a href="{{ url_for('multi_entity.group_detail', group_id=entity.parent_group_id) }}">
+                                    {{ entity.group_name }}
+                                </a>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ entity.country or '-' }}</td>
+                            <td>
+                                <span class="badge badge-info">{{ entity.branch_count or 0 }}</span>
+                            </td>
+                            <td>
+                                <span class="badge badge-warning">{{ entity.site_count or 0 }}</span>
+                            </td>
+                            <td>
+                                {% if entity.status == 'active' %}
+                                <span class="badge badge-success">Active</span>
+                                {% elif entity.status == 'suspended' %}
+                                <span class="badge badge-warning">Suspended</span>
+                                {% else %}
+                                <span class="badge badge-secondary">Archived</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('multi_entity.entity_detail', entity_id=entity.id) }}" 
+                                       class="btn btn-outline-primary" title="View">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if entity.is_active %}
+                                    <a href="{{ url_for('multi_entity.entity_edit', entity_id=entity.id) }}" 
+                                       class="btn btn-outline-warning" title="Edit">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center py-5">
+                                <div class="text-muted">
+                                    <i class="fas fa-building fa-4x mb-3"></i>
+                                    <p class="mb-0">No entities found</p>
+                                    <a href="{{ url_for('multi_entity.entity_create') }}" class="btn btn-success btn-sm mt-3">
+                                        <i class="fas fa-plus mr-1"></i> Create First Entity
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

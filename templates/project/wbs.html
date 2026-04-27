@@ -1,0 +1,250 @@
+{% extends "project/base.html" %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="mb-8 flex justify-between items-center">
+    <div>
+        <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ t('wbs_builder', 'WBS Builder') }}</h1>
+        <p class="text-slate-600 dark:text-slate-400 mt-1">{{ t('wbs_subtitle', 'Work Breakdown Structure for project') }}</p>
+    </div>
+    <div class="flex gap-3">
+        <select id="projectSelector" onchange="loadWBS()" class="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">{{ t('select_project', 'Select Project') }}</option>
+            {% for p in projects %}
+            <option value="{{ p.id }}" {% if selected_project == p.id %}selected{% endif %}>{{ p.code }} - {{ p.name }}</option>
+            {% endfor %}
+        </select>
+        <button onclick="exportWBS()" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-download mr-2"></i>{{ t('export', 'Export') }}
+        </button>
+    </div>
+</div>
+
+<!-- WBS Tree -->
+<div class="card">
+    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+        <div class="flex items-center gap-4">
+            <h2 class="font-semibold text-slate-800 dark:text-white">{{ t('work_breakdown_structure', 'Work Breakdown Structure') }}</h2>
+            <button onclick="expandAll()" class="px-3 py-1 text-sm text-slate-600 hover:text-slate-800 dark:text-slate-400">
+                <i class="fas fa-expand mr-1"></i>{{ t('expand_all', 'Expand All') }}
+            </button>
+            <button onclick="collapseAll()" class="px-3 py-1 text-sm text-slate-600 hover:text-slate-800 dark:text-slate-400">
+                <i class="fas fa-compress mr-1"></i>{{ t('collapse_all', 'Collapse All') }}
+            </button>
+        </div>
+        <button onclick="addRootNode()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-plus mr-2"></i>{{ t('add_root_node', 'Add Root Node') }}
+        </button>
+    </div>
+
+    <div class="p-5" id="wbsTree">
+        {% if wbs_nodes %}
+        <div class="space-y-1">
+            {% for node in wbs_nodes recursive %}
+            <div class="wbs-node" data-node-id="{{ node.id }}" data-level="{{ node.level }}" style="margin-left: {{ (node.level - 1) * 24 }}px">
+                <div class="flex items-center gap-2 p-2 hover:bg-slate-50 dark:hover:bg-slate-700/30 rounded-lg group">
+                    {% if node.children %}
+                    <button onclick="toggleNode('{{ node.id }}')" class="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-slate-600">
+                        <i class="fas fa-chevron-right transition-transform" id="toggle-{{ node.id }}"></i>
+                    </button>
+                    {% else %}
+                    <span class="w-5"></span>
+                    {% endif %}
+                    <span class="px-2 py-0.5 text-xs font-mono bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded">{{ node.code }}</span>
+                    <div class="flex-1">
+                        <span class="font-medium text-slate-800 dark:text-white">{{ node.name }}</span>
+                        {% if node.description %}
+                        <p class="text-sm text-slate-500">{{ node.description }}</p>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <span class="text-sm text-slate-500">Level {{ node.level }}</span>
+                        <span class="status-badge status-{{ node.status|lower }}">{{ node.status }}</span>
+                        <div class="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                            <button onclick="addChildNode('{{ node.id }}')" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            <button onclick="editNode('{{ node.id }}')" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 rounded">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="deleteNode('{{ node.id }}')" class="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% if node.children %}
+                <div class="children hidden" id="children-{{ node.id }}">
+                    {{ loop(node.children) }}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-12">
+            <i class="fas fa-sitemap text-6xl text-slate-300 dark:text-slate-600 mb-4"></i>
+            <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-2">{{ t('no_wbs', 'No WBS Defined') }}</h3>
+            <p class="text-slate-500 dark:text-slate-400 mb-4">{{ t('no_wbs_message', 'Select a project or add your first WBS node') }}</p>
+            {% if selected_project %}
+            <button onclick="addRootNode()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+                <i class="fas fa-plus mr-2"></i>{{ t('add_first_node', 'Add First Node') }}
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add/Edit Node Modal -->
+<div id="nodeModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50" onclick="closeNodeModal()"></div>
+        <div class="relative bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-slate-800 dark:text-white" id="nodeModalTitle">{{ t('add_wbs_node', 'Add WBS Node') }}</h3>
+                <button onclick="closeNodeModal()" class="p-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="nodeForm" method="POST" action="{{ url_for('project_save_wbs_node') }}">
+                <input type="hidden" name="project_id" value="{{ selected_project }}">
+                <input type="hidden" name="node_id" id="nodeId">
+                <input type="hidden" name="parent_id" id="nodeParentId">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('node_name', 'Node Name') }} *</label>
+                        <input type="text" id="nodeName" name="name" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('description', 'Description') }}</label>
+                        <textarea id="nodeDescription" name="description" rows="2" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('wbs_code', 'WBS Code') }}</label>
+                            <input type="text" id="nodeCode" name="code" readonly class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                            <p class="text-xs text-slate-500 mt-1">{{ t('auto_generated', 'Auto-generated based on parent') }}</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('level', 'Level') }}</label>
+                            <input type="number" id="nodeLevel" name="level" readonly class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('status', 'Status') }}</label>
+                        <select id="nodeStatus" name="status" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                            <option value="On Hold">On Hold</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="closeNodeModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-600 dark:hover:bg-slate-500 text-slate-700 dark:text-slate-300 rounded-lg font-medium">{{ t('cancel', 'Cancel') }}</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">{{ t('save', 'Save') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function loadWBS() {
+    const projectId = document.getElementById('projectSelector').value;
+    if (projectId) {
+        window.location.href = '{{ url_for("project_wbs") }}?project_id=' + projectId;
+    }
+}
+
+function toggleNode(nodeId) {
+    const children = document.getElementById('children-' + nodeId);
+    const icon = document.getElementById('toggle-' + nodeId);
+    children.classList.toggle('hidden');
+    icon.classList.toggle('rotate-90');
+}
+
+function expandAll() {
+    document.querySelectorAll('.children').forEach(el => el.classList.remove('hidden'));
+    document.querySelectorAll('.fa-chevron-right').forEach(el => el.classList.add('rotate-90'));
+}
+
+function collapseAll() {
+    document.querySelectorAll('.children').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.fa-chevron-right').forEach(el => el.classList.remove('rotate-90'));
+}
+
+function addRootNode() {
+    document.getElementById('nodeModalTitle').textContent = '{{ t("add_root_node", "Add Root Node") }}';
+    document.getElementById('nodeForm').reset();
+    document.getElementById('nodeId').value = '';
+    document.getElementById('nodeParentId').value = '';
+    document.getElementById('nodeLevel').value = 1;
+    document.getElementById('nodeCode').value = '1';
+    document.getElementById('nodeModal').classList.remove('hidden');
+}
+
+function addChildNode(parentId) {
+    fetch('/api/project/wbs/parent/' + parentId)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('nodeModalTitle').textContent = '{{ t("add_child_node", "Add Child Node") }}';
+            document.getElementById('nodeForm').reset();
+            document.getElementById('nodeId').value = '';
+            document.getElementById('nodeParentId').value = parentId;
+            document.getElementById('nodeLevel').value = data.level + 1;
+            document.getElementById('nodeCode').value = data.code;
+            document.getElementById('nodeModal').classList.remove('hidden');
+        });
+}
+
+function editNode(nodeId) {
+    fetch('/api/project/wbs/node/' + nodeId)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('nodeModalTitle').textContent = '{{ t("edit_wbs_node", "Edit WBS Node") }}';
+            document.getElementById('nodeId').value = data.id;
+            document.getElementById('nodeParentId').value = data.parent_id || '';
+            document.getElementById('nodeName').value = data.name;
+            document.getElementById('nodeDescription').value = data.description || '';
+            document.getElementById('nodeCode').value = data.code;
+            document.getElementById('nodeLevel').value = data.level;
+            document.getElementById('nodeStatus').value = data.status;
+            document.getElementById('nodeModal').classList.remove('hidden');
+        });
+}
+
+function closeNodeModal() {
+    document.getElementById('nodeModal').classList.add('hidden');
+}
+
+function deleteNode(nodeId) {
+    Swal.fire({
+        title: '{{ t("delete_node", "Delete Node") }}',
+        text: '{{ t("confirm_delete_node", "Are you sure you want to delete this node and all its children?") }}',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '{{ t("yes_delete", "Yes, Delete") }}',
+        cancelButtonText: '{{ t("cancel", "Cancel") }}',
+        confirmButtonColor: '#ef4444'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            fetch('/api/project/wbs/node/' + nodeId, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || '' }
+            }).then(() => location.reload());
+        }
+    });
+}
+
+function exportWBS() {
+    const projectId = document.getElementById('projectSelector').value;
+    if (projectId) {
+        window.location.href = '/api/project/wbs/export/' + projectId;
+    }
+}
+</script>
+{% endblock %}

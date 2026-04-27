@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('message_queue', 'Message Queue') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-list fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('message_queue', 'Message Queue') }}
+        </h1>
+        <div class="btn-group">
+            <a href="{{ url_for('integration_export_center', type='queue', format='csv') }}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-download me-1"></i> CSV
+            </a>
+            <a href="{{ url_for('integration_dlq') }}" class="btn btn-outline-danger btn-sm">
+                <i class="fas fa-exclamation-circle me-1"></i> {{ t('view_dlq', 'View DLQ') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Queue Stats -->
+    <div class="row mb-4" id="queueStats">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white shadow">
+                <div class="card-body">
+                    <div class="text-white-50 small">{{ t('total_pending', 'Total Pending') }}</div>
+                    <div class="h4 mb-0" id="statPending">-</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white shadow">
+                <div class="card-body">
+                    <div class="text-white-50 small">{{ t('processing', 'Processing') }}</div>
+                    <div class="h4 mb-0" id="statProcessing">-</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white shadow">
+                <div class="card-body">
+                    <div class="text-white-50 small">{{ t('completed', 'Completed') }}</div>
+                    <div class="h4 mb-0" id="statCompleted">-</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white shadow">
+                <div class="card-body">
+                    <div class="text-white-50 small">{{ t('failed', 'Failed') }}</div>
+                    <div class="h4 mb-0" id="statFailed">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ t('queue_items', 'Queue Items') }} ({{ pagination.total }})</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" width="100%" cellspacing="0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>{{ t('queue_item_id', 'ID') }}</th>
+                            <th>{{ t('queue', 'Queue') }}</th>
+                            <th>{{ t('source', 'Source') }}</th>
+                            <th>{{ t('destination', 'Destination') }}</th>
+                            <th>{{ t('priority', 'Priority') }}</th>
+                            <th>{{ t('status', 'Status') }}</th>
+                            <th>{{ t('retries', 'Retries') }}</th>
+                            <th>{{ t('last_error', 'Last Error') }}</th>
+                            <th>{{ t('created', 'Created') }}</th>
+                            <th>{{ t('actions', 'Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td><code>{{ item.queue_item_id[:12] }}...</code></td>
+                            <td><span class="badge bg-secondary">{{ item.queue_name }}</span></td>
+                            <td>{{ item.source_system or '-' }}</td>
+                            <td>{{ item.destination_system or '-' }}</td>
+                            <td>
+                                {% if item.priority == 'high' %}
+                                    <span class="badge bg-danger">{{ t('high', 'High') }}</span>
+                                {% elif item.priority == 'low' %}
+                                    <span class="badge bg-info">{{ t('low', 'Low') }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ t('normal', 'Normal') }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.message_status == 'completed' %}
+                                    <span class="badge bg-success">{{ t('completed', 'Completed') }}</span>
+                                {% elif item.message_status == 'failed' %}
+                                    <span class="badge bg-danger">{{ t('failed', 'Failed') }}</span>
+                                {% elif item.message_status == 'processing' %}
+                                    <span class="badge bg-warning">{{ t('processing', 'Processing') }}</span>
+                                {% elif item.message_status == 'queued' %}
+                                    <span class="badge bg-info">{{ t('queued', 'Queued') }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ item.message_status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ item.retry_count }}</td>
+                            <td class="small text-danger">{{ item.last_error[:50] if item.last_error else '-' }}</td>
+                            <td>{{ item.created_at }}</td>
+                            <td>
+                                {% if item.message_status in ['failed', 'pending'] %}
+                                <button onclick="requeueItem('{{ item.queue_item_id }}')" class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-redo"></i>
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="10" class="text-center text-muted py-4">
+                                <i class="fas fa-list fa-3x mb-3"></i>
+                                <p>{{ t('no_queue_items', 'No queue items') }}</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadQueueStats() {
+    try {
+        const response = await fetch('/integration/queue/stats/');
+        const data = await response.json();
+        
+        let pending = 0, processing = 0, completed = 0, failed = 0;
+        
+        if (data.by_queue) {
+            data.by_queue.forEach(q => {
+                pending += q.pending + q.queued;
+                processing += q.processing;
+                completed += q.completed;
+                failed += q.failed;
+            });
+        }
+        
+        document.getElementById('statPending').textContent = pending;
+        document.getElementById('statProcessing').textContent = processing;
+        document.getElementById('statCompleted').textContent = completed;
+        document.getElementById('statFailed').textContent = failed;
+    } catch (error) {
+        console.error('Error loading queue stats:', error);
+    }
+}
+
+function requeueItem(itemId) {
+    if (confirm('{{ t("confirm_requeue", "Requeue this item?") }}')) {
+        fetch(`/integration/queue/${itemId}/requeue/`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('{{ t("item_requeued", "Item requeued successfully") }}');
+                    location.reload();
+                } else {
+                    alert('{{ t("requeue_error", "Error:") }} ' + data.message);
+                }
+            });
+    }
+}
+
+loadQueueStats();
+</script>
+{% endblock %}

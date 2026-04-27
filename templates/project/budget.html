@@ -1,0 +1,337 @@
+{% extends "project/base.html" %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="mb-8 flex justify-between items-center">
+    <div>
+        <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ t('budget_management', 'Budget Management') }}</h1>
+        <p class="text-slate-600 dark:text-slate-400 mt-1">{{ t('budget_subtitle', 'Track and manage project budgets') }}</p>
+    </div>
+    <div class="flex gap-3">
+        <button onclick="exportBudget()" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-download mr-2"></i>{{ t('export', 'Export') }}
+        </button>
+        <button onclick="showAddCostModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-plus mr-2"></i>{{ t('add_cost', 'Add Cost') }}
+        </button>
+    </div>
+</div>
+
+<!-- Budget Overview Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('total_budget', 'Total Budget') }}</p>
+                <p class="text-2xl font-bold text-slate-800 dark:text-white mt-1 amount">${{ "%.2f"|format(stats.total_budget) }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                <i class="fas fa-dollar-sign text-indigo-600 dark:text-indigo-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('total_spent', 'Total Spent') }}</p>
+                <p class="text-2xl font-bold text-slate-800 dark:text-white mt-1 amount">${{ "%.2f"|format(stats.total_spent) }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                <i class="fas fa-credit-card text-blue-600 dark:text-blue-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('committed', 'Committed') }}</p>
+                <p class="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1 amount">${{ "%.2f"|format(stats.committed) }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <i class="fas fa-hand-holding-usd text-amber-600 dark:text-amber-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('forecast_at_completion', 'Forecast at Completion') }}</p>
+                <p class="text-2xl font-bold {% if stats.forecast > stats.total_budget %}text-red-600{% else %}text-green-600{% endif %} mt-1 amount">${{ "%.2f"|format(stats.forecast) }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg {% if stats.forecast > stats.total_budget %}bg-red-100 dark:bg-red-900/30{% else %}bg-green-100 dark:bg-green-900/30{% endif %} flex items-center justify-center">
+                <i class="fas {% if stats.forecast > stats.total_budget %}fa-exclamation-triangle{% else %}fa-chart-line{% endif %} {% if stats.forecast > stats.total_budget %}text-red-600 dark:text-red-400{% else %}text-green-600 dark:text-green-400{% endif %} text-xl"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Budget vs Actual -->
+<div class="card mb-6">
+    <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+        <h2 class="font-semibold text-slate-800 dark:text-white">{{ t('budget_vs_actual', 'Budget vs Actual') }}</h2>
+    </div>
+    <div class="p-5">
+        <canvas id="budgetChart" height="200"></canvas>
+    </div>
+</div>
+
+<!-- Two Column Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Cost Breakdown by Category -->
+    <div class="card">
+        <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+            <h2 class="font-semibold text-slate-800 dark:text-white">{{ t('cost_breakdown', 'Cost Breakdown by Category') }}</h2>
+        </div>
+        <div class="p-5">
+            <canvas id="costBreakdownChart" height="250"></canvas>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-50 dark:bg-slate-700/50">
+                    <tr>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('category', 'Category') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('budgeted', 'Budgeted') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('actual', 'Actual') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('variance', 'Variance') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                    {% for category in cost_breakdown %}
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ category.name }}</td>
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300 amount">${{ "%.2f"|format(category.budgeted) }}</td>
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300 amount">${{ "%.2f"|format(category.actual) }}</td>
+                        <td class="px-5 py-4 {% if category.variance < 0 %}text-red-600{% else %}text-green-600{% endif %} amount">
+                            ${{ "%.2f"|format(category.variance) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Commitment Tracking -->
+    <div class="card">
+        <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+            <h2 class="font-semibold text-slate-800 dark:text-white">{{ t('commitment_tracking', 'Commitment Tracking') }}</h2>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-50 dark:bg-slate-700/50">
+                    <tr>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('vendor', 'Vendor') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('description', 'Description') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('amount', 'Amount') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('status', 'Status') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                    {% for commitment in commitments %}
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ commitment.vendor }}</td>
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ commitment.description }}</td>
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300 amount">${{ "%.2f"|format(commitment.amount) }}</td>
+                        <td class="px-5 py-4">
+                            <span class="px-2 py-1 text-xs rounded {% if commitment.status == 'Confirmed' %}bg-green-100 text-green-700{% elif commitment.status == 'Pending' %}bg-amber-100 text-amber-700{% else %}bg-slate-100 text-slate-600{% endif %}">
+                                {{ commitment.status }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Cost Transactions -->
+<div class="card">
+    <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+        <h2 class="font-semibold text-slate-800 dark:text-white">{{ t('cost_transactions', 'Cost Transactions') }}</h2>
+        <div class="flex items-center gap-2">
+            <select id="projectFilter" onchange="loadBudget()" class="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 text-sm">
+                <option value="">{{ t('all_projects', 'All Projects') }}</option>
+                {% for p in projects %}
+                <option value="{{ p.id }}">{{ p.code }} - {{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-slate-50 dark:bg-slate-700/50">
+                <tr>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('date', 'Date') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('description', 'Description') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('category', 'Category') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('vendor', 'Vendor') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('amount', 'Amount') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('actions', 'Actions') }}</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                {% for cost in costs %}
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                    <td class="px-5 py-4 text-slate-500 dark:text-slate-400 text-sm">{{ cost.date }}</td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ cost.description }}</td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ cost.category }}</td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ cost.vendor }}</td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300 amount">${{ "%.2f"|format(cost.amount) }}</td>
+                    <td class="px-5 py-4">
+                        <div class="flex items-center gap-2">
+                            <button onclick="editCost('{{ cost.id }}')" class="p-2 text-slate-500 hover:text-indigo-600">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="deleteCost('{{ cost.id }}')" class="p-2 text-slate-500 hover:text-red-600">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add Cost Modal -->
+<div id="costModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50" onclick="closeCostModal()"></div>
+        <div class="relative bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-slate-800 dark:text-white" id="costModalTitle">{{ t('add_cost', 'Add Cost') }}</h3>
+                <button onclick="closeCostModal()" class="p-2 text-slate-500 hover:text-slate-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="costForm" method="POST" action="{{ url_for('project_save_cost') }}">
+                <input type="hidden" name="cost_id" id="costId">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('description', 'Description') }} *</label>
+                        <input type="text" id="costDescription" name="description" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('amount', 'Amount') }} *</label>
+                            <input type="number" id="costAmount" name="amount" step="0.01" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('date', 'Date') }} *</label>
+                            <input type="date" id="costDate" name="date" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('category', 'Category') }} *</label>
+                            <select id="costCategory" name="category" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="Labor">Labor</option>
+                                <option value="Materials">Materials</option>
+                                <option value="Equipment">Equipment</option>
+                                <option value="Services">Services</option>
+                                <option value="Travel">Travel</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('vendor', 'Vendor') }}</label>
+                            <input type="text" id="costVendor" name="vendor" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="closeCostModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium">{{ t('cancel', 'Cancel') }}</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">{{ t('save', 'Save') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function loadBudget() {
+    const projectId = document.getElementById('projectFilter').value;
+    window.location.href = '{{ url_for("project_budget") }}' + (projectId ? '?project_id=' + projectId : '');
+}
+
+function showAddCostModal() {
+    document.getElementById('costModalTitle').textContent = '{{ t("add_cost", "Add Cost") }}';
+    document.getElementById('costForm').reset();
+    document.getElementById('costId').value = '';
+    document.getElementById('costModal').classList.remove('hidden');
+}
+
+function editCost(costId) {
+    fetch('/api/project/cost/' + costId)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('costModalTitle').textContent = '{{ t("edit_cost", "Edit Cost") }}';
+            document.getElementById('costId').value = data.id;
+            document.getElementById('costDescription').value = data.description;
+            document.getElementById('costAmount').value = data.amount;
+            document.getElementById('costDate').value = data.date;
+            document.getElementById('costCategory').value = data.category;
+            document.getElementById('costVendor').value = data.vendor || '';
+            document.getElementById('costModal').classList.remove('hidden');
+        });
+}
+
+function closeCostModal() {
+    document.getElementById('costModal').classList.add('hidden');
+}
+
+function deleteCost(costId) {
+    Swal.fire({
+        title: '{{ t("delete_cost", "Delete Cost") }}',
+        text: '{{ t("confirm_delete_cost", "Are you sure you want to delete this cost?") }}',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '{{ t("yes_delete", "Yes, Delete") }}',
+        cancelButtonText: '{{ t("cancel", "Cancel") }}',
+        confirmButtonColor: '#ef4444'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            fetch('/api/project/cost/' + costId, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || '' }
+            }).then(() => location.reload());
+        }
+    });
+}
+
+function exportBudget() {
+    window.location.href = '/api/project/budget/export';
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Budget Chart
+    const budgetCtx = document.getElementById('budgetChart').getContext('2d');
+    new Chart(budgetCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ budget_labels|tojson }},
+            datasets: [
+                { label: '{{ t("budget", "Budget") }}', data: {{ budget_values|tojson }}, backgroundColor: '#3b82f6' },
+                { label: '{{ t("actual", "Actual") }}', data: {{ actual_values|tojson }}, backgroundColor: '#10b981' }
+            ]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+    });
+
+    // Cost Breakdown Chart
+    const breakdownCtx = document.getElementById('costBreakdownChart').getContext('2d');
+    new Chart(breakdownCtx, {
+        type: 'doughnut',
+        data: {
+            labels: {{ category_labels|tojson }},
+            datasets: [{ data: {{ category_values|tojson }}, backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'], borderWidth: 0 }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '60%' }
+    });
+});
+</script>
+{% endblock %}

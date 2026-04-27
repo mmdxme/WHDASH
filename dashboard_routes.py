@@ -482,11 +482,11 @@ def build_module_categories(user_role, lang='en'):
                 {'id': 'finance', 'label': 'Finance', 'icon': 'calculator', 'url': '/finance', 'description': 'Accounting & GL', 'permission': 'finance'},
                 {'id': 'treasury', 'label': 'Treasury', 'icon': 'wallet', 'url': '/finance/treasury/dashboard', 'description': 'Cash & liquidity', 'permission': 'finance.treasury'},
                 {'id': 'assets', 'label': 'Fixed Assets', 'icon': 'building', 'url': '/assets', 'description': 'Asset management', 'permission': 'assets'},
-                {'id': 'controlling', 'label': 'Controlling', 'icon': 'chart-pie', 'url': '/controlling', 'description': 'Cost accounting', 'permission': 'finance'},
-                {'id': 'inventory', 'label': 'Inventory', 'icon': 'boxes', 'url': '/', 'description': 'Warehouse management', 'permission': 'wms'},
+                {'id': 'controlling', 'label': 'Controlling', 'icon': 'chart-pie', 'url': '/finance/reports', 'description': 'Cost accounting', 'permission': 'finance'},
+                {'id': 'inventory', 'label': 'Inventory', 'icon': 'boxes', 'url': '/wms/dashboard', 'description': 'Warehouse management', 'permission': 'wms'},
                 {'id': 'logistics', 'label': 'Logistics', 'icon': 'truck', 'url': '/logistics', 'description': 'Transportation', 'permission': 'logistics'},
-                {'id': 'supply_chain', 'label': 'Supply Chain', 'icon': 'chain', 'url': '/supply-chain', 'description': 'SCM module', 'permission': 'scm'},
-                {'id': 'demand_planning', 'label': 'Demand Planning', 'icon': 'chart-line', 'url': '/demand-planning', 'description': 'Forecasting', 'permission': 'planning'},
+                {'id': 'supply_chain', 'label': 'Supply Chain', 'icon': 'chain', 'url': '/scm', 'description': 'SCM module', 'permission': 'scm'},
+                {'id': 'demand_planning', 'label': 'Demand Planning', 'icon': 'chart-line', 'url': '/scm/demand', 'description': 'Forecasting', 'permission': 'planning'},
                 {'id': 'manufacturing', 'label': 'Manufacturing', 'icon': 'industry', 'url': '/manufacturing', 'description': 'MES/PP', 'permission': 'manufacturing'},
                 {'id': 'quality', 'label': 'Quality', 'icon': 'check-double', 'url': '/quality', 'description': 'QA/QC', 'permission': 'quality'},
                 {'id': 'maintenance', 'label': 'Maintenance', 'icon': 'wrench', 'url': '/maintenance', 'description': 'EAM/PM', 'permission': 'maintenance'},
@@ -500,7 +500,7 @@ def build_module_categories(user_role, lang='en'):
                 {'id': 'hr', 'label': 'Human Resources', 'icon': 'user-tie', 'url': '/hr', 'description': 'Employee management', 'permission': 'hr'},
                 {'id': 'payroll', 'label': 'Payroll', 'icon': 'money-check', 'url': '/payroll', 'description': 'Salary processing', 'permission': 'hr.payroll'},
                 {'id': 'talent', 'label': 'Talent', 'icon': 'graduation-cap', 'url': '/talent', 'description': 'Talent management', 'permission': 'hr'},
-                {'id': 'expense', 'label': 'Expense', 'icon': 'receipt', 'url': '/expenses', 'description': 'Travel & expense', 'permission': 'hr.expense'},
+                {'id': 'expense', 'label': 'Expense', 'icon': 'receipt', 'url': '/expense-travel', 'description': 'Travel & expense', 'permission': 'expense_travel'},
             ]
         },
         {
@@ -511,7 +511,7 @@ def build_module_categories(user_role, lang='en'):
                 {'id': 'crm', 'label': 'CRM', 'icon': 'address-book', 'url': '/crm', 'description': 'Customer relationships', 'permission': 'crm'},
                 {'id': 'marketing', 'label': 'Marketing', 'icon': 'megaphone', 'url': '/marketing', 'description': 'Marketing automation', 'permission': 'marketing'},
                 {'id': 'ecommerce', 'label': 'E-commerce', 'icon': 'shopping-cart', 'url': '/ecommerce', 'description': 'Online store', 'permission': 'ecommerce'},
-                {'id': 'project', 'label': 'Project', 'icon': 'tasks', 'url': '/projects', 'description': 'Project management', 'permission': 'project'},
+                {'id': 'project', 'label': 'Project', 'icon': 'tasks', 'url': '/project', 'description': 'Project management', 'permission': 'project'},
             ]
         },
         {
@@ -519,28 +519,28 @@ def build_module_categories(user_role, lang='en'):
             'label': 'Technology & Governance',
             'icon': 'server',
             'modules': [
-                {'id': 'investment', 'label': 'Investment', 'icon': 'chart-line', 'url': '/investment', 'description': 'Investment tracking', 'permission': 'finance'},
+                {'id': 'investment', 'label': 'Investment', 'icon': 'chart-line', 'url': '/finance/investments', 'description': 'Investment tracking', 'permission': 'finance'},
                 {'id': 'bi', 'label': 'BI Dashboard', 'icon': 'chart-bar', 'url': '/bi', 'description': 'Analytics', 'permission': 'bi'},
                 {'id': 'ai', 'label': 'AI Copilot', 'icon': 'robot', 'url': '/ai', 'description': 'Intelligent assistant', 'permission': 'ai'},
                 {'id': 'btp', 'label': 'BTP', 'icon': 'cloud', 'url': '/btp', 'description': 'Business Technology', 'permission': 'platform'},
                 {'id': 'integration', 'label': 'Integration', 'icon': 'plug', 'url': '/integration', 'description': 'Middleware', 'permission': 'platform'},
                 {'id': 'security', 'label': 'Security', 'icon': 'shield-alt', 'url': '/security', 'description': 'SSO/MFA', 'permission': 'platform.security'},
-                {'id': 'compliance', 'label': 'Compliance', 'icon': 'gavel', 'url': '/compliance', 'description': 'GRC', 'permission': 'compliance'},
+                {'id': 'compliance', 'label': 'Compliance', 'icon': 'gavel', 'url': '/grc', 'description': 'GRC', 'permission': 'compliance'},
                 {'id': 'documents', 'label': 'Documents', 'icon': 'file-alt', 'url': '/documents', 'description': 'DMS', 'permission': 'documents'},
-                {'id': 'legal', 'label': 'Legal', 'icon': 'balance-scale', 'url': '/legal', 'description': 'Tax & legal', 'permission': 'finance'},
-                {'id': 'multi_company', 'label': 'Multi-company', 'icon': 'building', 'url': '/companies', 'description': 'Intercompany', 'permission': 'platform'},
+                {'id': 'legal', 'label': 'Legal', 'icon': 'balance-scale', 'url': '/legal-tax', 'description': 'Tax & legal', 'permission': 'finance'},
+                {'id': 'multi_company', 'label': 'Multi-company', 'icon': 'building', 'url': '/multi-entity', 'description': 'Intercompany', 'permission': 'platform'},
             ]
         },
-        {
+            {
             'id': 'services',
             'label': 'Services',
             'icon': 'headset',
             'modules': [
-                {'id': 'service', 'label': 'Service', 'icon': 'bell', 'url': '/service', 'description': 'Field service', 'permission': 'service'},
-                {'id': 'supplier', 'label': 'Supplier', 'icon': 'user-tag', 'url': '/supplier', 'description': 'Supplier portal', 'permission': 'procurement'},
-                {'id': 'contingent', 'label': 'Contingent', 'icon': 'user-clock', 'url': '/contingent', 'description': 'Workforce management', 'permission': 'hr'},
-                {'id': 'sustainability', 'label': 'Sustainability', 'icon': 'leaf', 'url': '/sustainability', 'description': 'ESG tracking', 'permission': 'compliance'},
-                {'id': 'rd', 'label': 'R&D', 'icon': 'flask', 'url': '/rd', 'description': 'Research & development', 'permission': 'project'},
+                {'id': 'service', 'label': 'Service', 'icon': 'bell', 'url': '/scm/service-level', 'description': 'Field service', 'permission': 'scm'},
+                {'id': 'supplier', 'label': 'Supplier', 'icon': 'user-tag', 'url': '/procurement/suppliers', 'description': 'Supplier portal', 'permission': 'procurement'},
+                {'id': 'contingent', 'label': 'Contingent', 'icon': 'user-clock', 'url': '/hr/employees', 'description': 'Workforce management', 'permission': 'hr'},
+                {'id': 'sustainability', 'label': 'Sustainability', 'icon': 'leaf', 'url': '/scm/reports', 'description': 'ESG tracking', 'permission': 'compliance'},
+                {'id': 'rd', 'label': 'R&D', 'icon': 'flask', 'url': '/project', 'description': 'Research & development', 'permission': 'project'},
             ]
         }
     ]
@@ -884,7 +884,7 @@ def build_reports(user_role):
             'title': 'HR Analytics',
             'description': 'Workforce metrics and attendance analysis',
             'icon': 'users',
-            'url': '/reports/hr',
+            'url': '/hr/reports',
             'last_run': '1 day ago',
             'frequency': 'Weekly'
         },

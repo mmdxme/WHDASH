@@ -68,6 +68,10 @@ from org_planning_routes import register_org_planning_routes
 from expense_travel_routes import expense_travel_bp
 from org_planning_models import run_org_planning_migrations
 from dashboard_routes import dashboard_bp
+from project_routes import register_project_routes
+from project_models import init_project_tables
+from legal_tax_routes import register_legal_tax_routes
+from legal_tax_models import initialize_legal_tax_schema
 
 # =============================================================================
 # UNIFIED PLATFORM MODULES (Enterprise Integration)
@@ -396,7 +400,10 @@ def csrf_protected(f):
 # Expose csrf_token to all templates
 @app.context_processor
 def inject_csrf_token():
-    return {'csrf_token': generate_csrf_token()}
+    class CSRFToken(str):
+        def __call__(self):
+            return str(self)
+    return {'csrf_token': CSRFToken(generate_csrf_token())}
 
 
 @app.context_processor
@@ -461,6 +468,11 @@ register_logistics_routes(app)
 register_planning_routes(app, get_db)
 from scm_routes import register_scm_routes
 register_scm_routes(app, get_db)
+
+@app.route('/supply-chain')
+def supply_chain_redirect():
+    return redirect('/scm/')
+
 register_marketing_routes(app)
 register_ci_routes(app)
 register_social_media_routes(app)
@@ -472,11 +484,15 @@ register_procurement_routes(app, get_db)
 register_profile_routes(app)
 register_asset_routes(app)
 register_maintenance_routes(app)
+from manufacturing_routes import register_manufacturing_routes
+register_manufacturing_routes(app)
 register_finance_routes(app)
 register_quality_routes(app)
 register_spc_routes(app)
 register_ecommerce_routes(app)
 register_document_routes(app)
+register_project_routes(app)
+register_legal_tax_routes(app)
 
 # =============================================================================
 # Enterprise Payroll Module
@@ -524,9 +540,13 @@ register_bi_routes(app)
 from bi_advanced_routes import register_advanced_bi_routes
 register_advanced_bi_routes(app)
 
+# Register Security / SSO / MFA routes
+from security_routes import register_security_routes
+register_security_routes(app)
+
 # Initialize Finance tables
-from finance_models import initialize_finance_schema
-initialize_finance_schema()
+from finance_models import initialize_finance_tables
+initialize_finance_tables()
 
 # Initialize Finance Enhancement tables (close tasks, templates, profit centers, etc.)
 from finance_enhancement_models import initialize_finance_enhancement_tables
@@ -543,6 +563,12 @@ initialize_spc_tables()
 # Initialize Customer Intelligence tables
 init_ci_tables()
 
+# Initialize Project tables
+init_project_tables()
+
+# Initialize Legal / Tax tables
+initialize_legal_tax_schema()
+
 # =============================================================================
 # INITIALIZE API GATEWAY MODULE
 # =============================================================================
@@ -558,6 +584,49 @@ initialize_workflow_schema()
 # Register API Gateway routes
 from api_gateway_routes import register_api_gateway_routes
 register_api_gateway_routes(app, require_login, user_has_permission, get_db)
+
+# =============================================================================
+# INITIALIZE INTEGRATION / MIDDLEWARE MODULE
+# =============================================================================
+from integration_models import init_integration_tables
+init_integration_tables()
+
+# Register Integration routes
+from integration_routes import register_integration_routes
+register_integration_routes(app)
+
+# =============================================================================
+# INITIALIZE TECHNOLOGY PLATFORM (BTP) MODULE
+# =============================================================================
+from btp_models import init_btp_tables, seed_btp_sample_data
+init_btp_tables()
+
+# Register BTP routes
+from btp_routes import register_btp_routes
+register_btp_routes(app)
+
+# Seed BTP sample data
+seed_btp_sample_data()
+
+# =============================================================================
+# INITIALIZE GRC MODULE (Governance, Risk & Compliance)
+# =============================================================================
+from grc_models import init_grc_tables, seed_grc_initial_data
+init_grc_tables()
+
+# Register GRC routes
+from grc_routes import register_grc_routes
+register_grc_routes(app)
+
+# Seed GRC initial data
+seed_grc_initial_data()
+
+# Seed comprehensive GRC demo data (risks, controls, incidents, etc.)
+try:
+    from seed_grc_data import seed_grc_comprehensive_data
+    seed_grc_comprehensive_data()
+except Exception as e:
+    print(f"[GRC] Warning: Could not seed comprehensive data: {e}")
 
 # Register Finance Enhancement routes
 from finance_enhancements import register_finance_enhancements
@@ -1282,8 +1351,14 @@ db.close()
 # Initialize Marketing tables
 from marketing_models import run_marketing_migrations
 from social_media_models import run_social_media_migrations
-run_marketing_migrations()
-run_social_media_migrations()
+try:
+    run_marketing_migrations()
+except Exception as e:
+    print(f"Marketing migrations error (non-fatal): {e}")
+try:
+    run_social_media_migrations()
+except Exception as e:
+    print(f"Social media migrations error (non-fatal): {e}")
 
 # =============================================================================
 # UNIFIED PLATFORM INITIALIZATION

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('btp_sync_jobs', 'Sync Jobs') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-sync fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('btp_sync_jobs', 'Sync Jobs') }}
+        </h1>
+        <div class="btn-group">
+            <a href="{{ url_for('btp_job_run_now') }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-play me-1"></i> {{ t('btp_run_now', 'Run Job Now') }}
+            </a>
+            <a href="{{ url_for('btp_retry_center') }}" class="btn btn-outline-warning btn-sm">
+                <i class="fas fa-redo me-1"></i> {{ t('btp_retry_center', 'Retry Center') }}
+            </a>
+            <a href="{{ url_for('btp_dlq') }}" class="btn btn-outline-danger btn-sm">
+                <i class="fas fa-envelope-square me-1"></i> {{ t('btp_dead_letter_queue', 'DLQ') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <select name="status" class="form-select">
+                        <option value="">{{ t('all_statuses', 'All Statuses') }}</option>
+                        <option value="queued" {{ 'selected' if request.args.get('status') == 'queued' else '' }}>{{ t('btp_queued', 'Queued') }}</option>
+                        <option value="processing" {{ 'selected' if request.args.get('status') == 'processing' else '' }}>{{ t('btp_processing', 'Processing') }}</option>
+                        <option value="completed" {{ 'selected' if request.args.get('status') == 'completed' else '' }}>{{ t('btp_completed', 'Completed') }}</option>
+                        <option value="failed" {{ 'selected' if request.args.get('status') == 'failed' else '' }}>{{ t('btp_failed', 'Failed') }}</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter me-1"></i> {{ t('apply', 'Apply') }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Jobs Table -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            {% if jobs %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>{{ t('btp_job_id', 'Job ID') }}</th>
+                            <th>{{ t('btp_job_name', 'Name') }}</th>
+                            <th>{{ t('btp_job_type', 'Type') }}</th>
+                            <th>{{ t('btp_job_status', 'Status') }}</th>
+                            <th>{{ t('btp_duration', 'Duration') }}</th>
+                            <th>{{ t('btp_attempts', 'Attempts') }}</th>
+                            <th>{{ t('btp_created_at', 'Created') }}</th>
+                            <th>{{ t('actions', 'Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for job in jobs %}
+                        <tr>
+                            <td><code>{{ job.job_id }}</code></td>
+                            <td>{{ job.name }}</td>
+                            <td>{{ job.job_type }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if job.status == 'completed' else 'danger' if job.status == 'failed' else 'warning' if job.status == 'queued' else 'info' }}">
+                                    {{ job.status }}
+                                </span>
+                            </td>
+                            <td>{{ job.duration_seconds or 0 }}s</td>
+                            <td>{{ job.attempts }}/{{ job.max_attempts }}</td>
+                            <td><small>{{ job.created_at }}</small></td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('btp_job_detail', job_id=job.id) }}" class="btn btn-outline-primary">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    {% if job.status == 'failed' %}
+                                    <a href="{{ url_for('btp_job_retry', job_id=job.id) }}" class="btn btn-outline-success">
+                                        <i class="fas fa-redo"></i>
+                                    </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-sync fa-4x text-gray-300 mb-3"></i>
+                <h5 class="text-gray-500">{{ t('btp_no_jobs', 'No jobs found') }}</h5>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

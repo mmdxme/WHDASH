@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Return: {{ return_obj.return_number }}</h1>
+            <p class="text-gray-600 mt-1">{{ return_obj.return_type|upper }} - {{ return_obj.status }}</p>
+        </div>
+        <div class="flex space-x-3">
+            {% if return_obj.status == 'draft' %}
+            <form action="/legal-tax/returns/{{ return_obj.id }}/submit" method="POST" class="inline">
+                <button type="submit" class="btn btn-primary btn-sm">Submit for Review</button>
+            </form>
+            {% endif %}
+            {% if return_obj.status == 'submitted' %}
+            <form action="/legal-tax/returns/{{ return_obj.id }}/approve" method="POST" class="inline">
+                <button type="submit" class="btn btn-success btn-sm">Approve</button>
+            </form>
+            {% endif %}
+            <a href="/legal-tax/returns" class="btn btn-outline btn-sm">Back to List</a>
+        </div>
+    </div>
+
+    <!-- Return Details -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-sm font-medium text-gray-500 uppercase mb-4">Tax Summary</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Output Tax</span>
+                    <span class="font-semibold">{{ "${:,.2f}".format(return_obj.total_output_tax or 0) }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Input Tax</span>
+                    <span class="font-semibold">{{ "${:,.2f}".format(return_obj.total_input_tax or 0) }}</span>
+                </div>
+                <div class="border-t pt-3 flex justify-between">
+                    <span class="text-gray-900 font-semibold">Net Tax Due</span>
+                    <span class="font-bold text-lg text-blue-600">{{ "${:,.2f}".format(return_obj.total_tax_due or 0) }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-sm font-medium text-gray-500 uppercase mb-4">Filing Information</h3>
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Status</span>
+                    <span class="px-2 py-1 text-xs rounded-full {% if return_obj.status == 'approved' %}bg-green-100 text-green-800{% elif return_obj.status == 'draft' %}bg-gray-100 text-gray-800{% else %}bg-yellow-100 text-yellow-800{% endif %}">{{ return_obj.status }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Filing Status</span>
+                    <span class="text-gray-900">{{ return_obj.filing_status }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-gray-600">Period</span>
+                    <span class="text-gray-900">{{ period.name if period else 'N/A' }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-sm font-medium text-gray-500 uppercase mb-4">Workflow</h3>
+            <div class="space-y-2">
+                {% for approval in approvals %}
+                <div class="flex items-center text-sm">
+                    <i class="fas fa-check-circle text-green-500 mr-2"></i>
+                    <span class="text-gray-700">{{ approval.action }} by {{ approval.approver_name }}</span>
+                </div>
+                {% endfor %}
+                {% if not approvals %}
+                <p class="text-gray-500 text-sm">No workflow actions yet</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Return Lines -->
+    <div class="bg-white rounded-lg shadow mb-6">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold">Return Lines</h2>
+        </div>
+        <div class="p-6">
+            {% if lines %}
+            <table class="min-w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Box</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500">Base Amount</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500">Tax Amount</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Type</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for line in lines %}
+                    <tr>
+                        <td class="px-4 py-2 text-sm font-medium text-gray-900">{{ line.box_code }}</td>
+                        <td class="px-4 py-2 text-sm text-gray-500">{{ line.box_label }}</td>
+                        <td class="px-4 py-2 text-sm text-right text-gray-900">{{ "${:,.2f}".format(line.base_amount or 0) }}</td>
+                        <td class="px-4 py-2 text-sm text-right font-medium text-blue-600">{{ "${:,.2f}".format(line.tax_amount or 0) }}</td>
+                        <td class="px-4 py-2 text-sm"><span class="px-2 py-1 text-xs rounded {% if line.line_type == 'auto' %}bg-blue-100 text-blue-800{% else %}bg-orange-100 text-orange-800{% endif %}">{{ line.line_type }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="text-gray-500 text-center py-4">No lines added yet</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Adjustments -->
+    {% if adjustments %}
+    <div class="bg-white rounded-lg shadow mb-6">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold">Manual Adjustments</h2>
+        </div>
+        <div class="p-6">
+            <table class="min-w-full">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Type</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Description</th>
+                        <th class="px-4 py-2 text-right text-xs font-medium text-gray-500">Amount</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Reason</th>
+                        <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Status</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for adj in adjustments %}
+                    <tr>
+                        <td class="px-4 py-2 text-sm">{{ adj.adjustment_type }}</td>
+                        <td class="px-4 py-2 text-sm">{{ adj.description }}</td>
+                        <td class="px-4 py-2 text-sm text-right font-medium">{{ "${:,.2f}".format(adj.adjustment_amount) }}</td>
+                        <td class="px-4 py-2 text-sm">{{ adj.reason }}</td>
+                        <td class="px-4 py-2 text-sm"><span class="px-2 py-1 text-xs rounded {% if adj.is_approved %}bg-green-100 text-green-800{% else %}bg-yellow-100 text-yellow-800{% endif %}">{% if adj.is_approved %}Approved{% else %}Pending{% endif %}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Comments -->
+    <div class="bg-white rounded-lg shadow">
+        <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-lg font-semibold">Comments & Activity</h2>
+        </div>
+        <div class="p-6">
+            {% if comments %}
+            <div class="space-y-4">
+                {% for comment in comments %}
+                <div class="flex items-start border-b border-gray-100 pb-4 last:border-0">
+                    <div class="flex-shrink-0 mr-3">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+                            <i class="fas fa-user text-blue-600 text-sm"></i>
+                        </div>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-medium text-gray-900">{{ comment.user_name or 'System' }}</span>
+                            <span class="text-xs text-gray-500">{{ comment.created_at }}</span>
+                        </div>
+                        <p class="text-gray-700 text-sm">{{ comment.comment }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-gray-500 text-center py-4">No comments yet</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

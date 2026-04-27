@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white">{{ t('nurture_journeys', 'Nurture Journeys') }}</h1>
+            <p class="text-slate-400 mt-1">{{ t('journeys_desc', 'Design and manage multi-step marketing automation journeys') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('marketing.journeys_new') }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-plus mr-2"></i>{{ t('new_journey', 'New Journey') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Journeys Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('journey', 'Journey') }}</th>
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('type', 'Type') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('status', 'Status') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('participants', 'Participants') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('completed', 'Completed') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('completion_rate', 'Rate') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for journey in journeys %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-all">
+                        <td class="py-4 px-6">
+                            <a href="{{ url_for('marketing.journeys_view', id=journey.id) }}" class="text-brand-400 hover:text-brand-300 font-semibold">
+                                {{ journey.journey_name }}
+                            </a>
+                            <div class="text-xs text-slate-500 mt-1">{{ journey.journey_code }} | {{ journey.segment_name or 'No Segment' }}</div>
+                        </td>
+                        <td class="py-4 px-6 text-slate-300">{{ journey.journey_type }}</td>
+                        <td class="py-4 px-6 text-center">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {% if journey.status == 'Active' %}bg-emerald-400/20 text-emerald-400{% elif journey.status == 'Draft' %}bg-slate-400/20 text-slate-400{% elif journey.status == 'Paused' %}bg-amber-400/20 text-amber-400{% else %}bg-blue-400/20 text-blue-400{% endif %}">
+                                {{ journey.status }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-center text-slate-300">{{ journey.participant_count or 0 }}</td>
+                        <td class="py-4 px-6 text-center text-emerald-400">{{ journey.completed_count or 0 }}</td>
+                        <td class="py-4 px-6 text-center">
+                            {% if journey.participant_count > 0 %}
+                                <span class="text-cyan-400 font-semibold">{{ "%.0f"|format((journey.completed_count / journey.participant_count) * 100) }}%</span>
+                            {% else %}
+                                <span class="text-slate-500">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-6 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <a href="{{ url_for('marketing.journeys_view', id=journey.id) }}" class="p-2 hover:bg-white/10 rounded-lg transition-all" title="{{ t('view', 'View') }}">
+                                    <i class="fa-solid fa-eye text-brand-400"></i>
+                                </a>
+                                <a href="{{ url_for('marketing.journeys_edit', id=journey.id) }}" class="p-2 hover:bg-white/10 rounded-lg transition-all" title="{{ t('edit', 'Edit') }}">
+                                    <i class="fa-solid fa-pen text-amber-400"></i>
+                                </a>
+                                {% if journey.status == 'Draft' %}
+                                <form method="post" action="{{ url_for('marketing.journeys_publish', id=journey.id) }}" class="inline">
+                                    <button type="submit" class="p-2 hover:bg-white/10 rounded-lg transition-all" title="{{ t('publish', 'Publish') }}">
+                                        <i class="fa-solid fa-play text-emerald-400"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="py-16 text-center text-slate-500">
+                            <i class="fa-solid fa-route text-5xl mb-4 text-slate-600"></i>
+                            <p class="text-lg">{{ t('no_journeys', 'No nurture journeys yet') }}</p>
+                            <a href="{{ url_for('marketing.journeys_new') }}" class="mt-4 inline-block px-4 py-2 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold transition-all">
+                                {{ t('create_first_journey', 'Create your first journey') }}
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

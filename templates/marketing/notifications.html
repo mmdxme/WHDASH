@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1000px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-extrabold text-white">{{ t('notifications', 'Marketing Notifications') }}</h1>
+        <p class="text-slate-400 mt-1">{{ t('notifications_desc', 'Stay updated with important marketing alerts and reminders') }}</p>
+    </div>
+
+    <!-- Notifications List -->
+    <div class="space-y-4">
+        {% for notif in notifications %}
+        <div class="glass-panel rounded-2xl p-6 hover:bg-white/5 transition-all">
+            <div class="flex items-start gap-4">
+                <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 {% if notif.priority == 'High' or notif.priority == 'Critical' %}bg-rose-500/20{% elif notif.priority == 'Medium' %}bg-amber-500/20{% else %}bg-blue-500/20{% endif %}">
+                    <i class="fa-solid {% if notif.notification_type == 'alert' %}fa-exclamation-circle text-rose-400{% elif notif.notification_type == 'approval' %}fa-check-circle text-amber-400{% elif notif.notification_type == 'reminder' %}fa-clock text-blue-400{% else %}fa-bell text-slate-400{% endif %}"></i>
+                </div>
+                <div class="flex-1">
+                    <div class="flex items-center justify-between mb-1">
+                        <h3 class="font-bold text-white">{{ notif.notification_title }}</h3>
+                        <span class="text-xs text-slate-500">{{ notif.created_at[:16] if notif.created_at else '' }}</span>
+                    </div>
+                    <p class="text-slate-400 text-sm mb-3">{{ notif.notification_message }}</p>
+                    <div class="flex items-center gap-4">
+                        {% if notif.action_url %}
+                        <a href="{{ notif.action_url }}" class="text-sm text-brand-400 hover:text-brand-300 font-semibold">
+                            <i class="fa-solid fa-arrow-right mr-1"></i>{{ t('view_details', 'View Details') }}
+                        </a>
+                        {% endif %}
+                        <button onclick="markRead({{ notif.id }})" class="text-sm text-slate-500 hover:text-white">
+                            <i class="fa-solid fa-check mr-1"></i>{{ t('mark_read', 'Mark as Read') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="glass-panel rounded-2xl p-12 text-center">
+            <i class="fa-solid fa-bell-slash text-6xl text-slate-600 mb-4"></i>
+            <p class="text-lg text-slate-400">{{ t('no_notifications', 'No new notifications') }}</p>
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<script>
+function markRead(id) {
+    fetch('/marketing/notifications/read/' + id, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    }).then(() => location.reload());
+}
+</script>
+{% endblock %}

@@ -46,7 +46,37 @@ from hr_models import (
 )
 from permissions import user_has_permission
 
+# Import export utilities
+from export_utils import (
+    send_export_response,
+    get_export_columns
+)
+
 hr_bp = Blueprint('hr', __name__, url_prefix='/hr')
+
+
+# =============================================================================
+# EXPORT TYPES AND COLUMNS
+# =============================================================================
+
+HR_EXPORT_TYPES = [
+    'csv', 'excel_text', 'excel_general', 'json', 'xml', 'txt',
+    'pdf', 'docx', 'html', 'printable', 'barcode', 'api',
+    'email', 'zip', 'backup', 'sql_dump', 'dashboard',
+    'summary', 'detailed', 'audit_log'
+]
+
+HR_EXPORT_COLUMNS = {
+    'employees': ['employee_id', 'name', 'department', 'position', 'hire_date', 'status'],
+    'departments': ['department_id', 'name', 'manager', 'employee_count'],
+    'positions': ['position_id', 'title', 'department', 'level'],
+    'attendance': ['employee_id', 'date', 'check_in', 'check_out', 'hours_worked'],
+    'leave': ['employee_id', 'leave_type', 'start_date', 'end_date', 'status'],
+    'payroll': ['employee_id', 'period', 'basic_salary', 'allowances', 'deductions', 'net_salary'],
+    'overtime': ['employee_id', 'date', 'hours', 'rate', 'amount'],
+    'rewards': ['employee_id', 'type', 'amount', 'reason', 'date'],
+    'loans': ['employee_id', 'loan_type', 'amount', 'installment', 'balance', 'status']
+}
 
 
 # =============================================================================
@@ -4795,6 +4825,189 @@ def api_stats():
         return jsonify(stats)
     finally:
         db.close()
+
+
+# =============================================================================
+# API EXPORT ENDPOINTS
+# =============================================================================
+
+@hr_bp.route('/api/export/<export_type>', methods=['GET', 'POST'])
+@hr_bp.route('/api/export/<data_type>/<export_type>', methods=['GET', 'POST'])
+@hr_login_required
+@hr_permission_required('view')
+def api_hr_export(export_type, data_type=None):
+    """Export HR data in all 20 formats."""
+    if export_type not in HR_EXPORT_TYPES:
+        return jsonify({
+            'error': f'Invalid export type. Valid types: {HR_EXPORT_TYPES}'
+        }), 400
+
+    db = get_db()
+    try:
+        company_id = session.get('company_id', 0)
+
+        # Determine data type from URL or default
+        if data_type is None:
+            data_type = request.args.get('type', 'employees')
+
+        # Configurable limits: default 5000, max 50000, per-request override via ?limit=
+        raw_limit = request.args.get('limit', 5000)
+        try:
+            export_limit = min(int(raw_limit), 50000)
+            if export_limit <= 0:
+                export_limit = 5000
+        except (ValueError, TypeError):
+            export_limit = 5000
+
+        offset = 0
+        page = request.args.get('page', 1)
+        per_page = request.args.get('per_page', 0)
+        if per_page:
+            try:
+                per_page = min(int(per_page), 10000)
+                if per_page > 0:
+                    offset = (max(1, int(page)) - 1) * per_page
+                    export_limit = per_page
+            except (ValueError, TypeError):
+                pass
+
+        title = None
+        columns = None
+
+        # Chunked fetch helper to avoid loading everything at once
+        def chunked_fetch(query, params, chunk_size=1000):
+            """Fetch results in chunks to reduce peak memory usage."""
+            results = []
+            current_offset = offset
+            while True:
+                remaining = export_limit - len(results)
+                if remaining <= 0:
+                    break
+                batch_size = min(chunk_size, remaining)
+                rows = db.execute(query + " LIMIT ? OFFSET ?", (*params, batch_size, current_offset)).fetchall()
+                if not rows:
+                    break
+                results.extend([dict(r) for r in rows])
+                if len(rows) < batch_size:
+                    break
+                current_offset += batch_size
+            return results
+
+        # Get data based on type
+        if data_type == 'employees':
+            query = """
+                SELECT e.*, d.department_name, p.position_title
+                FROM hr_employees e
+                LEFT JOIN hr_departments d ON e.department_id = d.id
+                LEFT JOIN hr_positions p ON e.position_id = p.id
+                WHERE e.company_id = ?
+                ORDER BY e.employee_name
+            """
+            data = chunked_fetch(query, (company_id,))
+            columns = HR_EXPORT_COLUMNS['employees']
+            title = 'HR Employees'
+        elif data_type == 'departments':
+            query = """
+                SELECT d.*, COUNT(e.id) as employee_count
+                FROM hr_departments d
+                LEFT JOIN hr_employees e ON d.id = e.department_id AND e.status = 'Active'
+                WHERE d.company_id = ?
+                GROUP BY d.id
+                ORDER BY d.department_name
+            """
+            data = chunked_fetch(query, (company_id,))
+            columns = HR_EXPORT_COLUMNS['departments']
+            title = 'HR Departments'
+        elif data_type == 'positions':
+            query = """
+                SELECT p.*, d.department_name
+                FROM hr_positions p
+                LEFT JOIN hr_departments d ON p.department_id = d.id
+                WHERE p.company_id = ?
+                ORDER BY p.position_title
+            """
+            data = chunked_fetch(query, (company_id,))
+            columns = HR_EXPORT_COLUMNS['positions']
+            title = 'HR Positions'
+        elif data_type == 'attendance':
+            query = """
+                SELECT * FROM hr_attendance
+                WHERE company_id = ?
+                ORDER BY attendance_date DESC
+            """
+            data = chunked_fetch(query, (company_id,))
+            columns = HR_EXPORT_COLUMNS['attendance']
+            title = 'HR Attendance'
+        elif data_type == 'leave':
+            query = """
+                SELECT lr.*, e.employee_name, lt.leave_type_name
+                FROM hr_leave_requests lr
+                LEFT JOIN hr_employees e ON lr.employee_id = e.id
+                LEFT JOIN hr_leave_types lt ON lr.leave_type_id = lt.id
+                WHERE lr.company_id = ?
+                ORDER BY lr.request_date DESC
+            """
+            data = chunked_fetch(query, (company_id,))
+            columns = HR_EXPORT_COLUMNS['leave']
+            title = 'HR Leave Requests'
+        elif data_type == 'payroll':
+            query = """
+                SELECT pr.*, e.employee_name
+                FROM hr_payroll_registers pr
+                LEFT JOIN hr_employees e ON pr.employee_id = e.id
+                WHERE pr.company_id = ?
+                ORDER BY pr.payroll_date DESC
+            """
+            data = chunked_fetch(query, (company_id,))
+            columns = HR_EXPORT_COLUMNS['payroll']
+            title = 'HR Payroll'
+        elif data_type == 'overtime':
+            query = """
+                SELECT * FROM hr_overtime_requests
+                WHERE company_id = ?
+                ORDER BY overtime_date DESC
+            """
+            data = chunked_fetch(query, (company_id,))
+            columns = HR_EXPORT_COLUMNS['overtime']
+            title = 'HR Overtime'
+        elif data_type == 'rewards':
+            query = """
+                SELECT * FROM hr_rewards
+                WHERE company_id = ?
+                ORDER BY reward_date DESC
+            """
+            data = chunked_fetch(query, (company_id,))
+            columns = HR_EXPORT_COLUMNS['rewards']
+            title = 'HR Rewards'
+        elif data_type == 'loans':
+            query = """
+                SELECT * FROM hr_loans
+                WHERE company_id = ?
+                ORDER BY loan_date DESC
+            """
+            data = chunked_fetch(query, (company_id,))
+            columns = HR_EXPORT_COLUMNS['loans']
+            title = 'HR Loans'
+        else:
+            return jsonify({'error': f'Data type {data_type} not supported'}), 400
+
+        filename = f'hr_{data_type}_{datetime.now().strftime("%Y%m%d")}'
+
+        return send_export_response(data, export_type, filename, columns, title)
+    finally:
+        db.close()
+
+
+@hr_bp.route('/api/export/list')
+@hr_login_required
+@hr_permission_required('view')
+def list_hr_export_types():
+    """List available export types for HR module."""
+    return jsonify({
+        'module': 'hr',
+        'data_types': list(HR_EXPORT_COLUMNS.keys()),
+        'export_types': [{'type': t} for t in HR_EXPORT_TYPES]
+    })
 
 
 def register_hr_routes(app):

@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('webhook_detail', 'Webhook Detail') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-bolt fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ webhook.name }}
+        </h1>
+        <a href="{{ url_for('integration_webhooks') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i> {{ t('back', 'Back') }}
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('webhook_info', 'Webhook Information') }}</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr><th>{{ t('code', 'Code') }}:</th><td><code>{{ webhook.code }}</code></td></tr>
+                        <tr><th>{{ t('event_type', 'Event Type') }}:</th><td><span class="badge bg-info">{{ webhook.event_type }}</span></td></tr>
+                        <tr><th>{{ t('source_system', 'Source System') }}:</th><td>{{ webhook.source_system or '-' }}</td></tr>
+                        <tr><th>{{ t('target_url', 'Target URL') }}:</th><td><code class="small">{{ webhook.target_url }}</code></td></tr>
+                        <tr><th>{{ t('http_method', 'HTTP Method') }}:</th><td>{{ webhook.http_method }}</td></tr>
+                        <tr><th>{{ t('auth_type', 'Auth Type') }}:</th><td>{{ webhook.auth_type }}</td></tr>
+                        <tr><th>{{ t('timeout', 'Timeout') }}:</th><td>{{ webhook.timeout_seconds }}s</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('statistics', 'Statistics') }}</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr><th>{{ t('status', 'Status') }}:</th>
+                            <td>{% if webhook.active_status == 'active' %}<span class="badge bg-success">{{ t('active', 'Active') }}</span>{% else %}<span class="badge bg-secondary">{{ t('inactive', 'Inactive') }}</span>{% endif %}</td>
+                        </tr>
+                        <tr><th>{{ t('health', 'Health') }}:</th>
+                            <td>{% if webhook.health_status == 'healthy' %}<span class="badge bg-success">{{ t('healthy', 'Healthy') }}</span>{% else %}<span class="badge bg-danger">{{ t('unhealthy', 'Unhealthy') }}</span>{% endif %}</td>
+                        </tr>
+                        <tr><th>{{ t('total_deliveries', 'Total Deliveries') }}:</th><td>{{ webhook.usage_count }}</td></tr>
+                        <tr><th>{{ t('successful', 'Successful') }}:</th><td class="text-success">{{ webhook.success_count }}</td></tr>
+                        <tr><th>{{ t('failed', 'Failed') }}:</th><td class="text-danger">{{ webhook.failure_count }}</td></tr>
+                        <tr><th>{{ t('last_success', 'Last Success') }}:</th><td>{{ webhook.last_success_at or '-' }}</td></tr>
+                        <tr><th>{{ t('last_failure', 'Last Failure') }}:</th><td>{{ webhook.last_failure_at or '-' }}</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deliveries -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ t('recent_deliveries', 'Recent Deliveries') }}</h6>
+        </div>
+        <div class="card-body">
+            {% if deliveries %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover">
+                    <thead><tr><th>{{ t('delivery_id', 'Delivery ID') }}</th><th>{{ t('event_id', 'Event ID') }}</th><th>{{ t('status', 'Status') }}</th><th>{{ t('http_code', 'HTTP Code') }}</th><th>{{ t('attempts', 'Attempts') }}</th><th>{{ t('latency', 'Latency') }}</th><th>{{ t('time', 'Time') }}</th><th>{{ t('actions', 'Actions') }}</th></tr></thead>
+                    <tbody>
+                        {% for d in deliveries %}
+                        <tr>
+                            <td><code>{{ d.delivery_id[:12] }}...</code></td>
+                            <td><code>{{ d.event_id or '-' }}</code></td>
+                            <td>
+                                {% if d.delivery_status == 'success' %}
+                                    <span class="badge bg-success">{{ t('success', 'Success') }}</span>
+                                {% elif d.delivery_status == 'failed' %}
+                                    <span class="badge bg-danger">{{ t('failed', 'Failed') }}</span>
+                                {% elif d.delivery_status == 'pending' %}
+                                    <span class="badge bg-warning">{{ t('pending', 'Pending') }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ d.delivery_status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ d.http_status_code or '-' }}</td>
+                            <td>{{ d.attempt_number }}</td>
+                            <td>{{ d.latency_ms }}ms</td>
+                            <td>{{ d.created_at }}</td>
+                            <td>
+                                <button onclick="replayDelivery('{{ d.id }}')" class="btn btn-outline-primary btn-sm">
+                                    <i class="fas fa-redo"></i> {{ t('replay', 'Replay') }}
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted text-center">{{ t('no_deliveries', 'No deliveries yet') }}</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function replayDelivery(deliveryId) {
+    if (confirm('{{ t("confirm_replay", "Replay this delivery?") }}')) {
+        fetch(`/integration/webhooks/${{{ webhook.id }}}/replay/`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({delivery_id: '{{ webhook.id }}_' + deliveryId})
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert('{{ t("replay_started", "Replay initiated:") }} ' + data.new_delivery_id);
+                location.reload();
+            } else {
+                alert('{{ t("replay_error", "Error:") }} ' + data.message);
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

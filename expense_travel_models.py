@@ -1570,6 +1570,41 @@ def get_travel_itineraries(travel_request_id):
     return get_all("SELECT * FROM travel_itineraries WHERE travel_request_id = ? ORDER BY sequence_order", (travel_request_id,))
 
 
+def update_travel_request(request_id, data):
+    """Update a travel request."""
+    fields = []
+    values = []
+
+    updatable = [
+        'status', 'trip_purpose', 'trip_type', 'destination_country', 'destination_city',
+        'travel_start_date', 'travel_end_date', 'total_trip_days',
+        'estimated_total_cost', 'estimated_total_cost_currency',
+        'pre_approved_budget', 'pre_approved_budget_currency',
+        'advance_requested', 'advance_requested_currency',
+        'policy_id', 'policy_name', 'justification', 'notes',
+        'current_approver_id', 'current_approver_name', 'approval_level', 'approval_deadline',
+        'approved_by', 'approved_by_name', 'approval_date',
+        'rejected_by', 'rejected_by_name', 'rejection_reason'
+    ]
+
+    for field in updatable:
+        if field in data:
+            fields.append(f"{field} = ?")
+            values.append(data[field])
+
+    if not fields:
+        return False
+
+    fields.append("updated_at = CURRENT_TIMESTAMP")
+    values.append(request_id)
+
+    with get_db_context() as db:
+        db.execute(f"UPDATE travel_requests SET {', '.join(fields)} WHERE id = ?", values)
+        db.commit()
+
+    return True
+
+
 # ============================================================================
 # CASH ADVANCE CRUD OPERATIONS
 # ============================================================================

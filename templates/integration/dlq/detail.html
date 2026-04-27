@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('dlq_item_detail', 'DLQ Item Detail') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-exclamation-circle fa-fw me-2 text-danger"></i>
+            {{ t('dlq_item_detail', 'DLQ Item Detail') }}
+        </h1>
+        <div class="btn-group">
+            <button onclick="replayItem('{{ item.dlq_item_id }}')" class="btn btn-outline-success btn-sm">
+                <i class="fas fa-redo me-1"></i> {{ t('replay', 'Replay') }}
+            </button>
+            <button onclick="resolveItem('{{ item.dlq_item_id }}')" class="btn btn-outline-warning btn-sm">
+                <i class="fas fa-check me-1"></i> {{ t('resolve', 'Resolve') }}
+            </button>
+            <a href="{{ url_for('integration_dlq') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back', 'Back') }}
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('item_info', 'Item Information') }}</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr><th>{{ t('dlq_item_id', 'DLQ Item ID') }}:</th><td><code>{{ item.dlq_item_id }}</code></td></tr>
+                        <tr><th>{{ t('original_message_id', 'Original Message ID') }}:</th><td><code>{{ item.original_message_id or '-' }}</code></td></tr>
+                        <tr><th>{{ t('queue', 'Queue') }}:</th><td><span class="badge bg-secondary">{{ item.queue_name }}</span></td></tr>
+                        <tr><th>{{ t('message_type', 'Message Type') }}:</th><td>{{ item.message_type or '-' }}</td></tr>
+                        <tr><th>{{ t('failure_count', 'Failure Count') }}:</th><td><span class="badge bg-danger">{{ item.failure_count }}</span></td></tr>
+                        <tr><th>{{ t('last_failure_at', 'Last Failure') }}:</th><td>{{ item.last_failure_at }}</td></tr>
+                        <tr><th>{{ t('source', 'Source') }}:</th><td>{{ item.source_system or '-' }}</td></tr>
+                        <tr><th>{{ t('destination', 'Destination') }}:</th><td>{{ item.destination_system or '-' }}</td></tr>
+                        <tr><th>{{ t('created_at', 'Created') }}:</th><td>{{ item.created_at }}</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('review_status', 'Review Status') }}</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr><th>{{ t('status', 'Status') }}:</th>
+                            <td>
+                                {% if item.review_status == 'pending' %}
+                                    <span class="badge bg-warning">{{ t('pending_review', 'Pending Review') }}</span>
+                                {% elif item.review_status == 'resolved' %}
+                                    <span class="badge bg-success">{{ t('resolved', 'Resolved') }}</span>
+                                {% elif item.review_status == 'replayed' %}
+                                    <span class="badge bg-info">{{ t('replayed', 'Replayed') }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr><th>{{ t('reviewed_by', 'Reviewed By') }}:</th><td>{{ item.reviewed_by or '-' }}</td></tr>
+                        <tr><th>{{ t('reviewed_at', 'Reviewed At') }}:</th><td>{{ item.reviewed_at or '-' }}</td></tr>
+                        <tr><th>{{ t('review_notes', 'Review Notes') }}:</th><td>{{ item.review_notes or '-' }}</td></tr>
+                        <tr><th>{{ t('resolution_action', 'Resolution Action') }}:</th><td>{{ item.resolution_action or '-' }}</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('error_details', 'Error Details') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-danger">
+                        <strong>{{ t('error_message', 'Error Message') }}:</strong>
+                        <p>{{ item.error_message or 'No error message' }}</p>
+                    </div>
+                    {% if item.stack_trace %}
+                    <div class="mt-3">
+                        <strong>{{ t('stack_trace', 'Stack Trace') }}:</strong>
+                        <pre class="bg-dark text-light p-3 mt-2" style="max-height: 300px; overflow-y: auto;"><code>{{ item.stack_trace }}</code></pre>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if item.payload %}
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('payload', 'Payload') }}</h6>
+                </div>
+                <div class="card-body">
+                    <pre class="bg-light p-3" style="max-height: 400px; overflow-y: auto;"><code>{{ item.payload }}</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function replayItem(itemId) {
+    if (confirm('{{ t("confirm_replay", "Replay this item?") }}')) {
+        fetch(`/integration/dlq/${itemId}/replay/`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('{{ t("replay_started", "Replay initiated:") }} ' + data.new_message_id);
+                    location.reload();
+                } else {
+                    alert('{{ t("replay_error", "Error:") }} ' + data.message);
+                }
+            });
+    }
+}
+
+function resolveItem(itemId) {
+    if (confirm('{{ t("confirm_resolve", "Mark this item as resolved?") }}')) {
+        fetch(`/integration/dlq/${itemId}/resolve/`, { 
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({notes: 'Manually resolved from detail view'})
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('{{ t("item_resolved", "Item marked as resolved") }}');
+                    location.reload();
+                } else {
+                    alert('{{ t("resolve_error", "Error:") }} ' + data.message);
+                }
+            });
+    }
+}
+</script>
+{% endblock %}

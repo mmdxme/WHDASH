@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('connector_detail', 'Connector Detail') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-plug fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ connector.name }}
+        </h1>
+        <div class="btn-group">
+            <a href="{{ url_for('integration_connector_edit', connector_id=connector.id) }}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-edit me-1"></i> {{ t('edit', 'Edit') }}
+            </a>
+            <a href="{{ url_for('integration_connectors') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back', 'Back') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Connector Info Cards -->
+    <div class="row">
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('connector_info', 'Connector Information') }}</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>{{ t('code', 'Code') }}:</th>
+                            <td><code>{{ connector.code }}</code></td>
+                        </tr>
+                        <tr>
+                            <th>{{ t('type', 'Type') }}:</th>
+                            <td>
+                                <span class="badge" style="background-color: {{ connector.type_color }}; color: white;">
+                                    <i class="{{ connector.type_icon }} me-1"></i>
+                                    {{ connector.type_name }}
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ t('direction', 'Direction') }}:</th>
+                            <td>
+                                {% if connector.direction == 'inbound' %}
+                                    <span class="badge bg-info">{{ t('inbound', 'Inbound') }}</span>
+                                {% elif connector.direction == 'outbound' %}
+                                    <span class="badge bg-warning">{{ t('outbound', 'Outbound') }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ t('bidirectional', 'Bidirectional') }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ t('owner_module', 'Owner Module') }}:</th>
+                            <td>{{ connector.owner_module }}</td>
+                        </tr>
+                        <tr>
+                            <th>{{ t('environment', 'Environment') }}:</th>
+                            <td>{{ connector.environment }}</td>
+                        </tr>
+                        <tr>
+                            <th>{{ t('timeout', 'Timeout') }}:</th>
+                            <td>{{ connector.timeout_seconds }}s</td>
+                        </tr>
+                        <tr>
+                            <th>{{ t('payload_format', 'Payload Format') }}:</th>
+                            <td>{{ connector.payload_format }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('status', 'Status') }}</h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th>{{ t('active_status', 'Active Status') }}:</th>
+                            <td>
+                                {% if connector.active_status == 'active' %}
+                                    <span class="badge bg-success">{{ t('active', 'Active') }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ t('inactive', 'Inactive') }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ t('health_status', 'Health Status') }}:</th>
+                            <td>
+                                {% if connector.health_status == 'healthy' %}
+                                    <span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>{{ t('healthy', 'Healthy') }}</span>
+                                {% elif connector.health_status == 'unhealthy' %}
+                                    <span class="badge bg-danger"><i class="fas fa-times-circle me-1"></i>{{ t('unhealthy', 'Unhealthy') }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary"><i class="fas fa-question-circle me-1"></i>{{ t('unknown', 'Unknown') }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ t('test_status', 'Test Status') }}:</th>
+                            <td>
+                                {% if connector.test_status == 'success' %}
+                                    <span class="badge bg-success">{{ t('passed', 'Passed') }}</span>
+                                {% elif connector.test_status == 'failed' %}
+                                    <span class="badge bg-danger">{{ t('failed', 'Failed') }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ t('untested', 'Untested') }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>{{ t('last_success', 'Last Success') }}:</th>
+                            <td>{{ connector.last_success_at or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>{{ t('last_failure', 'Last Failure') }}:</th>
+                            <td>{{ connector.last_failure_at or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>{{ t('last_tested', 'Last Tested') }}:</th>
+                            <td>{{ connector.last_tested_at or '-' }}</td>
+                        </tr>
+                    </table>
+                    <hr>
+                    <div class="btn-group w-100">
+                        {% if connector.active_status == 'active' %}
+                            <form action="{{ url_for('integration_connector_deactivate', connector_id=connector.id) }}" method="post" class="w-100">
+                                <button type="submit" class="btn btn-outline-warning w-100">
+                                    <i class="fas fa-pause me-1"></i> {{ t('deactivate', 'Deactivate') }}
+                                </button>
+                            </form>
+                        {% else %}
+                            <form action="{{ url_for('integration_connector_activate', connector_id=connector.id) }}" method="post" class="w-100">
+                                <button type="submit" class="btn btn-outline-success w-100">
+                                    <i class="fas fa-play me-1"></i> {{ t('activate', 'Activate') }}
+                                </button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('quick_actions', 'Quick Actions') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button onclick="testConnector({{ connector.id }})" class="btn btn-outline-info">
+                            <i class="fas fa-vial me-1"></i> {{ t('test_connection', 'Test Connection') }}
+                        </button>
+                        <a href="{{ url_for('integration_credentials') }}?connector={{ connector.id }}" class="btn btn-outline-primary">
+                            <i class="fas fa-key me-1"></i> {{ t('manage_credentials', 'Manage Credentials') }}
+                        </a>
+                        <a href="{{ url_for('integration_flows') }}?connector={{ connector.id }}" class="btn btn-outline-secondary">
+                            <i class="fas fa-project-diagram me-1"></i> {{ t('view_related_flows', 'View Related Flows') }}
+                        </a>
+                        <a href="{{ url_for('integration_webhooks') }}?connector={{ connector.id }}" class="btn btn-outline-warning">
+                            <i class="fas fa-bolt me-1"></i> {{ t('view_webhooks', 'View Webhooks') }}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Description -->
+    {% if connector.description %}
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('description', 'Description') }}</h6>
+                </div>
+                <div class="card-body">
+                    <p>{{ connector.description }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Tabs for Credentials, Flows, Webhooks -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <ul class="nav nav-tabs card-header-tabs" id="connectorTabs" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active" id="credentials-tab" data-bs-toggle="tab" data-bs-target="#credentials" type="button">
+                                <i class="fas fa-key me-1"></i> {{ t('credentials', 'Credentials') }} ({{ credentials|length }})
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" id="flows-tab" data-bs-toggle="tab" data-bs-target="#flows" type="button">
+                                <i class="fas fa-project-diagram me-1"></i> {{ t('related_flows', 'Related Flows') }} ({{ related_flows|length }})
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" id="webhooks-tab" data-bs-toggle="tab" data-bs-target="#webhooks" type="button">
+                                <i class="fas fa-bolt me-1"></i> {{ t('webhooks', 'Webhooks') }} ({{ webhooks|length }})
+                            </button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" id="logs-tab" data-bs-toggle="tab" data-bs-target="#logs" type="button">
+                                <i class="fas fa-history me-1"></i> {{ t('recent_logs', 'Recent Logs') }}
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body">
+                    <div class="tab-content" id="connectorTabContent">
+                        <!-- Credentials Tab -->
+                        <div class="tab-pane fade show active" id="credentials" role="tabpanel">
+                            {% if credentials %}
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>{{ t('name', 'Name') }}</th>
+                                            <th>{{ t('type', 'Type') }}</th>
+                                            <th>{{ t('auth_method', 'Auth Method') }}</th>
+                                            <th>{{ t('status', 'Status') }}</th>
+                                            <th>{{ t('test_status', 'Test Status') }}</th>
+                                            <th>{{ t('expires', 'Expires') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for cred in credentials %}
+                                        <tr>
+                                            <td>{{ cred.name }}</td>
+                                            <td>{{ cred.credential_type }}</td>
+                                            <td>{{ cred.auth_method }}</td>
+                                            <td>
+                                                {% if cred.is_active %}
+                                                    <span class="badge bg-success">{{ t('active', 'Active') }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">{{ t('inactive', 'Inactive') }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>
+                                                {% if cred.test_status == 'success' %}
+                                                    <span class="badge bg-success">{{ t('passed', 'Passed') }}</span>
+                                                {% elif cred.test_status == 'failed' %}
+                                                    <span class="badge bg-danger">{{ t('failed', 'Failed') }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">{{ t('untested', 'Untested') }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ cred.expires_at or '-' }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="text-muted text-center">{{ t('no_credentials', 'No credentials configured for this connector') }}</p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Flows Tab -->
+                        <div class="tab-pane fade" id="flows" role="tabpanel">
+                            {% if related_flows %}
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>{{ t('code', 'Code') }}</th>
+                                            <th>{{ t('name', 'Name') }}</th>
+                                            <th>{{ t('status', 'Status') }}</th>
+                                            <th>{{ t('trigger', 'Trigger') }}</th>
+                                            <th>{{ t('actions', 'Actions') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for flow in related_flows %}
+                                        <tr>
+                                            <td><code>{{ flow.code }}</code></td>
+                                            <td>{{ flow.name }}</td>
+                                            <td>
+                                                {% if flow.flow_status == 'published' %}
+                                                    <span class="badge bg-success">{{ t('published', 'Published') }}</span>
+                                                {% elif flow.flow_status == 'draft' %}
+                                                    <span class="badge bg-warning">{{ t('draft', 'Draft') }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">{{ flow.flow_status }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ flow.trigger_type }}</td>
+                                            <td>
+                                                <a href="{{ url_for('integration_flow_detail', flow_id=flow.id) }}" class="btn btn-outline-primary btn-sm">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="text-muted text-center">{{ t('no_flows', 'No flows use this connector') }}</p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Webhooks Tab -->
+                        <div class="tab-pane fade" id="webhooks" role="tabpanel">
+                            {% if webhooks %}
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>{{ t('code', 'Code') }}</th>
+                                            <th>{{ t('name', 'Name') }}</th>
+                                            <th>{{ t('event_type', 'Event Type') }}</th>
+                                            <th>{{ t('status', 'Status') }}</th>
+                                            <th>{{ t('usage', 'Usage') }}</th>
+                                            <th>{{ t('actions', 'Actions') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for wh in webhooks %}
+                                        <tr>
+                                            <td><code>{{ wh.code }}</code></td>
+                                            <td>{{ wh.name }}</td>
+                                            <td>{{ wh.event_type }}</td>
+                                            <td>
+                                                {% if wh.active_status == 'active' %}
+                                                    <span class="badge bg-success">{{ t('active', 'Active') }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-secondary">{{ t('inactive', 'Inactive') }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ wh.usage_count }}</td>
+                                            <td>
+                                                <a href="{{ url_for('integration_webhook_detail', webhook_id=wh.id) }}" class="btn btn-outline-primary btn-sm">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="text-muted text-center">{{ t('no_webhooks', 'No webhooks configured for this connector') }}</p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Logs Tab -->
+                        <div class="tab-pane fade" id="logs" role="tabpanel">
+                            {% if recent_logs %}
+                            <div class="table-responsive">
+                                <table class="table table-bordered table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>{{ t('level', 'Level') }}</th>
+                                            <th>{{ t('message', 'Message') }}</th>
+                                            <th>{{ t('correlation_id', 'Correlation ID') }}</th>
+                                            <th>{{ t('time', 'Time') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for log in recent_logs %}
+                                        <tr>
+                                            <td>
+                                                {% if log.log_level == 'error' %}
+                                                    <span class="badge bg-danger">{{ log.log_level }}</span>
+                                                {% elif log.log_level == 'warning' %}
+                                                    <span class="badge bg-warning">{{ log.log_level }}</span>
+                                                {% else %}
+                                                    <span class="badge bg-info">{{ log.log_level }}</span>
+                                                {% endif %}
+                                            </td>
+                                            <td>{{ log.message }}</td>
+                                            <td><code>{{ log.correlation_id or '-' }}</code></td>
+                                            <td>{{ log.created_at }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="text-muted text-center">{{ t('no_logs', 'No recent logs for this connector') }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function testConnector(connectorId) {
+    if (confirm('{{ t("confirm_test", "Are you sure you want to test this connector?") }}')) {
+        fetch(`/integration/connectors/${connectorId}/test/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('{{ t("test_passed", "Connector test passed!") }}');
+                    location.reload();
+                } else {
+                    alert('{{ t("test_failed", "Connector test failed:") }} ' + data.message);
+                }
+            });
+    }
+}
+</script>
+{% endblock %}

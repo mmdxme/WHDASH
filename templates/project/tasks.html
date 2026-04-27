@@ -1,0 +1,395 @@
+{% extends "project/base.html" %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="mb-8 flex justify-between items-center">
+    <div>
+        <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ t('tasks', 'Tasks') }}</h1>
+        <p class="text-slate-600 dark:text-slate-400 mt-1">{{ t('tasks_subtitle', 'Manage project tasks and assignments') }}</p>
+    </div>
+    <div class="flex gap-3">
+        <div class="flex items-center gap-2 border border-slate-300 dark:border-slate-600 rounded-lg overflow-hidden">
+            <button onclick="setTaskView('list')" class="px-3 py-2 bg-indigo-600 text-white" id="taskListBtn">
+                <i class="fas fa-list"></i>
+            </button>
+            <button onclick="setTaskView('board')" class="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300" id="taskBoardBtn">
+                <i class="fas fa-columns"></i>
+            </button>
+        </div>
+        <button onclick="exportTasks()" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-download mr-2"></i>{{ t('export', 'Export') }}
+        </button>
+        <button onclick="showAddTaskModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-plus mr-2"></i>{{ t('add_task', 'Add Task') }}
+        </button>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-6">
+    <div class="p-4 flex flex-wrap gap-4">
+        <select id="projectFilter" onchange="loadTasks()" class="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">{{ t('all_projects', 'All Projects') }}</option>
+            {% for p in projects %}
+            <option value="{{ p.id }}" {% if selected_project == p.id %}selected{% endif %}>{{ p.code }} - {{ p.name }}</option>
+            {% endfor %}
+        </select>
+        <select id="statusFilter" onchange="loadTasks()" class="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">{{ t('all_statuses', 'All Statuses') }}</option>
+            <option value="Pending" {% if status_filter == 'Pending' %}selected{% endif %}>{{ t('pending', 'Pending') }}</option>
+            <option value="In Progress" {% if status_filter == 'In Progress' %}selected{% endif %}>{{ t('in_progress', 'In Progress') }}</option>
+            <option value="Completed" {% if status_filter == 'Completed' %}selected{% endif %}>{{ t('completed', 'Completed') }}</option>
+        </select>
+        <select id="priorityFilter" onchange="loadTasks()" class="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">{{ t('all_priorities', 'All Priorities') }}</option>
+            <option value="Critical" {% if priority_filter == 'Critical' %}selected{% endif %}>{{ t('critical', 'Critical') }}</option>
+            <option value="High" {% if priority_filter == 'High' %}selected{% endif %}>{{ t('high', 'High') }}</option>
+            <option value="Medium" {% if priority_filter == 'Medium' %}selected{% endif %}>{{ t('medium', 'Medium') }}</option>
+            <option value="Low" {% if priority_filter == 'Low' %}selected{% endif %}>{{ t('low', 'Low') }}</option>
+        </select>
+        <select id="assigneeFilter" onchange="loadTasks()" class="px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">{{ t('all_assignees', 'All Assignees') }}</option>
+            {% for user in users %}
+            <option value="{{ user.id }}" {% if assignee_filter == user.id|string %}selected{% endif %}>{{ user.name }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" id="searchInput" onkeyup="loadTasks()" placeholder="{{ t('search_tasks', 'Search tasks...') }}" class="flex-1 min-w-[200px] px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+</div>
+
+<!-- List View -->
+<div id="taskListView">
+    <div class="card">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead class="bg-slate-50 dark:bg-slate-700/50">
+                    <tr>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase cursor-pointer" data-sort="code">{{ t('code', 'Code') }} <i class="fas fa-sort ml-1"></i></th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase cursor-pointer" data-sort="name">{{ t('name', 'Name') }} <i class="fas fa-sort ml-1"></i></th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('project', 'Project') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('assignee', 'Assignee') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('due_date', 'Due Date') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase cursor-pointer" data-sort="priority">{{ t('priority', 'Priority') }} <i class="fas fa-sort ml-1"></i></th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('status', 'Status') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('progress', 'Progress') }}</th>
+                        <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                    {% for task in tasks %}
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                        <td class="px-5 py-4">
+                            <a href="{{ url_for('project_task_detail', task_id=task.id) }}" class="font-medium text-indigo-600 hover:underline">{{ task.code }}</a>
+                        </td>
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300">
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" {% if task.status == 'Completed' %}checked{% endif %} onchange="toggleTaskComplete('{{ task.id }}')">
+                                <span class="{% if task.status == 'Completed' %}line-through text-slate-400{% endif %}">{{ task.name }}</span>
+                            </div>
+                        </td>
+                        <td class="px-5 py-4 text-slate-500 dark:text-slate-400 text-sm">{{ task.project_name }}</td>
+                        <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ task.assignee_name }}</td>
+                        <td class="px-5 py-4 text-sm {% if task.is_overdue %}text-red-600 font-medium{% else %}text-slate-500 dark:text-slate-400{% endif %}">{{ task.due_date }}</td>
+                        <td class="px-5 py-4">
+                            <span class="px-2 py-1 text-xs rounded {% if task.priority == 'Critical' %}bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400{% elif task.priority == 'High' %}bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400{% elif task.priority == 'Medium' %}bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400{% else %}bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400{% endif %}">
+                                {{ task.priority }}
+                            </span>
+                        </td>
+                        <td class="px-5 py-4">
+                            <span class="status-badge status-{{ task.status|lower|replace(' ', '-') }}">{{ task.status }}</span>
+                        </td>
+                        <td class="px-5 py-4">
+                            <div class="flex items-center gap-2">
+                                <div class="progress-bar w-16 h-2">
+                                    <div class="progress-fill bg-indigo-500" style="width: {{ task.progress }}%"></div>
+                                </div>
+                                <span class="text-xs text-slate-500">{{ task.progress }}%</span>
+                            </div>
+                        </td>
+                        <td class="px-5 py-4">
+                            <div class="flex items-center gap-2">
+                                <a href="{{ url_for('project_task_detail', task_id=task.id) }}" class="p-2 text-slate-500 hover:text-indigo-600" title="{{ t('view', 'View') }}">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <button onclick="editTask('{{ task.id }}')" class="p-2 text-slate-500 hover:text-indigo-600" title="{{ t('edit', 'Edit') }}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="deleteTask('{{ task.id }}')" class="p-2 text-slate-500 hover:text-red-600" title="{{ t('delete', 'Delete') }}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="px-5 py-12 text-center text-slate-500 dark:text-slate-400">
+                            <i class="fas fa-tasks text-4xl mb-3"></i>
+                            <p>{{ t('no_tasks_found', 'No tasks found') }}</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <!-- Pagination -->
+        {% if pagination.pages > 1 %}
+        <div class="p-4 border-t border-slate-200 dark:border-slate-700 flex justify-between items-center">
+            <div class="text-sm text-slate-500">
+                {{ t('showing', 'Showing') }} {{ pagination.start }} - {{ pagination.end }} {{ t('of', 'of') }} {{ pagination.total }}
+            </div>
+            <div class="flex items-center gap-2">
+                {% if pagination.has_prev %}
+                <a href="?page={{ pagination.prev }}" class="px-3 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200"><i class="fas fa-chevron-left"></i></a>
+                {% endif %}
+                {% for page in pagination.pages_list %}
+                <a href="?page={{ page }}" class="px-3 py-1 rounded {% if page == pagination.current %}bg-indigo-600 text-white{% else %}bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300{% endif %}">{{ page }}</a>
+                {% endfor %}
+                {% if pagination.has_next %}
+                <a href="?page={{ pagination.next }}" class="px-3 py-1 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200"><i class="fas fa-chevron-right"></i></a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Board View -->
+<div id="taskBoardView" class="hidden">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        {% for column in task_columns %}
+        <div class="card p-4">
+            <h4 class="font-semibold text-slate-800 dark:text-white mb-4 flex items-center justify-between">
+                <span class="flex items-center gap-2">
+                    {% if column.name == 'To Do' %}<i class="fas fa-circle text-slate-400"></i>
+                    {% elif column.name == 'In Progress' %}<i class="fas fa-spinner text-blue-500"></i>
+                    {% elif column.name == 'Review' %}<i class="fas fa-eye text-amber-500"></i>
+                    {% else %}<i class="fas fa-check-circle text-green-500"></i>
+                    {% endif %}
+                    {{ column.name }}
+                </span>
+                <span class="px-2 py-0.5 text-xs rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">{{ column.count }}</span>
+            </h4>
+            <div class="space-y-3 min-h-[200px]">
+                {% for task in column.tasks %}
+                <div class="p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-200 dark:border-slate-600 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors cursor-pointer" onclick="viewTask('{{ task.id }}')">
+                    <div class="flex items-start justify-between mb-2">
+                        <span class="text-xs font-mono text-slate-500">{{ task.code }}</span>
+                        <span class="px-2 py-0.5 text-xs rounded {% if task.priority == 'Critical' %}bg-red-100 text-red-700{% elif task.priority == 'High' %}bg-orange-100 text-orange-700{% elif task.priority == 'Medium' %}bg-amber-100 text-amber-700{% else %}bg-slate-100 text-slate-600{% endif %}">
+                            {{ task.priority }}
+                        </span>
+                    </div>
+                    <p class="font-medium text-slate-800 dark:text-white text-sm mb-2">{{ task.name }}</p>
+                    <div class="flex items-center justify-between text-xs text-slate-500">
+                        <span class="flex items-center gap-1">
+                            <i class="fas fa-user"></i> {{ task.assignee_name }}
+                        </span>
+                        <span {% if task.is_overdue %}class="text-red-600"{% endif %}>
+                            <i class="fas fa-calendar"></i> {{ task.due_date }}
+                        </span>
+                    </div>
+                    {% if task.dependency %}
+                    <div class="mt-2 pt-2 border-t border-slate-200 dark:border-slate-600">
+                        <span class="text-xs text-slate-400">
+                            <i class="fas fa-link mr-1"></i>{{ t('depends_on', 'Depends on') }}: {{ task.dependency }}
+                        </span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Add/Edit Task Modal -->
+<div id="taskModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50" onclick="closeTaskModal()"></div>
+        <div class="relative bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-2xl p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-slate-800 dark:text-white" id="taskModalTitle">{{ t('add_task', 'Add Task') }}</h3>
+                <button onclick="closeTaskModal()" class="p-2 text-slate-500 hover:text-slate-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="taskForm" method="POST" action="{{ url_for('project_save_task') }}">
+                <input type="hidden" name="task_id" id="taskId">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('task_name', 'Task Name') }} *</label>
+                        <input type="text" id="taskName" name="name" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('project', 'Project') }} *</label>
+                        <select id="taskProject" name="project_id" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">{{ t('select_project', 'Select project') }}</option>
+                            {% for p in projects %}
+                            <option value="{{ p.id }}">{{ p.code }} - {{ p.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('phase', 'Phase') }}</label>
+                        <select id="taskPhase" name="phase_id" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">{{ t('select_phase', 'Select phase') }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('assignee', 'Assignee') }} *</label>
+                        <select id="taskAssignee" name="assignee_id" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">{{ t('select_assignee', 'Select assignee') }}</option>
+                            {% for user in users %}
+                            <option value="{{ user.id }}">{{ user.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('due_date', 'Due Date') }} *</label>
+                        <input type="date" id="taskDueDate" name="due_date" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('priority', 'Priority') }}</label>
+                        <select id="taskPriority" name="priority" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="Low">Low</option>
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                            <option value="Critical">Critical</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('status', 'Status') }}</label>
+                        <select id="taskStatus" name="status" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Review">Review</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                    <div class="col-span-2">
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('description', 'Description') }}</label>
+                        <textarea id="taskDescription" name="description" rows="2" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="closeTaskModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium">{{ t('cancel', 'Cancel') }}</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">{{ t('save', 'Save') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function setTaskView(view) {
+    if (view === 'list') {
+        document.getElementById('taskListView').classList.remove('hidden');
+        document.getElementById('taskBoardView').classList.add('hidden');
+        document.getElementById('taskListBtn').classList.add('bg-indigo-600', 'text-white');
+        document.getElementById('taskListBtn').classList.remove('bg-slate-100', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+        document.getElementById('taskBoardBtn').classList.remove('bg-indigo-600', 'text-white');
+        document.getElementById('taskBoardBtn').classList.add('bg-slate-100', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+    } else {
+        document.getElementById('taskListView').classList.add('hidden');
+        document.getElementById('taskBoardView').classList.remove('hidden');
+        document.getElementById('taskBoardBtn').classList.add('bg-indigo-600', 'text-white');
+        document.getElementById('taskBoardBtn').classList.remove('bg-slate-100', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+        document.getElementById('taskListBtn').classList.remove('bg-indigo-600', 'text-white');
+        document.getElementById('taskListBtn').classList.add('bg-slate-100', 'dark:bg-slate-700', 'text-slate-600', 'dark:text-slate-300');
+    }
+}
+
+function loadTasks() {
+    const params = new URLSearchParams();
+    const projectId = document.getElementById('projectFilter').value;
+    const status = document.getElementById('statusFilter').value;
+    const priority = document.getElementById('priorityFilter').value;
+    const assignee = document.getElementById('assigneeFilter').value;
+    const search = document.getElementById('searchInput').value;
+    if (projectId) params.set('project_id', projectId);
+    if (status) params.set('status', status);
+    if (priority) params.set('priority', priority);
+    if (assignee) params.set('assignee', assignee);
+    if (search) params.set('search', search);
+    window.location.href = '{{ url_for("project_tasks") }}?' + params.toString();
+}
+
+function viewTask(taskId) {
+    window.location.href = '/project/task/' + taskId;
+}
+
+function showAddTaskModal() {
+    document.getElementById('taskModalTitle').textContent = '{{ t("add_task", "Add Task") }}';
+    document.getElementById('taskForm').reset();
+    document.getElementById('taskId').value = '';
+    document.getElementById('taskModal').classList.remove('hidden');
+}
+
+function editTask(taskId) {
+    fetch('/api/project/task/' + taskId)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('taskModalTitle').textContent = '{{ t("edit_task", "Edit Task") }}';
+            document.getElementById('taskId').value = data.id;
+            document.getElementById('taskName').value = data.name;
+            document.getElementById('taskProject').value = data.project_id;
+            document.getElementById('taskPhase').value = data.phase_id || '';
+            document.getElementById('taskAssignee').value = data.assignee_id;
+            document.getElementById('taskDueDate').value = data.due_date;
+            document.getElementById('taskPriority').value = data.priority;
+            document.getElementById('taskStatus').value = data.status;
+            document.getElementById('taskDescription').value = data.description || '';
+            document.getElementById('taskModal').classList.remove('hidden');
+        });
+}
+
+function closeTaskModal() {
+    document.getElementById('taskModal').classList.add('hidden');
+}
+
+function toggleTaskComplete(taskId) {
+    fetch('/api/project/task/toggle/' + taskId, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || '' }
+    }).then(() => location.reload());
+}
+
+function deleteTask(taskId) {
+    Swal.fire({
+        title: '{{ t("delete_task", "Delete Task") }}',
+        text: '{{ t("confirm_delete_task", "Are you sure you want to delete this task?") }}',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '{{ t("yes_delete", "Yes, Delete") }}',
+        cancelButtonText: '{{ t("cancel", "Cancel") }}',
+        confirmButtonColor: '#ef4444'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            fetch('/api/project/task/' + taskId, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || '' }
+            }).then(() => location.reload());
+        }
+    });
+}
+
+function exportTasks() {
+    window.location.href = '/api/project/tasks/export';
+}
+
+// Load phases when project changes
+document.getElementById('taskProject')?.addEventListener('change', function() {
+    fetch('/api/project/' + this.value + '/phases')
+        .then(response => response.json())
+        .then(data => {
+            const select = document.getElementById('taskPhase');
+            select.innerHTML = '<option value="">{{ t("select_phase", "Select phase") }}</option>';
+            data.forEach(phase => {
+                select.innerHTML += '<option value="' + phase.id + '">' + phase.name + '</option>';
+            });
+        });
+});
+</script>
+{% endblock %}

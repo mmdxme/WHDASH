@@ -2,52 +2,69 @@
 {% block content %}
 <div class="space-y-6 fade-in">
     <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-white">{{ title }}</h1>
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('putaway', 'Putaway') }}</h1>
+            <p class="text-sm text-slate-400 mt-1">{{ t('putaway_desc', 'Validate suggested locations and complete putaway tasks') }}</p>
+        </div>
+        <a href="{{ url_for('wms_putaway_rules') }}" class="px-4 py-2 bg-brand-500/10 border border-brand-500/20 rounded-xl text-brand-400 text-sm font-medium">{{ t('putaway_rules', 'Rules') }}</a>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-panel rounded-2xl p-4"><p class="text-xs text-slate-400 uppercase font-bold">{{ t('total', 'Total') }}</p><p class="text-2xl text-white font-extrabold">{{ total_count }}</p></div>
+        <div class="glass-panel rounded-2xl p-4"><p class="text-xs text-slate-400 uppercase font-bold">{{ t('pending', 'Pending') }}</p><p class="text-2xl text-amber-400 font-extrabold">{{ tasks|selectattr('status','equalto','PENDING')|list|length }}</p></div>
+        <div class="glass-panel rounded-2xl p-4"><p class="text-xs text-slate-400 uppercase font-bold">{{ t('in_progress', 'In Progress') }}</p><p class="text-2xl text-cyan-400 font-extrabold">{{ tasks|selectattr('status','equalto','IN_PROGRESS')|list|length }}</p></div>
+        <div class="glass-panel rounded-2xl p-4"><p class="text-xs text-slate-400 uppercase font-bold">{{ t('completed', 'Completed') }}</p><p class="text-2xl text-emerald-400 font-extrabold">{{ tasks|selectattr('status','equalto','COMPLETED')|list|length }}</p></div>
+    </div>
+
+    <div class="glass-panel rounded-2xl p-4">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <select name="status" class="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                <option value="">{{ t('all_statuses', 'All Statuses') }}</option>
+                {% for s in ['PENDING','ASSIGNED','IN_PROGRESS','COMPLETED'] %}<option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+            </select>
+            <select name="warehouse_id" class="px-3 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-white">
+                <option value="">{{ t('all_warehouses', 'All Warehouses') }}</option>
+                {% for w in warehouses %}<option value="{{ w.id }}" {% if warehouse_id == w.id|string %}selected{% endif %}>{{ w.name }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="px-4 py-2 bg-brand-500 text-white rounded-xl text-sm">{{ t('filter', 'Filter') }}</button>
+            <a href="{{ url_for('wms_putaway') }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-slate-400 text-sm text-center">{{ t('clear', 'Clear') }}</a>
+        </form>
     </div>
 
     <div class="glass-panel rounded-2xl overflow-hidden">
-        <table class="w-full text-sm">
-            <thead>
-                <tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase tracking-wider">
-                    <th class="text-left py-3 px-4 font-semibold">Task #</th>
-                    <th class="text-left py-3 px-4 font-semibold">Item</th>
-                    <th class="text-left py-3 px-4 font-semibold">Warehouse</th>
-                    <th class="text-left py-3 px-4 font-semibold">Source</th>
-                    <th class="text-left py-3 px-4 font-semibold">Destination</th>
-                    <th class="text-right py-3 px-4 font-semibold">Qty</th>
-                    <th class="text-center py-3 px-4 font-semibold">Priority</th>
-                    <th class="text-center py-3 px-4 font-semibold">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for t in tasks %}
-                <tr class="border-b border-white/5 hover:bg-white/5">
-                    <td class="py-3 px-4 text-brand-400 font-medium">{{ t.task_number }}</td>
-                    <td class="py-3 px-4 text-white">{{ t.item_code }} <span class="text-slate-400 text-xs">{{ t.item_name[:30] }}</span></td>
-                    <td class="py-3 px-4 text-slate-300">{{ t.warehouse_name }}</td>
-                    <td class="py-3 px-4 text-slate-400">{{ t.source_location or '-' }}</td>
-                    <td class="py-3 px-4 text-slate-400">{{ t.destination_location or 'Unassigned' }}</td>
-                    <td class="py-3 px-4 text-right text-emerald-400 font-bold tabular-nums">{{ t.quantity|int }}</td>
-                    <td class="py-3 px-4 text-center">
-                        <span class="px-2 py-1 rounded text-xs font-bold
-                            {% if t.priority >= 8 %}bg-red-500/10 text-red-400{% elif t.priority >= 5 %}bg-amber-500/10 text-amber-400{% else %}bg-slate-500/10 text-slate-400{% endif %}">
-                            {{ t.priority }}
-                        </span>
-                    </td>
-                    <td class="py-3 px-4 text-center">
-                        <span class="px-3 py-1 rounded-lg text-xs font-bold uppercase tracking-wider
-                            {% if t.status == 'COMPLETED' %}bg-emerald-500/10 text-emerald-400
-                            {% elif t.status == 'IN_PROGRESS' %}bg-cyan-500/10 text-cyan-400
-                            {% elif t.status == 'PENDING' %}bg-slate-500/10 text-slate-400{% endif %}">
-                            {{ t.status }}
-                        </span>
-                    </td>
-                </tr>
-                {% else %}
-                <tr><td colspan="8" class="py-16 text-center text-slate-500"><i class="fa-solid fa-box text-4xl mb-3 block opacity-20"></i>No putaway tasks</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead><tr class="bg-slate-800/50 text-slate-400 border-b border-white/5 text-xs uppercase">
+                    <th class="text-left py-3 px-4">{{ t('task', 'Task') }}</th><th class="text-left py-3 px-4">{{ t('item', 'Item') }}</th><th class="text-left py-3 px-4">{{ t('warehouse', 'Warehouse') }}</th><th class="text-left py-3 px-4">{{ t('source', 'Source') }}</th><th class="text-left py-3 px-4">{{ t('destination', 'Destination') }}</th><th class="text-right py-3 px-4">{{ t('qty', 'Qty') }}</th><th class="text-center py-3 px-4">{{ t('status', 'Status') }}</th><th class="text-center py-3 px-4">{{ t('actions', 'Actions') }}</th>
+                </tr></thead>
+                <tbody>
+                    {% for task in tasks %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-3 px-4 text-brand-400 font-medium">{{ task.task_number }}</td>
+                        <td class="py-3 px-4 text-white">{{ task.item_code }} <span class="text-slate-400 text-xs">{{ task.item_name[:32] }}</span></td>
+                        <td class="py-3 px-4 text-slate-300">{{ task.warehouse_name }}</td>
+                        <td class="py-3 px-4 text-slate-400">{{ task.source_location or '-' }}</td>
+                        <td class="py-3 px-4 text-slate-400">{{ task.destination_location or task.suggested_location_id or '-' }}</td>
+                        <td class="py-3 px-4 text-right text-emerald-400 font-bold">{{ task.quantity|int }}</td>
+                        <td class="py-3 px-4 text-center"><span class="px-2 py-1 rounded-lg text-xs font-bold bg-slate-500/10 text-slate-300">{{ task.status }}</span></td>
+                        <td class="py-3 px-4">
+                            {% if task.status != 'COMPLETED' %}
+                            <form method="POST" action="{{ url_for('wms_putaway_complete', task_id=task.id) }}" class="flex items-center justify-center gap-2">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <input name="location_id" value="{{ task.destination_location_id or task.suggested_location_id or '' }}" placeholder="{{ t('location_id', 'Location ID') }}" class="w-24 px-2 py-1 bg-white/5 border border-white/10 rounded-lg text-xs text-white">
+                                <button class="px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-xs font-medium">{{ t('complete', 'Complete') }}</button>
+                            </form>
+                            {% else %}
+                            <span class="block text-center text-xs text-slate-500">{{ t('done', 'Done') }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="py-16 text-center text-slate-500">{{ t('no_putaway_tasks', 'No putaway tasks') }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 {% endblock %}

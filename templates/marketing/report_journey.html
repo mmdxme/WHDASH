@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-extrabold text-white">{{ t('journey_performance_report', 'Journey Performance Report') }}</h1>
+        <p class="text-slate-400 mt-1">{{ t('journey_report_desc', 'Analyze nurture journey effectiveness and participant progress') }}</p>
+    </div>
+
+    <!-- Overall Metrics -->
+    {% if overall %}
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-white mb-1">{{ overall.total_journeys or 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('total_journeys', 'Total Journeys') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-blue-400 mb-1">{{ overall.total_participants or 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('total_participants', 'Participants') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-emerald-400 mb-1">{{ overall.total_completed or 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('completed', 'Completed') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-cyan-400 mb-1">{{ overall.avg_completion_days|int if overall.avg_completion_days else 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('avg_days', 'Avg Days') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-amber-400 mb-1">
+                {% if overall.total_participants > 0 %}{{ "%.0f"|format((overall.total_completed / overall.total_participants) * 100) }}%{% else %}0%{% endif %}
+            </div>
+            <div class="text-sm text-slate-400">{{ t('completion_rate', 'Completion Rate') }}</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Journeys Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('journey', 'Journey') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('type', 'Type') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('status', 'Status') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('enrolled', 'Enrolled') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('active', 'Active') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('completed', 'Completed') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('rate', 'Rate') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for j in journeys %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-4 px-6">
+                            <a href="{{ url_for('marketing.journeys_view', id=j.id) }}" class="text-brand-400 hover:text-brand-300 font-semibold">{{ j.journey_name }}</a>
+                        </td>
+                        <td class="py-4 px-6 text-center text-slate-300">{{ j.journey_type|title }}</td>
+                        <td class="py-4 px-6 text-center">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {% if j.status == 'Active' %}bg-emerald-400/20 text-emerald-400{% else %}bg-slate-400/20 text-slate-400{% endif %}">
+                                {{ j.status }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-center text-blue-400">{{ j.enrolled or 0 }}</td>
+                        <td class="py-4 px-6 text-center text-cyan-400">{{ j.active or 0 }}</td>
+                        <td class="py-4 px-6 text-center text-emerald-400">{{ j.completed or 0 }}</td>
+                        <td class="py-4 px-6 text-center">
+                            {% if j.enrolled > 0 %}
+                                <span class="font-semibold {% if (j.completed / j.enrolled * 100) >= 50 %}text-emerald-400{% elif (j.completed / j.enrolled * 100) >= 25 %}text-amber-400{% else %}text-rose-400{% endif %}">
+                                    {{ "%.0f"|format((j.completed / j.enrolled) * 100) }}%
+                                </span>
+                            {% else %}-{% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="py-16 text-center text-slate-500">
+                            <i class="fa-solid fa-route text-5xl mb-4 text-slate-600"></i>
+                            <p>{{ t('no_journeys', 'No journeys to report on') }}</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

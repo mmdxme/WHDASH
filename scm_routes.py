@@ -33,8 +33,44 @@ from functools import wraps
 
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, flash, session, Response
 
+# Import export utilities
+from export_utils import (
+    send_export_response,
+    get_export_columns
+)
 
 scm_bp = Blueprint('scm', __name__, url_prefix='/scm')
+
+
+# =============================================================================
+# SUPPLY-CHAIN REDIRECT (friendly URL )
+# =============================================================================
+
+@scm_bp.route('/supply-chain')
+def supply_chain_redirect():
+    """Redirect /supply-chain to the SCM dashboard."""
+    from flask import redirect, url_for
+    return redirect(url_for('scm.dashboard'))
+
+
+# =============================================================================
+# EXPORT TYPES AND COLUMNS
+# =============================================================================
+
+SCM_EXPORT_TYPES = [
+    'csv', 'excel_text', 'excel_general', 'json', 'xml', 'txt',
+    'pdf', 'docx', 'html', 'printable', 'barcode', 'api',
+    'email', 'zip', 'backup', 'sql_dump', 'dashboard',
+    'summary', 'detailed', 'audit_log'
+]
+
+SCM_EXPORT_COLUMNS = {
+    'demand': ['plan_id', 'item_code', 'forecast_date', 'quantity', 'confidence'],
+    'supply': ['plan_id', 'item_code', 'supply_date', 'quantity', 'source'],
+    'replenishment': ['item_code', 'warehouse', 'suggested_qty', 'current_stock', 'status'],
+    'inventory': ['item_code', 'warehouse', 'on_hand', 'allocated', 'available'],
+    'alerts': ['alert_id', 'type', 'severity', 'message', 'created_at']
+}
 
 
 def get_db():
@@ -5202,6 +5238,99 @@ def api_net_requirement(item_id):
     result = calculate_net_requirement(item_id, db)
     
     return jsonify(result or {})
+
+
+# =============================================================================
+# API EXPORT ENDPOINTS
+# =============================================================================
+
+@scm_bp.route('/api/export/<export_type>', methods=['GET', 'POST'])
+@scm_bp.route('/api/export/<data_type>/<export_type>', methods=['GET', 'POST'])
+@scm_permission_required('scm', 'view')
+def api_scm_export(export_type, data_type=None):
+    """Export SCM data in all 20 formats."""
+    if export_type not in SCM_EXPORT_TYPES:
+        return jsonify({
+            'error': f'Invalid export type. Valid types: {SCM_EXPORT_TYPES}'
+        }), 400
+
+    db = get_db()
+    company_id = session.get('company_id', 0)
+
+    # Determine data type from URL or default
+    if data_type is None:
+        data_type = request.args.get('type', 'demand')
+
+    # Get data based on type
+    if data_type == 'demand':
+        data = db.execute("""
+            SELECT * FROM planning_demand_plans
+            WHERE company_id = ?
+            ORDER BY forecast_date DESC
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = SCM_EXPORT_COLUMNS['demand']
+        title = 'Demand Plans'
+    elif data_type == 'supply':
+        data = db.execute("""
+            SELECT * FROM planning_supply_plans
+            WHERE company_id = ?
+            ORDER BY supply_date DESC
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = SCM_EXPORT_COLUMNS['supply']
+        title = 'Supply Plans'
+    elif data_type == 'replenishment':
+        data = db.execute("""
+            SELECT * FROM planning_replenishment_recommendations
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = SCM_EXPORT_COLUMNS['replenishment']
+        title = 'Replenishment Recommendations'
+    elif data_type == 'inventory':
+        data = db.execute("""
+            SELECT i.*, w.name as warehouse_name
+            FROM wms_inventory i
+            LEFT JOIN wms_warehouses w ON i.warehouse_id = w.id
+            WHERE i.company_id = ?
+            ORDER BY i.last_updated DESC
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = SCM_EXPORT_COLUMNS['inventory']
+        title = 'SCM Inventory'
+    elif data_type == 'alerts':
+        data = db.execute("""
+            SELECT * FROM planning_alerts
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = SCM_EXPORT_COLUMNS['alerts']
+        title = 'Planning Alerts'
+    else:
+        return jsonify({'error': f'Data type {data_type} not supported'}), 400
+
+    filename = f'scm_{data_type}_{datetime.now().strftime("%Y%m%d")}'
+
+    return send_export_response(data, export_type, filename, columns, title)
+
+
+@scm_bp.route('/api/export/list')
+@scm_permission_required('scm', 'view')
+def list_scm_export_types():
+    """List available export types for SCM module."""
+    return jsonify({
+        'module': 'scm',
+        'data_types': list(SCM_EXPORT_COLUMNS.keys()),
+        'export_types': [{'type': t} for t in SCM_EXPORT_TYPES]
+    })
 
 
 def register_scm_routes(app, get_db):

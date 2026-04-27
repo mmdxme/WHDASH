@@ -759,12 +759,14 @@ def travel_edit(request_id):
         return redirect(url_for('expense_travel.travel_detail', request_id=request_id))
     
     if request.method == 'POST':
-        from expense_travel_models import update_expense_claim  # Reuse for travel too
-        # Would need a separate update function but reusing pattern
-        
+        from expense_travel_models import update_travel_request
+
+        data = request.form.to_dict()
+        update_travel_request(request_id, data)
+
         log_expense_audit('travel_request', request_id, 'UPDATE', user_id=user_id, user_name=username,
                           notes=f"Updated travel request {travel['travel_number']}")
-        
+
         flash('Travel request updated successfully', 'success')
         return redirect(url_for('expense_travel.travel_detail', request_id=request_id))
     

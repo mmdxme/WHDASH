@@ -1,0 +1,305 @@
+{% extends "project/base.html" %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="mb-8 flex justify-between items-center">
+    <div>
+        <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ t('executive_dashboard', 'Executive Dashboard') }}</h1>
+        <p class="text-slate-600 dark:text-slate-400 mt-1">{{ t('executive_subtitle', 'Portfolio overview and strategic insights') }}</p>
+    </div>
+    <div class="flex gap-3">
+        <button onclick="exportReport()" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-download mr-2"></i>{{ t('export', 'Export') }}
+        </button>
+        <button onclick="refreshData()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-sync-alt mr-2"></i>{{ t('refresh', 'Refresh') }}
+        </button>
+    </div>
+</div>
+
+<!-- Portfolio Health Overview -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('total_projects', 'Total Projects') }}</p>
+                <p class="text-2xl font-bold text-slate-800 dark:text-white mt-1">{{ stats.total_projects|default(0) }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+                <i class="fas fa-folder text-indigo-600 dark:text-indigo-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('healthy_projects', 'Healthy') }}</p>
+                <p class="text-2xl font-bold text-green-600 dark:text-green-400 mt-1">{{ stats.healthy_projects|default(0) }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                <i class="fas fa-check-circle text-green-600 dark:text-green-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('at_risk_projects', 'At Risk') }}</p>
+                <p class="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">{{ stats.at_risk_projects|default(0) }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <i class="fas fa-exclamation-circle text-amber-600 dark:text-amber-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="card stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-500 dark:text-slate-400">{{ t('critical_projects', 'Critical') }}</p>
+                <p class="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">{{ stats.critical_projects|default(0) }}</p>
+            </div>
+            <div class="w-12 h-12 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+                <i class="fas fa-times-circle text-red-600 dark:text-red-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Two Column Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Project Status Summary -->
+    <div class="card">
+        <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+            <h2 class="text-lg font-semibold text-slate-800 dark:text-white">{{ t('project_status_summary', 'Project Status Summary') }}</h2>
+        </div>
+        <div class="p-5">
+            <canvas id="statusChart" height="200"></canvas>
+        </div>
+    </div>
+
+    <!-- Budget vs Actual -->
+    <div class="card">
+        <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+            <h2 class="text-lg font-semibold text-slate-800 dark:text-white">{{ t('budget_vs_actual', 'Budget vs Actual') }}</h2>
+        </div>
+        <div class="p-5">
+            <canvas id="budgetChart" height="200"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Critical Risks & Issues -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Critical Risks Alerts -->
+    <div class="card">
+        <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-slate-800 dark:text-white">{{ t('critical_risks_alerts', 'Critical Risks & Alerts') }}</h2>
+            <a href="{{ url_for('project_risks') }}" class="text-indigo-600 hover:text-indigo-700 text-sm font-medium">{{ t('view_all', 'View All') }}</a>
+        </div>
+        <div class="p-5">
+            {% if critical_risks %}
+            <div class="space-y-3">
+                {% for risk in critical_risks[:5] %}
+                <div class="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="px-2 py-1 text-xs rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 mb-2 inline-block">{{ t('critical', 'CRITICAL') }}</span>
+                            <p class="font-medium text-slate-800 dark:text-white">{{ risk.title }}</p>
+                            <p class="text-sm text-slate-500 mt-1">{{ risk.project_name }}</p>
+                        </div>
+                        <span class="text-red-600 font-medium">{{ risk.probability }}%</span>
+                    </div>
+                    <div class="mt-2 flex items-center justify-between text-xs text-slate-500">
+                        <span>{{ t('impact', 'Impact') }}: {{ risk.impact }}</span>
+                        <span>{{ t('owner', 'Owner') }}: {{ risk.owner }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fas fa-check-circle text-4xl text-green-300 dark:text-green-600 mb-3"></i>
+                <p class="text-slate-500 dark:text-slate-400">{{ t('no_critical_risks', 'No critical risks') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Open Issues -->
+    <div class="card">
+        <div class="p-5 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center">
+            <h2 class="text-lg font-semibold text-slate-800 dark:text-white">{{ t('open_issues', 'Open Issues') }}</h2>
+            <a href="{{ url_for('project_issues') }}" class="text-indigo-600 hover:text-indigo-700 text-sm font-medium">{{ t('view_all', 'View All') }}</a>
+        </div>
+        <div class="p-5">
+            {% if open_issues %}
+            <div class="space-y-3">
+                {% for issue in open_issues[:5] %}
+                <div class="p-3 {% if issue.priority == 'High' %}bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800{% elif issue.priority == 'Medium' %}bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800{% else %}bg-slate-50 dark:bg-slate-700/30{% endif %} rounded-lg border">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <span class="px-2 py-1 text-xs rounded {% if issue.priority == 'High' %}bg-red-100 text-red-700{% elif issue.priority == 'Medium' %}bg-amber-100 text-amber-700{% else %}bg-slate-100 text-slate-600{% endif %} mb-2 inline-block">{{ issue.priority }}</span>
+                            <p class="font-medium text-slate-800 dark:text-white">{{ issue.title }}</p>
+                            <p class="text-sm text-slate-500 mt-1">{{ issue.project_name }}</p>
+                        </div>
+                        <span class="text-slate-500 text-sm">{{ issue.created_at }}</span>
+                    </div>
+                    <div class="mt-2 flex items-center justify-between text-xs text-slate-500">
+                        <span>{{ t('reporter', 'Reporter') }}: {{ issue.reporter }}</span>
+                        <span>{{ t('status', 'Status') }}: {{ issue.status }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8">
+                <i class="fas fa-check-circle text-4xl text-green-300 dark:text-green-600 mb-3"></i>
+                <p class="text-slate-500 dark:text-slate-400">{{ t('no_open_issues', 'No open issues') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Project Completion Trend -->
+<div class="card mb-6">
+    <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+        <h2 class="text-lg font-semibold text-slate-800 dark:text-white">{{ t('project_completion_trend', 'Project Completion Trend') }}</h2>
+    </div>
+    <div class="p-5">
+        <canvas id="completionChart" height="120"></canvas>
+    </div>
+</div>
+
+<!-- Branch/Entity Comparison -->
+<div class="card">
+    <div class="p-5 border-b border-slate-200 dark:border-slate-700">
+        <h2 class="text-lg font-semibold text-slate-800 dark:text-white">{{ t('branch_entity_comparison', 'Branch/Entity Comparison') }}</h2>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="w-full">
+            <thead class="bg-slate-50 dark:bg-slate-700/50">
+                <tr>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('branch', 'Branch') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('projects', 'Projects') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('active', 'Active') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('budget', 'Budget') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('spent', 'Spent') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('variance', 'Variance') }}</th>
+                    <th class="px-5 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase">{{ t('health', 'Health') }}</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                {% for branch in branch_comparison %}
+                <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                    <td class="px-5 py-4 font-medium text-slate-800 dark:text-white">{{ branch.name }}</td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ branch.total_projects }}</td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300">{{ branch.active_projects }}</td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300 amount">${{ "%.2f"|format(branch.budget) }}</td>
+                    <td class="px-5 py-4 text-slate-600 dark:text-slate-300 amount">${{ "%.2f"|format(branch.spent) }}</td>
+                    <td class="px-5 py-4 {% if branch.variance < 0 %}text-red-600{% else %}text-green-600{% endif %} amount">
+                        {% if branch.variance < 0 %}${{ "%.2f"|format(branch.variance) }}{% else %}${{ "%.2f"|format(branch.variance) }}{% endif %}
+                    </td>
+                    <td class="px-5 py-4">
+                        <span class="px-2 py-1 text-xs rounded {% if branch.health == 'Healthy' %}bg-green-100 text-green-700{% elif branch.health == 'At Risk' %}bg-amber-100 text-amber-700{% else %}bg-red-100 text-red-700{% endif %}">
+                            {{ branch.health }}
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function exportReport() {
+    // Export functionality
+    Swal.fire('{{ t("exporting", "Exporting") }}...', '{{ t("please_wait", "Please wait") }}', 'info');
+}
+
+function refreshData() {
+    location.reload();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Status Chart
+    const statusCtx = document.getElementById('statusChart').getContext('2d');
+    new Chart(statusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['{{ t("active", "Active") }}', '{{ t("on_hold", "On Hold") }}', '{{ t("completed", "Completed") }}', '{{ t("cancelled", "Cancelled") }}'],
+            datasets: [{
+                data: [
+                    {{ project_status.Active|default(0) }},
+                    {{ project_status.OnHold|default(0) }},
+                    {{ project_status.Completed|default(0) }},
+                    {{ project_status.Cancelled|default(0) }}
+                ],
+                backgroundColor: ['#10b981', '#f59e0b', '#3b82f6', '#6b7280'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+
+    // Budget Chart
+    const budgetCtx = document.getElementById('budgetChart').getContext('2d');
+    new Chart(budgetCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ budget_labels|tojson }},
+            datasets: [
+                {
+                    label: '{{ t("budget", "Budget") }}',
+                    data: {{ budget_values|tojson }},
+                    backgroundColor: '#3b82f6'
+                },
+                {
+                    label: '{{ t("actual", "Actual") }}',
+                    data: {{ actual_values|tojson }},
+                    backgroundColor: '#10b981'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+
+    // Completion Trend Chart
+    const completionCtx = document.getElementById('completionChart').getContext('2d');
+    new Chart(completionCtx, {
+        type: 'line',
+        data: {
+            labels: {{ trend_labels|tojson }},
+            datasets: [{
+                label: '{{ t("completed_projects", "Completed Projects") }}',
+                data: {{ trend_values|tojson }},
+                borderColor: '#6366f1',
+                backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+});
+</script>
+{% endblock %}

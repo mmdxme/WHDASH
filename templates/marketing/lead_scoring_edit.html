@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[800px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="mb-8">
+        <div class="flex items-center gap-3 mb-4">
+            <a href="{{ url_for('marketing.lead_scoring_list') }}" class="p-2 hover:bg-white/10 rounded-lg transition-all">
+                <i class="fa-solid fa-arrow-left text-slate-400"></i>
+            </a>
+            <h1 class="text-2xl font-extrabold text-white">{{ title }}</h1>
+        </div>
+        <p class="text-slate-400">{{ t('scoring_rule_desc', 'Configure lead scoring rule parameters') }}</p>
+    </div>
+
+    <!-- Form -->
+    <form method="post" class="glass-panel rounded-2xl p-6">
+        <div class="space-y-6">
+            <!-- Basic Info -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('rule_name', 'Rule Name') }} *</label>
+                    <input type="text" name="rule_name" value="{{ rule.rule_name if rule else '' }}" required
+                           class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('rule_code', 'Rule Code') }}</label>
+                    <input type="text" name="rule_code" value="{{ rule.rule_code if rule else '' }}"
+                           placeholder="Auto-generated if empty"
+                           class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('rule_type', 'Rule Type') }} *</label>
+                    <select name="rule_type" required class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                        <option value="">{{ t('select_type', 'Select Type') }}</option>
+                        <option value="positive" {% if rule and rule.rule_type == 'positive' %}selected{% endif %}>{{ t('positive', 'Positive') }}</option>
+                        <option value="negative" {% if rule and rule.rule_type == 'negative' %}selected{% endif %}>{{ t('negative', 'Negative') }}</option>
+                        <option value="neutral" {% if rule and rule.rule_type == 'neutral' %}selected{% endif %}>{{ t('neutral', 'Neutral') }}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('category', 'Category') }} *</label>
+                    <select name="category" required class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                        <option value="">{{ t('select_category', 'Select Category') }}</option>
+                        <option value="demographic" {% if rule and rule.category == 'demographic' %}selected{% endif %}>{{ t('demographic', 'Demographic') }}</option>
+                        <option value="behavioral" {% if rule and rule.category == 'behavioral' %}selected{% endif %}>{{ t('behavioral', 'Behavioral') }}</option>
+                        <option value="engagement" {% if rule and rule.category == 'engagement' %}selected{% endif %}>{{ t('engagement', 'Engagement') }}</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('score_change', 'Score Change') }} *</label>
+                    <input type="number" name="score_change" value="{{ rule.score_change if rule else 10 }}" required
+                           class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                </div>
+            </div>
+
+            <!-- Condition -->
+            <div class="border-t border-white/10 pt-6">
+                <h3 class="text-lg font-semibold text-white mb-4">{{ t('condition', 'Condition') }}</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('attribute_field', 'Attribute Field') }}</label>
+                        <input type="text" name="attribute_field" value="{{ rule.attribute_field if rule else '' }}"
+                               placeholder="e.g., industry, engagement_action"
+                               class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('operator', 'Operator') }}</label>
+                        <select name="operator" class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                            <option value="equals" {% if rule and rule.operator == 'equals' %}selected{% endif %}>{{ t('equals', 'Equals') }}</option>
+                            <option value="contains" {% if rule and rule.operator == 'contains' %}selected{% endif %}>{{ t('contains', 'Contains') }}</option>
+                            <option value="greater_than" {% if rule and rule.operator == 'greater_than' %}selected{% endif %}>{{ t('greater_than', 'Greater Than') }}</option>
+                            <option value="less_than" {% if rule and rule.operator == 'less_than' %}selected{% endif %}>{{ t('less_than', 'Less Than') }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('attribute_value', 'Value') }}</label>
+                        <input type="text" name="attribute_value" value="{{ rule.attribute_value if rule else '' }}"
+                               placeholder="e.g., Auto Parts"
+                               class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Priority & Status -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('priority', 'Priority') }}</label>
+                    <input type="number" name="priority" value="{{ rule.priority if rule else 0 }}"
+                           class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('status', 'Status') }}</label>
+                    <div class="flex items-center gap-4 mt-3">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="is_active" value="1" {% if not rule or rule.is_active %}checked{% endif %}
+                                   class="w-5 h-5 rounded border-white/20 bg-white/5 text-brand-500 focus:ring-brand-500">
+                            <span class="text-white">{{ t('active', 'Active') }}</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div>
+                <label class="block text-sm font-semibold text-slate-300 mb-2">{{ t('description', 'Description') }}</label>
+                <textarea name="description" rows="3"
+                          placeholder="{{ t('rule_description_placeholder', 'Describe when this rule applies...') }}"
+                          class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:ring-2 focus:ring-brand-500/50">{{ rule.description if rule else '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="flex items-center justify-end gap-3 mt-8 pt-6 border-t border-white/10">
+            <a href="{{ url_for('marketing.lead_scoring_list') }}" class="px-6 py-3 text-slate-400 hover:text-white transition-all">
+                {{ t('cancel', 'Cancel') }}
+            </a>
+            <button type="submit" class="px-6 py-3 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-save mr-2"></i>{{ t('save_rule', 'Save Rule') }}
+            </button>
+        </div>
+    </form>
+
+</div>
+{% endblock %}

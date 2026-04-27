@@ -478,6 +478,264 @@ DOCUMENT_TABLES = [
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (category_id) REFERENCES document_categories(id) ON DELETE SET NULL
     )""",
+
+    # -------------------------------------------------------------------------
+    # 16. Document Metadata Definitions
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_metadata_definitions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        field_code TEXT UNIQUE NOT NULL,
+        field_name TEXT NOT NULL,
+        field_type TEXT DEFAULT 'text',
+        category_id INTEGER,
+        is_required INTEGER DEFAULT 0,
+        is_searchable INTEGER DEFAULT 1,
+        is_exportable INTEGER DEFAULT 1,
+        visible_in_list INTEGER DEFAULT 1,
+        editable_by_roles TEXT,
+        default_value TEXT,
+        validation_pattern TEXT,
+        options_json TEXT,
+        display_order INTEGER DEFAULT 0,
+        help_text TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (category_id) REFERENCES document_categories(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 17. Document Metadata Values
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_metadata_values (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id INTEGER NOT NULL,
+        field_id INTEGER NOT NULL,
+        field_value TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+        FOREIGN KEY (field_id) REFERENCES dms_metadata_definitions(id) ON DELETE CASCADE,
+        UNIQUE(document_id, field_id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 18. Document Reviews
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_document_reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id INTEGER NOT NULL,
+        reviewer_user_id INTEGER,
+        review_status TEXT DEFAULT 'Pending',
+        review_requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        review_completed_at DATETIME,
+        review_comments TEXT,
+        review_score INTEGER,
+        due_date DATETIME,
+        is_overdue INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewer_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 19. Document Approvals
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_document_approvals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id INTEGER NOT NULL,
+        approver_user_id INTEGER,
+        approval_status TEXT DEFAULT 'Pending',
+        approval_sequence INTEGER DEFAULT 1,
+        approval_requested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        approval_completed_at DATETIME,
+        approval_comments TEXT,
+        rejection_reason TEXT,
+        due_date DATETIME,
+        is_overdue INTEGER DEFAULT 0,
+        external_ref TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+        FOREIGN KEY (approver_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 20. Document ACL (Access Control List)
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_document_acl (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id INTEGER NOT NULL,
+        user_id INTEGER,
+        role_id INTEGER,
+        department_id INTEGER,
+        permission_type TEXT NOT NULL,
+        permission_level TEXT DEFAULT 'Read',
+        granted_by_user_id INTEGER,
+        is_inherited INTEGER DEFAULT 0,
+        expires_at DATETIME,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+        FOREIGN KEY (granted_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 21. Document Export Presets
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_export_presets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        preset_name TEXT NOT NULL,
+        preset_code TEXT UNIQUE,
+        description TEXT,
+        export_format TEXT DEFAULT 'CSV',
+        include_columns TEXT,
+        date_range_start DATETIME,
+        date_range_end DATETIME,
+        filter_criteria TEXT,
+        is_shared INTEGER DEFAULT 0,
+        created_by_user_id INTEGER,
+        usage_count INTEGER DEFAULT 0,
+        last_used_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 22. Legal Holds
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_legal_holds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        hold_reference TEXT UNIQUE NOT NULL,
+        hold_name TEXT NOT NULL,
+        description TEXT,
+        hold_type TEXT DEFAULT 'Legal',
+        status TEXT DEFAULT 'Active',
+        reason TEXT,
+        requested_by_user_id INTEGER,
+        legal_case_ref TEXT,
+        start_date DATETIME,
+        end_date DATETIME,
+        is_permanent INTEGER DEFAULT 0,
+        company_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (requested_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 23. Legal Hold Documents
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_legal_hold_documents (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        hold_id INTEGER NOT NULL,
+        document_id INTEGER NOT NULL,
+        added_by_user_id INTEGER,
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        notes TEXT,
+        FOREIGN KEY (hold_id) REFERENCES dms_legal_holds(id) ON DELETE CASCADE,
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+        UNIQUE(hold_id, document_id)
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 24. Document Archive Log
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_archive_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id INTEGER NOT NULL,
+        archived_by_user_id INTEGER,
+        archive_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        archive_location TEXT,
+        archive_reason TEXT,
+        retention_end_date DATETIME,
+        disposed INTEGER DEFAULT 0,
+        disposed_by_user_id INTEGER,
+        disposed_at DATETIME,
+        disposal_method TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+        FOREIGN KEY (archived_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 25. Document Disposal Log
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_disposal_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id INTEGER NOT NULL,
+        disposal_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        disposed_by_user_id INTEGER,
+        disposal_method TEXT,
+        disposal_approval_user_id INTEGER,
+        approval_notes TEXT,
+        verified_by_user_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+        FOREIGN KEY (disposed_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 26. Document Comments
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_document_comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        document_id INTEGER NOT NULL,
+        parent_comment_id INTEGER,
+        user_id INTEGER NOT NULL,
+        comment_text TEXT NOT NULL,
+        mentions TEXT,
+        is_resolved INTEGER DEFAULT 0,
+        resolved_by_user_id INTEGER,
+        resolved_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE,
+        FOREIGN KEY (parent_comment_id) REFERENCES dms_document_comments(id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 27. Required Document Rules
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_required_document_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rule_name TEXT NOT NULL,
+        rule_code TEXT UNIQUE,
+        description TEXT,
+        source_module TEXT NOT NULL,
+        document_category_id INTEGER,
+        document_type TEXT,
+        is_mandatory INTEGER DEFAULT 1,
+        validity_days INTEGER,
+        warning_days_before_expiry INTEGER,
+        company_id INTEGER,
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (document_category_id) REFERENCES document_categories(id) ON DELETE SET NULL
+    )""",
+
+    # -------------------------------------------------------------------------
+    # 28. Saved Views
+    # -------------------------------------------------------------------------
+    """CREATE TABLE IF NOT EXISTS dms_saved_views (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        view_name TEXT NOT NULL,
+        view_code TEXT UNIQUE,
+        view_type TEXT DEFAULT 'list',
+        filter_config TEXT,
+        sort_config TEXT,
+        column_config TEXT,
+        is_shared INTEGER DEFAULT 0,
+        is_default INTEGER DEFAULT 0,
+        created_by_user_id INTEGER,
+        usage_count INTEGER DEFAULT 0,
+        last_used_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    )""",
 ]
 
 
@@ -492,6 +750,10 @@ DOCUMENT_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status)",
     "CREATE INDEX IF NOT EXISTS idx_documents_source ON documents(source_module, source_record_id)",
     "CREATE INDEX IF NOT EXISTS idx_documents_archived ON documents(is_archived)",
+    "CREATE INDEX IF NOT EXISTS idx_documents_expiry ON documents(expiry_date)",
+    "CREATE INDEX IF NOT EXISTS idx_documents_company ON documents(company_id)",
+    "CREATE INDEX IF NOT EXISTS idx_documents_department ON documents(department_id)",
+    "CREATE INDEX IF NOT EXISTS idx_documents_created ON documents(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_versions_document ON document_versions(document_id)",
     "CREATE INDEX IF NOT EXISTS idx_versions_current ON document_versions(is_current_version)",
     "CREATE INDEX IF NOT EXISTS idx_links_document ON document_links(document_id)",
@@ -499,6 +761,7 @@ DOCUMENT_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_shares_document ON document_shares(document_id)",
     "CREATE INDEX IF NOT EXISTS idx_access_logs_document ON document_access_logs(document_id)",
     "CREATE INDEX IF NOT EXISTS idx_access_logs_user ON document_access_logs(user_id)",
+    "CREATE INDEX IF NOT EXISTS idx_access_logs_created ON document_access_logs(created_at)",
     "CREATE INDEX IF NOT EXISTS idx_checkout_document ON document_checkout(document_id)",
     "CREATE INDEX IF NOT EXISTS idx_checkout_user ON document_checkout(checked_out_by_user_id)",
     "CREATE INDEX IF NOT EXISTS idx_checkout_expires ON document_checkout(check_out_expires_at)",
@@ -511,6 +774,16 @@ DOCUMENT_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_signature_participants_status ON signature_participants(status)",
     "CREATE INDEX IF NOT EXISTS idx_templates_category ON document_templates(category_id)",
     "CREATE INDEX IF NOT EXISTS idx_templates_active ON document_templates(is_active)",
+    "CREATE INDEX IF NOT EXISTS idx_metadata_doc ON dms_metadata_values(document_id)",
+    "CREATE INDEX IF NOT EXISTS idx_metadata_field ON dms_metadata_values(field_id)",
+    "CREATE INDEX IF NOT EXISTS idx_reviews_document ON dms_document_reviews(document_id)",
+    "CREATE INDEX IF NOT EXISTS idx_approvals_document ON dms_document_approvals(document_id)",
+    "CREATE INDEX IF NOT EXISTS idx_acl_document ON dms_document_acl(document_id)",
+    "CREATE INDEX IF NOT EXISTS idx_legal_holds_status ON dms_legal_holds(status)",
+    "CREATE INDEX IF NOT EXISTS idx_legal_hold_docs_hold ON dms_legal_hold_documents(hold_id)",
+    "CREATE INDEX IF NOT EXISTS idx_legal_hold_docs_doc ON dms_legal_hold_documents(document_id)",
+    "CREATE INDEX IF NOT EXISTS idx_comments_document ON dms_document_comments(document_id)",
+    "CREATE INDEX IF NOT EXISTS idx_required_rules_module ON dms_required_document_rules(source_module)",
 ]
 
 
@@ -1681,6 +1954,673 @@ def auto_expire_checkouts():
         return count
     finally:
         db_local.close()
+
+
+# =============================================================================
+# DOCUMENT REVIEWS & APPROVALS HELPERS
+# =============================================================================
+
+def get_pending_reviews(user_id=None):
+    """Get pending document reviews."""
+    db = get_db()
+    try:
+        query = """
+            SELECT r.*, d.title as document_title, d.document_code,
+                   u.username as reviewer_username
+            FROM dms_document_reviews r
+            JOIN documents d ON r.document_id = d.id
+            LEFT JOIN users u ON r.reviewer_user_id = u.id
+            WHERE r.review_status = 'Pending'
+        """
+        params = []
+        if user_id:
+            query += " AND r.reviewer_user_id = ?"
+            params.append(user_id)
+        query += " ORDER BY r.due_date ASC, r.review_requested_at DESC"
+        return db.execute(query, params).fetchall()
+    finally:
+        db.close()
+
+
+def get_pending_approvals(user_id=None):
+    """Get pending document approvals."""
+    db = get_db()
+    try:
+        query = """
+            SELECT a.*, d.title as document_title, d.document_code,
+                   u.username as approver_username
+            FROM dms_document_approvals a
+            JOIN documents d ON a.document_id = d.id
+            LEFT JOIN users u ON a.approver_user_id = u.id
+            WHERE a.approval_status = 'Pending'
+        """
+        params = []
+        if user_id:
+            query += " AND a.approver_user_id = ?"
+            params.append(user_id)
+        query += " ORDER BY a.due_date ASC, a.approval_requested_at DESC"
+        return db.execute(query, params).fetchall()
+    finally:
+        db.close()
+
+
+def get_document_reviews(document_id):
+    """Get all reviews for a document."""
+    db = get_db()
+    try:
+        return db.execute("""
+            SELECT r.*, u.username as reviewer_username
+            FROM dms_document_reviews r
+            LEFT JOIN users u ON r.reviewer_user_id = u.id
+            WHERE r.document_id = ?
+            ORDER BY r.review_requested_at DESC
+        """, (document_id,)).fetchall()
+    finally:
+        db.close()
+
+
+def get_document_approvals(document_id):
+    """Get all approvals for a document."""
+    db = get_db()
+    try:
+        return db.execute("""
+            SELECT a.*, u.username as approver_username
+            FROM dms_document_approvals a
+            LEFT JOIN users u ON a.approver_user_id = u.id
+            WHERE a.document_id = ?
+            ORDER BY a.approval_sequence ASC
+        """, (document_id,)).fetchall()
+    finally:
+        db.close()
+
+
+# =============================================================================
+# ACCESS CONTROL HELPERS
+# =============================================================================
+
+def get_document_acl(document_id):
+    """Get ACL entries for a document."""
+    db = get_db()
+    try:
+        return db.execute("""
+            SELECT acl.*, u.username, r.name as role_name
+            FROM dms_document_acl acl
+            LEFT JOIN users u ON acl.user_id = u.id
+            LEFT JOIN roles r ON acl.role_id = r.id
+            WHERE acl.document_id = ?
+            ORDER BY acl.created_at DESC
+        """, (document_id,)).fetchall()
+    finally:
+        db.close()
+
+
+def check_document_permission(document_id, user_id, permission_level='Read'):
+    """Check if user has specific permission on document."""
+    db = get_db()
+    try:
+        # Check direct user ACL
+        acl = db.execute("""
+            SELECT 1 FROM dms_document_acl
+            WHERE document_id = ? AND user_id = ?
+            AND is_active = 1
+            AND (expires_at IS NULL OR expires_at > datetime('now'))
+        """, (document_id, user_id)).fetchone()
+
+        if acl:
+            return True
+
+        # Check owner
+        owner = db.execute("SELECT 1 FROM documents WHERE id = ? AND owner_user_id = ?",
+                          (document_id, user_id)).fetchone()
+        if owner:
+            return True
+
+        return False
+    finally:
+        db.close()
+
+
+def add_document_acl(document_id, user_id=None, role_id=None, permission_type='User',
+                     permission_level='Read', granted_by_user_id=None, expires_at=None):
+    """Add ACL entry for a document."""
+    db = get_db()
+    try:
+        cursor = db.execute("""
+            INSERT INTO dms_document_acl
+            (document_id, user_id, role_id, permission_type, permission_level,
+             granted_by_user_id, expires_at, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+        """, (document_id, user_id, role_id, permission_type, permission_level,
+              granted_by_user_id, expires_at))
+        db.commit()
+        return cursor.lastrowid
+    finally:
+        db.close()
+
+
+def remove_document_acl(acl_id):
+    """Remove ACL entry."""
+    db = get_db()
+    try:
+        db.execute("DELETE FROM dms_document_acl WHERE id = ?", (acl_id,))
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+
+# =============================================================================
+# RETENTION POLICY HELPERS
+# =============================================================================
+
+def get_retention_policies():
+    """Get all retention policies."""
+    db = get_db()
+    try:
+        return db.execute("""
+            SELECT p.*,
+                   (SELECT COUNT(*) FROM document_retention_schedules WHERE policy_id = p.id) as document_count
+            FROM document_retention_policies p
+            ORDER BY p.policy_name
+        """).fetchall()
+    finally:
+        db.close()
+
+
+def get_retention_schedules(policy_id=None, status=None):
+    """Get retention schedules."""
+    db = get_db()
+    try:
+        query = """
+            SELECT s.*, p.policy_name, d.title as document_title, d.document_code,
+                   u.username as reviewed_by_username
+            FROM document_retention_schedules s
+            JOIN document_retention_policies p ON s.policy_id = p.id
+            JOIN documents d ON s.document_id = d.id
+            LEFT JOIN users u ON s.reviewed_by_user_id = u.id
+            WHERE 1=1
+        """
+        params = []
+        if policy_id:
+            query += " AND s.policy_id = ?"
+            params.append(policy_id)
+        if status:
+            query += " AND s.status = ?"
+            params.append(status)
+        query += " ORDER BY s.expires_at ASC"
+        return db.execute(query, params).fetchall()
+    finally:
+        db.close()
+
+
+def get_overdue_retention_reviews():
+    """Get documents with overdue retention reviews."""
+    db = get_db()
+    try:
+        return db.execute("""
+            SELECT s.*, p.policy_name, d.title, d.document_code
+            FROM document_retention_schedules s
+            JOIN document_retention_policies p ON s.policy_id = p.id
+            JOIN documents d ON s.document_id = d.id
+            WHERE s.review_date < datetime('now') AND s.status = 'active'
+            ORDER BY s.review_date ASC
+        """).fetchall()
+    finally:
+        db.close()
+
+
+# =============================================================================
+# LEGAL HOLD HELPERS
+# =============================================================================
+
+def get_legal_holds(status=None):
+    """Get legal holds, optionally filtered by status."""
+    db = get_db()
+    try:
+        query = """
+            SELECT h.*,
+                   (SELECT COUNT(*) FROM dms_legal_hold_documents WHERE hold_id = h.id) as document_count,
+                   u.username as requested_by_username
+            FROM dms_legal_holds h
+            LEFT JOIN users u ON h.requested_by_user_id = u.id
+        """
+        params = []
+        if status:
+            query += " WHERE h.status = ?"
+            params.append(status)
+        query += " ORDER BY h.created_at DESC"
+        return db.execute(query, params).fetchall()
+    finally:
+        db.close()
+
+
+def get_legal_hold_documents(hold_id):
+    """Get all documents under a legal hold."""
+    db = get_db()
+    try:
+        return db.execute("""
+            SELECT d.*, hd.added_at, hd.notes, u.username as added_by_username
+            FROM dms_legal_hold_documents hd
+            JOIN documents d ON hd.document_id = d.id
+            LEFT JOIN users u ON hd.added_by_user_id = u.id
+            WHERE hd.hold_id = ?
+            ORDER BY hd.added_at DESC
+        """, (hold_id,)).fetchall()
+    finally:
+        db.close()
+
+
+def add_document_to_legal_hold(hold_id, document_id, added_by_user_id=None, notes=None):
+    """Add a document to a legal hold."""
+    db = get_db()
+    try:
+        db.execute("""
+            INSERT INTO dms_legal_hold_documents (hold_id, document_id, added_by_user_id, notes)
+            VALUES (?, ?, ?, ?)
+        """, (hold_id, document_id, added_by_user_id, notes))
+        db.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False  # Already in hold
+    finally:
+        db.close()
+
+
+def remove_document_from_legal_hold(hold_id, document_id):
+    """Remove a document from a legal hold."""
+    db = get_db()
+    try:
+        db.execute("""
+            DELETE FROM dms_legal_hold_documents
+            WHERE hold_id = ? AND document_id = ?
+        """, (hold_id, document_id))
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+
+def is_document_under_legal_hold(document_id):
+    """Check if a document is under legal hold."""
+    db = get_db()
+    try:
+        hold = db.execute("""
+            SELECT h.hold_name FROM dms_legal_holds h
+            JOIN dms_legal_hold_documents hd ON h.id = hd.hold_id
+            WHERE hd.document_id = ? AND h.status = 'Active'
+        """, (document_id,)).fetchone()
+        return dict(hold) if hold else None
+    finally:
+        db.close()
+
+
+# =============================================================================
+# EXPORT PRESET HELPERS
+# =============================================================================
+
+def get_export_presets(created_by_user_id=None):
+    """Get export presets."""
+    db = get_db()
+    try:
+        query = """
+            SELECT e.*, u.username as created_by_username
+            FROM dms_export_presets e
+            LEFT JOIN users u ON e.created_by_user_id = u.id
+        """
+        params = []
+        if created_by_user_id:
+            query += " WHERE e.created_by_user_id = ?"
+            params.append(created_by_user_id)
+        query += " ORDER BY e.usage_count DESC"
+        return db.execute(query, params).fetchall()
+    finally:
+        db.close()
+
+
+def create_export_preset(name, code, export_format, include_columns=None,
+                         date_from=None, date_to=None, created_by_user_id=None):
+    """Create a new export preset."""
+    db = get_db()
+    try:
+        cursor = db.execute("""
+            INSERT INTO dms_export_presets
+            (preset_name, preset_code, export_format, include_columns,
+             date_range_start, date_range_end, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (name, code, export_format, include_columns, date_from, date_to, created_by_user_id))
+        db.commit()
+        return cursor.lastrowid
+    finally:
+        db.close()
+
+
+def increment_preset_usage(preset_id):
+    """Increment the usage count for an export preset."""
+    db = get_db()
+    try:
+        db.execute("""
+            UPDATE dms_export_presets
+            SET usage_count = usage_count + 1, last_used_at = datetime('now')
+            WHERE id = ?
+        """, (preset_id,))
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+
+# =============================================================================
+# METADATA HELPERS
+# =============================================================================
+
+def get_metadata_definitions(category_id=None):
+    """Get metadata field definitions."""
+    db = get_db()
+    try:
+        query = """
+            SELECT md.*, c.name as category_name
+            FROM dms_metadata_definitions md
+            LEFT JOIN document_categories c ON md.category_id = c.id
+        """
+        params = []
+        if category_id:
+            query += " WHERE md.category_id = ?"
+            params.append(category_id)
+        query += " ORDER BY md.display_order ASC, md.field_name"
+        return db.execute(query, params).fetchall()
+    finally:
+        db.close()
+
+
+def get_document_metadata(document_id):
+    """Get all metadata values for a document."""
+    db = get_db()
+    try:
+        return db.execute("""
+            SELECT mv.*, md.field_name, md.field_type, md.field_code
+            FROM dms_metadata_values mv
+            JOIN dms_metadata_definitions md ON mv.field_id = md.id
+            WHERE mv.document_id = ?
+            ORDER BY md.display_order ASC
+        """, (document_id,)).fetchall()
+    finally:
+        db.close()
+
+
+def update_document_metadata(document_id, field_id, field_value):
+    """Update a metadata value for a document."""
+    db = get_db()
+    try:
+        db.execute("""
+            INSERT INTO dms_metadata_values (document_id, field_id, field_value, updated_at)
+            VALUES (?, ?, ?, datetime('now'))
+            ON CONFLICT(document_id, field_id) DO UPDATE SET
+                field_value = excluded.field_value,
+                updated_at = datetime('now')
+        """, (document_id, field_id, field_value))
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+
+# =============================================================================
+# DOCUMENT COMMENTS HELPERS
+# =============================================================================
+
+def get_document_comments(document_id, include_replies=True):
+    """Get comments for a document."""
+    db = get_db()
+    try:
+        if include_replies:
+            return db.execute("""
+                SELECT c.*, u.username, u.full_name,
+                       (SELECT COUNT(*) FROM dms_document_comments WHERE parent_comment_id = c.id) as reply_count
+                FROM dms_document_comments c
+                LEFT JOIN users u ON c.user_id = u.id
+                WHERE c.document_id = ? AND c.parent_comment_id IS NULL
+                ORDER BY c.created_at DESC
+            """, (document_id,)).fetchall()
+        else:
+            return db.execute("""
+                SELECT c.*, u.username, u.full_name
+                FROM dms_document_comments c
+                LEFT JOIN users u ON c.user_id = u.id
+                WHERE c.document_id = ?
+                ORDER BY c.created_at DESC
+            """, (document_id,)).fetchall()
+    finally:
+        db.close()
+
+
+def get_comment_replies(parent_comment_id):
+    """Get replies to a comment."""
+    db = get_db()
+    try:
+        return db.execute("""
+            SELECT c.*, u.username, u.full_name
+            FROM dms_document_comments c
+            LEFT JOIN users u ON c.user_id = u.id
+            WHERE c.parent_comment_id = ?
+            ORDER BY c.created_at ASC
+        """, (parent_comment_id,)).fetchall()
+    finally:
+        db.close()
+
+
+def add_document_comment(document_id, user_id, comment_text, parent_comment_id=None):
+    """Add a comment to a document."""
+    db = get_db()
+    try:
+        cursor = db.execute("""
+            INSERT INTO dms_document_comments (document_id, user_id, comment_text, parent_comment_id)
+            VALUES (?, ?, ?, ?)
+        """, (document_id, user_id, comment_text, parent_comment_id))
+        db.commit()
+        return cursor.lastrowid
+    finally:
+        db.close()
+
+
+def resolve_comment(comment_id, resolved_by_user_id):
+    """Mark a comment as resolved."""
+    db = get_db()
+    try:
+        db.execute("""
+            UPDATE dms_document_comments
+            SET is_resolved = 1, resolved_by_user_id = ?, resolved_at = datetime('now')
+            WHERE id = ?
+        """, (resolved_by_user_id, comment_id))
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+
+def delete_comment(comment_id):
+    """Delete a comment."""
+    db = get_db()
+    try:
+        db.execute("DELETE FROM dms_document_comments WHERE id = ?", (comment_id,))
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+
+# =============================================================================
+# DOCUMENT STATISTICS HELPERS
+# =============================================================================
+
+def get_document_stats_for_user(user_id):
+    """Get document statistics for a specific user."""
+    db = get_db()
+    try:
+        stats = {
+            'total_documents': 0,
+            'my_documents': 0,
+            'shared_with_me': 0,
+            'pending_signatures': 0,
+            'archived_documents': 0,
+            'draft_documents': 0,
+            'published_documents': 0,
+            'pending_reviews': 0,
+            'pending_approvals': 0,
+        }
+
+        # Total documents
+        result = db.execute("SELECT COUNT(*) as cnt FROM documents").fetchone()
+        stats['total_documents'] = result['cnt'] if result else 0
+
+        # My documents (owner)
+        result = db.execute("SELECT COUNT(*) as cnt FROM documents WHERE owner_user_id = ?",
+                          (user_id,)).fetchone()
+        stats['my_documents'] = result['cnt'] if result else 0
+
+        # Shared with me
+        result = db.execute("""
+            SELECT COUNT(DISTINCT document_id) as cnt FROM document_shares
+            WHERE (shared_with_user_id = ? OR shared_with_role IN (
+                SELECT role FROM user_roles WHERE user_id = ?
+            )) AND is_active = 1
+        """, (user_id, user_id)).fetchone()
+        stats['shared_with_me'] = result['cnt'] if result else 0
+
+        # Pending signatures for user
+        result = db.execute("""
+            SELECT COUNT(*) as cnt FROM signature_participants
+            WHERE user_id = ? AND status = 'Pending'
+        """, (user_id,)).fetchone()
+        stats['pending_signatures'] = result['cnt'] if result else 0
+
+        # Archived
+        result = db.execute("SELECT COUNT(*) as cnt FROM documents WHERE is_archived = 1").fetchone()
+        stats['archived_documents'] = result['cnt'] if result else 0
+
+        # Draft
+        result = db.execute("SELECT COUNT(*) as cnt FROM documents WHERE status = 'Draft'").fetchone()
+        stats['draft_documents'] = result['cnt'] if result else 0
+
+        # Published
+        result = db.execute("SELECT COUNT(*) as cnt FROM documents WHERE status = 'Published'").fetchone()
+        stats['published_documents'] = result['cnt'] if result else 0
+
+        # Pending reviews for user
+        result = db.execute("""
+            SELECT COUNT(*) as cnt FROM dms_document_reviews
+            WHERE reviewer_user_id = ? AND review_status = 'Pending'
+        """, (user_id,)).fetchone()
+        stats['pending_reviews'] = result['cnt'] if result else 0
+
+        # Pending approvals for user
+        result = db.execute("""
+            SELECT COUNT(*) as cnt FROM dms_document_approvals
+            WHERE approver_user_id = ? AND approval_status = 'Pending'
+        """, (user_id,)).fetchone()
+        stats['pending_approvals'] = result['cnt'] if result else 0
+
+        return stats
+    finally:
+        db.close()
+
+
+def get_recent_documents(user_id, limit=10):
+    """Get recent documents for a user."""
+    db = get_db()
+    try:
+        return db.execute("""
+            SELECT d.*, c.name as category_name,
+                   u.username as owner_username
+            FROM documents d
+            LEFT JOIN document_categories c ON d.category_id = c.id
+            LEFT JOIN users u ON d.owner_user_id = u.id
+            WHERE d.is_archived = 0
+            ORDER BY d.updated_at DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+    finally:
+        db.close()
+
+
+def get_pending_signatures_for_user(user_id, limit=5):
+    """Get pending signature requests for a user."""
+    db = get_db()
+    try:
+        return db.execute("""
+            SELECT sr.*, d.title as document_title, d.document_code,
+                   u.username as requestor_username,
+                   p.status as participant_status
+            FROM signature_requests sr
+            JOIN signature_participants p ON sr.id = p.request_id
+            JOIN documents d ON sr.document_id = d.id
+            LEFT JOIN users u ON sr.requestor_user_id = u.id
+            WHERE p.user_id = ? AND p.status = 'Pending' AND sr.status = 'Pending'
+            ORDER BY sr.due_date ASC, sr.created_at DESC
+            LIMIT ?
+        """, (user_id, limit)).fetchall()
+    finally:
+        db.close()
+
+
+def get_recent_document_activity(user_id, limit=10):
+    """Get recent document access activity."""
+    db = get_db()
+    try:
+        return db.execute("""
+            SELECT al.*, d.title as document_title, d.document_code,
+                   u.username
+            FROM document_access_logs al
+            JOIN documents d ON al.document_id = d.id
+            LEFT JOIN users u ON al.user_id = u.id
+            ORDER BY al.created_at DESC
+            LIMIT ?
+        """, (limit,)).fetchall()
+    finally:
+        db.close()
+
+
+# =============================================================================
+# DOCUMENT DISPOSAL HELPERS
+# =============================================================================
+
+def dispose_document(document_id, disposed_by_user_id, disposal_method='Shredded',
+                     approval_user_id=None, approval_notes=None):
+    """Record document disposal."""
+    db = get_db()
+    try:
+        cursor = db.execute("""
+            INSERT INTO dms_disposal_log
+            (document_id, disposed_by_user_id, disposal_method, disposal_approval_user_id, approval_notes)
+            VALUES (?, ?, ?, ?, ?)
+        """, (document_id, disposed_by_user_id, disposal_method, approval_user_id, approval_notes))
+        db.commit()
+        return cursor.lastrowid
+    finally:
+        db.close()
+
+
+def get_disposal_log(document_id=None, limit=100):
+    """Get disposal log entries."""
+    db = get_db()
+    try:
+        query = """
+            SELECT dl.*, d.title, d.document_code,
+                   u1.username as disposed_by_username,
+                   u2.username as approved_by_username
+            FROM dms_disposal_log dl
+            JOIN documents d ON dl.document_id = d.id
+            LEFT JOIN users u1 ON dl.disposed_by_user_id = u1.id
+            LEFT JOIN users u2 ON dl.disposal_approval_user_id = u2.id
+        """
+        params = []
+        if document_id:
+            query += " WHERE dl.document_id = ?"
+            params.append(document_id)
+        query += " ORDER BY dl.disposal_date DESC LIMIT ?"
+        params.append(limit)
+        return db.execute(query, params).fetchall()
+    finally:
+        db.close()
 
 
 # Initialize tables when module is imported

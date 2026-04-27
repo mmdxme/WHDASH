@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white">{{ t('journey_intelligence', 'Customer Journey Intelligence') }}</h1>
+            <p class="text-slate-400 mt-1">{{ t('journey_intelligence_desc', 'Analyze customer touchpoints and journey patterns') }}</p>
+        </div>
+    </div>
+
+    <!-- Stage Summary -->
+    {% if stage_summary %}
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+        {% for stage in stage_summary %}
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="text-2xl font-extrabold text-white mb-1">{{ stage.count }}</div>
+            <div class="text-sm text-slate-400">{{ stage.journey_stage }}</div>
+            <div class="mt-2 flex gap-2 text-xs">
+                <span class="text-cyan-400">Eng: {{ "%.0f"|format(stage.avg_engagement or 0) }}</span>
+                <span class="text-amber-400">Risk: {{ "%.0f"|format(stage.avg_churn_risk or 0) }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Filters -->
+    <div class="glass-panel rounded-2xl p-4 mb-8">
+        <form method="get" class="flex flex-wrap items-center gap-4">
+            <input type="text" name="search" value="{{ search }}" placeholder="{{ t('search_customers', 'Search customers...') }}"
+                   class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm flex-1">
+            <select name="journey_stage" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm">
+                <option value="">{{ t('all_stages', 'All Stages') }}</option>
+                <option value="Awareness" {% if journey_stage == 'Awareness' %}selected{% endif %}>{{ t('awareness', 'Awareness') }}</option>
+                <option value="Consideration" {% if journey_stage == 'Consideration' %}selected{% endif %}>{{ t('consideration', 'Consideration') }}</option>
+                <option value="Conversion" {% if journey_stage == 'Conversion' %}selected{% endif %}>{{ t('conversion', 'Conversion') }}</option>
+                <option value="Retention" {% if journey_stage == 'Retention' %}selected{% endif %}>{{ t('retention', 'Retention') }}</option>
+                <option value="Advocacy" {% if journey_stage == 'Advocacy' %}selected{% endif %}>{{ t('advocacy', 'Advocacy') }}</option>
+            </select>
+            <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold">{{ t('filter', 'Filter') }}</button>
+        </form>
+    </div>
+
+    <!-- Journey Records Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('customer', 'Customer') }}</th>
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('stage', 'Stage') }}</th>
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('touchpoint', 'Touchpoint') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('channel', 'Channel') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('engagement', 'Engagement') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('churn_risk', 'Churn Risk') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('next_action', 'Next Action') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-4 px-6">
+                            <div class="font-semibold text-white">{{ record.lead_name or 'Unknown' }}</div>
+                            <div class="text-xs text-slate-500">{{ record.email or record.phone or '-' }}</div>
+                        </td>
+                        <td class="py-4 px-6">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {% if record.journey_stage == 'Awareness' %}bg-blue-400/20 text-blue-400{% elif record.journey_stage == 'Consideration' %}bg-amber-400/20 text-amber-400{% elif record.journey_stage == 'Conversion' %}bg-emerald-400/20 text-emerald-400{% elif record.journey_stage == 'Retention' %}bg-purple-400/20 text-purple-400{% else %}bg-cyan-400/20 text-cyan-400{% endif %}">
+                                {{ record.journey_stage }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-slate-300">
+                            {{ record.touchpoint_name or record.touchpoint_type or '-' }}
+                        </td>
+                        <td class="py-4 px-6 text-center text-slate-400">{{ record.channel_name or '-' }}</td>
+                        <td class="py-4 px-6 text-center">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {% if record.engagement_score >= 70 %}bg-emerald-400/20 text-emerald-400{% elif record.engagement_score >= 40 %}bg-amber-400/20 text-amber-400{% else %}bg-rose-400/20 text-rose-400{% endif %}">
+                                {{ record.engagement_score or 0 }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-center">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {% if record.churn_risk_score >= 70 %}bg-rose-400/20 text-rose-400{% elif record.churn_risk_score >= 40 %}bg-amber-400/20 text-amber-400{% else %}bg-emerald-400/20 text-emerald-400{% endif %}">
+                                {{ record.churn_risk_score or 0 }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-center text-cyan-400 text-xs">
+                            {{ record.next_best_action or '-' }}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="py-16 text-center text-slate-500">
+                            <i class="fa-solid fa-route text-5xl mb-4 text-slate-600"></i>
+                            <p class="text-lg">{{ t('no_journey_data', 'No journey intelligence data yet') }}</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if total > per_page %}
+    <div class="flex items-center justify-between mt-6">
+        <div class="text-sm text-slate-400">
+            {{ t('showing', 'Showing') }} {{ (page - 1) * per_page + 1 }} - {{ [page * per_page, total] | min }} {{ t('of', 'of') }} {{ total }}
+        </div>
+        <div class="flex gap-2">
+            {% if page > 1 %}
+            <a href="?page={{ page - 1 }}&search={{ search }}&journey_stage={{ journey_stage }}" class="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm">{{ t('prev', 'Prev') }}</a>
+            {% endif %}
+            {% if page * per_page < total %}
+            <a href="?page={{ page + 1 }}&search={{ search }}&journey_stage={{ journey_stage }}" class="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-sm">{{ t('next', 'Next') }}</a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

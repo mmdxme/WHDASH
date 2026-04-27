@@ -1,0 +1,254 @@
+{% extends "project/base.html" %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="mb-8 flex justify-between items-center">
+    <div>
+        <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ t('project_phases', 'Project Phases') }}</h1>
+        <p class="text-slate-600 dark:text-slate-400 mt-1">{{ t('phases_subtitle', 'Manage project phases and deliverables') }}</p>
+    </div>
+    <div class="flex gap-3">
+        <a href="{{ url_for('project_list') }}" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-arrow-left mr-2"></i>{{ t('back_to_projects', 'Back to Projects') }}
+        </a>
+        <button onclick="showAddPhaseModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-plus mr-2"></i>{{ t('add_phase', 'Add Phase') }}
+        </button>
+    </div>
+</div>
+
+<!-- Project Selector -->
+<div class="card mb-6">
+    <div class="p-4 flex items-center gap-4">
+        <label class="text-sm font-medium text-slate-700 dark:text-slate-300">{{ t('select_project', 'Select Project') }}:</label>
+        <select id="projectSelector" onchange="loadPhases()" class="flex-1 max-w-md px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <option value="">{{ t('select_project', 'Select a project') }}</option>
+            {% for p in projects %}
+            <option value="{{ p.id }}" {% if selected_project == p.id %}selected{% endif %}>{{ p.code }} - {{ p.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
+
+<!-- Phases List -->
+<div id="phasesList">
+    {% if selected_project and phases %}
+    <div class="space-y-4">
+        {% for phase in phases %}
+        <div class="card p-5 phase-card" data-phase-id="{{ phase.id }}">
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex items-start gap-4">
+                    <div class="flex flex-col items-center">
+                        <span class="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold">{{ loop.index }}</span>
+                        {% if not loop.last %}
+                        <div class="w-0.5 h-16 bg-indigo-200 dark:bg-indigo-700 mt-2"></div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-3 mb-1">
+                            <h3 class="text-lg font-semibold text-slate-800 dark:text-white">{{ phase.name }}</h3>
+                            <span class="status-badge status-{{ phase.status|lower }}">{{ phase.status }}</span>
+                        </div>
+                        <p class="text-sm text-slate-500">{{ phase.start_date }} - {{ phase.end_date }}</p>
+                        <p class="text-sm text-slate-600 dark:text-slate-400 mt-2">{{ phase.description }}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="editPhase('{{ phase.id }}')" class="p-2 text-slate-500 hover:text-indigo-600 transition-colors" title="{{ t('edit', 'Edit') }}">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button onclick="deletePhase('{{ phase.id }}')" class="p-2 text-slate-500 hover:text-red-600 transition-colors" title="{{ t('delete', 'Delete') }}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    <button onclick="togglePhaseDetails('{{ phase.id }}')" class="p-2 text-slate-500 hover:text-indigo-600 transition-colors" title="{{ t('expand', 'Expand') }}">
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Progress -->
+            <div class="mb-4">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-sm font-medium text-slate-600 dark:text-slate-400">{{ t('progress', 'Progress') }}</span>
+                    <span class="text-sm font-semibold text-slate-800 dark:text-white">{{ phase.progress }}%</span>
+                </div>
+                <div class="progress-bar h-3">
+                    <div class="progress-fill {% if phase.progress >= 100 %}bg-green-500{% elif phase.progress >= 75 %}bg-indigo-500{% elif phase.progress >= 50 %}bg-blue-500{% elif phase.progress >= 25 %}bg-amber-500{% else %}bg-slate-400{% endif %}" style="width: {{ phase.progress }}%"></div>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-50 dark:bg-slate-700/30 rounded-lg">
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-slate-800 dark:text-white">{{ phase.task_count }}</p>
+                    <p class="text-xs text-slate-500">{{ t('total_tasks', 'Total Tasks') }}</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-green-600 dark:text-green-400">{{ phase.completed_tasks }}</p>
+                    <p class="text-xs text-slate-500">{{ t('completed', 'Completed') }}</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-amber-600 dark:text-amber-400">{{ phase.in_progress_tasks }}</p>
+                    <p class="text-xs text-slate-500">{{ t('in_progress', 'In Progress') }}</p>
+                </div>
+                <div class="text-center">
+                    <p class="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{{ phase.deliverable_count }}</p>
+                    <p class="text-xs text-slate-500">{{ t('deliverables', 'Deliverables') }}</p>
+                </div>
+            </div>
+
+            <!-- Expandable Tasks -->
+            <div id="phase-tasks-{{ phase.id }}" class="hidden mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <h4 class="font-semibold text-slate-800 dark:text-white mb-3">{{ t('phase_tasks', 'Phase Tasks') }}</h4>
+                {% if phase.tasks %}
+                <div class="space-y-2">
+                    {% for task in phase.tasks %}
+                    <div class="flex items-center justify-between p-3 bg-white dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
+                        <div class="flex items-center gap-3">
+                            <input type="checkbox" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" {% if task.status == 'Completed' %}checked{% endif %}>
+                            <div>
+                                <p class="font-medium text-slate-800 dark:text-white">{{ task.name }}</p>
+                                <p class="text-xs text-slate-500">{{ task.assignee_name }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-sm text-slate-500">{{ task.due_date }}</span>
+                            <span class="status-badge status-{{ task.status|lower }}">{{ task.status }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-slate-500 dark:text-slate-400 text-center py-4">{{ t('no_tasks_in_phase', 'No tasks in this phase') }}</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card p-12 text-center">
+        <i class="fas fa-layer-group text-6xl text-slate-300 dark:text-slate-600 mb-4"></i>
+        <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-2">{{ t('no_phases', 'No Phases') }}</h3>
+        <p class="text-slate-500 dark:text-slate-400 mb-4">{{ t('no_phases_message', 'Select a project or create your first phase') }}</p>
+        {% if selected_project %}
+        <button onclick="showAddPhaseModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium transition-colors">
+            <i class="fas fa-plus mr-2"></i>{{ t('add_first_phase', 'Add First Phase') }}
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<!-- Add/Edit Phase Modal -->
+<div id="phaseModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-center justify-center min-h-screen px-4">
+        <div class="fixed inset-0 bg-black/50" onclick="closePhaseModal()"></div>
+        <div class="relative bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-slate-800 dark:text-white" id="phaseModalTitle">{{ t('add_phase', 'Add Phase') }}</h3>
+                <button onclick="closePhaseModal()" class="p-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <form id="phaseForm" method="POST" action="{{ url_for('project_save_phase') }}">
+                <input type="hidden" name="project_id" value="{{ selected_project }}">
+                <input type="hidden" name="phase_id" id="phaseId">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('phase_name', 'Phase Name') }} *</label>
+                        <input type="text" id="phaseName" name="name" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('description', 'Description') }}</label>
+                        <textarea id="phaseDescription" name="description" rows="3" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('start_date', 'Start Date') }} *</label>
+                            <input type="date" id="phaseStartDate" name="start_date" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('end_date', 'End Date') }} *</label>
+                            <input type="date" id="phaseEndDate" name="end_date" required class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{{ t('status', 'Status') }}</label>
+                        <select id="phaseStatus" name="status" class="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="Pending">Pending</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                            <option value="On Hold">On Hold</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="closePhaseModal()" class="px-4 py-2 bg-slate-200 hover:bg-slate-300 dark:bg-slate-600 dark:hover:bg-slate-500 text-slate-700 dark:text-slate-300 rounded-lg font-medium">{{ t('cancel', 'Cancel') }}</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">{{ t('save', 'Save') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function loadPhases() {
+    const projectId = document.getElementById('projectSelector').value;
+    if (projectId) {
+        window.location.href = '{{ url_for("project_phases") }}?project_id=' + projectId;
+    }
+}
+
+function showAddPhaseModal() {
+    document.getElementById('phaseModalTitle').textContent = '{{ t("add_phase", "Add Phase") }}';
+    document.getElementById('phaseForm').reset();
+    document.getElementById('phaseId').value = '';
+    document.getElementById('phaseModal').classList.remove('hidden');
+}
+
+function editPhase(phaseId) {
+    fetch('/api/project/phase/' + phaseId)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('phaseModalTitle').textContent = '{{ t("edit_phase", "Edit Phase") }}';
+            document.getElementById('phaseId').value = data.id;
+            document.getElementById('phaseName').value = data.name;
+            document.getElementById('phaseDescription').value = data.description || '';
+            document.getElementById('phaseStartDate').value = data.start_date;
+            document.getElementById('phaseEndDate').value = data.end_date;
+            document.getElementById('phaseStatus').value = data.status;
+            document.getElementById('phaseModal').classList.remove('hidden');
+        });
+}
+
+function closePhaseModal() {
+    document.getElementById('phaseModal').classList.add('hidden');
+}
+
+function deletePhase(phaseId) {
+    Swal.fire({
+        title: '{{ t("delete_phase", "Delete Phase") }}',
+        text: '{{ t("confirm_delete_phase", "Are you sure you want to delete this phase?") }}',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '{{ t("yes_delete", "Yes, Delete") }}',
+        cancelButtonText: '{{ t("cancel", "Cancel") }}',
+        confirmButtonColor: '#ef4444'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            fetch('/api/project/phase/' + phaseId, {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || '' }
+            }).then(() => location.reload());
+        }
+    });
+}
+
+function togglePhaseDetails(phaseId) {
+    const details = document.getElementById('phase-tasks-' + phaseId);
+    details.classList.toggle('hidden');
+}
+</script>
+{% endblock %}

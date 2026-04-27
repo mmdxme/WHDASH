@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white">{{ t('ab_tests', 'A/B Tests') }}</h1>
+            <p class="text-slate-400 mt-1">{{ t('ab_tests_desc', 'Design and analyze A/B tests for campaign optimization') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('marketing.ab_tests_new') }}" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-plus mr-2"></i>{{ t('new_ab_test', 'New Test') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Tests Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('test', 'Test') }}</th>
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('type', 'Type') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('status', 'Status') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('variants', 'Variants') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('winner', 'Winner') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('uplift', 'Uplift') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for test in tests %}
+                    <tr class="border-b border-white/5 hover:bg-white/5 transition-all">
+                        <td class="py-4 px-6">
+                            <a href="{{ url_for('marketing.ab_tests_view', id=test.id) }}" class="text-brand-400 hover:text-brand-300 font-semibold">
+                                {{ test.test_name }}
+                            </a>
+                            <div class="text-xs text-slate-500 mt-1">{{ test.test_code }} | {{ test.channel or 'Multi-channel' }}</div>
+                        </td>
+                        <td class="py-4 px-6 text-slate-300">{{ test.test_type }}</td>
+                        <td class="py-4 px-6 text-center">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {% if test.status == 'Active' %}bg-emerald-400/20 text-emerald-400{% elif test.status == 'Completed' %}bg-blue-400/20 text-blue-400{% elif test.status == 'Draft' %}bg-slate-400/20 text-slate-400{% else %}bg-amber-400/20 text-amber-400{% endif %}">
+                                {{ test.status }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-center text-slate-300">
+                            {{ test.control_variant or 'Control' }} vs {{ test.challenger_variant or 'Challenger' }}
+                        </td>
+                        <td class="py-4 px-6 text-center">
+                            {% if test.winning_variant %}
+                                <span class="px-3 py-1 rounded-full text-xs font-bold bg-emerald-400/20 text-emerald-400">
+                                    {{ test.winning_variant }}
+                                </span>
+                            {% else %}
+                                <span class="text-slate-500">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-6 text-center">
+                            {% if test.uplift_percentage %}
+                                <span class="text-emerald-400 font-bold {% if test.uplift_percentage > 0 %}positive{% else %}negative{% endif %}">
+                                    {% if test.uplift_percentage > 0 %}+{% endif %}{{ "%.1f"|format(test.uplift_percentage) }}%
+                                </span>
+                            {% else %}
+                                <span class="text-slate-500">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-6 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <a href="{{ url_for('marketing.ab_tests_view', id=test.id) }}" class="p-2 hover:bg-white/10 rounded-lg transition-all" title="{{ t('view', 'View') }}">
+                                    <i class="fa-solid fa-eye text-brand-400"></i>
+                                </a>
+                                <a href="{{ url_for('marketing.ab_tests_edit', id=test.id) }}" class="p-2 hover:bg-white/10 rounded-lg transition-all" title="{{ t('edit', 'Edit') }}">
+                                    <i class="fa-solid fa-pen text-amber-400"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="py-16 text-center text-slate-500">
+                            <i class="fa-solid fa-flask text-5xl mb-4 text-slate-600"></i>
+                            <p class="text-lg">{{ t('no_ab_tests', 'No A/B tests yet') }}</p>
+                            <a href="{{ url_for('marketing.ab_tests_new') }}" class="mt-4 inline-block px-4 py-2 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold transition-all">
+                                {{ t('create_first_test', 'Create your first test') }}
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

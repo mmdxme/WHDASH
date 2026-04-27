@@ -1,5 +1,4 @@
-"""
-Business Intelligence Routes - Management Dashboard Endpoints
+"""Business Intelligence Routes - Management Dashboard Endpoints
 ====================================================
 Flask routes for all executive dashboard and management reporting endpoints.
 
@@ -11,7 +10,7 @@ This module provides:
 - Alert and exception routes
 - Consolidated and comparative report routes
 - Drill-down API endpoints
-- Export functionality
+- Export functionality (20 export types)
 
 All routes require authentication and respect permission controls.
 
@@ -27,6 +26,32 @@ import csv
 import io
 from datetime import datetime
 from openpyxl import Workbook
+
+# Import export utilities
+from export_utils import (
+    send_export_response,
+    export_to_csv,
+    export_to_excel_text,
+    export_to_excel_general,
+    export_to_json,
+    export_to_xml,
+    export_to_txt,
+    export_to_pdf,
+    export_to_docx,
+    export_to_html,
+    export_to_printable_html,
+    export_to_barcode_labels,
+    export_to_api_json,
+    export_to_email_html,
+    export_to_zip,
+    export_to_backup,
+    export_to_sql_dump,
+    export_dashboard_state,
+    export_summary_report,
+    export_detailed_report,
+    export_audit_log,
+    get_export_columns
+)
 
 # Import BI models
 from bi_models import (
@@ -689,46 +714,162 @@ def register_bi_routes(app: Flask):
         )
         return jsonify(data)
 
-    # ==========================================================================
-    # EXPORT ENDPOINTS
-    # ==========================================================================
+    # =============================================================================
+# EXPORT ENDPOINTS - ALL 20 EXPORT TYPES
+# ==============================================================================
 
-    @app.route('/api/bi/export/<report_type>')
+    VALID_EXPORT_TYPES = [
+        'csv', 'excel_text', 'excel_general', 'json', 'xml', 'txt',
+        'pdf', 'docx', 'html', 'printable', 'barcode', 'api',
+        'email', 'zip', 'backup', 'sql_dump', 'dashboard',
+        'summary', 'detailed', 'audit_log'
+    ]
+
+    EXPORT_COLUMNS = {
+        'sales': ['order_number', 'customer', 'date', 'amount', 'status'],
+        'inventory': ['item_code', 'item_name', 'quantity', 'value'],
+        'alerts': ['severity', 'type', 'title', 'description'],
+        'holding': ['company_name', 'total_sales', 'order_count', 'customer_count'],
+        'customers': ['customer_id', 'name', 'email', 'total_orders', 'total_value'],
+        'logistics': ['shipment_id', 'origin', 'destination', 'status', 'delivery_date'],
+        'procurement': ['po_number', 'supplier', 'amount', 'status', 'expected_date'],
+        'hr': ['employee_id', 'name', 'department', 'position', 'status'],
+        'marketing': ['campaign_id', 'name', 'channel', 'budget', 'roi'],
+        'financial': ['invoice_id', 'customer', 'amount', 'due_date', 'status']
+    }
+
+
+    @app.route('/api/bi/export/<export_type>', methods=['GET', 'POST'])
+    @app.route('/api/bi/export/<report_type>/<export_type>', methods=['GET', 'POST'])
     @require_login
-    def api_export_report(report_type):
-        """Export report data to Excel or CSV."""
+    def api_export_report(report_type=None, export_type=None):
+        """Export report data in all 20 formats."""
+        # Handle combined path like /api/bi/export/sales/csv
+        if export_type is None:
+            export_type = report_type
+            report_type = request.args.get('report', 'sales')
+
+        if export_type not in VALID_EXPORT_TYPES:
+            return jsonify({
+                'error': f'Invalid export type. Valid types: {VALID_EXPORT_TYPES}'
+            }), 400
+
         date_from, date_to = parse_date_params()
         company_id = parse_company_filter()
-        export_format = request.args.get('format', 'excel')
-        
+
         # Get data based on report type
+        report_type = report_type or 'sales'
         if report_type == 'sales':
             data = get_sales_kpis(company_id, date_from, date_to)
-            filename = f'Sales_Report_{date_from}_{date_to}'
-            columns = ['order_number', 'customer', 'date', 'amount', 'status']
+            columns = EXPORT_COLUMNS['sales']
+            title = f'Sales Report: {date_from} to {date_to}'
         elif report_type == 'inventory':
             data = get_inventory_kpis(company_id)
-            filename = f'Inventory_Report_{date_from}_{date_to}'
-            columns = ['item_code', 'item_name', 'quantity', 'value']
+            columns = EXPORT_COLUMNS['inventory']
+            title = 'Inventory Report'
         elif report_type == 'alerts':
             data = get_alerts_and_exceptions(company_id)
-            filename = f'Alerts_Report_{date_from}_{date_to}'
-            columns = ['severity', 'type', 'title', 'description']
+            columns = EXPORT_COLUMNS['alerts']
+            title = 'Risk Alerts Report'
         elif report_type == 'holding':
             data = get_consolidated_holding_view(date_from, date_to)
-            filename = f'Holding_Consolidated_{date_from}_{date_to}'
-            columns = ['company_name', 'total_sales', 'order_count', 'customer_count']
+            columns = EXPORT_COLUMNS['holding']
+            title = f'Holding Consolidated: {date_from} to {date_to}'
+        elif report_type == 'customers':
+            data = get_customer_metrics(date_from, date_to, company_id)
+            columns = EXPORT_COLUMNS['customers']
+            title = 'Customer Metrics Report'
+        elif report_type == 'logistics':
+            data = get_logistics_kpis(date_from, date_to, company_id)
+            columns = EXPORT_COLUMNS['logistics']
+            title = f'Logistics Report: {date_from} to {date_to}'
+        elif report_type == 'procurement':
+            data = get_procurement_kpis(date_from, date_to, company_id)
+            columns = EXPORT_COLUMNS['procurement']
+            title = f'Procurement Report: {date_from} to {date_to}'
+        elif report_type == 'hr':
+            data = get_hr_kpis(date_from, date_to, company_id)
+            columns = EXPORT_COLUMNS['hr']
+            title = f'HR Report: {date_from} to {date_to}'
+        elif report_type == 'marketing':
+            data = get_marketing_kpis(date_from, date_to, company_id)
+            columns = EXPORT_COLUMNS['marketing']
+            title = f'Marketing Report: {date_from} to {date_to}'
+        elif report_type == 'financial':
+            data = get_financial_kpis(date_from, date_to, company_id)
+            columns = EXPORT_COLUMNS['financial']
+            title = f'Financial Report: {date_from} to {date_to}'
         else:
-            return jsonify({'error': f'Export type {report_type} not supported'}), 400
-        
-        if export_format == 'csv':
-            return export_to_csv_response(data, columns, filename)
-        else:
-            return export_to_excel_response(data, columns, filename)
+            # Default to executive dashboard data
+            data = get_executive_dashboard_data(session.get('user_id'), company_id, date_from, date_to)
+            columns = get_export_columns(data)
+            title = f'Executive Dashboard: {date_from} to {date_to}'
 
-    # ==========================================================================
-    # SETTINGS / KPI DEFINITIONS
-    # ==========================================================================
+        filename = f'{report_type}_report_{date_from}_{date_to}'
+
+        # Handle POST with filters
+        if request.method == 'POST':
+            filters = request.json or {}
+            # Apply filters to data
+            data = _apply_export_filters(data, filters)
+
+        return send_export_response(data, export_type, filename, columns, title)
+
+
+    def _apply_export_filters(data, filters):
+        """Apply filters to exported data."""
+        if not filters:
+            return data
+
+        filtered = []
+        for record in data:
+            include = True
+            for key, value in filters.items():
+                if key in record and str(record[key]) != str(value):
+                    include = False
+                    break
+            if include:
+                filtered.append(record)
+        return filtered
+
+
+    @app.route('/api/bi/export/list')
+    @require_login
+    def list_bi_export_types():
+        """List available export types for BI module."""
+        return jsonify({
+            'module': 'bi',
+            'report_types': list(EXPORT_COLUMNS.keys()),
+            'export_types': [{'type': t} for t in VALID_EXPORT_TYPES]
+        })
+
+
+# =============================================================================
+# EXPORT HELPERS (Legacy - kept for backward compatibility)
+# =============================================================================
+
+def export_to_csv_response(data, columns, filename):
+    """Generate CSV export response (legacy wrapper)."""
+    content = export_to_csv(data, filename, columns)
+    return Response(
+        content,
+        mimetype='text/csv; charset=utf-8-sig',
+        headers={'Content-Disposition': f'attachment; filename={filename}.csv'}
+    )
+
+
+# =============================================================================
+# SETTINGS / KPI DEFINITIONS
+# =============================================================================
+
+    @app.route('/bi/settings')
+    @require_login
+    def bi_settings():
+        """BI Settings - KPI definitions and thresholds."""
+        return render_template(
+            'bi/settings.html',
+            page_title='BI Settings & KPI Definitions'
+        )
 
     @app.route('/bi/settings')
     @require_login
@@ -838,7 +979,7 @@ def register_bi_routes(app: Flask):
     def bi_catchall(subpath):
         """Catch-all route for BI pages."""
         return render_template(
-            'bi/dashboard_base.html',
+            'bi/base_bi.html',
             page_title=f'BI: {subpath}',
             error=f'Page {subpath} not found'
         )

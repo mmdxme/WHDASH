@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+            <h1 class="text-3xl font-extrabold text-white">{{ t('roi_dashboard', 'Marketing ROI Dashboard') }}</h1>
+            <p class="text-slate-400 mt-1">{{ t('roi_dashboard_desc', 'Analyze marketing return on investment across campaigns and channels') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <form method="get" class="flex items-center gap-2">
+                <input type="date" name="date_from" value="{{ date_from }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm">
+                <span class="text-slate-500">{{ t('to', 'to') }}</span>
+                <input type="date" name="date_to" value="{{ date_to }}" class="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm">
+                <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold">{{ t('filter', 'Filter') }}</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Summary Metrics -->
+    {% if summary %}
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
+                    <i class="fa-solid fa-dollar-sign text-white text-lg"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white mb-1">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(summary.total_marketing_spend or 0) }}</div>
+            <div class="text-sm text-slate-400">{{ t('total_spend', 'Total Spend') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
+                    <i class="fa-solid fa-chart-line text-white text-lg"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-emerald-400 mb-1">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(summary.total_revenue or 0) }}</div>
+            <div class="text-sm text-slate-400">{{ t('total_revenue', 'Total Revenue') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center">
+                    <i class="fa-solid fa-percentage text-white text-lg"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white mb-1">{{ "%.1f"|format(summary.overall_roi or 0) }}%</div>
+            <div class="text-sm text-slate-400">{{ t('overall_roi', 'Overall ROI') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center">
+                    <i class="fa-solid fa-users text-white text-lg"></i>
+                </div>
+            </div>
+            <div class="text-3xl font-extrabold text-white mb-1">{{ summary.total_new_customers or 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('new_customers', 'New Customers') }}</div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Cost Metrics -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-2xl font-extrabold text-cyan-400 mb-1">{{ user_preferences.currency_symbol or '$' }}{{ "%.2f"|format(summary.avg_cost_per_lead if summary else 0) }}</div>
+            <div class="text-sm text-slate-400">{{ t('cost_per_lead', 'Cost/Lead') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-2xl font-extrabold text-rose-400 mb-1">{{ user_preferences.currency_symbol or '$' }}{{ "%.2f"|format(summary.avg_cost_per_acquisition if summary else 0) }}</div>
+            <div class="text-sm text-slate-400">{{ t('cost_per_acquisition', 'Cost/Acquisition') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-2xl font-extrabold text-purple-400 mb-1">{{ summary.total_leads or 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('total_leads', 'Total Leads') }}</div>
+        </div>
+    </div>
+
+    <!-- Campaign ROI Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden mb-8">
+        <div class="p-6 border-b border-white/10">
+            <h3 class="text-lg font-bold text-white">{{ t('campaign_roi', 'Campaign ROI') }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('campaign', 'Campaign') }}</th>
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('type', 'Type') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('status', 'Status') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('spend', 'Spend') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('revenue', 'Revenue') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('roi', 'ROI') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('cpl', 'CPL') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for camp in campaign_roi %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-4 px-6">
+                            <a href="{{ url_for('marketing.report_campaign_detail', id=camp.id) }}" class="text-brand-400 hover:text-brand-300 font-semibold">{{ camp.name }}</a>
+                        </td>
+                        <td class="py-4 px-6 text-slate-300">{{ camp.campaign_type or '-' }}</td>
+                        <td class="py-4 px-6 text-center">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {% if camp.status == 'Active' %}bg-emerald-400/20 text-emerald-400{% elif camp.status == 'Completed' %}bg-blue-400/20 text-blue-400{% else %}bg-slate-400/20 text-slate-400{% endif %}">
+                                {{ camp.status }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-right text-white">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(camp.actual_cost or 0) }}</td>
+                        <td class="py-4 px-6 text-right text-emerald-400">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(camp.total_sales or 0) }}</td>
+                        <td class="py-4 px-6 text-right">
+                            <span class="font-bold {% if camp.roi_percentage > 0 %}text-emerald-400{% elif camp.roi_percentage < 0 %}text-rose-400{% else %}text-slate-400{% endif %}">
+                                {% if camp.roi_percentage > 0 %}+{% endif %}{{ "%.1f"|format(camp.roi_percentage or 0) }}%
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-right text-cyan-400">{{ user_preferences.currency_symbol or '$' }}{{ "%.2f"|format(camp.cost_per_lead or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="py-12 text-center text-slate-500">{{ t('no_campaign_data', 'No campaign data for selected period') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Channel ROI Table -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-6 border-b border-white/10">
+            <h3 class="text-lg font-bold text-white">{{ t('channel_roi', 'Channel ROI') }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('channel', 'Channel') }}</th>
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('type', 'Type') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('spend', 'Spend') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('leads', 'Leads') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('revenue', 'Revenue') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('cpl', 'CPL') }}</th>
+                        <th class="text-right py-4 px-6 font-semibold">{{ t('roi', 'ROI') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for chan in channel_roi %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-4 px-6 text-white font-semibold">{{ chan.channel_name }}</td>
+                        <td class="py-4 px-6 text-slate-400">{{ chan.channel_type }}</td>
+                        <td class="py-4 px-6 text-right text-white">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(chan.total_spend or 0) }}</td>
+                        <td class="py-4 px-6 text-right text-cyan-400">{{ chan.total_leads or 0 }}</td>
+                        <td class="py-4 px-6 text-right text-emerald-400">{{ user_preferences.currency_symbol or '$' }}{{ "%.0f"|format(chan.total_sales or 0) }}</td>
+                        <td class="py-4 px-6 text-right text-amber-400">{{ user_preferences.currency_symbol or '$' }}{{ "%.2f"|format(chan.cost_per_lead or 0) }}</td>
+                        <td class="py-4 px-6 text-right">
+                            <span class="font-bold {% if chan.roi_percentage > 0 %}text-emerald-400{% elif chan.roi_percentage < 0 %}text-rose-400{% else %}text-slate-400{% endif %}">
+                                {% if chan.roi_percentage > 0 %}+{% endif %}{{ "%.1f"|format(chan.roi_percentage or 0) }}%
+                            </span>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="py-12 text-center text-slate-500">{{ t('no_channel_data', 'No channel data for selected period') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

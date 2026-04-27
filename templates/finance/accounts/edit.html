@@ -1,131 +1,88 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ title }} - MMDx</title>
-    <link href="/static/css/tailwind.min.css" rel="stylesheet">
-    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
-    <style>
-        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
-        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
-        label { display: block; margin-bottom: 0.5rem; color: #9ca3af; font-size: 0.875rem; }
-        input, select, textarea { width: 100%; background: #0f172a; border: 1px solid #334155; border-radius: 0.5rem; padding: 0.75rem; color: white; }
-        input:focus, select:focus, textarea:focus { outline: none; border-color: #6366f1; }
-        .btn { padding: 0.75rem 1.5rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
-        .btn-primary { background: #6366f1; color: white; }
-        .btn-primary:hover { background: #4f46e5; }
-        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
-        .btn-outline:hover { background: #334155; }
-        .form-group { margin-bottom: 1.5rem; }
-        .checkbox-group { display: flex; align-items: center; gap: 0.5rem; }
-        .checkbox-group input { width: auto; }
-    </style>
-</head>
-<body>
-    {% extends "base.html" %}
+{% extends "base.html" %}
 
-    {% block content %}
-    <div class="container mx-auto px-4 py-8 max-w-4xl">
-        <div class="flex justify-between items-center mb-8">
-            <div>
-                <h1 class="text-3xl font-bold text-white">{{ title }}</h1>
-                <p class="text-gray-400 mt-1">Edit account information</p>
+{% block title %}{{ t('edit_account', 'Edit Account') }} - {{ platform_name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div class="bg-slate-800/80 backdrop-blur-lg border-b border-slate-700">
+        <div class="px-6 py-4">
+            <div class="flex items-center space-x-4">
+                <a href="/finance/accounts" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="fa fa-arrow-left"></i>
+                </a>
+                <h1 class="text-xl font-bold text-white">{{ t('edit_account', 'Edit Account') }}</h1>
             </div>
-            <a href="/finance/accounts/{{ account.id }}" class="btn btn-outline">
-                <i class="fas fa-arrow-left"></i> Back
-            </a>
         </div>
-
-        <form method="POST" class="card">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="form-group">
-                    <label for="code">Account Code *</label>
-                    <input type="text" id="code" name="code" required value="{{ account.code }}">
-                </div>
-
-                <div class="form-group">
-                    <label for="account_type">Account Type *</label>
-                    <select id="account_type" name="account_type" required>
-                        <option value="ASSET" {% if account.account_type == 'ASSET' %}selected{% endif %}>Asset</option>
-                        <option value="LIABILITY" {% if account.account_type == 'LIABILITY' %}selected{% endif %}>Liability</option>
-                        <option value="EQUITY" {% if account.account_type == 'EQUITY' %}selected{% endif %}>Equity</option>
-                        <option value="REVENUE" {% if account.account_type == 'REVENUE' %}selected{% endif %}>Revenue</option>
-                        <option value="COGS" {% if account.account_type == 'COGS' %}selected{% endif %}>Cost of Goods Sold</option>
-                        <option value="EXPENSE" {% if account.account_type == 'EXPENSE' %}selected{% endif %}>Expense</option>
-                        <option value="OTHER_INCOME" {% if account.account_type == 'OTHER_INCOME' %}selected{% endif %}>Other Income</option>
-                        <option value="OTHER_EXPENSE" {% if account.account_type == 'OTHER_EXPENSE' %}selected{% endif %}>Other Expense</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="name">Account Name (English) *</label>
-                    <input type="text" id="name" name="name" required value="{{ account.name }}">
-                </div>
-
-                <div class="form-group">
-                    <label for="name_ar">Account Name (Arabic)</label>
-                    <input type="text" id="name_ar" name="name_ar" value="{{ account.name_ar or '' }}">
-                </div>
-
-                <div class="form-group md:col-span-2">
-                    <label for="description">Description</label>
-                    <textarea id="description" name="description" rows="2">{{ account.description or '' }}</textarea>
-                </div>
-
-                <div class="form-group">
-                    <label for="category_id">Category</label>
-                    <select id="category_id" name="category_id">
-                        <option value="">Select Category</option>
-                        {% for cat in categories %}
-                        <option value="{{ cat.id }}" {% if account.category_id == cat.id %}selected{% endif %}>{{ cat.code }} - {{ cat.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="parent_id">Parent Account</label>
-                    <select id="parent_id" name="parent_id">
-                        <option value="">None (Top Level)</option>
-                        {% for acc in accounts %}
-                        {% if acc.id != account.id %}
-                        <option value="{{ acc.id }}" {% if account.parent_id == acc.id %}selected{% endif %}>{{ acc.code }} - {{ acc.name }}</option>
-                        {% endif %}
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <div class="form-group mt-6">
-                <label class="text-lg font-semibold text-white mb-4">Account Settings</label>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="is_active" name="is_active" value="1" {% if account.is_active %}checked{% endif %}>
-                        <label for="is_active" class="mb-0">Active</label>
-                    </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="is_posting_allowed" name="is_posting_allowed" value="1" {% if account.is_posting_allowed %}checked{% endif %}>
-                        <label for="is_posting_allowed" class="mb-0">Allow Posting</label>
-                    </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="is_control_account" name="is_control_account" value="1" {% if account.is_control_account %}checked{% endif %}>
-                        <label for="is_control_account" class="mb-0">Control Account</label>
-                    </div>
-                    <div class="checkbox-group">
-                        <input type="checkbox" id="is_cost_center_allowed" name="is_cost_center_allowed" value="1" {% if account.is_cost_center_allowed %}checked{% endif %}>
-                        <label for="is_cost_center_allowed" class="mb-0">Cost Center Allowed</label>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex justify-end gap-4 mt-8 pt-6 border-t border-gray-700">
-                <a href="/finance/accounts/{{ account.id }}" class="btn btn-outline">Cancel</a>
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i> Update Account
-                </button>
-            </div>
-        </form>
     </div>
-    {% endblock %}
-</body>
-</html>
+
+    <div class="p-6">
+        <div class="max-w-2xl mx-auto">
+            <form method="POST" class="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700 p-6">
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('account_name', 'Account Name') }}</label>
+                        <input type="text" name="account_name" value="{{ account.account_name }}" required class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('account_type', 'Account Type') }}</label>
+                        <select name="account_type" required class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="cash" {% if account.account_type == 'cash' %}selected{% endif %}>{{ t('cash_wallet', 'Cash Wallet') }}</option>
+                            <option value="bank" {% if account.account_type == 'bank' %}selected{% endif %}>{{ t('bank_account', 'Bank Account') }}</option>
+                            <option value="card" {% if account.account_type == 'card' %}selected{% endif %}>{{ t('credit_debit_card', 'Credit/Debit Card') }}</option>
+                            <option value="digital" {% if account.account_type == 'digital' %}selected{% endif %}>{{ t('digital_wallet', 'Digital Wallet') }}</option>
+                            <option value="savings" {% if account.account_type == 'savings' %}selected{% endif %}>{{ t('savings_account', 'Savings Account') }}</option>
+                            <option value="investment" {% if account.account_type == 'investment' %}selected{% endif %}>{{ t('investment_account', 'Investment Account') }}</option>
+                            <option value="foreign" {% if account.account_type == 'foreign' %}selected{% endif %}>{{ t('foreign_currency', 'Foreign Currency Account') }}</option>
+                            <option value="joint" {% if account.account_type == 'joint' %}selected{% endif %}>{{ t('joint_account', 'Joint Account') }}</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('currency', 'Currency') }}</label>
+                        <select name="currency" required class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                            <option value="USD" {% if account.currency == 'USD' %}selected{% endif %}>USD - US Dollar</option>
+                            <option value="EUR" {% if account.currency == 'EUR' %}selected{% endif %}>EUR - Euro</option>
+                            <option value="GBP" {% if account.currency == 'GBP' %}selected{% endif %}>GBP - British Pound</option>
+                            <option value="AED" {% if account.currency == 'AED' %}selected{% endif %}>AED - UAE Dirham</option>
+                            <option value="SAR" {% if account.currency == 'SAR' %}selected{% endif %}>SAR - Saudi Riyal</option>
+                            <option value="INR" {% if account.currency == 'INR' %}selected{% endif %}>INR - Indian Rupee</option>
+                            <option value="CNY" {% if account.currency == 'CNY' %}selected{% endif %}>CNY - Chinese Yuan</option>
+                            <option value="JPY" {% if account.currency == 'JPY' %}selected{% endif %}>JPY - Japanese Yen</option>
+                            <option value="RUB" {% if account.currency == 'RUB' %}selected{% endif %}>RUB - Russian Ruble</option>
+                            <option value="BRL" {% if account.currency == 'BRL' %}selected{% endif %}>BRL - Brazilian Real</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('bank_provider', 'Bank / Provider') }}</label>
+                        <input type="text" name="bank_provider" value="{{ account.bank_provider }}" class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('branch_reference', 'Branch / Reference') }}</label>
+                        <input type="text" name="branch_reference" value="{{ account.branch_reference }}" class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-300 mb-2">{{ t('notes', 'Notes') }}</label>
+                        <textarea name="notes" rows="3" class="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500">{{ account.notes }}</textarea>
+                    </div>
+
+                    <div class="flex items-center">
+                        <input type="checkbox" name="is_active" id="is_active" value="1" {% if account.is_active %}checked{% endif %} class="w-4 h-4 rounded bg-slate-700 border-slate-600 text-emerald-500 focus:ring-emerald-500">
+                        <label for="is_active" class="ml-2 text-sm text-slate-300">{{ t('active', 'Active') }}</label>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end space-x-4 mt-8 pt-6 border-t border-slate-700">
+                    <a href="/finance/accounts" class="px-6 py-2 text-slate-400 hover:text-white transition-colors">{{ t('cancel', 'Cancel') }}</a>
+                    <button type="submit" class="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors">
+                        <i class="fa fa-save mr-2"></i>{{ t('save_changes', 'Save Changes') }}
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

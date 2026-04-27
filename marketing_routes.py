@@ -46,6 +46,12 @@ from marketing_models import (
     generate_marketing_alerts, generate_marketing_recommendations, run_marketing_insights
 )
 
+# Import export utilities
+from export_utils import (
+    send_export_response,
+    get_export_columns
+)
+
 mkt_bp = Blueprint('marketing', __name__, url_prefix='/marketing')
 
 
@@ -3607,6 +3613,2689 @@ def api_funnel_data():
     db.close()
     
     return jsonify([dict(r) for r in funnel_stages])
+
+
+# =============================================================================
+# LEAD SCORING
+# =============================================================================
+
+@mkt_bp.route('/lead-scoring')
+@mkt_login_required
+@mkt_permission_required('view_leads')
+def lead_scoring_list():
+    """List lead scoring rules."""
+    db = get_db()
+
+    rules = db.execute("""
+        SELECT r.*, u.username as created_by_name
+        FROM marketing_lead_scoring_rules r
+        LEFT JOIN users u ON r.created_by_user_id = u.id
+        WHERE r.is_active = 1
+        ORDER BY r.priority DESC, r.category, r.rule_name
+    """).fetchall()
+
+    # Get lead score distribution
+    score_distribution = db.execute("""
+        SELECT
+            CASE
+                WHEN ls.total_score >= 80 THEN 'Hot (80+)'
+                WHEN ls.total_score >= 50 THEN 'Warm (50-79)'
+                WHEN ls.total_score >= 20 THEN 'Cool (20-49)'
+                ELSE 'Cold (0-19)'
+            END as score_grade,
+            COUNT(*) as count
+        FROM marketing_lead_scores ls
+        GROUP BY score_grade
+        ORDER BY count DESC
+    """).fetchall()
+
+    # Get MQL/SQL counts
+    mql_count = db.execute("SELECT COUNT(*) as cnt FROM marketing_lead_scores WHERE is_mql = 1").fetchone()['cnt']
+    sql_count = db.execute("SELECT COUNT(*) as cnt FROM marketing_lead_scores WHERE is_sql = 1").fetchone()['cnt']
+
+    db.close()
+
+    return render_template('marketing/lead_scoring.html',
+        title='Lead Scoring',
+        rules=[dict(r) for r in rules],
+        score_distribution=[dict(r) for r in score_distribution],
+        mql_count=mql_count,
+        sql_count=sql_count,
+    )
+
+
+@mkt_bp.route('/lead-scoring/rules/new', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('manage_leads')
+def lead_scoring_rule_new():
+    """Create new lead scoring rule."""
+    db = get_db()
+    user = get_current_user()
+
+    if request.method == 'POST':
+        rule_name = request.form.get('rule_name', '').strip()
+        rule_code = request.form.get('rule_code', '').strip()
+        rule_type = request.form.get('rule_type', '')
+        category = request.form.get('category', '')
+        attribute_field = request.form.get('attribute_field', '')
+        operator = request.form.get('operator', '')
+        attribute_value = request.form.get('attribute_value', '')
+        score_change = request.form.get('score_change', 0)
+        priority = request.form.get('priority', 0)
+        description = request.form.get('description', '')
+
+        if not rule_name or not rule_type or not category:
+            flash('Rule name, type, and category are required.', 'error')
+            return render_template('marketing/lead_scoring_rule_edit.html', title='New Scoring Rule', rule=None)
+
+        if not rule_code:
+            rule_code = f"RULE-{rule_name[:6].upper()}-{datetime.now().strftime('%H%M%S')}"
+
+        cursor = db.execute("""
+            INSERT INTO marketing_lead_scoring_rules
+            (rule_name, rule_code, rule_type, category, attribute_field, operator, attribute_value, score_change, priority, description, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (rule_name, rule_code, rule_type, category, attribute_field, operator, attribute_value, score_change, priority, description, user['id']))
+        db.commit()
+
+        flash(f'Scoring rule "{rule_name}" created successfully.', 'success')
+        return redirect(url_for('marketing.lead_scoring_list'))
+
+    db.close()
+    return render_template('marketing/lead_scoring_rule_edit.html', title='New Scoring Rule', rule=None)
+
+
+@mkt_bp.route('/leads/scores')
+@mkt_login_required
+@mkt_permission_required('view_leads')
+def leads_scores_list():
+    """List all leads with their scores."""
+    db = get_db()
+
+    page = int(request.args.get('page', 1))
+    per_page = 20
+    offset = (page - 1) * per_page
+
+    search = request.args.get('search', '')
+    score_grade = request.args.get('score_grade', '')
+    show_mql = request.args.get('mql', '')
+    show_sql = request.args.get('sql', '')
+
+    query = """
+        SELECT l.*, ls.total_score, ls.demographic_score, ls.behavioral_score,
+               ls.engagement_score, ls.score_grade, ls.is_mql, ls.is_sql,
+               ls.last_calculated_at
+        FROM marketing_leads l
+        LEFT JOIN marketing_lead_scores ls ON l.id = ls.lead_id
+        WHERE 1=1
+    """
+    count_query = "SELECT COUNT(*) as cnt FROM marketing_leads l LEFT JOIN marketing_lead_scores ls ON l.id = ls.lead_id WHERE 1=1"
+    params = []
+    count_params = []
+
+    if search:
+        query += " AND l.lead_name LIKE ?"
+        count_query += " AND l.lead_name LIKE ?"
+        params.append(f"%{search}%")
+        count_params.append(f"%{search}%")
+
+    if score_grade:
+        grade_conditions = {
+            'Hot': 'ls.total_score >= 80',
+            'Warm': 'ls.total_score >= 50 AND ls.total_score < 80',
+            'Cool': 'ls.total_score >= 20 AND ls.total_score < 50',
+            'Cold': '(ls.total_score < 20 OR ls.total_score IS NULL)'
+        }
+        if score_grade in grade_conditions:
+            query += f" AND ({grade_conditions[score_grade]})"
+            count_query += f" AND ({grade_conditions[score_grade]})"
+
+    if show_mql:
+        query += " AND ls.is_mql = 1"
+        count_query += " AND ls.is_mql = 1"
+
+    if show_sql:
+        query += " AND ls.is_sql = 1"
+        count_query += " AND ls.is_sql = 1"
+
+    total = db.execute(count_query, count_params).fetchone()['cnt']
+    query += " ORDER BY ls.total_score DESC NULLS LAST LIMIT ? OFFSET ?"
+    params.extend([per_page, offset])
+
+    leads = db.execute(query, params).fetchall()
+    db.close()
+
+    return render_template('marketing/leads_scores.html',
+        title='Lead Scores',
+        leads=[dict(r) for r in leads],
+        page=page, per_page=per_page, total=total,
+        search=search, score_grade=score_grade, show_mql=show_mql, show_sql=show_sql,
+    )
+
+
+@mkt_bp.route('/leads/scores/<int:lead_id>')
+@mkt_login_required
+@mkt_permission_required('view_leads')
+def lead_score_detail(lead_id):
+    """View detailed lead score breakdown."""
+    db = get_db()
+
+    lead = db.execute("SELECT * FROM marketing_leads WHERE id = ?", (lead_id,)).fetchone()
+    if not lead:
+        flash('Lead not found.', 'error')
+        return redirect(url_for('marketing.leads_scores_list'))
+
+    score = db.execute("SELECT * FROM marketing_lead_scores WHERE lead_id = ?", (lead_id,)).fetchone()
+    score_history = db.execute("""
+        SELECT h.*, r.rule_name
+        FROM marketing_lead_score_history h
+        LEFT JOIN marketing_lead_scoring_rules r ON h.triggered_by_rule_id = r.id
+        WHERE h.lead_id = ?
+        ORDER BY h.created_at DESC
+        LIMIT 20
+    """, (lead_id,)).fetchall()
+
+    # Get applicable rules
+    applicable_rules = db.execute("""
+        SELECT * FROM marketing_lead_scoring_rules
+        WHERE is_active = 1
+        ORDER BY category, priority DESC
+    """).fetchall()
+
+    db.close()
+
+    return render_template('marketing/lead_score_detail.html',
+        title=f'Lead Score: {lead["lead_name"]}',
+        lead=dict(lead),
+        score=dict(score) if score else None,
+        score_history=[dict(r) for r in score_history],
+        applicable_rules=[dict(r) for r in applicable_rules],
+    )
+
+
+@mkt_bp.route('/api/leads/<int:lead_id>/calculate-score', methods=['POST'])
+@mkt_login_required
+@mkt_permission_required('manage_leads')
+def api_calculate_lead_score(lead_id):
+    """API to calculate lead score based on rules."""
+    db = get_db()
+
+    lead = db.execute("SELECT * FROM marketing_leads WHERE id = ?", (lead_id,)).fetchone()
+    if not lead:
+        db.close()
+        return jsonify({'success': False, 'message': 'Lead not found'}), 404
+
+    # Get all active rules
+    rules = db.execute("SELECT * FROM marketing_lead_scoring_rules WHERE is_active = 1").fetchall()
+
+    demographic_score = 0
+    behavioral_score = 0
+    engagement_score = 0
+    breakdown = []
+
+    for rule in rules:
+        matches = False
+        field = rule['attribute_field']
+        operator = rule['operator']
+        value = rule['attribute_value']
+
+        # Check if lead matches rule criteria
+        lead_value = lead.get(field) if lead else None
+
+        if operator == 'equals' and str(lead_value).lower() == str(value).lower():
+            matches = True
+        elif operator == 'contains' and lead_value and str(value).lower() in str(lead_value).lower():
+            matches = True
+        elif operator == 'greater_than' and lead_value and float(lead_value) > float(value):
+            matches = True
+        elif operator == 'less_than' and lead_value and float(lead_value) < float(value):
+            matches = True
+
+        if matches:
+            if rule['category'] == 'demographic':
+                demographic_score += rule['score_change']
+            elif rule['category'] == 'behavioral':
+                behavioral_score += rule['score_change']
+            elif rule['category'] == 'engagement':
+                engagement_score += rule['score_change']
+
+            breakdown.append({
+                'rule_name': rule['rule_name'],
+                'category': rule['category'],
+                'score_change': rule['score_change'],
+            })
+
+    total_score = demographic_score + behavioral_score + engagement_score
+
+    # Determine grade
+    if total_score >= 80:
+        grade = 'Hot'
+    elif total_score >= 50:
+        grade = 'Warm'
+    elif total_score >= 20:
+        grade = 'Cool'
+    else:
+        grade = 'Cold'
+
+    is_mql = 1 if total_score >= 50 else 0
+    is_sql = 1 if total_score >= 80 else 0
+
+    # Update or create score record
+    existing = db.execute("SELECT id FROM marketing_lead_scores WHERE lead_id = ?", (lead_id,)).fetchone()
+    if existing:
+        db.execute("""
+            UPDATE marketing_lead_scores SET
+                total_score = ?, demographic_score = ?, behavioral_score = ?,
+                engagement_score = ?, score_grade = ?, is_mql = ?, is_sql = ?,
+                last_calculated_at = CURRENT_TIMESTAMP,
+                score_breakdown = ?
+            WHERE lead_id = ?
+        """, (total_score, demographic_score, behavioral_score, engagement_score, grade, is_mql, is_sql, json.dumps(breakdown), lead_id))
+    else:
+        db.execute("""
+            INSERT INTO marketing_lead_scores
+            (lead_id, total_score, demographic_score, behavioral_score, engagement_score, score_grade, is_mql, is_sql, last_calculated_at, score_breakdown)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+        """, (lead_id, total_score, demographic_score, behavioral_score, engagement_score, grade, is_mql, is_sql, json.dumps(breakdown)))
+
+    db.commit()
+    db.close()
+
+    return jsonify({
+        'success': True,
+        'total_score': total_score,
+        'demographic_score': demographic_score,
+        'behavioral_score': behavioral_score,
+        'engagement_score': engagement_score,
+        'grade': grade,
+        'is_mql': bool(is_mql),
+        'is_sql': bool(is_sql),
+        'breakdown': breakdown,
+    })
+
+
+# =============================================================================
+# JOURNEY BUILDER / NURTURE JOURNEYS
+# =============================================================================
+
+@mkt_bp.route('/journeys')
+@mkt_login_required
+@mkt_permission_required('view_campaigns')
+def journeys_list():
+    """List nurture journeys."""
+    db = get_db()
+
+    journeys = db.execute("""
+        SELECT j.*, s.name as segment_name, u.username as created_by_name
+        FROM marketing_nurture_journeys j
+        LEFT JOIN marketing_customer_segments s ON j.target_segment_id = s.id
+        LEFT JOIN users u ON j.created_by_user_id = u.id
+        ORDER BY j.created_at DESC
+    """).fetchall()
+
+    db.close()
+
+    return render_template('marketing/journeys.html',
+        title='Journey Builder',
+        journeys=[dict(r) for r in journeys],
+    )
+
+
+@mkt_bp.route('/journeys/new', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('manage_campaigns')
+def journey_new():
+    """Create new nurture journey."""
+    db = get_db()
+    user = get_current_user()
+
+    segments = db.execute("SELECT id, name FROM marketing_customer_segments WHERE status = 'Active' ORDER BY name").fetchall()
+    templates = db.execute("SELECT id, template_name, channel FROM marketing_templates WHERE is_active = 1 ORDER BY template_name").fetchall()
+
+    if request.method == 'POST':
+        journey_name = request.form.get('journey_name', '').strip()
+        journey_code = request.form.get('journey_code', '').strip()
+        journey_type = request.form.get('journey_type', '')
+        description = request.form.get('description', '')
+        objective = request.form.get('objective', '')
+        target_segment_id = request.form.get('target_segment_id')
+        entry_trigger_type = request.form.get('entry_trigger_type', '')
+        status = request.form.get('status', 'Draft')
+
+        if not journey_name or not journey_type:
+            flash('Journey name and type are required.', 'error')
+            return render_template('marketing/journey_edit.html', title='New Journey',
+                                  journey=None, segments=[dict(r) for r in segments],
+                                  templates=[dict(r) for r in templates])
+
+        if not journey_code:
+            journey_code = f"JRN-{journey_name[:6].upper()}-{datetime.now().strftime('%H%M%S')}"
+
+        cursor = db.execute("""
+            INSERT INTO marketing_nurture_journeys
+            (journey_name, journey_code, journey_type, description, objective, target_segment_id,
+             entry_trigger_type, status, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (journey_name, journey_code, journey_type, description, objective, target_segment_id, entry_trigger_type, status, user['id']))
+        db.commit()
+        journey_id = cursor.lastrowid
+
+        flash(f'Journey "{journey_name}" created successfully.', 'success')
+        return redirect(url_for('marketing.journey_edit', id=journey_id))
+
+    db.close()
+    return render_template('marketing/journey_edit.html', title='New Journey',
+                          journey=None, segments=[dict(r) for r in segments],
+                          templates=[dict(r) for r in templates])
+
+
+@mkt_bp.route('/journeys/edit/<int:id>', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('manage_campaigns')
+def journey_edit(id):
+    """Edit nurture journey and its steps."""
+    db = get_db()
+    user = get_current_user()
+
+    journey = db.execute("SELECT * FROM marketing_nurture_journeys WHERE id = ?", (id,)).fetchone()
+    if not journey:
+        flash('Journey not found.', 'error')
+        return redirect(url_for('marketing.journeys_list'))
+
+    segments = db.execute("SELECT id, name FROM marketing_customer_segments WHERE status = 'Active' ORDER BY name").fetchall()
+    templates = db.execute("SELECT id, template_name, channel FROM marketing_templates WHERE is_active = 1 ORDER BY template_name").fetchall()
+    steps = db.execute("SELECT * FROM marketing_journey_steps WHERE journey_id = ? ORDER BY step_order", (id,)).fetchall()
+
+    if request.method == 'POST':
+        journey_name = request.form.get('journey_name', '').strip()
+        journey_type = request.form.get('journey_type', '')
+        description = request.form.get('description', '')
+        objective = request.form.get('objective', '')
+        target_segment_id = request.form.get('target_segment_id')
+        entry_trigger_type = request.form.get('entry_trigger_type', '')
+        status = request.form.get('status', 'Draft')
+
+        db.execute("""
+            UPDATE marketing_nurture_journeys SET
+                journey_name = ?, journey_type = ?, description = ?, objective = ?,
+                target_segment_id = ?, entry_trigger_type = ?, status = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (journey_name, journey_type, description, objective, target_segment_id, entry_trigger_type, status, id))
+        db.commit()
+
+        flash('Journey updated successfully.', 'success')
+        return redirect(url_for('marketing.journey_edit', id=id))
+
+    db.close()
+    return render_template('marketing/journey_edit.html', title=f'Edit: {journey["journey_name"]}',
+                          journey=dict(journey), segments=[dict(r) for r in segments],
+                          templates=[dict(r) for r in templates], steps=[dict(r) for r in steps])
+
+
+@mkt_bp.route('/journeys/<int:id>/steps/add', methods=['POST'])
+@mkt_login_required
+@mkt_permission_required('manage_campaigns')
+def journey_step_add(id):
+    """Add a step to a journey."""
+    db = get_db()
+
+    journey = db.execute("SELECT * FROM marketing_nurture_journeys WHERE id = ?", (id,)).fetchone()
+    if not journey:
+        db.close()
+        return jsonify({'success': False, 'message': 'Journey not found'}), 404
+
+    step_name = request.form.get('step_name', '').strip()
+    step_type = request.form.get('step_type', '')
+    delay_days = request.form.get('delay_days', 0)
+    delay_hours = request.form.get('delay_hours', 0)
+
+    # Get next step order
+    max_order = db.execute("SELECT MAX(step_order) as max_order FROM marketing_journey_steps WHERE journey_id = ?", (id,)).fetchone()['max_order'] or 0
+    step_order = max_order + 1
+
+    cursor = db.execute("""
+        INSERT INTO marketing_journey_steps (journey_id, step_order, step_name, step_type, delay_days, delay_hours)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (id, step_order, step_name, step_type, delay_days, delay_hours))
+    db.commit()
+    step_id = cursor.lastrowid
+    db.close()
+
+    return jsonify({'success': True, 'step_id': step_id, 'message': 'Step added successfully'})
+
+
+@mkt_bp.route('/journeys/<int:id>/publish', methods=['POST'])
+@mkt_login_required
+@mkt_permission_required('manage_campaigns')
+def journey_publish(id):
+    """Publish a journey to activate it."""
+    db = get_db()
+    user = get_current_user()
+
+    journey = db.execute("SELECT * FROM marketing_nurture_journeys WHERE id = ?", (id,)).fetchone()
+    if not journey:
+        db.close()
+        return jsonify({'success': False, 'message': 'Journey not found'}), 404
+
+    # Check if journey has at least one step
+    steps_count = db.execute("SELECT COUNT(*) as cnt FROM marketing_journey_steps WHERE journey_id = ?", (id,)).fetchone()['cnt']
+    if steps_count == 0:
+        db.close()
+        return jsonify({'success': False, 'message': 'Journey must have at least one step before publishing'}), 400
+
+    db.execute("""
+        UPDATE marketing_nurture_journeys SET
+            is_active = 1, is_published = 1, published_at = CURRENT_TIMESTAMP,
+            published_by_user_id = ?, status = 'Active', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    """, (user['id'], id))
+    db.commit()
+    db.close()
+
+    return jsonify({'success': True, 'message': 'Journey published successfully'})
+
+
+@mkt_bp.route('/journeys/participants/<int:journey_id>')
+@mkt_login_required
+@mkt_permission_required('view_campaigns')
+def journey_participants(journey_id):
+    """View journey participants."""
+    db = get_db()
+
+    journey = db.execute("SELECT * FROM marketing_nurture_journeys WHERE id = ?", (journey_id,)).fetchone()
+    if not journey:
+        flash('Journey not found.', 'error')
+        return redirect(url_for('marketing.journeys_list'))
+
+    participants = db.execute("""
+        SELECT p.*, l.lead_name, l.phone, l.email, l.lead_status,
+               s.step_name as current_step_name
+        FROM marketing_journey_participants p
+        JOIN marketing_leads l ON p.lead_id = l.id
+        LEFT JOIN marketing_journey_steps s ON p.current_step_id = s.id
+        WHERE p.journey_id = ?
+        ORDER BY p.enrolled_at DESC
+    """, (journey_id,)).fetchall()
+
+    db.close()
+
+    return render_template('marketing/journey_participants.html',
+        title=f'Journey Participants: {journey["journey_name"]}',
+        journey=dict(journey),
+        participants=[dict(r) for r in participants],
+    )
+
+
+# =============================================================================
+# A/B TESTING
+# =============================================================================
+
+@mkt_bp.route('/ab-tests')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def ab_tests_list():
+    """List A/B tests."""
+    db = get_db()
+
+    tests = db.execute("""
+        SELECT t.*, c.name as campaign_name, s.name as segment_name, u.username as created_by_name
+        FROM marketing_ab_tests t
+        LEFT JOIN marketing_campaigns c ON t.campaign_id = c.id
+        LEFT JOIN marketing_customer_segments s ON t.target_segment_id = s.id
+        LEFT JOIN users u ON t.created_by_user_id = u.id
+        ORDER BY t.created_at DESC
+    """).fetchall()
+
+    db.close()
+
+    return render_template('marketing/ab_tests.html',
+        title='A/B Testing',
+        tests=[dict(r) for r in tests],
+    )
+
+
+@mkt_bp.route('/ab-tests/new', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('manage_campaigns')
+def ab_test_new():
+    """Create new A/B test."""
+    db = get_db()
+    user = get_current_user()
+
+    campaigns = db.execute("SELECT id, name FROM marketing_campaigns WHERE status IN ('Active', 'Draft') ORDER BY name").fetchall()
+    segments = db.execute("SELECT id, name FROM marketing_customer_segments WHERE status = 'Active' ORDER BY name").fetchall()
+
+    if request.method == 'POST':
+        test_name = request.form.get('test_name', '').strip()
+        test_code = request.form.get('test_code', '').strip()
+        test_type = request.form.get('test_type', '')
+        hypothesis = request.form.get('hypothesis', '')
+        description = request.form.get('description', '')
+        campaign_id = request.form.get('campaign_id')
+        target_segment_id = request.form.get('target_segment_id')
+        channel = request.form.get('channel', '')
+        control_variant = request.form.get('control_variant', '')
+        challenger_variant = request.form.get('challenger_variant', '')
+        success_metric = request.form.get('success_metric', '')
+        status = request.form.get('status', 'Draft')
+
+        if not test_name or not test_type:
+            flash('Test name and type are required.', 'error')
+            return render_template('marketing/ab_test_edit.html', title='New A/B Test',
+                                  test=None, campaigns=[dict(r) for r in campaigns],
+                                  segments=[dict(r) for r in segments])
+
+        if not test_code:
+            test_code = f"AB-{test_name[:6].upper()}-{datetime.now().strftime('%H%M%S')}"
+
+        cursor = db.execute("""
+            INSERT INTO marketing_ab_tests
+            (test_name, test_code, test_type, hypothesis, description, campaign_id, target_segment_id,
+             channel, control_variant, challenger_variant, success_metric, status, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (test_name, test_code, test_type, hypothesis, description, campaign_id, target_segment_id,
+              channel, control_variant, challenger_variant, success_metric, status, user['id']))
+        db.commit()
+        test_id = cursor.lastrowid
+
+        # Create default variants
+        db.execute("""
+            INSERT INTO marketing_ab_test_variants (test_id, variant_name, variant_type)
+            VALUES (?, ?, 'control')
+        """, (test_id, control_variant or 'Control'))
+
+        db.execute("""
+            INSERT INTO marketing_ab_test_variants (test_id, variant_name, variant_type)
+            VALUES (?, ?, 'challenger')
+        """, (test_id, challenger_variant or 'Challenger'))
+        db.commit()
+
+        flash(f'A/B Test "{test_name}" created successfully.', 'success')
+        return redirect(url_for('marketing.ab_tests_list'))
+
+    db.close()
+    return render_template('marketing/ab_test_edit.html', title='New A/B Test',
+                          test=None, campaigns=[dict(r) for r in campaigns],
+                          segments=[dict(r) for r in segments])
+
+
+@mkt_bp.route('/ab-tests/<int:id>')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def ab_test_detail(id):
+    """View A/B test details and results."""
+    db = get_db()
+
+    test = db.execute("""
+        SELECT t.*, c.name as campaign_name, s.name as segment_name
+        FROM marketing_ab_tests t
+        LEFT JOIN marketing_campaigns c ON t.campaign_id = c.id
+        LEFT JOIN marketing_customer_segments s ON t.target_segment_id = s.id
+        WHERE t.id = ?
+    """, (id,)).fetchone()
+
+    if not test:
+        flash('A/B Test not found.', 'error')
+        return redirect(url_for('marketing.ab_tests_list'))
+
+    variants = db.execute("SELECT * FROM marketing_ab_test_variants WHERE test_id = ?", (id,)).fetchall()
+
+    db.close()
+
+    return render_template('marketing/ab_test_detail.html',
+        title=f'A/B Test: {test["test_name"]}',
+        test=dict(test),
+        variants=[dict(r) for r in variants],
+    )
+
+
+# =============================================================================
+# CUSTOMER JOURNEY INTELLIGENCE
+# =============================================================================
+
+@mkt_bp.route('/journey-intelligence')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def journey_intelligence_list():
+    """List customer journey intelligence records."""
+    db = get_db()
+
+    page = int(request.args.get('page', 1))
+    per_page = 20
+    offset = (page - 1) * per_page
+
+    search = request.args.get('search', '')
+    journey_stage = request.args.get('journey_stage', '')
+
+    query = """
+        SELECT ji.*, l.lead_name, c.name as customer_name,
+               ch.name as channel_name, camp.name as campaign_name
+        FROM marketing_journey_intelligence ji
+        LEFT JOIN marketing_leads l ON ji.lead_id = l.id
+        LEFT JOIN sdad_customers c ON ji.customer_id = c.id
+        LEFT JOIN marketing_channels ch ON ji.channel_id = ch.id
+        LEFT JOIN marketing_campaigns camp ON ji.campaign_id = camp.id
+        WHERE 1=1
+    """
+    count_query = "SELECT COUNT(*) as cnt FROM marketing_journey_intelligence WHERE 1=1"
+    params = []
+    count_params = []
+
+    if search:
+        query += " AND (l.lead_name LIKE ? OR c.name LIKE ?)"
+        count_query += " AND (l.lead_name LIKE ? OR c.name LIKE ?)"
+        search_term = f"%{search}%"
+        params.extend([search_term, search_term])
+        count_params.extend([search_term, search_term])
+
+    if journey_stage:
+        query += " AND ji.journey_stage = ?"
+        count_query += " AND ji.journey_stage = ?"
+        params.append(journey_stage)
+        count_params.append(journey_stage)
+
+    total = db.execute(count_query, count_params).fetchone()['cnt']
+    query += " ORDER BY ji.touchpoint_date DESC LIMIT ? OFFSET ?"
+    params.extend([per_page, offset])
+
+    records = db.execute(query, params).fetchall()
+    db.close()
+
+    return render_template('marketing/journey_intelligence.html',
+        title='Customer Journey Intelligence',
+        records=[dict(r) for r in records],
+        page=page, per_page=per_page, total=total,
+        search=search, journey_stage=journey_stage,
+    )
+
+
+@mkt_bp.route('/journey-intelligence/customer/<int:customer_id>')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def customer_journey_timeline(customer_id):
+    """View complete journey timeline for a customer."""
+    db = get_db()
+
+    customer = db.execute("SELECT * FROM sdad_customers WHERE id = ?", (customer_id,)).fetchone()
+    if not customer:
+        # Try lead
+        customer = db.execute("SELECT *, NULL as name, NULL as phone FROM marketing_leads WHERE id = ?", (customer_id,)).fetchone()
+        if not customer:
+            flash('Customer not found.', 'error')
+            return redirect(url_for('marketing.journey_intelligence_list'))
+
+    # Get all touchpoints
+    touchpoints = db.execute("""
+        SELECT ji.*, ch.name as channel_name, camp.name as campaign_name,
+               cont.topic as content_name
+        FROM marketing_journey_intelligence ji
+        LEFT JOIN marketing_channels ch ON ji.channel_id = ch.id
+        LEFT JOIN marketing_campaigns camp ON ji.campaign_id = camp.id
+        LEFT JOIN marketing_content cont ON ji.content_id = cont.id
+        WHERE (ji.customer_id = ? OR ji.lead_id = ?)
+        ORDER BY ji.touchpoint_date DESC
+    """, (customer_id, customer_id)).fetchall()
+
+    # Get lead if applicable
+    lead = None
+    if customer.get('lead_name'):
+        lead = dict(customer)
+
+    # Calculate engagement metrics
+    total_touchpoints = len(touchpoints)
+    conversion_points = sum(1 for t in touchpoints if t['is_conversion_point'])
+    avg_days_in_stage = db.execute("""
+        SELECT AVG(days_in_stage) as avg_days FROM marketing_journey_intelligence
+        WHERE (customer_id = ? OR lead_id = ?) AND days_in_stage > 0
+    """, (customer_id, customer_id)).fetchone()['avg_days'] or 0
+
+    db.close()
+
+    return render_template('marketing/customer_journey_timeline.html',
+        title=f'Customer Journey: {customer.get("name") or customer.get("lead_name") or "Unknown"}',
+        customer=dict(customer),
+        lead=lead,
+        touchpoints=[dict(t) for t in touchpoints],
+        total_touchpoints=total_touchpoints,
+        conversion_points=conversion_points,
+        avg_days_in_stage=round(avg_days_in_stage, 1),
+    )
+
+
+# =============================================================================
+# ROI & PERFORMANCE
+# =============================================================================
+
+@mkt_bp.route('/roi')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def roi_overview():
+    """Marketing ROI dashboard."""
+    db = get_db()
+
+    date_from = request.args.get('date_from', (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d'))
+    date_to = request.args.get('date_to', datetime.now().strftime('%Y-%m-%d'))
+
+    # Get campaign ROI data
+    campaign_roi = db.execute("""
+        SELECT c.id, c.name, c.campaign_type, c.budget, c.actual_cost,
+               c.leads_generated, c.sales_generated, c.profit_generated,
+               c.new_customers_acquired,
+               CASE WHEN c.actual_cost > 0 THEN ROUND((c.sales_generated - c.actual_cost) / c.actual_cost * 100, 2) ELSE 0 END as roi_percentage,
+               CASE WHEN c.leads_generated > 0 THEN ROUND(c.actual_cost / c.leads_generated, 2) ELSE 0 END as cost_per_lead,
+               CASE WHEN c.new_customers_acquired > 0 THEN ROUND(c.actual_cost / c.new_customers_acquired, 2) ELSE 0 END as cost_per_acquisition
+        FROM marketing_campaigns c
+        WHERE c.actual_cost > 0
+        ORDER BY roi_percentage DESC
+    """).fetchall()
+
+    # Calculate totals
+    total_investment = sum(c['actual_cost'] or 0 for c in campaign_roi)
+    total_revenue = sum(c['sales_generated'] or 0 for c in campaign_roi)
+    total_profit = sum(c['profit_generated'] or 0 for c in campaign_roi)
+    total_leads = sum(c['leads_generated'] or 0 for c in campaign_roi)
+    total_customers = sum(c['new_customers_acquired'] or 0 for c in campaign_roi)
+
+    overall_roi = round((total_profit / total_investment * 100), 2) if total_investment > 0 else 0
+    overall_cpl = round(total_investment / total_leads, 2) if total_leads > 0 else 0
+    overall_cpa = round(total_investment / total_customers, 2) if total_customers > 0 else 0
+
+    # Channel ROI breakdown
+    channel_roi = db.execute("""
+        SELECT ch.name as channel_name, ch.channel_type,
+               SUM(cc.actual_spend) as total_spend,
+               SUM(cc.leads_generated) as leads,
+               SUM(cc.sales_generated) as sales,
+               CASE WHEN SUM(cc.actual_spend) > 0 THEN ROUND((SUM(cc.sales_generated) - SUM(cc.actual_spend)) / SUM(cc.actual_spend) * 100, 2) ELSE 0 END as roi
+        FROM marketing_channels ch
+        LEFT JOIN marketing_campaign_channels cc ON ch.id = cc.channel_id
+        GROUP BY ch.id
+        HAVING total_spend > 0
+        ORDER BY roi DESC
+    """).fetchall()
+
+    db.close()
+
+    return render_template('marketing/roi_dashboard.html',
+        title='Marketing ROI',
+        campaign_roi=[dict(r) for r in campaign_roi],
+        channel_roi=[dict(r) for r in channel_roi],
+        totals={
+            'investment': total_investment,
+            'revenue': total_revenue,
+            'profit': total_profit,
+            'leads': total_leads,
+            'customers': total_customers,
+            'roi': overall_roi,
+            'cpl': overall_cpl,
+            'cpa': overall_cpa,
+        },
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+# =============================================================================
+# MARKETING ASSETS LIBRARY
+# =============================================================================
+
+@mkt_bp.route('/assets')
+@mkt_login_required
+@mkt_permission_required('view_content')
+def assets_list():
+    """List marketing assets."""
+    db = get_db()
+
+    page = int(request.args.get('page', 1))
+    per_page = 20
+    offset = (page - 1) * per_page
+
+    search = request.args.get('search', '')
+    asset_type = request.args.get('asset_type', '')
+
+    query = """
+        SELECT a.*, u.username as created_by_name
+        FROM marketing_assets a
+        LEFT JOIN users u ON a.created_by_user_id = u.id
+        WHERE 1=1
+    """
+    count_query = "SELECT COUNT(*) as cnt FROM marketing_assets WHERE 1=1"
+    params = []
+    count_params = []
+
+    if search:
+        query += " AND (a.asset_name LIKE ? OR a.tags LIKE ?)"
+        count_query += " AND (asset_name LIKE ? OR tags LIKE ?)"
+        search_term = f"%{search}%"
+        params.extend([search_term, search_term])
+        count_params.extend([search_term, search_term])
+
+    if asset_type:
+        query += " AND a.asset_type = ?"
+        count_query += " AND asset_type = ?"
+        params.append(asset_type)
+        count_params.append(asset_type)
+
+    total = db.execute(count_query, count_params).fetchone()['cnt']
+    query += " ORDER BY a.created_at DESC LIMIT ? OFFSET ?"
+    params.extend([per_page, offset])
+
+    assets = db.execute(query, params).fetchall()
+    db.close()
+
+    return render_template('marketing/assets.html',
+        title='Marketing Assets',
+        assets=[dict(r) for r in assets],
+        page=page, per_page=per_page, total=total,
+        search=search, asset_type=asset_type,
+    )
+
+
+# =============================================================================
+# COMMUNICATIONS CENTER
+# =============================================================================
+
+@mkt_bp.route('/communications')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def communications_list():
+    """List marketing communications log."""
+    db = get_db()
+
+    page = int(request.args.get('page', 1))
+    per_page = 20
+    offset = (page - 1) * per_page
+
+    search = request.args.get('search', '')
+    channel = request.args.get('channel', '')
+    status = request.args.get('status', '')
+
+    query = """
+        SELECT c.*, camp.name as campaign_name, t.template_name
+        FROM marketing_communications c
+        LEFT JOIN marketing_campaigns camp ON c.campaign_id = camp.id
+        LEFT JOIN marketing_templates t ON c.template_id = t.id
+        WHERE 1=1
+    """
+    count_query = "SELECT COUNT(*) as cnt FROM marketing_communications WHERE 1=1"
+    params = []
+    count_params = []
+
+    if search:
+        query += " AND (c.recipient_name LIKE ? OR c.subject LIKE ?)"
+        count_query += " AND (recipient_name LIKE ? OR subject LIKE ?)"
+        search_term = f"%{search}%"
+        params.extend([search_term, search_term])
+        count_params.extend([search_term, search_term])
+
+    if channel:
+        query += " AND c.channel = ?"
+        count_query += " AND channel = ?"
+        params.append(channel)
+        count_params.append(channel)
+
+    if status:
+        query += " AND c.status = ?"
+        count_query += " AND status = ?"
+        params.append(status)
+        count_params.append(status)
+
+    total = db.execute(count_query, count_params).fetchone()['cnt']
+    query += " ORDER BY c.created_at DESC LIMIT ? OFFSET ?"
+    params.extend([per_page, offset])
+
+    comms = db.execute(query, params).fetchall()
+    db.close()
+
+    return render_template('marketing/communications.html',
+        title='Communications Center',
+        communications=[dict(r) for r in comms],
+        page=page, per_page=per_page, total=total,
+        search=search, channel=channel, status=status,
+    )
+
+
+# =============================================================================
+# EXPORT CENTER
+# =============================================================================
+
+@mkt_bp.route('/exports')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def exports_list():
+    """List and manage exports."""
+    db = get_db()
+
+    configs = db.execute("""
+        SELECT * FROM marketing_export_configs
+        WHERE is_active = 1
+        ORDER BY export_type, config_name
+    """).fetchall()
+
+    db.close()
+
+    return render_template('marketing/exports.html',
+        title='Export Center',
+        configs=[dict(r) for r in configs],
+    )
+
+
+@mkt_bp.route('/exports/configure/<int:id>', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def export_configure(id):
+    """Configure and execute an export."""
+    db = get_db()
+
+    config = db.execute("SELECT * FROM marketing_export_configs WHERE id = ?", (id,)).fetchone()
+    if not config:
+        flash('Export configuration not found.', 'error')
+        return redirect(url_for('marketing.exports_list'))
+
+    if request.method == 'POST':
+        columns = request.form.getlist('columns')
+        date_from = request.form.get('date_from', '')
+        date_to = request.form.get('date_to', '')
+        output_format = request.form.get('output_format', 'csv')
+
+        # Build export based on entity_type
+        entity_type = config['entity_type']
+        data = []
+        headers = []
+
+        if entity_type == 'campaign':
+            data = db.execute("""
+                SELECT * FROM marketing_campaigns
+                WHERE created_at BETWEEN ? AND ?
+            """, (date_from, date_to)).fetchall() if date_from and date_to else db.execute("SELECT * FROM marketing_campaigns").fetchall()
+            headers = [d[0] for d in db.execute("PRAGMA table_info(marketing_campaigns)").fetchall()]
+
+        elif entity_type == 'lead':
+            data = db.execute("""
+                SELECT l.*, ls.total_score, ls.score_grade
+                FROM marketing_leads l
+                LEFT JOIN marketing_lead_scores ls ON l.id = ls.lead_id
+            """).fetchall()
+
+        elif entity_type == 'segment':
+            data = db.execute("SELECT * FROM marketing_customer_segments").fetchall()
+
+        elif entity_type == 'channel':
+            data = db.execute("SELECT * FROM marketing_channels").fetchall()
+
+        elif entity_type == 'journey':
+            data = db.execute("""
+                SELECT j.*, COUNT(p.id) as participant_count
+                FROM marketing_nurture_journeys j
+                LEFT JOIN marketing_journey_participants p ON j.id = p.journey_id
+                GROUP BY j.id
+            """).fetchall()
+
+        # Generate CSV
+        import csv
+        import io
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        if columns:
+            writer.writerow(columns)
+            for row in data:
+                writer.writerow([row.get(col, '') for col in columns])
+        else:
+            writer.writerow([d[1] for d in db.execute(f"PRAGMA table_info(marketing_{entity_type})").fetchall()])
+            for row in data:
+                writer.writerow(row)
+
+        output.seek(0)
+        db.close()
+
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename=marketing_{entity_type}_export.csv'}
+        )
+
+    db.close()
+    return render_template('marketing/export_configure.html',
+        title=f'Configure Export: {config["config_name"]}',
+        config=dict(config),
+    )
+
+
+# =============================================================================
+# MARKETING NOTIFICATIONS
+# =============================================================================
+
+@mkt_bp.route('/notifications')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def notifications_list():
+    """List marketing notifications for current user."""
+    db = get_db()
+
+    user_id = session.get('user_id')
+
+    notifications = db.execute("""
+        SELECT * FROM marketing_notifications
+        WHERE (recipient_user_id = ? OR recipient_role = 'all')
+        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+        ORDER BY created_at DESC
+        LIMIT 50
+    """, (user_id,)).fetchall()
+
+    unread_count = db.execute("""
+        SELECT COUNT(*) as cnt FROM marketing_notifications
+        WHERE (recipient_user_id = ? OR recipient_role = 'all')
+        AND is_read = 0
+        AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
+    """, (user_id,)).fetchone()['cnt']
+
+    db.close()
+
+    return render_template('marketing/notifications.html',
+        title='Marketing Notifications',
+        notifications=[dict(r) for r in notifications],
+        unread_count=unread_count,
+    )
+
+
+@mkt_bp.route('/notifications/mark-read/<int:id>', methods=['POST'])
+@mkt_login_required
+def notification_mark_read(id):
+    """Mark notification as read."""
+    db = get_db()
+
+    db.execute("""
+        UPDATE marketing_notifications SET
+            is_read = 1, read_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    """, (id,))
+    db.commit()
+    db.close()
+
+    return jsonify({'success': True})
+
+
+# =============================================================================
+# FLOW INTEGRATION
+# =============================================================================
+
+@mkt_bp.route('/flow/send-notification', methods=['POST'])
+@mkt_login_required
+@mkt_permission_required('manage_campaigns')
+def flow_send_notification():
+    """Send a notification to Flow system."""
+    data = request.get_json()
+
+    notification_type = data.get('notification_type', 'marketing_alert')
+    title = data.get('title', '')
+    message = data.get('message', '')
+    priority = data.get('priority', 'Normal')
+    entity_type = data.get('entity_type')
+    entity_id = data.get('entity_id')
+    entity_name = data.get('entity_name')
+    action_url = data.get('action_url')
+
+    db = get_db()
+
+    # Create notification in Flow format
+    cursor = db.execute("""
+        INSERT INTO marketing_notifications
+        (notification_type, notification_title, notification_message, recipient_role,
+         linked_entity_type, linked_entity_id, linked_entity_name, priority, action_url)
+        VALUES (?, ?, ?, 'all', ?, ?, ?, ?, ?)
+    """, (notification_type, title, message, entity_type, entity_id, entity_name, priority, action_url))
+    db.commit()
+    notification_id = cursor.lastrowid
+    db.close()
+
+    return jsonify({
+        'success': True,
+        'notification_id': notification_id,
+        'message': 'Notification sent to Flow'
+    })
+
+
+@mkt_bp.route('/lead-scoring/new', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('manage_leads')
+def lead_scoring_new():
+    """Create new lead scoring rule."""
+    db = get_db()
+    user = get_current_user()
+
+    if request.method == 'POST':
+        rule_name = request.form.get('rule_name', '').strip()
+        rule_code = request.form.get('rule_code', '').strip()
+        rule_type = request.form.get('rule_type', '')
+        category = request.form.get('category', '')
+        attribute_field = request.form.get('attribute_field', '')
+        operator = request.form.get('operator', '')
+        attribute_value = request.form.get('attribute_value', '')
+        score_change = request.form.get('score_change', 0)
+        priority = request.form.get('priority', 0)
+        description = request.form.get('description', '')
+
+        if not rule_name or not rule_type or not category:
+            flash('Rule name, type, and category are required.', 'error')
+            return render_template('marketing/lead_scoring_edit.html', title='New Scoring Rule', rule=None)
+
+        if not rule_code:
+            rule_code = f"LSR-{rule_type.upper()[:3]}-{datetime.now().strftime('%Y%m%d%H%M')}"
+
+        cursor = db.execute("""
+            INSERT INTO marketing_lead_scoring_rules
+            (rule_name, rule_code, rule_type, category, attribute_field, operator, attribute_value, score_change, priority, description, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (rule_name, rule_code, rule_type, category, attribute_field, operator, attribute_value, score_change, priority, description, user['id']))
+        db.commit()
+
+        log_marketing_audit(db, 'lead_scoring_rule', cursor.lastrowid, 'CREATE',
+                           new_value=json.dumps({'rule_name': rule_name, 'score_change': score_change}),
+                           actor_user_id=user['id'])
+
+        flash(f'Scoring rule "{rule_name}" created successfully.', 'success')
+        return redirect(url_for('marketing.lead_scoring_list'))
+
+    db.close()
+    return render_template('marketing/lead_scoring_edit.html', title='New Scoring Rule', rule=None)
+
+
+@mkt_bp.route('/lead-scoring/edit/<int:id>', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('manage_leads')
+def lead_scoring_edit(id):
+    """Edit lead scoring rule."""
+    db = get_db()
+    user = get_current_user()
+
+    rule = db.execute("SELECT * FROM marketing_lead_scoring_rules WHERE id = ?", (id,)).fetchone()
+    if not rule:
+        flash('Scoring rule not found.', 'error')
+        return redirect(url_for('marketing.lead_scoring_list'))
+
+    if request.method == 'POST':
+        db.execute("""
+            UPDATE marketing_lead_scoring_rules SET
+                rule_name = ?, rule_code = ?, rule_type = ?, category = ?,
+                attribute_field = ?, operator = ?, attribute_value = ?,
+                score_change = ?, priority = ?, description = ?, is_active = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (
+            request.form.get('rule_name', ''),
+            request.form.get('rule_code', ''),
+            request.form.get('rule_type', ''),
+            request.form.get('category', ''),
+            request.form.get('attribute_field', ''),
+            request.form.get('operator', ''),
+            request.form.get('attribute_value', ''),
+            request.form.get('score_change', 0),
+            request.form.get('priority', 0),
+            request.form.get('description', ''),
+            1 if request.form.get('is_active') else 0,
+            id
+        ))
+        db.commit()
+
+        log_marketing_audit(db, 'lead_scoring_rule', id, 'UPDATE', actor_user_id=user['id'])
+        flash('Scoring rule updated successfully.', 'success')
+        return redirect(url_for('marketing.lead_scoring_list'))
+
+    db.close()
+    return render_template('marketing/lead_scoring_edit.html', title=f'Edit: {rule["rule_name"]}', rule=dict(rule))
+
+
+@mkt_bp.route('/lead-scoring/recalculate/<int:lead_id>', methods=['POST'])
+@mkt_login_required
+@mkt_permission_required('manage_leads')
+def lead_scoring_recalculate(lead_id):
+    """Recalculate score for a specific lead."""
+    db = get_db()
+    user = get_current_user()
+
+    lead = db.execute("SELECT * FROM marketing_leads WHERE id = ?", (lead_id,)).fetchone()
+    if not lead:
+        return jsonify({'success': False, 'message': 'Lead not found'}), 404
+
+    # Get active rules
+    rules = db.execute("SELECT * FROM marketing_lead_scoring_rules WHERE is_active = 1").fetchall()
+
+    demographic_score = 0
+    behavioral_score = 0
+    engagement_score = 0
+
+    # Calculate scores based on rules
+    for rule in rules:
+        score = rule['score_change']
+        if rule['category'] == 'demographic':
+            demographic_score += score
+        elif rule['category'] == 'behavioral':
+            behavioral_score += score
+        elif rule['category'] == 'engagement':
+            engagement_score += score
+
+    total_score = max(0, demographic_score + behavioral_score + engagement_score)
+
+    # Determine grades
+    if total_score >= 80:
+        grade = 'Hot'
+        is_mql = 1
+        is_sql = 1
+    elif total_score >= 50:
+        grade = 'Warm'
+        is_mql = 1
+        is_sql = 0
+    else:
+        grade = 'Cold'
+        is_mql = 0
+        is_sql = 0
+
+    # Update or create score record
+    existing_score = db.execute("SELECT id FROM marketing_lead_scores WHERE lead_id = ?", (lead_id,)).fetchone()
+
+    if existing_score:
+        db.execute("""
+            UPDATE marketing_lead_scores SET
+                total_score = ?, demographic_score = ?, behavioral_score = ?, engagement_score = ?,
+                is_mql = ?, is_sql = ?, score_grade = ?, last_calculated_at = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE lead_id = ?
+        """, (total_score, demographic_score, behavioral_score, engagement_score, is_mql, is_sql, grade, lead_id))
+    else:
+        db.execute("""
+            INSERT INTO marketing_lead_scores
+            (lead_id, total_score, demographic_score, behavioral_score, engagement_score, is_mql, is_sql, score_grade, last_calculated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        """, (lead_id, total_score, demographic_score, behavioral_score, engagement_score, is_mql, is_sql, grade))
+
+    # Log score history
+    previous_total = existing_score['total_score'] if existing_score else 0
+    db.execute("""
+        INSERT INTO marketing_lead_score_history
+        (lead_id, score_change, previous_score, new_score, trigger_type, trigger_description, triggered_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (lead_id, total_score - previous_total, previous_total, total_score, 'manual_recalculation', 'Manual score recalculation', user['id']))
+
+    db.commit()
+    db.close()
+
+    return jsonify({
+        'success': True,
+        'total_score': total_score,
+        'grade': grade,
+        'is_mql': bool(is_mql),
+        'is_sql': bool(is_sql)
+    })
+
+
+# =============================================================================
+# NURTURE JOURNEYS
+# =============================================================================
+
+@mkt_bp.route('/journeys/new', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('manage_campaigns')
+def journeys_new():
+    """Create new nurture journey."""
+    db = get_db()
+    user = get_current_user()
+
+    segments = db.execute("SELECT id, name, code FROM marketing_customer_segments WHERE status = 'Active' ORDER BY name").fetchall()
+    contents = db.execute("SELECT id, topic, title FROM marketing_content WHERE status = 'Published' ORDER BY title").fetchall()
+    templates = db.execute("SELECT id, template_name, channel FROM marketing_templates WHERE is_active = 1 ORDER BY template_name").fetchall()
+
+    if request.method == 'POST':
+        journey_name = request.form.get('journey_name', '').strip()
+        journey_code = request.form.get('journey_code', '').strip()
+        journey_type = request.form.get('journey_type', '')
+        description = request.form.get('description', '')
+        objective = request.form.get('objective', '')
+        target_segment_id = request.form.get('target_segment_id')
+        entry_trigger_type = request.form.get('entry_trigger_type', '')
+        status = request.form.get('status', 'Draft')
+
+        if not journey_name or not journey_type:
+            flash('Journey name and type are required.', 'error')
+            return render_template('marketing/journey_edit.html', title='New Journey', journey=None,
+                                   segments=[dict(r) for r in segments], contents=[dict(r) for r in contents],
+                                   templates=[dict(r) for r in templates])
+
+        if not journey_code:
+            journey_code = f"JRN-{datetime.now().strftime('%Y%m%d%H%M')}"
+
+        cursor = db.execute("""
+            INSERT INTO marketing_nurture_journeys
+            (journey_name, journey_code, journey_type, description, objective, target_segment_id,
+             entry_trigger_type, status, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (journey_name, journey_code, journey_type, description, objective, target_segment_id,
+              entry_trigger_type, status, user['id']))
+        db.commit()
+        journey_id = cursor.lastrowid
+
+        # Add journey steps if provided
+        step_names = request.form.getlist('step_name')
+        step_types = request.form.getlist('step_type')
+        step_delays = request.form.getlist('step_delay')
+
+        for i, (name, stype, delay) in enumerate(zip(step_names, step_types, step_delays)):
+            if name and stype:
+                db.execute("""
+                    INSERT INTO marketing_journey_steps
+                    (journey_id, step_order, step_name, step_type, delay_hours, is_entry_step)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (journey_id, i + 1, name, stype, delay or 0, 1 if i == 0 else 0))
+        db.commit()
+
+        log_marketing_audit(db, 'nurture_journey', journey_id, 'CREATE',
+                           new_value=json.dumps({'journey_name': journey_name, 'journey_type': journey_type}),
+                           actor_user_id=user['id'])
+
+        flash(f'Journey "{journey_name}" created successfully.', 'success')
+        return redirect(url_for('marketing.journeys_view', id=journey_id))
+
+    db.close()
+    return render_template('marketing/journey_edit.html', title='New Journey', journey=None,
+                          segments=[dict(r) for r in segments], contents=[dict(r) for r in contents],
+                          templates=[dict(r) for r in templates])
+
+
+@mkt_bp.route('/journeys/view/<int:id>')
+@mkt_login_required
+@mkt_permission_required('view_campaigns')
+def journeys_view(id):
+    """View journey details."""
+    db = get_db()
+
+    journey = db.execute("""
+        SELECT j.*, s.name as segment_name, u.username as created_by_name
+        FROM marketing_nurture_journeys j
+        LEFT JOIN marketing_customer_segments s ON j.target_segment_id = s.id
+        LEFT JOIN users u ON j.created_by_user_id = u.id
+        WHERE j.id = ?
+    """, (id,)).fetchone()
+
+    if not journey:
+        flash('Journey not found.', 'error')
+        return redirect(url_for('marketing.journeys_list'))
+
+    steps = db.execute("""
+        SELECT * FROM marketing_journey_steps
+        WHERE journey_id = ?
+        ORDER BY step_order
+    """, (id,)).fetchall()
+
+    participants = db.execute("""
+        SELECT p.*, l.lead_name, l.email, l.phone
+        FROM marketing_journey_participants p
+        JOIN marketing_leads l ON p.lead_id = l.id
+        WHERE p.journey_id = ?
+        ORDER BY p.enrolled_at DESC
+        LIMIT 50
+    """, (id,)).fetchall()
+
+    # Journey performance metrics
+    perf_metrics = db.execute("""
+        SELECT
+            COUNT(*) as total_enrolled,
+            SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as active,
+            SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) as completed,
+            SUM(CASE WHEN status = 'Dropped' THEN 1 ELSE 0 END) as dropped,
+            AVG(total_engagements) as avg_engagements,
+            SUM(conversion_value) as total_conversion_value
+        FROM marketing_journey_participants
+        WHERE journey_id = ?
+    """, (id,)).fetchone()
+
+    db.close()
+
+    return render_template('marketing/journey_view.html',
+        title=f'Journey: {journey["journey_name"]}',
+        journey=dict(journey),
+        steps=[dict(r) for r in steps],
+        participants=[dict(r) for r in participants],
+        perf_metrics=dict(perf_metrics) if perf_metrics else None,
+    )
+
+
+@mkt_bp.route('/journeys/edit/<int:id>', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('manage_campaigns')
+def journeys_edit(id):
+    """Edit nurture journey."""
+    db = get_db()
+    user = get_current_user()
+
+    journey = db.execute("SELECT * FROM marketing_nurture_journeys WHERE id = ?", (id,)).fetchone()
+    if not journey:
+        flash('Journey not found.', 'error')
+        return redirect(url_for('marketing.journeys_list'))
+
+    segments = db.execute("SELECT id, name, code FROM marketing_customer_segments WHERE status = 'Active' ORDER BY name").fetchall()
+    contents = db.execute("SELECT id, topic, title FROM marketing_content WHERE status = 'Published' ORDER BY title").fetchall()
+    templates = db.execute("SELECT id, template_name, channel FROM marketing_templates WHERE is_active = 1 ORDER BY template_name").fetchall()
+    steps = db.execute("SELECT * FROM marketing_journey_steps WHERE journey_id = ? ORDER BY step_order", (id,)).fetchall()
+
+    if request.method == 'POST':
+        db.execute("""
+            UPDATE marketing_nurture_journeys SET
+                journey_name = ?, journey_code = ?, journey_type = ?,
+                description = ?, objective = ?, target_segment_id = ?,
+                entry_trigger_type = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (
+            request.form.get('journey_name', ''),
+            request.form.get('journey_code', ''),
+            request.form.get('journey_type', ''),
+            request.form.get('description', ''),
+            request.form.get('objective', ''),
+            request.form.get('target_segment_id'),
+            request.form.get('entry_trigger_type', ''),
+            request.form.get('status', 'Draft'),
+            id
+        ))
+        db.commit()
+
+        log_marketing_audit(db, 'nurture_journey', id, 'UPDATE', actor_user_id=user['id'])
+        flash('Journey updated successfully.', 'success')
+        return redirect(url_for('marketing.journeys_view', id=id))
+
+    db.close()
+    return render_template('marketing/journey_edit.html', title=f'Edit: {journey["journey_name"]}',
+                          journey=dict(journey), steps=[dict(r) for r in steps],
+                          segments=[dict(r) for r in segments], contents=[dict(r) for r in contents],
+                          templates=[dict(r) for r in templates])
+
+
+@mkt_bp.route('/journeys/publish/<int:id>', methods=['POST'])
+@mkt_login_required
+@mkt_permission_required('manage_campaigns')
+def journeys_publish(id):
+    """Publish a journey to make it active."""
+    db = get_db()
+    user = get_current_user()
+
+    journey = db.execute("SELECT * FROM marketing_nurture_journeys WHERE id = ?", (id,)).fetchone()
+    if not journey:
+        return jsonify({'success': False, 'message': 'Journey not found'}), 404
+
+    # Check if journey has at least one step
+    steps = db.execute("SELECT COUNT(*) as cnt FROM marketing_journey_steps WHERE journey_id = ?", (id,)).fetchone()
+    if steps['cnt'] == 0:
+        return jsonify({'success': False, 'message': 'Journey must have at least one step before publishing'}), 400
+
+    db.execute("""
+        UPDATE marketing_nurture_journeys SET
+            is_published = 1, is_active = 1, status = 'Active',
+            published_at = CURRENT_TIMESTAMP, published_by_user_id = ?
+        WHERE id = ?
+    """, (user['id'], id))
+    db.commit()
+
+    log_marketing_audit(db, 'nurture_journey', id, 'PUBLISH', actor_user_id=user['id'])
+    flash(f'Journey "{journey["journey_name"]}" published successfully.', 'success')
+
+    return redirect(url_for('marketing.journeys_view', id=id))
+
+
+# =============================================================================
+# A/B TESTING
+# =============================================================================
+
+@mkt_bp.route('/ab-tests/new', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('manage_campaigns')
+def ab_tests_new():
+    """Create new A/B test."""
+    db = get_db()
+    user = get_current_user()
+
+    campaigns = db.execute("SELECT id, name FROM marketing_campaigns WHERE status IN ('Active', 'Draft') ORDER BY name").fetchall()
+    segments = db.execute("SELECT id, name FROM marketing_customer_segments WHERE status = 'Active' ORDER BY name").fetchall()
+
+    if request.method == 'POST':
+        test_name = request.form.get('test_name', '').strip()
+        test_code = request.form.get('test_code', '').strip()
+        test_type = request.form.get('test_type', '')
+        hypothesis = request.form.get('hypothesis', '')
+        description = request.form.get('description', '')
+        campaign_id = request.form.get('campaign_id')
+        channel = request.form.get('channel', '')
+        control_variant = request.form.get('control_variant', '')
+        challenger_variant = request.form.get('challenger_variant', '')
+        control_percentage = request.form.get('control_percentage', 50)
+        success_metric = request.form.get('success_metric', '')
+        start_date = request.form.get('start_date', '')
+        end_date = request.form.get('end_date', '')
+        status = request.form.get('status', 'Draft')
+
+        if not test_name or not test_type:
+            flash('Test name and type are required.', 'error')
+            return render_template('marketing/ab_test_edit.html', title='New A/B Test', test=None,
+                                   campaigns=[dict(r) for r in campaigns], segments=[dict(r) for r in segments])
+
+        if not test_code:
+            test_code = f"AB-{datetime.now().strftime('%Y%m%d%H%M')}"
+
+        cursor = db.execute("""
+            INSERT INTO marketing_ab_tests
+            (test_name, test_code, test_type, hypothesis, description, campaign_id, channel,
+             control_variant, challenger_variant, control_percentage, challenger_percentage,
+             success_metric, start_date, end_date, status, created_by_user_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (test_name, test_code, test_type, hypothesis, description, campaign_id, channel,
+              control_variant, challenger_variant, control_percentage, 100 - int(control_percentage),
+              success_metric, start_date, end_date, status, user['id']))
+        db.commit()
+        test_id = cursor.lastrowid
+
+        # Create variants
+        db.execute("""
+            INSERT INTO marketing_ab_test_variants (test_id, variant_name, variant_type)
+            VALUES (?, ?, 'control')
+        """, (test_id, control_variant or 'Control'))
+
+        db.execute("""
+            INSERT INTO marketing_ab_test_variants (test_id, variant_name, variant_type)
+            VALUES (?, ?, 'challenger')
+        """, (test_id, challenger_variant or 'Challenger'))
+
+        db.commit()
+
+        flash(f'A/B Test "{test_name}" created successfully.', 'success')
+        return redirect(url_for('marketing.ab_tests_view', id=test_id))
+
+    db.close()
+    return render_template('marketing/ab_test_edit.html', title='New A/B Test', test=None,
+                          campaigns=[dict(r) for r in campaigns], segments=[dict(r) for r in segments])
+
+
+@mkt_bp.route('/ab-tests/view/<int:id>')
+@mkt_login_required
+@mkt_permission_required('view_campaigns')
+def ab_tests_view(id):
+    """View A/B test details."""
+    db = get_db()
+
+    test = db.execute("""
+        SELECT t.*, c.name as campaign_name, s.name as segment_name,
+               u.username as created_by_name
+        FROM marketing_ab_tests t
+        LEFT JOIN marketing_campaigns c ON t.campaign_id = c.id
+        LEFT JOIN marketing_customer_segments s ON t.target_segment_id = s.id
+        LEFT JOIN users u ON t.created_by_user_id = u.id
+        WHERE t.id = ?
+    """, (id,)).fetchone()
+
+    if not test:
+        flash('A/B test not found.', 'error')
+        return redirect(url_for('marketing.ab_tests_list'))
+
+    variants = db.execute("SELECT * FROM marketing_ab_test_variants WHERE test_id = ?", (id,)).fetchall()
+
+    db.close()
+
+    return render_template('marketing/ab_test_view.html',
+        title=f'A/B Test: {test["test_name"]}',
+        test=dict(test),
+        variants=[dict(r) for r in variants],
+    )
+
+
+@mkt_bp.route('/ab-tests/edit/<int:id>', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('manage_campaigns')
+def ab_tests_edit(id):
+    """Edit A/B test."""
+    db = get_db()
+    user = get_current_user()
+
+    test = db.execute("SELECT * FROM marketing_ab_tests WHERE id = ?", (id,)).fetchone()
+    if not test:
+        flash('A/B test not found.', 'error')
+        return redirect(url_for('marketing.ab_tests_list'))
+
+    campaigns = db.execute("SELECT id, name FROM marketing_campaigns WHERE status IN ('Active', 'Draft') ORDER BY name").fetchall()
+    segments = db.execute("SELECT id, name FROM marketing_customer_segments WHERE status = 'Active' ORDER BY name").fetchall()
+    variants = db.execute("SELECT * FROM marketing_ab_test_variants WHERE test_id = ?", (id,)).fetchall()
+
+    if request.method == 'POST':
+        db.execute("""
+            UPDATE marketing_ab_tests SET
+                test_name = ?, test_type = ?, hypothesis = ?, description = ?,
+                campaign_id = ?, channel = ?, control_variant = ?, challenger_variant = ?,
+                control_percentage = ?, challenger_percentage = ?, success_metric = ?,
+                start_date = ?, end_date = ?, status = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (
+            request.form.get('test_name', ''),
+            request.form.get('test_type', ''),
+            request.form.get('hypothesis', ''),
+            request.form.get('description', ''),
+            request.form.get('campaign_id'),
+            request.form.get('channel', ''),
+            request.form.get('control_variant', ''),
+            request.form.get('challenger_variant', ''),
+            request.form.get('control_percentage', 50),
+            request.form.get('challenger_percentage', 50),
+            request.form.get('success_metric', ''),
+            request.form.get('start_date', ''),
+            request.form.get('end_date', ''),
+            request.form.get('status', 'Draft'),
+            id
+        ))
+        db.commit()
+
+        log_marketing_audit(db, 'ab_test', id, 'UPDATE', actor_user_id=user['id'])
+        flash('A/B test updated successfully.', 'success')
+        return redirect(url_for('marketing.ab_tests_view', id=id))
+
+    db.close()
+    return render_template('marketing/ab_test_edit.html', title=f'Edit: {test["test_name"]}',
+                          test=dict(test), variants=[dict(r) for r in variants],
+                          campaigns=[dict(r) for r in campaigns], segments=[dict(r) for r in segments])
+
+
+# =============================================================================
+# CUSTOMER JOURNEY INTELLIGENCE
+# =============================================================================
+
+@mkt_bp.route('/journey-intelligence/customer/<int:customer_id>')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def journey_intelligence_customer(customer_id):
+    """View journey intelligence for a specific customer."""
+    db = get_db()
+
+    # Get customer info
+    customer = db.execute("SELECT * FROM sdad_customers WHERE id = ?", (customer_id,)).fetchone()
+
+    # Get journey records
+    journeys = db.execute("""
+        SELECT ji.*, c.name as channel_name, camp.name as campaign_name
+        FROM marketing_journey_intelligence ji
+        LEFT JOIN marketing_channels c ON ji.channel_id = c.id
+        LEFT JOIN marketing_campaigns camp ON ji.campaign_id = camp.id
+        WHERE ji.customer_id = ?
+        ORDER BY ji.touchpoint_date DESC
+    """, (customer_id,)).fetchall()
+
+    # Get associated leads
+    leads = db.execute("SELECT * FROM marketing_leads WHERE phone LIKE ? OR email LIKE ?",
+                       (f"%{customer['phone'] if customer else ''}%", f"%{customer['email'] if customer else ''}%")).fetchall()
+
+    # Calculate journey summary
+    summary = {
+        'total_touchpoints': len(journeys),
+        'avg_engagement': sum([j['engagement_score'] or 0 for j in journeys]) / len(journeys) if journeys else 0,
+        'avg_churn_risk': sum([j['churn_risk_score'] or 0 for j in journeys]) / len(journeys) if journeys else 0,
+        'conversion_value': sum([j['conversion_value'] or 0 for j in journeys]),
+    }
+
+    # Get next best actions
+    next_actions = db.execute("""
+        SELECT next_best_action, COUNT(*) as count
+        FROM marketing_journey_intelligence
+        WHERE customer_id = ? AND next_best_action IS NOT NULL
+        GROUP BY next_best_action
+        ORDER BY count DESC
+        LIMIT 5
+    """, (customer_id,)).fetchall()
+
+    db.close()
+
+    return render_template('marketing/journey_intelligence_customer.html',
+        title=f'Customer Journey: {customer["name"] if customer else "Unknown"}',
+        customer=dict(customer) if customer else None,
+        journeys=[dict(j) for j in journeys],
+        leads=[dict(l) for l in leads],
+        summary=summary,
+        next_actions=[dict(a) for a in next_actions],
+    )
+
+
+# =============================================================================
+# ROI & PERFORMANCE
+# =============================================================================
+
+@mkt_bp.route('/roi-dashboard')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def roi_dashboard_page():
+    """Marketing ROI dashboard."""
+    db = get_db()
+
+    date_from = request.args.get('date_from', (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d'))
+    date_to = request.args.get('date_to', datetime.now().strftime('%Y-%m-%d'))
+
+    # Get campaign ROI data
+    campaign_roi = db.execute("""
+        SELECT
+            c.id, c.name, c.campaign_type, c.status,
+            c.budget, c.actual_cost,
+            COALESCE(SUM(m.sales_generated), 0) as total_sales,
+            COALESCE(SUM(m.new_customers_acquired), 0) as new_customers,
+            CASE WHEN c.actual_cost > 0
+                 THEN ROUND((COALESCE(SUM(m.sales_generated), 0) - c.actual_cost) / c.actual_cost * 100, 2)
+                 ELSE 0 END as roi_percentage,
+            CASE WHEN COUNT(DISTINCT l.id) > 0
+                 THEN ROUND(c.actual_cost / COUNT(DISTINCT l.id), 2)
+                 ELSE 0 END as cost_per_lead,
+            CASE WHEN SUM(m.new_customers_acquired) > 0
+                 THEN ROUND(c.actual_cost / SUM(m.new_customers_acquired), 2)
+                 ELSE 0 END as cost_per_acquisition
+        FROM marketing_campaigns c
+        LEFT JOIN marketing_campaigns m ON c.id = m.id
+        LEFT JOIN marketing_leads l ON l.related_campaign_id = c.id
+        WHERE c.start_date >= ? AND c.start_date <= ?
+        GROUP BY c.id
+        ORDER BY roi_percentage DESC
+    """, (date_from, date_to)).fetchall()
+
+    # Get channel ROI breakdown
+    channel_roi = db.execute("""
+        SELECT
+            ch.name as channel_name, ch.channel_type,
+            SUM(cc.actual_spend) as total_spend,
+            SUM(cc.leads_generated) as total_leads,
+            SUM(cc.sales_generated) as total_sales,
+            CASE WHEN SUM(cc.leads_generated) > 0
+                 THEN ROUND(SUM(cc.actual_spend) / SUM(cc.leads_generated), 2)
+                 ELSE 0 END as cost_per_lead,
+            CASE WHEN SUM(cc.actual_spend) > 0
+                 THEN ROUND((SUM(cc.sales_generated) - SUM(cc.actual_spend)) / SUM(cc.actual_spend) * 100, 2)
+                 ELSE 0 END as roi_percentage
+        FROM marketing_channels ch
+        LEFT JOIN marketing_campaign_channels cc ON ch.id = cc.channel_id
+        LEFT JOIN marketing_campaigns c ON cc.campaign_id = c.id
+        WHERE c.start_date >= ? AND c.start_date <= ?
+        GROUP BY ch.id
+        ORDER BY roi_percentage DESC
+    """, (date_from, date_to)).fetchall()
+
+    # Summary metrics
+    summary = db.execute("""
+        SELECT
+            SUM(c.actual_cost) as total_marketing_spend,
+            SUM(c.sales_generated) as total_revenue,
+            SUM(c.profit_generated) as total_profit,
+            SUM(c.leads_generated) as total_leads,
+            SUM(c.new_customers_acquired) as total_new_customers,
+            CASE WHEN SUM(c.leads_generated) > 0
+                 THEN ROUND(SUM(c.actual_cost) / SUM(c.leads_generated), 2)
+                 ELSE 0 END as avg_cost_per_lead,
+            CASE WHEN SUM(c.new_customers_acquired) > 0
+                 THEN ROUND(SUM(c.actual_cost) / SUM(c.new_customers_acquired), 2)
+                 ELSE 0 END as avg_cost_per_acquisition,
+            CASE WHEN SUM(c.actual_cost) > 0
+                 THEN ROUND((SUM(c.sales_generated) - SUM(c.actual_cost)) / SUM(c.actual_cost) * 100, 2)
+                 ELSE 0 END as overall_roi
+        FROM marketing_campaigns c
+        WHERE c.start_date >= ? AND c.start_date <= ?
+    """, (date_from, date_to)).fetchone()
+
+    db.close()
+
+    return render_template('marketing/roi_dashboard.html',
+        title='Marketing ROI Dashboard',
+        campaign_roi=[dict(r) for r in campaign_roi],
+        channel_roi=[dict(r) for r in channel_roi],
+        summary=dict(summary) if summary else None,
+        date_from=date_from, date_to=date_to,
+    )
+
+
+# =============================================================================
+# CHANNEL DELIVERABILITY
+# =============================================================================
+
+@mkt_bp.route('/channel-deliverability')
+@mkt_login_required
+@mkt_permission_required('view_channels')
+def channel_deliverability():
+    """Channel deliverability metrics."""
+    db = get_db()
+
+    metrics = db.execute("""
+        SELECT * FROM marketing_channel_deliverability
+        ORDER BY channel, period_end DESC
+    """).fetchall()
+
+    # Recent communications summary
+    comm_summary = db.execute("""
+        SELECT
+            channel,
+            COUNT(*) as total_sent,
+            SUM(CASE WHEN status = 'Delivered' THEN 1 ELSE 0 END) as delivered,
+            SUM(CASE WHEN status = 'Opened' THEN 1 ELSE 0 END) as opened,
+            SUM(CASE WHEN status = 'Clicked' THEN 1 ELSE 0 END) as clicked,
+            SUM(CASE WHEN status = 'Bounced' THEN 1 ELSE 0 END) as bounced,
+            SUM(CASE WHEN status = 'Unsubscribed' THEN 1 ELSE 0 END) as unsubscribed,
+            SUM(total_cost) as total_cost
+        FROM marketing_communications
+        GROUP BY channel
+    """).fetchall()
+
+    db.close()
+
+    return render_template('marketing/channel_deliverability.html',
+        title='Channel Deliverability',
+        metrics=[dict(r) for r in metrics],
+        comm_summary=[dict(r) for r in comm_summary],
+    )
+
+
+# =============================================================================
+# MARKETING ASSETS
+# =============================================================================
+
+@mkt_bp.route('/assets-library')
+@mkt_login_required
+@mkt_permission_required('view_content')
+def assets_library_list():
+    """List marketing assets."""
+    db = get_db()
+
+    page = int(request.args.get('page', 1))
+    per_page = 30
+    offset = (page - 1) * per_page
+
+    search = request.args.get('search', '')
+    asset_type = request.args.get('asset_type', '')
+
+    query = """
+        SELECT a.*, u.username as created_by_name
+        FROM marketing_assets a
+        LEFT JOIN users u ON a.created_by_user_id = u.id
+        WHERE 1=1
+    """
+    count_query = "SELECT COUNT(*) as cnt FROM marketing_assets WHERE 1=1"
+    params = []
+    count_params = []
+
+    if search:
+        query += " AND (a.asset_name LIKE ? OR a.asset_code LIKE ? OR a.tags LIKE ?)"
+        count_query += " AND (asset_name LIKE ? OR asset_code LIKE ? OR tags LIKE ?)"
+        search_term = f"%{search}%"
+        params.extend([search_term, search_term, search_term])
+        count_params.extend([search_term, search_term, search_term])
+
+    if asset_type:
+        query += " AND a.asset_type = ?"
+        count_query += " AND asset_type = ?"
+        params.append(asset_type)
+        count_params.append(asset_type)
+
+    total = db.execute(count_query, count_params).fetchone()['cnt']
+    query += " ORDER BY a.created_at DESC LIMIT ? OFFSET ?"
+    params.extend([per_page, offset])
+
+    assets = db.execute(query, params).fetchall()
+
+    db.close()
+
+    return render_template('marketing/assets.html',
+        title='Marketing Assets',
+        assets=[dict(r) for r in assets],
+        page=page, per_page=per_page, total=total,
+        search=search, asset_type=asset_type,
+    )
+
+
+@mkt_bp.route('/templates')
+@mkt_login_required
+@mkt_permission_required('view_content')
+def templates_list():
+    """List marketing templates."""
+    db = get_db()
+
+    templates = db.execute("""
+        SELECT t.*, u.username as created_by_name
+        FROM marketing_templates t
+        LEFT JOIN users u ON t.created_by_user_id = u.id
+        ORDER BY t.channel, t.template_name
+    """).fetchall()
+
+    db.close()
+
+    return render_template('marketing/templates.html',
+        title='Marketing Templates',
+        templates=[dict(r) for r in templates],
+    )
+
+
+# =============================================================================
+# EXPORT CENTER
+# =============================================================================
+
+@mkt_bp.route('/export-center')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def export_center():
+    """Marketing export center."""
+    db = get_db()
+
+    # Get saved export configurations
+    configs = db.execute("""
+        SELECT c.*, u.username as created_by_name
+        FROM marketing_export_configs c
+        LEFT JOIN users u ON c.created_by_user_id = u.id
+        WHERE c.is_active = 1
+        ORDER BY c.entity_type, c.config_name
+    """).fetchall()
+
+    # Get recent exports
+    recent_exports = db.execute("""
+        SELECT * FROM marketing_activity_log
+        WHERE activity_type = 'export'
+        ORDER BY created_at DESC
+        LIMIT 20
+    """).fetchall()
+
+    db.close()
+
+    return render_template('marketing/export_center.html',
+        title='Export Center',
+        configs=[dict(c) for c in configs],
+        recent_exports=[dict(e) for e in recent_exports],
+    )
+
+
+@mkt_bp.route('/export/run/<int:config_id>', methods=['GET', 'POST'])
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def export_run(config_id):
+    """Run an export with a specific configuration."""
+    db = get_db()
+
+    config = db.execute("SELECT * FROM marketing_export_configs WHERE id = ?", (config_id,)).fetchone()
+    if not config:
+        flash('Export configuration not found.', 'error')
+        return redirect(url_for('marketing.export_center'))
+
+    # Build export data based on entity type
+    export_data = []
+    headers = []
+
+    if config['entity_type'] == 'campaign':
+        headers = ['Name', 'Code', 'Type', 'Status', 'Start Date', 'End Date', 'Budget', 'Actual Cost', 'Leads', 'Sales', 'ROI %']
+        rows = db.execute("""
+            SELECT name, code, campaign_type, status, start_date, end_date,
+                   budget, actual_cost, leads_generated, sales_generated,
+                   CASE WHEN actual_cost > 0 THEN ROUND((sales_generated - actual_cost) / actual_cost * 100, 1) ELSE 0 END as roi
+            FROM marketing_campaigns
+            ORDER BY created_at DESC
+        """).fetchall()
+        export_data = [dict(r) for r in rows]
+
+    elif config['entity_type'] == 'lead':
+        headers = ['Name', 'Email', 'Phone', 'Source', 'Status', 'Importance', 'Value', 'Probability', 'Created']
+        rows = db.execute("""
+            SELECT l.lead_name, l.email, l.phone, s.name as source_name,
+                   l.lead_status, l.importance_level, l.estimated_value,
+                   l.conversion_probability, l.created_at
+            FROM marketing_leads l
+            LEFT JOIN marketing_lead_sources s ON l.source_id = s.id
+            ORDER BY l.created_at DESC
+        """).fetchall()
+        export_data = [dict(r) for r in rows]
+
+    elif config['entity_type'] == 'segment':
+        headers = ['Name', 'Code', 'Type', 'Customer Type', 'Status', 'Created']
+        rows = db.execute("""
+            SELECT name, code, segment_type, customer_type, status, created_at
+            FROM marketing_customer_segments
+            ORDER BY name
+        """).fetchall()
+        export_data = [dict(r) for r in rows]
+
+    elif config['entity_type'] == 'channel':
+        headers = ['Name', 'Code', 'Type', 'Budget', 'Status']
+        rows = db.execute("""
+            SELECT name, code, channel_type, budget, status
+            FROM marketing_channels
+            ORDER BY name
+        """).fetchall()
+        export_data = [dict(r) for r in rows]
+
+    db.close()
+
+    # Log export
+    log_marketing_audit(db, 'export', config_id, 'EXPORT',
+                       new_value=json.dumps({'config_name': config['config_name'], 'entity_type': config['entity_type']}),
+                       actor_user_id=get_current_user()['id'])
+
+    # Generate file
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    if config['include_headers']:
+        writer.writerow(headers)
+
+    for row in export_data:
+        writer.writerow([row.get(h.lower().replace(' ', '_')) or row.get(h.lower()) or '' for h in headers])
+
+    output.seek(0)
+
+    filename = f"marketing_{config['entity_type']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{config['output_format']}"
+
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv' if config['output_format'] == 'csv' else 'application/vnd.ms-excel',
+        headers={'Content-Disposition': f'attachment; filename={filename}'}
+    )
+
+
+# =============================================================================
+# MARKETING WORKFLOW & APPROVALS
+# =============================================================================
+
+@mkt_bp.route('/approvals')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def approvals_list():
+    """List pending approvals."""
+    db = get_db()
+
+    pending_campaigns = db.execute("""
+        SELECT c.*, u.username as created_by_name
+        FROM marketing_campaigns c
+        LEFT JOIN users u ON c.created_by_user_id = u.id
+        WHERE c.approval_state = 'Pending'
+        ORDER BY c.created_at DESC
+    """).fetchall()
+
+    pending_budgets = db.execute("""
+        SELECT b.*, u.username as created_by_name
+        FROM marketing_budgets b
+        LEFT JOIN users u ON b.created_by_user_id = u.id
+        WHERE b.status = 'Pending Approval'
+        ORDER BY b.created_at DESC
+    """).fetchall()
+
+    pending_content = db.execute("""
+        SELECT ct.*, u.username as created_by_name
+        FROM marketing_content ct
+        LEFT JOIN users u ON ct.created_by_user_id = u.id
+        WHERE ct.status = 'Pending Approval'
+        ORDER BY ct.created_at DESC
+    """).fetchall()
+
+    db.close()
+
+    return render_template('marketing/approvals.html',
+        title='Marketing Approvals',
+        pending_campaigns=[dict(r) for r in pending_campaigns],
+        pending_budgets=[dict(r) for r in pending_budgets],
+        pending_content=[dict(r) for r in pending_content],
+    )
+
+
+@mkt_bp.route('/approvals/campaign/<int:id>/approve', methods=['POST'])
+@mkt_login_required
+@mkt_permission_required('approve_campaigns')
+def approval_campaign_approve(id):
+    """Approve a campaign."""
+    db = get_db()
+    user = get_current_user()
+
+    db.execute("""
+        UPDATE marketing_campaigns SET
+            approval_state = 'Approved',
+            approved_by_user_id = ?,
+            approved_at = CURRENT_TIMESTAMP,
+            status = 'Active'
+        WHERE id = ?
+    """, (user['id'], id))
+    db.commit()
+
+    log_marketing_audit(db, 'campaign', id, 'APPROVE', actor_user_id=user['id'])
+    flash('Campaign approved successfully.', 'success')
+
+    return redirect(url_for('marketing.approvals_list'))
+
+
+@mkt_bp.route('/approvals/campaign/<int:id>/reject', methods=['POST'])
+@mkt_login_required
+@mkt_permission_required('approve_campaigns')
+def approval_campaign_reject(id):
+    """Reject a campaign."""
+    db = get_db()
+    user = get_current_user()
+    reason = request.form.get('reason', '')
+
+    db.execute("""
+        UPDATE marketing_campaigns SET
+            approval_state = 'Rejected',
+            status = 'Draft'
+        WHERE id = ?
+    """, (id,))
+    db.commit()
+
+    log_marketing_audit(db, 'campaign', id, 'REJECT',
+                       new_value=reason, actor_user_id=user['id'])
+    flash('Campaign rejected.', 'warning')
+
+    return redirect(url_for('marketing.approvals_list'))
+
+
+# =============================================================================
+# SLA MONITORING
+# =============================================================================
+
+@mkt_bp.route('/sla-monitoring')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def sla_monitoring():
+    """Marketing SLA monitoring."""
+    db = get_db()
+
+    # Get active SLA instances
+    sla_instances = db.execute("""
+        SELECT si.*, sp.policy_name, sp.policy_type,
+               u.username as current_assignee_name,
+               e.username as escalated_to_name
+        FROM marketing_sla_instances si
+        JOIN marketing_sla_policies sp ON si.sla_policy_id = sp.id
+        LEFT JOIN users u ON si.current_assignee_id = u.id
+        LEFT JOIN users e ON si.escalated_to_user_id = e.id
+        WHERE si.status IN ('Active', 'Breached')
+        ORDER BY si.status ASC, si.started_at DESC
+    """).fetchall()
+
+    # Get SLA summary
+    sla_summary = db.execute("""
+        SELECT
+            COUNT(*) as total_active,
+            SUM(CASE WHEN status = 'Active' THEN 1 ELSE 0 END) as on_track,
+            SUM(CASE WHEN status = 'Breached' THEN 1 ELSE 0 END) as breached,
+            SUM(CASE WHEN status = 'Resolved' THEN 1 ELSE 0 END) as resolved
+        FROM marketing_sla_instances
+        WHERE status IN ('Active', 'Breached', 'Resolved')
+    """).fetchone()
+
+    db.close()
+
+    return render_template('marketing/sla_monitoring.html',
+        title='SLA Monitoring',
+        sla_instances=[dict(r) for r in sla_instances],
+        sla_summary=dict(sla_summary) if sla_summary else None,
+    )
+
+
+# =============================================================================
+# BRANCH MARKETING CONFIG
+# =============================================================================
+
+@mkt_bp.route('/branch-marketing')
+@mkt_login_required
+@mkt_permission_required('manage_settings')
+def branch_marketing_list():
+    """List branch marketing configurations."""
+    db = get_db()
+
+    configs = db.execute("SELECT * FROM marketing_branch_configs ORDER BY branch_name").fetchall()
+
+    db.close()
+
+    return render_template('marketing/branch_marketing.html',
+        title='Branch Marketing Configuration',
+        configs=[dict(r) for r in configs],
+    )
+
+
+# =============================================================================
+# REPORTS - CAMPAIGN DETAIL
+# =============================================================================
+
+@mkt_bp.route('/reports/campaign/<int:id>')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def report_campaign_detail(id):
+    """Detailed campaign report."""
+    db = get_db()
+
+    campaign = db.execute("""
+        SELECT c.*, u.username as owner_name, b.name as brand_name, s.name as segment_name
+        FROM marketing_campaigns c
+        LEFT JOIN users u ON c.owner_user_id = u.id
+        LEFT JOIN marketing_brands b ON c.target_brand_id = b.id
+        LEFT JOIN marketing_customer_segments s ON c.target_segment_id = s.id
+        WHERE c.id = ?
+    """, (id,)).fetchone()
+
+    if not campaign:
+        flash('Campaign not found.', 'error')
+        return redirect(url_for('marketing.campaigns_list'))
+
+    # Get channel performance
+    channel_perf = db.execute("""
+        SELECT cc.*, c.name as channel_name, c.channel_type,
+               c.budget as channel_budget
+        FROM marketing_campaign_channels cc
+        JOIN marketing_channels c ON cc.channel_id = c.id
+        WHERE cc.campaign_id = ?
+    """, (id,)).fetchall()
+
+    # Get lead source breakdown
+    lead_sources = db.execute("""
+        SELECT ls.name, COUNT(l.id) as lead_count,
+               SUM(l.estimated_value) as total_value,
+               SUM(CASE WHEN l.lead_status = 'Converted to Customer' THEN 1 ELSE 0 END) as converted
+        FROM marketing_leads l
+        JOIN marketing_lead_sources ls ON l.source_id = ls.id
+        WHERE l.related_campaign_id = ?
+        GROUP BY ls.id
+    """, (id,)).fetchall()
+
+    # Get daily metrics
+    daily_metrics = db.execute("""
+        SELECT metric_date, SUM(metric_value) as value
+        FROM marketing_performance_metrics
+        WHERE entity_type = 'campaign' AND entity_id = ?
+        GROUP BY metric_date
+        ORDER BY metric_date
+    """, (id,)).fetchall()
+
+    db.close()
+
+    return render_template('marketing/report_campaign.html',
+        title=f'Campaign Report: {campaign["name"]}',
+        campaign=dict(campaign),
+        channel_perf=[dict(r) for r in channel_perf],
+        lead_sources=[dict(r) for r in lead_sources],
+        daily_metrics=[dict(r) for r in daily_metrics],
+    )
+
+
+# =============================================================================
+# REPORTS - LEAD ANALYSIS
+# =============================================================================
+
+@mkt_bp.route('/reports/leads')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def report_leads():
+    """Lead analysis report."""
+    db = get_db()
+
+    date_from = request.args.get('date_from', (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d'))
+    date_to = request.args.get('date_to', datetime.now().strftime('%Y-%m-%d'))
+
+    # Lead by source
+    leads_by_source = db.execute("""
+        SELECT ls.name as source_name, COUNT(l.id) as count,
+               SUM(l.estimated_value) as total_value,
+               AVG(l.conversion_probability) as avg_probability
+        FROM marketing_leads l
+        JOIN marketing_lead_sources ls ON l.source_id = ls.id
+        WHERE l.created_at >= ? AND l.created_at <= ?
+        GROUP BY ls.id
+        ORDER BY count DESC
+    """, (date_from, date_to)).fetchall()
+
+    # Lead by status
+    leads_by_status = db.execute("""
+        SELECT lead_status, COUNT(*) as count,
+               SUM(estimated_value) as total_value
+        FROM marketing_leads
+        WHERE created_at >= ? AND created_at <= ?
+        GROUP BY lead_status
+    """, (date_from, date_to)).fetchall()
+
+    # Lead scoring distribution
+    scoring_dist = db.execute("""
+        SELECT score_grade, COUNT(*) as count
+        FROM marketing_lead_scores ls
+        JOIN marketing_leads l ON ls.lead_id = l.id
+        WHERE l.created_at >= ? AND l.created_at <= ?
+        GROUP BY score_grade
+    """, (date_from, date_to)).fetchall()
+
+    # MQL/SQL funnel
+    mql_sql = db.execute("""
+        SELECT
+            SUM(CASE WHEN is_mql = 1 THEN 1 ELSE 0 END) as mql_count,
+            SUM(CASE WHEN is_sql = 1 THEN 1 ELSE 0 END) as sql_count,
+            AVG(total_score) as avg_score
+        FROM marketing_lead_scores
+    """).fetchone()
+
+    db.close()
+
+    return render_template('marketing/report_lead.html',
+        title='Lead Analysis Report',
+        leads_by_source=[dict(r) for r in leads_by_source],
+        leads_by_status=[dict(r) for r in leads_by_status],
+        scoring_dist=[dict(r) for r in scoring_dist],
+        mql_sql=dict(mql_sql) if mql_sql else None,
+        date_from=date_from, date_to=date_to,
+    )
+
+
+# =============================================================================
+# REPORTS - JOURNEY PERFORMANCE
+# =============================================================================
+
+@mkt_bp.route('/reports/journeys')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def report_journeys():
+    """Journey performance report."""
+    db = get_db()
+
+    journeys = db.execute("""
+        SELECT j.*,
+               (SELECT COUNT(*) FROM marketing_journey_participants WHERE journey_id = j.id) as enrolled,
+               (SELECT COUNT(*) FROM marketing_journey_participants WHERE journey_id = j.id AND status = 'Completed') as completed,
+               (SELECT COUNT(*) FROM marketing_journey_participants WHERE journey_id = j.id AND status = 'Active') as active,
+               (SELECT AVG(total_engagements) FROM marketing_journey_participants WHERE journey_id = j.id) as avg_engagements
+        FROM marketing_nurture_journeys j
+        ORDER BY j.created_at DESC
+    """).fetchall()
+
+    # Overall journey metrics
+    overall = db.execute("""
+        SELECT
+            COUNT(*) as total_journeys,
+            SUM(total_enrolled) as total_enrolled,
+            SUM(total_completed) as total_completed,
+            AVG(avg_completion_days) as avg_completion_days,
+            SUM(total_enrolled) as total_participants
+        FROM marketing_nurture_journeys
+    """).fetchone()
+
+    db.close()
+
+    return render_template('marketing/report_journey.html',
+        title='Journey Performance Report',
+        journeys=[dict(r) for r in journeys],
+        overall=dict(overall) if overall else None,
+    )
+
+
+# =============================================================================
+# REPORTS - CHANNEL PERFORMANCE
+# =============================================================================
+
+@mkt_bp.route('/reports/channels')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def report_channels():
+    """Channel performance report."""
+    db = get_db()
+
+    date_from = request.args.get('date_from', (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d'))
+    date_to = request.args.get('date_to', datetime.now().strftime('%Y-%m-%d'))
+
+    channels = db.execute("""
+        SELECT c.*,
+               COALESCE(SUM(cc.leads_generated), 0) as total_leads,
+               COALESCE(SUM(cc.inquiries_generated), 0) as total_inquiries,
+               COALESCE(SUM(cc.sales_generated), 0) as total_sales,
+               COALESCE(AVG(cc.actual_spend), 0) as avg_spend,
+               CASE WHEN SUM(cc.leads_generated) > 0
+                    THEN ROUND(SUM(cc.actual_spend) / SUM(cc.leads_generated), 2)
+                    ELSE 0 END as cost_per_lead
+        FROM marketing_channels c
+        LEFT JOIN marketing_campaign_channels cc ON c.id = cc.channel_id
+        LEFT JOIN marketing_campaigns camp ON cc.campaign_id = camp.id
+        WHERE camp.start_date >= ? AND camp.start_date <= ?
+        GROUP BY c.id
+        ORDER BY total_sales DESC
+    """, (date_from, date_to)).fetchall()
+
+    db.close()
+
+    return render_template('marketing/report_channel.html',
+        title='Channel Performance Report',
+        channels=[dict(r) for r in channels],
+        date_from=date_from, date_to=date_to,
+    )
+
+
+# =============================================================================
+# REPORTS - ATTRIBUTION
+# =============================================================================
+
+@mkt_bp.route('/reports/attribution')
+@mkt_login_required
+@mkt_permission_required('view_reports')
+def report_attribution():
+    """Marketing attribution report."""
+    db = get_db()
+
+    # Attribution by campaign
+    campaign_attr = db.execute("""
+        SELECT c.name, c.campaign_type,
+               COUNT(DISTINCT a.customer_id) as attributed_customers,
+               SUM(a.revenue_generated) as attributed_revenue,
+               SUM(a.profit_generated) as attributed_profit,
+               COUNT(DISTINCT CASE WHEN a.is_conversion = 1 THEN a.customer_id END) as conversions
+        FROM marketing_attribution a
+        JOIN marketing_campaigns c ON a.campaign_id = c.id
+        GROUP BY c.id
+        ORDER BY attributed_revenue DESC
+    """).fetchall()
+
+    # Attribution by channel
+    channel_attr = db.execute("""
+        SELECT ch.name as channel_name, ch.channel_type,
+               COUNT(DISTINCT a.customer_id) as attributed_customers,
+               SUM(a.revenue_generated) as attributed_revenue,
+               SUM(a.profit_generated) as attributed_profit
+        FROM marketing_attribution a
+        JOIN marketing_channels ch ON a.channel_id = ch.id
+        GROUP BY ch.id
+        ORDER BY attributed_revenue DESC
+    """).fetchall()
+
+    # Attribution model comparison
+    models = db.execute("SELECT * FROM marketing_attribution_models WHERE is_active = 1").fetchall()
+
+    db.close()
+
+    return render_template('marketing/report_attribution.html',
+        title='Attribution Report',
+        campaign_attr=[dict(r) for r in campaign_attr],
+        channel_attr=[dict(r) for r in channel_attr],
+        models=[dict(r) for r in models],
+    )
+
+
+# =============================================================================
+# MARKETING SETTINGS
+# =============================================================================
+
+@mkt_bp.route('/settings/view')
+@mkt_login_required
+@mkt_permission_required('manage_settings')
+def settings_view():
+    """View marketing settings."""
+    db = get_db()
+
+    settings = db.execute("""
+        SELECT * FROM marketing_settings
+        WHERE is_active = 1
+        ORDER BY category, setting_key
+    """).fetchall()
+
+    # Group by category
+    settings_by_cat = {}
+    for s in settings:
+        cat = s['category']
+        if cat not in settings_by_cat:
+            settings_by_cat[cat] = []
+        settings_by_cat[cat].append(dict(s))
+
+    db.close()
+
+    return render_template('marketing/settings.html',
+        title='Marketing Settings',
+        settings_by_cat=settings_by_cat,
+    )
+
+
+# =============================================================================
+# MARKETING NOTIFICATIONS
+# =============================================================================
+
+@mkt_bp.route('/notifications/read/<int:id>', methods=['POST'])
+@mkt_login_required
+def notifications_read(id):
+    """Mark notification as read."""
+    db = get_db()
+
+    db.execute("""
+        UPDATE marketing_notifications SET
+            is_read = 1, read_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND recipient_user_id = ?
+    """, (id, session['user_id']))
+
+    db.commit()
+    db.close()
+
+    return jsonify({'success': True})
+
+
+# =============================================================================
+# EXPORT ENDPOINTS - ALL 20 EXPORT TYPES
+# =============================================================================
+
+MARKETING_EXPORT_TYPES = [
+    'csv', 'excel_text', 'excel_general', 'json', 'xml', 'txt',
+    'pdf', 'docx', 'html', 'printable', 'barcode', 'api',
+    'email', 'zip', 'backup', 'sql_dump', 'dashboard',
+    'summary', 'detailed', 'audit_log'
+]
+
+MARKETING_EXPORT_COLUMNS = {
+    'campaigns': ['campaign_id', 'name', 'channel', 'status', 'start_date', 'budget', 'spent', 'roi'],
+    'leads': ['lead_id', 'name', 'email', 'source', 'status', 'score', 'created_at'],
+    'channels': ['channel_name', 'type', 'status', 'total_campaigns', 'total_budget'],
+    'content': ['content_id', 'title', 'type', 'status', 'publish_date', 'views'],
+    'offers': ['offer_id', 'title', 'type', 'discount', 'start_date', 'end_date', 'status'],
+    'budgets': ['budget_id', 'category', 'allocated', 'spent', 'remaining', 'period'],
+    'performance': ['metric', 'value', 'change', 'period', 'trend'],
+    'segments': ['segment_id', 'name', 'criteria', 'member_count', 'created_at']
+}
+
+
+@mkt_bp.route('/api/export/<export_type>', methods=['GET', 'POST'])
+@mkt_bp.route('/api/export/<data_type>/<export_type>', methods=['GET', 'POST'])
+@mkt_permission_required('reports')
+def api_marketing_export(export_type, data_type=None):
+    """Export marketing data in all 20 formats."""
+    if export_type not in MARKETING_EXPORT_TYPES:
+        return jsonify({
+            'error': f'Invalid export type. Valid types: {MARKETING_EXPORT_TYPES}'
+        }), 400
+
+    company_id = session.get('company_id', 0)
+
+    # Determine data type from URL or default
+    if data_type is None:
+        data_type = request.args.get('type', 'campaigns')
+
+    # Get data based on type
+    if data_type == 'campaigns':
+        db = get_db()
+        data = db.execute("""
+            SELECT * FROM marketing_campaigns
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = MARKETING_EXPORT_COLUMNS['campaigns']
+        title = 'Marketing Campaigns'
+    elif data_type == 'leads':
+        db = get_db()
+        data = db.execute("""
+            SELECT * FROM marketing_leads
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = MARKETING_EXPORT_COLUMNS['leads']
+        title = 'Marketing Leads'
+    elif data_type == 'channels':
+        db = get_db()
+        data = db.execute("""
+            SELECT * FROM marketing_channels
+            WHERE company_id = ?
+            ORDER BY channel_name
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = MARKETING_EXPORT_COLUMNS['channels']
+        title = 'Marketing Channels'
+    elif data_type == 'content':
+        db = get_db()
+        data = db.execute("""
+            SELECT * FROM marketing_content
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = MARKETING_EXPORT_COLUMNS['content']
+        title = 'Marketing Content'
+    elif data_type == 'offers':
+        db = get_db()
+        data = db.execute("""
+            SELECT * FROM marketing_offers
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = MARKETING_EXPORT_COLUMNS['offers']
+        title = 'Marketing Offers'
+    elif data_type == 'budgets':
+        db = get_db()
+        data = db.execute("""
+            SELECT * FROM marketing_budgets
+            WHERE company_id = ?
+            ORDER BY period DESC
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = MARKETING_EXPORT_COLUMNS['budgets']
+        title = 'Marketing Budgets'
+    elif data_type == 'segments':
+        db = get_db()
+        data = db.execute("""
+            SELECT * FROM marketing_segments
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,)).fetchall()
+        data = [dict(row) for row in data]
+        columns = MARKETING_EXPORT_COLUMNS['segments']
+        title = 'Customer Segments'
+    else:
+        return jsonify({'error': f'Data type {data_type} not supported'}), 400
+
+    filename = f'marketing_{data_type}_{datetime.now().strftime("%Y%m%d")}'
+
+    return send_export_response(data, export_type, filename, columns, title)
+
+
+@mkt_bp.route('/api/export/list')
+@mkt_permission_required('reports')
+def list_marketing_export_types():
+    """List available export types for marketing module."""
+    return jsonify({
+        'module': 'marketing',
+        'data_types': list(MARKETING_EXPORT_COLUMNS.keys()),
+        'export_types': [{'type': t} for t in MARKETING_EXPORT_TYPES]
+    })
 
 
 # =============================================================================

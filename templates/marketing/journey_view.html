@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="{{ 'fa' if user_preferences.direction_resolved == 'rtl' else 'en' }}" dir="{{ user_preferences.direction_resolved }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ t('app_name', 'Enterprise Hub') }} - {{ t(title, title) }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body class="premium-bg text-slate-100 min-h-screen antialiased">
+{% extends "base.html" %}
+
+{% block content %}
+<div class="p-6 max-w-[1600px] mx-auto">
+
+    <!-- Page Header -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <div>
+            <div class="flex items-center gap-3 mb-2">
+                <a href="{{ url_for('marketing.journeys_list') }}" class="p-2 hover:bg-white/10 rounded-lg transition-all">
+                    <i class="fa-solid fa-arrow-left text-slate-400"></i>
+                </a>
+                <h1 class="text-2xl font-extrabold text-white">{{ journey.journey_name }}</h1>
+            </div>
+            <p class="text-slate-400 ml-10">{{ journey.journey_code }} | {{ journey.journey_type|title }} | Target: {{ journey.segment_name or 'All Segments' }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <span class="px-4 py-2 rounded-full text-sm font-bold {% if journey.status == 'Active' %}bg-emerald-400/20 text-emerald-400{% elif journey.status == 'Draft' %}bg-slate-400/20 text-slate-400{% else %}bg-amber-400/20 text-amber-400{% endif %}">
+                {{ journey.status }}
+            </span>
+            <a href="{{ url_for('marketing.journeys_edit', id=journey.id) }}" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 rounded-xl text-sm font-semibold transition-all">
+                <i class="fa-solid fa-pen mr-2"></i>{{ t('edit', 'Edit') }}
+            </a>
+            {% if journey.status == 'Draft' %}
+            <form method="post" action="{{ url_for('marketing.journeys_publish', id=journey.id) }}" class="inline">
+                <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-sm font-semibold transition-all">
+                    <i class="fa-solid fa-play mr-2"></i>{{ t('publish', 'Publish') }}
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Journey Overview -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-blue-400 mb-1">{{ perf_metrics.total_enrolled if perf_metrics else 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('enrolled', 'Enrolled') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-emerald-400 mb-1">{{ perf_metrics.active if perf_metrics else 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('active', 'Active') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-cyan-400 mb-1">{{ perf_metrics.completed if perf_metrics else 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('completed', 'Completed') }}</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-5 text-center">
+            <div class="text-3xl font-extrabold text-amber-400 mb-1">{{ perf_metrics.avg_engagements|int if perf_metrics and perf_metrics.avg_engagements else 0 }}</div>
+            <div class="text-sm text-slate-400">{{ t('avg_engagements', 'Avg Engagements') }}</div>
+        </div>
+    </div>
+
+    <!-- Journey Description -->
+    {% if journey.description or journey.objective %}
+    <div class="glass-panel rounded-2xl p-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {% if journey.description %}
+            <div>
+                <h3 class="text-sm font-bold text-slate-400 uppercase mb-2">{{ t('description', 'Description') }}</h3>
+                <p class="text-white">{{ journey.description }}</p>
+            </div>
+            {% endif %}
+            {% if journey.objective %}
+            <div>
+                <h3 class="text-sm font-bold text-slate-400 uppercase mb-2">{{ t('objective', 'Objective') }}</h3>
+                <p class="text-white">{{ journey.objective }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Journey Steps -->
+    <div class="glass-panel rounded-2xl overflow-hidden mb-8">
+        <div class="p-6 border-b border-white/10">
+            <h3 class="text-lg font-bold text-white">{{ t('journey_steps', 'Journey Steps') }}</h3>
+        </div>
+        <div class="p-6">
+            {% if steps %}
+            <div class="space-y-4">
+                {% for step in steps %}
+                <div class="flex items-start gap-4 p-4 bg-white/5 rounded-xl">
+                    <div class="w-10 h-10 rounded-full bg-brand-500/20 flex items-center justify-center flex-shrink-0">
+                        <span class="text-brand-400 font-bold">{{ step.step_order }}</span>
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex items-center justify-between mb-1">
+                            <h4 class="font-semibold text-white">{{ step.step_name }}</h4>
+                            <span class="px-2 py-1 rounded text-xs font-bold {% if step.step_type == 'email' %}bg-blue-400/20 text-blue-400{% elif step.step_type == 'sms' %}bg-emerald-400/20 text-emerald-400{% elif step.step_type == 'delay' %}bg-amber-400/20 text-amber-400{% else %}bg-purple-400/20 text-purple-400{% endif %}">
+                                {{ step.step_type|title }}
+                            </span>
+                        </div>
+                        <p class="text-sm text-slate-400">
+                            {% if step.delay_hours > 0 %}
+                                {{ t('wait', 'Wait') }} {{ step.delay_hours }} {{ t('hours', 'hours') }}
+                            {% endif %}
+                            {% if step.step_config %}
+                                | {{ step.step_config[:50] }}...
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-slate-500">
+                <i class="fa-solid fa-route text-4xl mb-3"></i>
+                <p>{{ t('no_steps_yet', 'No steps defined for this journey') }}</p>
+                <a href="{{ url_for('marketing.journeys_edit', id=journey.id) }}" class="mt-4 inline-block px-4 py-2 bg-brand-600 hover:bg-brand-500 rounded-xl text-sm font-semibold transition-all">
+                    {{ t('add_steps', 'Add Steps') }}
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent Participants -->
+    <div class="glass-panel rounded-2xl overflow-hidden">
+        <div class="p-6 border-b border-white/10">
+            <h3 class="text-lg font-bold text-white">{{ t('recent_participants', 'Recent Participants') }}</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-white/5">
+                    <tr class="text-slate-400 border-b border-white/10">
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('lead', 'Lead') }}</th>
+                        <th class="text-left py-4 px-6 font-semibold">{{ t('contact', 'Contact') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('status', 'Status') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('engagements', 'Engagements') }}</th>
+                        <th class="text-center py-4 px-6 font-semibold">{{ t('enrolled', 'Enrolled') }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in participants %}
+                    <tr class="border-b border-white/5 hover:bg-white/5">
+                        <td class="py-4 px-6">
+                            <a href="{{ url_for('marketing.leads_view', id=p.lead_id) }}" class="text-brand-400 hover:text-brand-300 font-semibold">
+                                {{ p.lead_name }}
+                            </a>
+                        </td>
+                        <td class="py-4 px-6 text-slate-300">
+                            {{ p.email or '-' }}<br>
+                            <span class="text-xs text-slate-500">{{ p.phone or '-' }}</span>
+                        </td>
+                        <td class="py-4 px-6 text-center">
+                            <span class="px-3 py-1 rounded-full text-xs font-bold {% if p.status == 'Completed' %}bg-emerald-400/20 text-emerald-400{% elif p.status == 'Active' %}bg-blue-400/20 text-blue-400{% elif p.status == 'Dropped' %}bg-rose-400/20 text-rose-400{% else %}bg-slate-400/20 text-slate-400{% endif %}">
+                                {{ p.status }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-center text-cyan-400">{{ p.total_engagements or 0 }}</td>
+                        <td class="py-4 px-6 text-center text-slate-400">{{ p.enrolled_at[:10] if p.enrolled_at else '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="py-12 text-center text-slate-500">
+                            <i class="fa-solid fa-users text-4xl mb-3"></i>
+                            <p>{{ t('no_participants_yet', 'No participants enrolled yet') }}</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('dlq', 'Dead Letter Queue') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-exclamation-circle fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('dead_letter_queue', 'Dead Letter Queue') }}
+        </h1>
+        <div class="btn-group">
+            <a href="{{ url_for('integration_export_center', type='dlq', format='csv') }}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-download me-1"></i> CSV
+            </a>
+            <a href="{{ url_for('integration_queue') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-list me-1"></i> {{ t('view_queue', 'View Queue') }}
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ t('dlq_items', 'DLQ Items') }} ({{ pagination.total }})</h6>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" width="100%" cellspacing="0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>{{ t('dlq_item_id', 'ID') }}</th>
+                            <th>{{ t('queue', 'Queue') }}</th>
+                            <th>{{ t('message_type', 'Type') }}</th>
+                            <th>{{ t('error_message', 'Error') }}</th>
+                            <th>{{ t('failures', 'Failures') }}</th>
+                            <th>{{ t('status', 'Status') }}</th>
+                            <th>{{ t('source', 'Source') }}</th>
+                            <th>{{ t('created', 'Created') }}</th>
+                            <th>{{ t('actions', 'Actions') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td><code>{{ item.dlq_item_id[:12] }}...</code></td>
+                            <td><span class="badge bg-secondary">{{ item.queue_name }}</span></td>
+                            <td>{{ item.message_type or '-' }}</td>
+                            <td class="small text-danger">{{ item.error_message[:60] if item.error_message else '-' }}</td>
+                            <td><span class="badge bg-danger">{{ item.failure_count }}</span></td>
+                            <td>
+                                {% if item.review_status == 'pending' %}
+                                    <span class="badge bg-warning">{{ t('pending_review', 'Pending') }}</span>
+                                {% elif item.review_status == 'resolved' %}
+                                    <span class="badge bg-success">{{ t('resolved', 'Resolved') }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ item.review_status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ item.source_system or '-' }}</td>
+                            <td>{{ item.created_at }}</td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('integration_dlq_detail', item_id=item.dlq_item_id) }}" class="btn btn-outline-primary" title="{{ t('view', 'View') }}">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <button onclick="replayItem('{{ item.dlq_item_id }}')" class="btn btn-outline-success" title="{{ t('replay', 'Replay') }}">
+                                        <i class="fas fa-redo"></i>
+                                    </button>
+                                    <button onclick="resolveItem('{{ item.dlq_item_id }}')" class="btn btn-outline-warning" title="{{ t('resolve', 'Resolve') }}">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">
+                                <i class="fas fa-check-circle fa-3x mb-3 text-success"></i>
+                                <p>{{ t('no_dlq_items', 'No DLQ items - everything is healthy!') }}</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function replayItem(itemId) {
+    if (confirm('{{ t("confirm_replay", "Replay this item?") }}')) {
+        fetch(`/integration/dlq/${itemId}/replay/`, { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('{{ t("replay_started", "Replay initiated:") }} ' + data.new_message_id);
+                    location.reload();
+                } else {
+                    alert('{{ t("replay_error", "Error:") }} ' + data.message);
+                }
+            });
+    }
+}
+
+function resolveItem(itemId) {
+    if (confirm('{{ t("confirm_resolve", "Mark this item as resolved?") }}')) {
+        fetch(`/integration/dlq/${itemId}/resolve/`, { 
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({notes: 'Manually resolved'})
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('{{ t("item_resolved", "Item marked as resolved") }}');
+                    location.reload();
+                } else {
+                    alert('{{ t("resolve_error", "Error:") }} ' + data.message);
+                }
+            });
+    }
+}
+</script>
+{% endblock %}

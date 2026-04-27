@@ -681,6 +681,359 @@ class EcommerceSetting:
 
 
 # =============================================================================
+# E-COMMERCE FULFILLMENT MODELS (RETURNS & REFUNDS)
+# =============================================================================
+
+@dataclass
+class EcommerceReturn:
+    """
+    Represents a return request from a customer.
+    """
+    id: int = 0
+    return_number: str = ""  # RTR-2024-00001
+    order_import_id: int = 0
+    channel_id: int = 0
+    channel_name: str = ""
+    company_id: int = 0
+
+    # Customer info
+    customer_id: int = 0
+    customer_email: str = ""
+    customer_name: str = ""
+
+    # Return details
+    return_type: str = "return"  # return, exchange, repair
+    reason: str = ""  # defective, wrong_item, changed_mind, not_as_described, other
+    reason_details: str = ""
+    order_line_ids: str = ""  # JSON array of order line IDs
+
+    # Quantities
+    items_requested: int = 0
+    items_received: int = 0
+    items_refunded: int = 0
+
+    # Status
+    status: str = "pending"  # pending, approved, rejected, received, inspected, processed, cancelled
+    return_label_sent: bool = False
+    return_label_tracking: str = ""
+    prepaid_label_amount: float = 0.0
+
+    # Resolution
+    resolution: str = ""  # refund, exchange, store_credit, deny
+    resolution_notes: str = ""
+
+    # Internal refs
+    internal_return_id: int = 0
+
+    # Audit
+    requested_at: str = ""
+    requested_by: int = 0
+    reviewed_at: str = ""
+    reviewed_by: int = 0
+    received_at: str = ""
+    processed_at: str = ""
+    notes: str = ""
+
+
+@dataclass
+class EcommerceRefund:
+    """
+    Represents a refund processed for an order.
+    """
+    id: int = 0
+    refund_number: str = ""  # REF-2024-00001
+    order_import_id: int = 0
+    return_id: int = 0
+    channel_id: int = 0
+    channel_name: str = ""
+    company_id: int = 0
+
+    # Customer
+    customer_id: int = 0
+    customer_email: str = ""
+    customer_name: str = ""
+
+    # Refund details
+    refund_type: str = "full"  # full, partial, multiple
+    payment_method: str = ""
+    original_payment_reference: str = ""
+
+    # Amounts
+    subtotal_refund: float = 0.0
+    tax_refund: float = 0.0
+    shipping_refund: float = 0.0
+    total_refund: float = 0.0
+    restocking_fee: float = 0.0
+    amount_to_customer: float = 0.0
+
+    # Status
+    status: str = "pending"  # pending, approved, processing, completed, failed, reversed
+    refund_reference: str = ""
+    processor_reference: str = ""
+
+    # Processing
+    processed_at: str = ""
+    processed_by: int = 0
+    notes: str = ""
+    created_at: str = ""
+
+
+# =============================================================================
+# E-COMMERCE PRICING & PROMOTIONS MODELS
+# =============================================================================
+
+@dataclass
+class EcommercePriceList:
+    """
+    Channel-specific price lists.
+    """
+    id: int = 0
+    price_list_code: str = ""
+    price_list_name: str = ""
+    channel_id: int = 0
+    channel_name: str = ""
+    company_id: int = 0
+
+    # Currency & validity
+    currency: str = "USD"
+    start_date: str = ""
+    end_date: str = ""
+    is_active: bool = True
+    is_default: bool = False
+
+    # Pricing rules
+    markup_type: str = "percentage"  # percentage, fixed
+    markup_value: float = 0.0
+    minimum_margin: float = 0.0
+    round_to: float = 0.01  # 0.01 = round to nearest cent
+
+    # Audit
+    created_at: str = ""
+    created_by: int = 0
+    updated_at: str = ""
+    updated_by: int = 0
+
+
+@dataclass
+class EcommercePriceListItem:
+    """
+    Individual items in a price list.
+    """
+    id: int = 0
+    price_list_id: int = 0
+    internal_item_id: int = 0
+    internal_sku: str = ""
+    internal_barcode: str = ""
+
+    # Pricing
+    cost_price: float = 0.0
+    list_price: float = 0.0
+    selling_price: float = 0.0
+    currency: str = "USD"
+
+    # Volume pricing
+    volume_pricing: str = ""  # JSON: [{"min_qty": 10, "price": 9.99}, ...]
+
+    is_active: bool = True
+    created_at: str = ""
+    updated_at: str = ""
+
+
+@dataclass
+class EcommercePromotion:
+    """
+    Promotions and discounts for channels.
+    """
+    id: int = 0
+    promotion_code: str = ""
+    promotion_name: str = ""
+    promotion_type: str = "discount"  # discount, bogo, free_shipping, buy_x_get_y, bundle
+    channel_id: int = 0
+    channel_name: str = ""
+    company_id: int = 0
+
+    # Validity
+    start_date: str = ""
+    end_date: str = ""
+    is_active: bool = True
+    is_stackable: bool = False
+
+    # Conditions (JSON)
+    conditions: str = ""  # {"min_purchase": 50, "applies_to": "category", "category_ids": [...]}
+    # Actions (JSON)
+    actions: str = ""  # {"type": "percentage", "value": 10, "max_discount": 100}
+
+    # Limits
+    usage_limit: int = 0  # 0 = unlimited
+    usage_count: int = 0
+    per_customer_limit: int = 1
+
+    # Status
+    status: str = "draft"  # draft, active, scheduled, expired, paused
+    approval_status: str = "pending"  # pending, approved, rejected
+    approved_by: int = 0
+    approved_at: str = ""
+
+    # Audit
+    created_at: str = ""
+    created_by: int = 0
+    updated_at: str = ""
+    updated_by: int = 0
+
+
+@dataclass
+class EcommercePromotionUsage:
+    """
+    Tracks promotion usage per customer.
+    """
+    id: int = 0
+    promotion_id: int = 0
+    customer_id: int = 0
+    customer_email: str = ""
+    order_import_id: int = 0
+    discount_amount: float = 0.0
+    used_at: str = ""
+
+
+# =============================================================================
+# E-COMMERCE ANALYTICS MODELS
+# =============================================================================
+
+@dataclass
+class EcommerceAnalytics:
+    """
+    Aggregated e-commerce analytics data.
+    """
+    id: int = 0
+    channel_id: int = 0
+    channel_name: str = ""
+    company_id: int = 0
+    warehouse_id: int = 0
+
+    # Period
+    period_type: str = "daily"  # daily, weekly, monthly, quarterly, yearly
+    period_start: str = ""
+    period_end: str = ""
+
+    # Orders
+    total_orders: int = 0
+    new_orders: int = 0
+    returned_orders: int = 0
+    cancelled_orders: int = 0
+    total_order_value: float = 0.0
+    average_order_value: float = 0.0
+
+    # Products
+    total_items_sold: int = 0
+    unique_products_sold: int = 0
+    top_selling_product_id: int = 0
+    top_selling_product_name: str = ""
+
+    # Customers
+    new_customers: int = 0
+    returning_customers: int = 0
+    total_customers: int = 0
+
+    # Inventory
+    total_inventory_synced: int = 0
+    out_of_stock_events: int = 0
+
+    # Performance
+    conversion_rate: float = 0.0
+    cart_abandonment_rate: float = 0.0
+    customer_retention_rate: float = 0.0
+
+    # Sync health
+    sync_success_rate: float = 100.0
+    total_exceptions: int = 0
+    avg_sync_duration_ms: int = 0
+
+    created_at: str = ""
+
+
+@dataclass
+class EcommerceProductPerformance:
+    """
+    Product performance metrics per channel.
+    """
+    id: int = 0
+    channel_id: int = 0
+    channel_name: str = ""
+    internal_item_id: int = 0
+    internal_sku: str = ""
+    product_mapping_id: int = 0
+    external_product_id: str = ""
+    external_product_name: str = ""
+
+    # Period
+    period_type: str = "daily"
+    period_start: str = ""
+    period_end: str = ""
+
+    # Sales
+    units_sold: int = 0
+    revenue: float = 0.0
+    avgSellingPrice: float = 0.0
+    total_discount: float = 0.0
+
+    # Inventory
+    views: int = 0
+    add_to_cart: int = 0
+    conversion_rate: float = 0.0
+    stock_turnover: float = 0.0
+
+    # Rankings
+    category_rank: int = 0
+    channel_rank: int = 0
+
+    created_at: str = ""
+
+
+# =============================================================================
+# E-COMMERCE WORKFLOW MODELS
+# =============================================================================
+
+@dataclass
+class EcommerceWorkflow:
+    """
+    Approval workflows for e-commerce operations.
+    """
+    id: int = 0
+    workflow_number: str = ""  # WKF-2024-00001
+    workflow_type: str = ""  # channel_disconnect, order_cancel, refund, return, exception_escalate
+    entity_type: str = ""  # channel, order, refund, return, exception
+    entity_id: int = 0
+    entity_reference: str = ""
+
+    channel_id: int = 0
+    channel_name: str = ""
+    company_id: int = 0
+
+    # Request
+    requested_by: int = 0
+    requested_by_name: str = ""
+    requested_at: str = ""
+    request_notes: str = ""
+
+    # Priority
+    priority: str = "NORMAL"  # LOW, NORMAL, HIGH, URGENT
+    due_at: str = ""
+
+    # Status
+    status: str = "pending"  # pending, approved, rejected, cancelled, expired
+
+    # Review
+    reviewed_by: int = 0
+    reviewed_by_name: str = ""
+    reviewed_at: str = ""
+    review_notes: str = ""
+
+    # Audit
+    created_at: str = ""
+    updated_at: str = ""
+
+
+# =============================================================================
 # DATABASE INITIALIZATION
 # =============================================================================
 
@@ -1156,6 +1509,257 @@ ECOMMERCE_TABLES = [
         updated_by INTEGER DEFAULT 0
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS ecommerce_flow_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        notification_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        message TEXT DEFAULT '',
+        entity_type TEXT DEFAULT '',
+        entity_id INTEGER DEFAULT 0,
+        entity_reference TEXT DEFAULT '',
+        channel_id INTEGER DEFAULT 0,
+        channel_name TEXT DEFAULT '',
+        exception_number TEXT DEFAULT '',
+        priority TEXT DEFAULT 'NORMAL',
+        is_read INTEGER DEFAULT 0,
+        action_url TEXT DEFAULT '',
+        created_by INTEGER DEFAULT 0,
+        company_id INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ecommerce_returns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        return_number TEXT NOT NULL UNIQUE,
+        order_import_id INTEGER DEFAULT 0,
+        channel_id INTEGER DEFAULT 0,
+        channel_name TEXT DEFAULT '',
+        company_id INTEGER DEFAULT 0,
+        customer_id INTEGER DEFAULT 0,
+        customer_email TEXT DEFAULT '',
+        customer_name TEXT DEFAULT '',
+        return_type TEXT DEFAULT 'return',
+        reason TEXT DEFAULT '',
+        reason_details TEXT DEFAULT '',
+        order_line_ids TEXT DEFAULT '[]',
+        items_requested INTEGER DEFAULT 0,
+        items_received INTEGER DEFAULT 0,
+        items_refunded INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        return_label_sent INTEGER DEFAULT 0,
+        return_label_tracking TEXT DEFAULT '',
+        prepaid_label_amount REAL DEFAULT 0.0,
+        resolution TEXT DEFAULT '',
+        resolution_notes TEXT DEFAULT '',
+        internal_return_id INTEGER DEFAULT 0,
+        requested_at TEXT DEFAULT '',
+        requested_by INTEGER DEFAULT 0,
+        reviewed_at TEXT DEFAULT '',
+        reviewed_by INTEGER DEFAULT 0,
+        received_at TEXT DEFAULT '',
+        processed_at TEXT DEFAULT '',
+        notes TEXT DEFAULT ''
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ecommerce_refunds (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        refund_number TEXT NOT NULL UNIQUE,
+        order_import_id INTEGER DEFAULT 0,
+        return_id INTEGER DEFAULT 0,
+        channel_id INTEGER DEFAULT 0,
+        channel_name TEXT DEFAULT '',
+        company_id INTEGER DEFAULT 0,
+        customer_id INTEGER DEFAULT 0,
+        customer_email TEXT DEFAULT '',
+        customer_name TEXT DEFAULT '',
+        refund_type TEXT DEFAULT 'full',
+        payment_method TEXT DEFAULT '',
+        original_payment_reference TEXT DEFAULT '',
+        subtotal_refund REAL DEFAULT 0.0,
+        tax_refund REAL DEFAULT 0.0,
+        shipping_refund REAL DEFAULT 0.0,
+        total_refund REAL DEFAULT 0.0,
+        restocking_fee REAL DEFAULT 0.0,
+        amount_to_customer REAL DEFAULT 0.0,
+        status TEXT DEFAULT 'pending',
+        refund_reference TEXT DEFAULT '',
+        processor_reference TEXT DEFAULT '',
+        processed_at TEXT DEFAULT '',
+        processed_by INTEGER DEFAULT 0,
+        notes TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ecommerce_price_lists (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        price_list_code TEXT NOT NULL UNIQUE,
+        price_list_name TEXT NOT NULL,
+        channel_id INTEGER DEFAULT 0,
+        channel_name TEXT DEFAULT '',
+        company_id INTEGER DEFAULT 0,
+        currency TEXT DEFAULT 'USD',
+        start_date TEXT DEFAULT '',
+        end_date TEXT DEFAULT '',
+        is_active INTEGER DEFAULT 1,
+        is_default INTEGER DEFAULT 0,
+        markup_type TEXT DEFAULT 'percentage',
+        markup_value REAL DEFAULT 0.0,
+        minimum_margin REAL DEFAULT 0.0,
+        round_to REAL DEFAULT 0.01,
+        created_at TEXT DEFAULT (datetime('now')),
+        created_by INTEGER DEFAULT 0,
+        updated_at TEXT DEFAULT (datetime('now')),
+        updated_by INTEGER DEFAULT 0
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ecommerce_price_list_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        price_list_id INTEGER NOT NULL,
+        internal_item_id INTEGER DEFAULT 0,
+        internal_sku TEXT DEFAULT '',
+        internal_barcode TEXT DEFAULT '',
+        cost_price REAL DEFAULT 0.0,
+        list_price REAL DEFAULT 0.0,
+        selling_price REAL DEFAULT 0.0,
+        currency TEXT DEFAULT 'USD',
+        volume_pricing TEXT DEFAULT '[]',
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (price_list_id) REFERENCES ecommerce_price_lists(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ecommerce_promotions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        promotion_code TEXT NOT NULL UNIQUE,
+        promotion_name TEXT NOT NULL,
+        promotion_type TEXT DEFAULT 'discount',
+        channel_id INTEGER DEFAULT 0,
+        channel_name TEXT DEFAULT '',
+        company_id INTEGER DEFAULT 0,
+        start_date TEXT DEFAULT '',
+        end_date TEXT DEFAULT '',
+        is_active INTEGER DEFAULT 1,
+        is_stackable INTEGER DEFAULT 0,
+        conditions TEXT DEFAULT '{}',
+        actions TEXT DEFAULT '{}',
+        usage_limit INTEGER DEFAULT 0,
+        usage_count INTEGER DEFAULT 0,
+        per_customer_limit INTEGER DEFAULT 1,
+        status TEXT DEFAULT 'draft',
+        approval_status TEXT DEFAULT 'pending',
+        approved_by INTEGER DEFAULT 0,
+        approved_at TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now')),
+        created_by INTEGER DEFAULT 0,
+        updated_at TEXT DEFAULT (datetime('now')),
+        updated_by INTEGER DEFAULT 0
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ecommerce_promotion_usage (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        promotion_id INTEGER NOT NULL,
+        customer_id INTEGER DEFAULT 0,
+        customer_email TEXT DEFAULT '',
+        order_import_id INTEGER DEFAULT 0,
+        discount_amount REAL DEFAULT 0.0,
+        used_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (promotion_id) REFERENCES ecommerce_promotions(id) ON DELETE CASCADE
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ecommerce_analytics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER DEFAULT 0,
+        channel_name TEXT DEFAULT '',
+        company_id INTEGER DEFAULT 0,
+        warehouse_id INTEGER DEFAULT 0,
+        period_type TEXT DEFAULT 'daily',
+        period_start TEXT DEFAULT '',
+        period_end TEXT DEFAULT '',
+        total_orders INTEGER DEFAULT 0,
+        new_orders INTEGER DEFAULT 0,
+        returned_orders INTEGER DEFAULT 0,
+        cancelled_orders INTEGER DEFAULT 0,
+        total_order_value REAL DEFAULT 0.0,
+        average_order_value REAL DEFAULT 0.0,
+        total_items_sold INTEGER DEFAULT 0,
+        unique_products_sold INTEGER DEFAULT 0,
+        top_selling_product_id INTEGER DEFAULT 0,
+        top_selling_product_name TEXT DEFAULT '',
+        new_customers INTEGER DEFAULT 0,
+        returning_customers INTEGER DEFAULT 0,
+        total_customers INTEGER DEFAULT 0,
+        total_inventory_synced INTEGER DEFAULT 0,
+        out_of_stock_events INTEGER DEFAULT 0,
+        conversion_rate REAL DEFAULT 0.0,
+        cart_abandonment_rate REAL DEFAULT 0.0,
+        customer_retention_rate REAL DEFAULT 0.0,
+        sync_success_rate REAL DEFAULT 100.0,
+        total_exceptions INTEGER DEFAULT 0,
+        avg_sync_duration_ms INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ecommerce_product_performance (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id INTEGER DEFAULT 0,
+        channel_name TEXT DEFAULT '',
+        internal_item_id INTEGER DEFAULT 0,
+        internal_sku TEXT DEFAULT '',
+        product_mapping_id INTEGER DEFAULT 0,
+        external_product_id TEXT DEFAULT '',
+        external_product_name TEXT DEFAULT '',
+        period_type TEXT DEFAULT 'daily',
+        period_start TEXT DEFAULT '',
+        period_end TEXT DEFAULT '',
+        units_sold INTEGER DEFAULT 0,
+        revenue REAL DEFAULT 0.0,
+        avg_selling_price REAL DEFAULT 0.0,
+        total_discount REAL DEFAULT 0.0,
+        views INTEGER DEFAULT 0,
+        add_to_cart INTEGER DEFAULT 0,
+        conversion_rate REAL DEFAULT 0.0,
+        stock_turnover REAL DEFAULT 0.0,
+        category_rank INTEGER DEFAULT 0,
+        channel_rank INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS ecommerce_workflows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workflow_number TEXT NOT NULL UNIQUE,
+        workflow_type TEXT NOT NULL,
+        entity_type TEXT DEFAULT '',
+        entity_id INTEGER DEFAULT 0,
+        entity_reference TEXT DEFAULT '',
+        channel_id INTEGER DEFAULT 0,
+        channel_name TEXT DEFAULT '',
+        company_id INTEGER DEFAULT 0,
+        requested_by INTEGER DEFAULT 0,
+        requested_by_name TEXT DEFAULT '',
+        requested_at TEXT DEFAULT '',
+        request_notes TEXT DEFAULT '',
+        priority TEXT DEFAULT 'NORMAL',
+        due_at TEXT DEFAULT '',
+        status TEXT DEFAULT 'pending',
+        reviewed_by INTEGER DEFAULT 0,
+        reviewed_by_name TEXT DEFAULT '',
+        reviewed_at TEXT DEFAULT '',
+        review_notes TEXT DEFAULT '',
+        created_at TEXT DEFAULT (datetime('now')),
+        updated_at TEXT DEFAULT (datetime('now'))
+    )
+    """,
 ]
 
 ECOMMERCE_INDEXES = [
@@ -1189,6 +1793,20 @@ ECOMMERCE_INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_ec_queue_status ON ecommerce_sync_queue(status)",
     "CREATE INDEX IF NOT EXISTS idx_ec_webhook_channel ON ecommerce_webhook_logs(channel_id)",
     "CREATE INDEX IF NOT EXISTS idx_ec_api_channel ON ecommerce_api_logs(channel_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_return_order ON ecommerce_returns(order_import_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_return_channel ON ecommerce_returns(channel_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_return_status ON ecommerce_returns(status)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_refund_order ON ecommerce_refunds(order_import_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_refund_status ON ecommerce_refunds(status)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_price_list_channel ON ecommerce_price_lists(channel_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_price_list_item ON ecommerce_price_list_items(price_list_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_promo_channel ON ecommerce_promotions(channel_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_promo_status ON ecommerce_promotions(status)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_analytics_channel ON ecommerce_analytics(channel_id)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_analytics_period ON ecommerce_analytics(period_type, period_start)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_workflow_type ON ecommerce_workflows(workflow_type)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_workflow_status ON ecommerce_workflows(status)",
+    "CREATE INDEX IF NOT EXISTS idx_ec_workflow_entity ON ecommerce_workflows(entity_type, entity_id)",
 ]
 
 

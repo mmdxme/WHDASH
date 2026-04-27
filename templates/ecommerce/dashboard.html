@@ -1,363 +1,202 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>E-commerce Integration - MMDx</title>
-    <link href="/static/css/tailwind.min.css" rel="stylesheet">
-    <link href="/static/css/fontawesome.min.css" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --info: #3b82f6;
-            --gray-700: #374151;
-            --gray-800: #1f2937;
-            --gray-900: #111827;
-        }
-        body { background: #0f172a; color: #e5e7eb; font-family: 'Segoe UI', Tahoma, sans-serif; }
-        .card { background: #1e293b; border-radius: 0.75rem; padding: 1.5rem; border: 1px solid #334155; }
-        .stat-card { transition: transform 0.2s, box-shadow 0.2s; }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); }
-        .badge { padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
-        .table-container { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; padding: 0.75rem 1rem; border-bottom: 2px solid #334155; color: #94a3b8; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
-        td { padding: 0.75rem 1rem; border-bottom: 1px solid #334155; }
-        tr:hover { background: #293548; }
-        .btn { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 0.5rem; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-primary:hover { background: var(--primary-dark); }
-        .btn-outline { border: 1px solid #475569; color: #cbd5e1; }
-        .btn-outline:hover { background: #334155; }
-        .btn-danger { background: var(--danger); color: white; }
-        .btn-danger:hover { background: #dc2626; }
-        .btn-success { background: var(--success); color: white; }
-        .btn-success:hover { background: #059669; }
-        .text-success { color: var(--success); }
-        .text-danger { color: var(--danger); }
-        .text-warning { color: var(--warning); }
-        .text-info { color: var(--info); }
-        .bg-success { background: rgba(16, 185, 129, 0.1); }
-        .bg-danger { background: rgba(239, 68, 68, 0.1); }
-        .bg-warning { background: rgba(245, 158, 11, 0.1); }
-        .bg-info { background: rgba(59, 130, 246, 0.1); }
-        .amount { font-family: 'Courier New', monospace; font-weight: 600; }
-        .severity-critical { color: #ef4444; }
-        .severity-high { color: #f97316; }
-        .severity-medium { color: #f59e0b; }
-        .severity-low { color: #6b7280; }
-        .status-badge { padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-size: 0.75rem; font-weight: 500; }
-        .status-pending { background: #f59e0b20; color: #f59e0b; }
-        .status-synced { background: #10b98120; color: #10b981; }
-        .status-failed { background: #ef444420; color: #ef4444; }
-        .status-open { background: #f59e0b20; color: #f59e0b; }
-        .status-resolved { background: #10b98120; color: #10b981; }
-    </style>
-</head>
-<body>
-    {% extends "base.html" %}
+{% extends "base.html" %}
 
-    {% block content %}
-    <div class="container mx-auto px-4 py-8">
-        <!-- Header -->
-        <div class="flex justify-between items-center mb-8">
-            <div>
-                <h1 class="text-3xl font-bold text-white">E-commerce Integration</h1>
-                <p class="text-gray-400 mt-1">Manage online orders, inventory, and customer synchronization</p>
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <h1 class="text-3xl font-bold text-white">{{ t('ecommerce_dashboard') or 'E-commerce Integration' }}</h1>
+            <p class="text-gray-400 mt-1">{{ t('ecommerce_dashboard_subtitle') or 'Manage online orders, inventory, and customer synchronization' }}</p>
+        </div>
+        <div class="flex gap-3">
+            <a href="/ecommerce/channels/create" class="btn btn-primary">
+                <i class="fas fa-plus"></i> {{ t('add_channel') or 'Add Channel' }}
+            </a>
+            <a href="/ecommerce/orders?status=pending" class="btn btn-outline">
+                <i class="fas fa-clock"></i> {{ t('pending_orders') or 'Pending Orders' }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Key Metrics Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-6 mb-8">
+        <!-- Active Channels -->
+        <div class="card stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm mb-1">{{ t('active_channels') or 'Active Channels' }}</p>
+                    <p class="text-2xl font-bold text-white">{{ stats.active_channels }}</p>
+                    <p class="text-gray-500 text-xs mt-1">{{ t('of_total') or 'of' }} {{ stats.total_channels }} {{ t('total') or 'total' }}</p>
+                </div>
+                <div class="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
+                    <i class="fas fa-globe text-primary text-xl"></i>
+                </div>
             </div>
-            <div class="flex gap-3">
-                <a href="/ecommerce/channels/create" class="btn btn-primary">
-                    <i class="fas fa-plus"></i> Add Channel
+        </div>
+
+        <!-- Pending Orders -->
+        <div class="card stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm mb-1">{{ t('pending_orders') or 'Pending Orders' }}</p>
+                    <p class="text-2xl font-bold text-warning">{{ stats.pending_orders }}</p>
+                    <p class="text-gray-500 text-xs mt-1">{{ t('awaiting_sync') or 'awaiting sync' }}</p>
+                </div>
+                <div class="w-12 h-12 bg-warning/20 rounded-full flex items-center justify-center">
+                    <i class="fas fa-clock text-warning text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Synced Today -->
+        <div class="card stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm mb-1">{{ t('synced_today') or 'Synced Today' }}</p>
+                    <p class="text-2xl font-bold text-success">{{ stats.synced_orders_today }}</p>
+                    <p class="text-gray-500 text-xs mt-1">{{ t('orders') or 'orders' }}</p>
+                </div>
+                <div class="w-12 h-12 bg-success/20 rounded-full flex items-center justify-center">
+                    <i class="fas fa-check-circle text-success text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Failed Orders -->
+        <div class="card stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm mb-1">{{ t('failed_syncs') or 'Failed Syncs' }}</p>
+                    <p class="text-2xl font-bold text-danger">{{ stats.failed_orders }}</p>
+                    <p class="text-gray-500 text-xs mt-1">{{ t('need_attention') or 'need attention' }}</p>
+                </div>
+                <div class="w-12 h-12 bg-danger/20 rounded-full flex items-center justify-center">
+                    <i class="fas fa-exclamation-triangle text-danger text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Customer Duplicates -->
+        <div class="card stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm mb-1">{{ t('duplicates') or 'Duplicates' }}</p>
+                    <p class="text-2xl font-bold text-warning">{{ stats.duplicate_customers }}</p>
+                    <p class="text-gray-500 text-xs mt-1">{{ t('need_review') or 'need review' }}</p>
+                </div>
+                <div class="w-12 h-12 bg-warning/20 rounded-full flex items-center justify-center">
+                    <i class="fas fa-user-friends text-warning text-xl"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- Open Exceptions -->
+        <div class="card stat-card">
+            <div class="flex items-center justify-between">
+                <div>
+                    <p class="text-gray-400 text-sm mb-1">{{ t('open_exceptions') or 'Open Exceptions' }}</p>
+                    <p class="text-2xl font-bold text-danger">{{ stats.open_exceptions }}</p>
+                    <p class="text-gray-500 text-xs mt-1">{{ t('require_action') or 'require action' }}</p>
+                </div>
+                <div class="w-12 h-12 bg-danger/20 rounded-full flex items-center justify-center">
+                    <i class="fas fa-exclamation-circle text-danger text-xl"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revenue and Quick Actions Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <!-- Today's Revenue -->
+        <div class="card">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-white">{{ t('todays_revenue') or "Today's Revenue" }}</h3>
+                <i class="fas fa-dollar-sign text-success"></i>
+            </div>
+            <p class="text-3xl font-bold text-success amount mb-2">${{ "%.2f"|format(stats.total_revenue_today) }}</p>
+            <p class="text-gray-400 text-sm">{{ t('from_orders') or 'from' }} {{ stats.synced_orders_today }} {{ t('synced_orders') or 'synced orders' }}</p>
+            <div class="mt-4 pt-4 border-t border-gray-700">
+                <a href="/ecommerce/reports/channel-sales" class="text-primary hover:text-primary-light text-sm">
+                    {{ t('view_channel_sales_report') or 'View Channel Sales Report' }} <i class="fas fa-arrow-right ml-1"></i>
                 </a>
-                <a href="/ecommerce/orders?status=pending" class="btn btn-outline">
-                    <i class="fas fa-clock"></i> Pending Orders
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card lg:col-span-2">
+            <h3 class="text-lg font-semibold text-white mb-4">{{ t('quick_actions') or 'Quick Actions' }}</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <a href="/ecommerce/channels" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
+                    <i class="fas fa-satellite-dish text-2xl text-primary mb-2"></i>
+                    <span class="text-sm text-gray-300">{{ t('channels') or 'Channels' }}</span>
+                </a>
+                <a href="/ecommerce/orders" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
+                    <i class="fas fa-shopping-cart text-2xl text-info mb-2"></i>
+                    <span class="text-sm text-gray-300">{{ t('all_orders') or 'All Orders' }}</span>
+                </a>
+                <a href="/ecommerce/customers" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
+                    <i class="fas fa-users text-2xl text-success mb-2"></i>
+                    <span class="text-sm text-gray-300">{{ t('customers') or 'Customers' }}</span>
+                </a>
+                <a href="/ecommerce/exceptions" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
+                    <i class="fas fa-exclamation-triangle text-2xl text-warning mb-2"></i>
+                    <span class="text-sm text-gray-300">{{ t('exceptions') or 'Exceptions' }}</span>
+                </a>
+                <a href="/ecommerce/inventory" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
+                    <i class="fas fa-boxes text-2xl text-primary mb-2"></i>
+                    <span class="text-sm text-gray-300">{{ t('inventory') or 'Inventory' }}</span>
+                </a>
+                <a href="/ecommerce/reports" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
+                    <i class="fas fa-chart-bar text-2xl text-info mb-2"></i>
+                    <span class="text-sm text-gray-300">{{ t('reports') or 'Reports' }}</span>
+                </a>
+                <a href="/ecommerce/settings" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
+                    <i class="fas fa-cog text-2xl text-gray-400 mb-2"></i>
+                    <span class="text-sm text-gray-300">{{ t('settings') or 'Settings' }}</span>
+                </a>
+                <a href="/ecommerce/audit-logs" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
+                    <i class="fas fa-history text-2xl text-gray-400 mb-2"></i>
+                    <span class="text-sm text-gray-300">{{ t('audit_logs') or 'Audit Logs' }}</span>
                 </a>
             </div>
         </div>
+    </div>
 
-        <!-- Key Metrics Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-6 mb-8">
-            <!-- Active Channels -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-400 text-sm mb-1">Active Channels</p>
-                        <p class="text-2xl font-bold text-white">{{ stats.active_channels }}</p>
-                        <p class="text-gray-500 text-xs mt-1">of {{ stats.total_channels }} total</p>
-                    </div>
-                    <div class="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
-                        <i class="fas fa-globe text-primary text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Pending Orders -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-400 text-sm mb-1">Pending Orders</p>
-                        <p class="text-2xl font-bold text-warning">{{ stats.pending_orders }}</p>
-                        <p class="text-gray-500 text-xs mt-1">awaiting sync</p>
-                    </div>
-                    <div class="w-12 h-12 bg-warning/20 rounded-full flex items-center justify-center">
-                        <i class="fas fa-clock text-warning text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Synced Today -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-400 text-sm mb-1">Synced Today</p>
-                        <p class="text-2xl font-bold text-success">{{ stats.synced_orders_today }}</p>
-                        <p class="text-gray-500 text-xs mt-1">orders</p>
-                    </div>
-                    <div class="w-12 h-12 bg-success/20 rounded-full flex items-center justify-center">
-                        <i class="fas fa-check-circle text-success text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Failed Orders -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-400 text-sm mb-1">Failed Syncs</p>
-                        <p class="text-2xl font-bold text-danger">{{ stats.failed_orders }}</p>
-                        <p class="text-gray-500 text-xs mt-1">need attention</p>
-                    </div>
-                    <div class="w-12 h-12 bg-danger/20 rounded-full flex items-center justify-center">
-                        <i class="fas fa-exclamation-triangle text-danger text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Customer Duplicates -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-400 text-sm mb-1">Duplicates</p>
-                        <p class="text-2xl font-bold text-warning">{{ stats.duplicate_customers }}</p>
-                        <p class="text-gray-500 text-xs mt-1">need review</p>
-                    </div>
-                    <div class="w-12 h-12 bg-warning/20 rounded-full flex items-center justify-center">
-                        <i class="fas fa-user-friends text-warning text-xl"></i>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Open Exceptions -->
-            <div class="card stat-card">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <p class="text-gray-400 text-sm mb-1">Open Exceptions</p>
-                        <p class="text-2xl font-bold text-danger">{{ stats.open_exceptions }}</p>
-                        <p class="text-gray-500 text-xs mt-1">require action</p>
-                    </div>
-                    <div class="w-12 h-12 bg-danger/20 rounded-full flex items-center justify-center">
-                        <i class="fas fa-exclamation-circle text-danger text-xl"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Revenue and Quick Actions Row -->
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            <!-- Today's Revenue -->
-            <div class="card">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-semibold text-white">Today's Revenue</h3>
-                    <i class="fas fa-dollar-sign text-success"></i>
-                </div>
-                <p class="text-3xl font-bold text-success amount mb-2">${{ "%.2f"|format(stats.total_revenue_today) }}</p>
-                <p class="text-gray-400 text-sm">from {{ stats.synced_orders_today }} synced orders</p>
-                <div class="mt-4 pt-4 border-t border-gray-700">
-                    <a href="/ecommerce/reports/channel-sales" class="text-primary hover:text-primary-light text-sm">
-                        View Channel Sales Report <i class="fas fa-arrow-right ml-1"></i>
-                    </a>
-                </div>
-            </div>
-
-            <!-- Quick Actions -->
-            <div class="card lg:col-span-2">
-                <h3 class="text-lg font-semibold text-white mb-4">Quick Actions</h3>
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <a href="/ecommerce/channels" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
-                        <i class="fas fa-satellite-dish text-2xl text-primary mb-2"></i>
-                        <span class="text-sm text-gray-300">Channels</span>
-                    </a>
-                    <a href="/ecommerce/orders" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
-                        <i class="fas fa-shopping-cart text-2xl text-info mb-2"></i>
-                        <span class="text-sm text-gray-300">All Orders</span>
-                    </a>
-                    <a href="/ecommerce/customers" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
-                        <i class="fas fa-users text-2xl text-success mb-2"></i>
-                        <span class="text-sm text-gray-300">Customers</span>
-                    </a>
-                    <a href="/ecommerce/exceptions" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
-                        <i class="fas fa-exclamation-triangle text-2xl text-warning mb-2"></i>
-                        <span class="text-sm text-gray-300">Exceptions</span>
-                    </a>
-                    <a href="/ecommerce/inventory" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
-                        <i class="fas fa-boxes text-2xl text-primary mb-2"></i>
-                        <span class="text-sm text-gray-300">Inventory</span>
-                    </a>
-                    <a href="/ecommerce/reports" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
-                        <i class="fas fa-chart-bar text-2xl text-info mb-2"></i>
-                        <span class="text-sm text-gray-300">Reports</span>
-                    </a>
-                    <a href="/ecommerce/settings" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
-                        <i class="fas fa-cog text-2xl text-gray-400 mb-2"></i>
-                        <span class="text-sm text-gray-300">Settings</span>
-                    </a>
-                    <a href="/ecommerce/audit-logs" class="flex flex-col items-center p-4 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 transition">
-                        <i class="fas fa-history text-2xl text-gray-400 mb-2"></i>
-                        <span class="text-sm text-gray-300">Audit Logs</span>
-                    </a>
-                </div>
-            </div>
-        </div>
-
-        <!-- Recent Orders and Exceptions -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <!-- Recent Orders -->
-            <div class="card">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">Recent Orders</h3>
-                    <a href="/ecommerce/orders" class="text-primary hover:text-primary-light text-sm">View All</a>
-                </div>
-                {% if recent_orders %}
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Order #</th>
-                                <th>Channel</th>
-                                <th>Customer</th>
-                                <th>Amount</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for order in recent_orders %}
-                            <tr>
-                                <td>
-                                    <a href="/ecommerce/orders/{{ order.id }}/view" class="text-primary hover:underline">
-                                        {{ order.external_order_number or order.external_order_id[:12] }}...
-                                    </a>
-                                </td>
-                                <td class="text-gray-400">{{ order.channel_name or 'N/A' }}</td>
-                                <td class="text-gray-300">{{ order.customer_name or order.customer_email[:20] }}</td>
-                                <td class="amount">${{ "%.2f"|format(order.total_amount) }}</td>
-                                <td>
-                                    <span class="status-badge status-{{ order.sync_status }}">
-                                        {{ order.sync_status }}
-                                    </span>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="text-center py-8 text-gray-500">
-                    <i class="fas fa-inbox text-4xl mb-3"></i>
-                    <p>No orders yet</p>
-                </div>
-                {% endif %}
-            </div>
-
-            <!-- Recent Exceptions -->
-            <div class="card">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-semibold text-white">Open Exceptions</h3>
-                    <a href="/ecommerce/exceptions" class="text-primary hover:text-primary-light text-sm">View All</a>
-                </div>
-                {% if recent_exceptions %}
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Exception #</th>
-                                <th>Type</th>
-                                <th>Channel</th>
-                                <th>Severity</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for exc in recent_exceptions %}
-                            <tr>
-                                <td>
-                                    <a href="/ecommerce/exceptions/{{ exc.exception_number }}/view" class="text-primary hover:underline">
-                                        {{ exc.exception_number }}
-                                    </a>
-                                </td>
-                                <td class="text-gray-300">{{ exc.exception_type }}</td>
-                                <td class="text-gray-400">{{ exc.channel_name or 'N/A' }}</td>
-                                <td>
-                                    <span class="severity-{{ exc.severity }}">{{ exc.severity }}</span>
-                                </td>
-                                <td>
-                                    <span class="status-badge status-{{ exc.status }}">
-                                        {{ exc.status }}
-                                    </span>
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                {% else %}
-                <div class="text-center py-8 text-gray-500">
-                    <i class="fas fa-check-circle text-4xl mb-3 text-success"></i>
-                    <p>No open exceptions</p>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- Channel Performance -->
+    <!-- Recent Orders and Exceptions -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <!-- Recent Orders -->
         <div class="card">
             <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-semibold text-white">Channel Performance</h3>
-                <a href="/ecommerce/reports/channel-sales" class="text-primary hover:text-primary-light text-sm">Full Report</a>
+                <h3 class="text-lg font-semibold text-white">{{ t('recent_orders') or 'Recent Orders' }}</h3>
+                <a href="/ecommerce/orders" class="text-primary hover:text-primary-light text-sm">{{ t('view_all') or 'View All' }}</a>
             </div>
-            {% if channel_performance %}
+            {% if recent_orders %}
             <div class="table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th>Channel</th>
-                            <th>Orders</th>
-                            <th>Synced</th>
-                            <th>Failed</th>
-                            <th>Total Sales</th>
-                            <th>Success Rate</th>
+                            <th>{{ t('order_number') or 'Order #' }}</th>
+                            <th>{{ t('channel') or 'Channel' }}</th>
+                            <th>{{ t('customer') or 'Customer' }}</th>
+                            <th>{{ t('amount') or 'Amount' }}</th>
+                            <th>{{ t('status') or 'Status' }}</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for ch in channel_performance %}
+                        {% for order in recent_orders %}
                         <tr>
-                            <td class="text-gray-300 font-medium">{{ ch.channel_name }}</td>
-                            <td class="text-center">{{ ch.order_count or 0 }}</td>
-                            <td class="text-center text-success">{{ ch.synced or 0 }}</td>
-                            <td class="text-center text-danger">{{ ch.failed or 0 }}</td>
-                            <td class="amount">${{ "%.2f"|format(ch.total_sales or 0) }}</td>
                             <td>
-                                {% if ch.order_count and ch.order_count > 0 %}
-                                    {% set rate = ((ch.synced or 0) / ch.order_count * 100) %}
-                                    <span class="text-{{ 'success' if rate >= 90 else 'warning' if rate >= 70 else 'danger' }}">
-                                        {{ "%.1f"|format(rate) }}%
-                                    </span>
-                                {% else %}
-                                    <span class="text-gray-500">N/A</span>
-                                {% endif %}
+                                <a href="/ecommerce/orders/{{ order.id }}/view" class="text-primary hover:underline">
+                                    {{ order.external_order_number or order.external_order_id[:12] }}...
+                                </a>
+                            </td>
+                            <td class="text-gray-400">{{ order.channel_name or 'N/A' }}</td>
+                            <td class="text-gray-300">{{ order.customer_name or order.customer_email[:20] }}</td>
+                            <td class="amount">${{ "%.2f"|format(order.total_amount) }}</td>
+                            <td>
+                                <span class="status-badge status-{{ order.sync_status }}">
+                                    {{ order.sync_status }}
+                                </span>
                             </td>
                         </tr>
                         {% endfor %}
@@ -366,13 +205,111 @@
             </div>
             {% else %}
             <div class="text-center py-8 text-gray-500">
-                <i class="fas fa-chart-line text-4xl mb-3"></i>
-                <p>No channel data available</p>
-                <a href="/ecommerce/channels/create" class="text-primary hover:underline mt-2 inline-block">Add your first channel</a>
+                <i class="fas fa-inbox text-4xl mb-3"></i>
+                <p>{{ t('no_orders_yet') or 'No orders yet' }}</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Recent Exceptions -->
+        <div class="card">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-white">{{ t('open_exceptions') or 'Open Exceptions' }}</h3>
+                <a href="/ecommerce/exceptions" class="text-primary hover:text-primary-light text-sm">{{ t('view_all') or 'View All' }}</a>
+            </div>
+            {% if recent_exceptions %}
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>{{ t('exception_number') or 'Exception #' }}</th>
+                            <th>{{ t('type') or 'Type' }}</th>
+                            <th>{{ t('channel') or 'Channel' }}</th>
+                            <th>{{ t('severity') or 'Severity' }}</th>
+                            <th>{{ t('status') or 'Status' }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for exc in recent_exceptions %}
+                        <tr>
+                            <td>
+                                <a href="/ecommerce/exceptions/{{ exc.exception_number }}/view" class="text-primary hover:underline">
+                                    {{ exc.exception_number }}
+                                </a>
+                            </td>
+                            <td class="text-gray-300">{{ exc.exception_type }}</td>
+                            <td class="text-gray-400">{{ exc.channel_name or 'N/A' }}</td>
+                            <td>
+                                <span class="severity-{{ exc.severity }}">{{ exc.severity }}</span>
+                            </td>
+                            <td>
+                                <span class="status-badge status-{{ exc.status }}">
+                                    {{ exc.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-8 text-gray-500">
+                <i class="fas fa-check-circle text-4xl mb-3 text-success"></i>
+                <p>{{ t('no_open_exceptions') or 'No open exceptions' }}</p>
             </div>
             {% endif %}
         </div>
     </div>
-    {% endblock %}
-</body>
-</html>
+
+    <!-- Channel Performance -->
+    <div class="card">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-semibold text-white">{{ t('channel_performance') or 'Channel Performance' }}</h3>
+            <a href="/ecommerce/reports/channel-sales" class="text-primary hover:text-primary-light text-sm">{{ t('full_report') or 'Full Report' }}</a>
+        </div>
+        {% if channel_performance %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>{{ t('channel') or 'Channel' }}</th>
+                        <th>{{ t('orders') or 'Orders' }}</th>
+                        <th>{{ t('synced') or 'Synced' }}</th>
+                        <th>{{ t('failed') or 'Failed' }}</th>
+                        <th>{{ t('total_sales') or 'Total Sales' }}</th>
+                        <th>{{ t('success_rate') or 'Success Rate' }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ch in channel_performance %}
+                    <tr>
+                        <td class="text-gray-300 font-medium">{{ ch.channel_name }}</td>
+                        <td class="text-center">{{ ch.order_count or 0 }}</td>
+                        <td class="text-center text-success">{{ ch.synced or 0 }}</td>
+                        <td class="text-center text-danger">{{ ch.failed or 0 }}</td>
+                        <td class="amount">${{ "%.2f"|format(ch.total_sales or 0) }}</td>
+                        <td>
+                            {% if ch.order_count and ch.order_count > 0 %}
+                                {% set rate = ((ch.synced or 0) / ch.order_count * 100) %}
+                                <span class="text-{{ 'success' if rate >= 90 else 'warning' if rate >= 70 else 'danger' }}">
+                                    {{ "%.1f"|format(rate) }}%
+                                </span>
+                            {% else %}
+                                <span class="text-gray-500">N/A</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-gray-500">
+            <i class="fas fa-chart-line text-4xl mb-3"></i>
+            <p>{{ t('no_channel_data') or 'No channel data available' }}</p>
+            <a href="/ecommerce/channels/create" class="text-primary hover:underline mt-2 inline-block">{{ t('add_first_channel') or 'Add your first channel' }}</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

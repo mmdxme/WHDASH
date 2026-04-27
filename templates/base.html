@@ -1130,8 +1130,11 @@
             opacity: 0.35;
         }
 
-        /* Pinned sections container (always visible, not scrolled with nav) */
-        #pinned-sections-container {
+        /* Pinned sections container - hidden when empty, shown when has content */
+        #pinned-sections-container:empty {
+            display: contents;
+        }
+        #pinned-sections-container:not(:empty) {
             display: flex;
             flex-direction: column;
         }
@@ -1141,6 +1144,8 @@
             display: flex;
             flex-direction: column;
             flex: 1;
+            min-height: 0;
+            overflow-y: auto;
         }
 
         /* Ensure sidebar-section works identically in both containers */
@@ -1153,6 +1158,47 @@
         #pinned-divider {
             margin-top: 0.25rem;
             margin-bottom: 0.25rem;
+        }
+
+        /* Reset All Pins Button */
+        .reset-pins-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            width: 100%;
+            padding: 0.5rem 1rem;
+            margin-bottom: 0.5rem;
+            background: transparent;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 0.5rem;
+            color: rgba(239, 68, 68, 0.7);
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            animation: subtle-pulse 3s ease-in-out infinite;
+        }
+
+        .reset-pins-btn:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.6);
+            color: rgb(239, 68, 68);
+            animation: none;
+        }
+
+        .reset-pins-btn:active {
+            transform: scale(0.97);
+        }
+
+        @keyframes subtle-pulse {
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 1; }
+        }
+
+        /* Hidden state for reset button when no pins exist */
+        .reset-pins-btn.hidden {
+            display: none;
         }
 
         /* Active pin icon: rotate 45deg and use filled bookmark icon to show "pinned" state */
@@ -1332,7 +1378,9 @@
 
         /* State 2: Compressed Workspace */
         .main-content {
+            flex: 1;
             margin-left: 0;
+            min-width: 0;
             transition: margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
@@ -4689,30 +4737,30 @@
     <!-- Mobile Overlay -->
     <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-[45] hidden md:hidden"></div>
 
-    <div class="app-shell flex min-h-screen" style="background-color: #0f172a; display: flex; flex-direction: column;">
+        <div class="app-shell" style="background-color: #0f172a; display: flex; min-height: 100vh;">
 
         <!-- ═══════════════════════════════════════════ -->
         <!-- SIDEBAR NAVIGATION                         -->
         <!-- ═══════════════════════════════════════════ -->
         <aside id="sidebar" class="fixed inset-y-0 left-0 glass-nav flex flex-col shadow-2xl" style="background-color: #0c1425;">
             <!-- Brand & Toggle -->
-            <div class="p-8 pb-4 flex items-center justify-between">
+            <div class="p-4 pb-2 flex items-center justify-between">
                 <a href="{{ url_for('index') }}" class="flex items-center group">
-                    <img src="{{ url_for('static', filename='logo_new.jpg') }}" alt="Logo" class="w-12 h-12 rounded-2xl object-cover shadow-xl shadow-brand-500/30">
+                    <img src="{{ url_for('static', filename='logo_new.jpg') }}" alt="Logo" class="w-10 h-10 rounded-xl object-cover shadow-xl shadow-brand-500/30">
                     <div class="sidebar-brand-text">
-                        <h1 class="text-xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 tracking-tight">{{ t('app_name', 'Enterprise') }}</h1>
-                        <p class="text-[10px] font-bold text-brand-400 uppercase tracking-[0.2em] leading-none mt-1">{{ t('app_subtitle', 'WMS HUB') }}</p>
+                        <h1 class="text-lg font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 tracking-tight">{{ t('app_name', 'Enterprise') }}</h1>
+                        <p class="text-[10px] font-bold text-brand-400 uppercase tracking-[0.2em] leading-none mt-0.5">{{ t('app_subtitle', 'WMS HUB') }}</p>
                     </div>
                 </a>
                 <button onclick="toggleSidebar()" class="text-slate-500 hover:text-white transition-colors lg:hidden">
-                    <i class="fa-solid fa-circle-chevron-left text-2xl"></i>
+                    <i class="fa-solid fa-circle-chevron-left text-xl"></i>
                 </button>
             </div>
 
             <!-- Nav Links -->
-            <nav class="flex-1 flex flex-col overflow-y-auto">
+            <nav class="flex-1 flex flex-col overflow-y-auto min-h-0">
                 <!-- Search bar (always visible at top of nav) -->
-                <div class="mb-3 px-1 pt-1">
+                <div class="px-1 pt-1">
                     <div class="relative group">
                         <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500 group-focus-within:text-brand-400 transition-colors">
                             <i class="fa-solid fa-magnifying-glass text-sm"></i>
@@ -4721,27 +4769,33 @@
                     </div>
                 </div>
 
+                <!-- Reset All Pins Button -->
+                <button id="reset-pins-btn" onclick="resetAllPins()" class="reset-pins-btn hidden mx-3" title="{{ t('reset_pins', 'Reset All Pins') }}">
+                    <i class="fa-solid fa-undo text-xs"></i>
+                    <span>{{ t('reset_pins', 'Reset Pins') }}</span>
+                </button>
+
                 <!-- Pinned sections: always visible, always expanded -->
-                <div id="pinned-sections-container" class="px-3 pb-2">
+                <div id="pinned-sections-container">
                     <!-- Pinned sections are moved here by JS when pinned -->
                 </div>
 
                 <!-- Divider between pinned and regular sections -->
-                <div id="pinned-divider" class="px-5 pb-1 hidden">
+                <div id="pinned-divider" class="px-5 hidden">
                     <div class="border-t border-white/10"></div>
                 </div>
 
                 <!-- Regular scrollable sections -->
-                <div id="sidebar-sections-container" class="flex-1 px-3 pb-3">
+                <div id="sidebar-sections-container">
                     {% include 'all_menus.html' %}
                 </div>
             </nav>
 
             <!-- User footer -->
-            <div class="p-8 border-t border-white/5">
+            <div class="p-4 border-t border-white/5">
                 <div class="flex items-center group">
-                    <img class="h-10 w-10 rounded-full object-cover border border-slate-700" src="{{ url_for('static', filename='uploads/avatars/' + (session.get('profile_pic') or 'default.png')) }}" alt="Avatar">
-                    <div class="ml-4 flex-1 sidebar-footer-meta">
+                    <img class="h-8 w-8 rounded-full object-cover border border-slate-700" src="{{ url_for('static', filename='uploads/avatars/' + (session.get('profile_pic') or 'default.png')) }}" alt="Avatar">
+                    <div class="ml-3 flex-1 sidebar-footer-meta">
                         <p class="text-xs font-bold text-white">{{ session.get('username') }}</p>
                         <p class="text-[10px] text-brand-400 uppercase tracking-wider">{{ t(session.get('role_name', ''), session.get('role_name', '')) }}</p>
                     </div>
@@ -4961,6 +5015,7 @@
                 if (pinnedContainer && section.parentElement !== pinnedContainer) {
                     pinnedContainer.appendChild(section);
                     pinnedDivider.classList.remove('hidden');
+                    pinnedContainer.classList.remove('hidden');
                 }
             }
 
@@ -4969,6 +5024,7 @@
                     sectionsContainer.appendChild(section);
                     if (pinnedContainer && pinnedContainer.children.length === 0) {
                         pinnedDivider.classList.add('hidden');
+                        pinnedContainer.classList.add('hidden');
                     }
                 }
             }
@@ -4992,8 +5048,12 @@
                     if (submenu) openSubMenu(submenu);
                     // Move to pinned container
                     moveSectionToPinned(section);
+                    pinnedContainer.classList.remove('hidden');
                 }
             });
+
+            // Update reset button visibility on init
+            updateResetPinsButton();
 
             // ── Apply sidebar expanded state ──
             // Desktop: starts collapsed so content is immediately visible;
@@ -5115,7 +5175,65 @@
                     moveSectionToPinned(section);
                 }
                 saveSidebarState();
+                updateResetPinsButton();
             };
+
+            // ── Reset All Pins ──
+            window.resetAllPins = function() {
+                const allSections = document.querySelectorAll('.sidebar-section');
+                let pinnedCount = 0;
+
+                allSections.forEach(section => {
+                    if (section.classList.contains('is-pinned')) {
+                        pinnedCount++;
+                        // Remove pinned state
+                        section.classList.remove('is-pinned');
+                        const pinBtn = section.querySelector('.pin-btn');
+                        if (pinBtn) pinBtn.classList.remove('is-active');
+                        // Reset thumbtack rotation
+                        const thumbtack = section.querySelector('.fa-thumbtack');
+                        if (thumbtack) thumbtack.style.transform = '';
+                        // Close submenu
+                        const submenu = section.querySelector('.sidebar-submenu');
+                        if (submenu) closeSubMenu(submenu);
+                        // Move back to regular container
+                        moveSectionToRegular(section);
+                    }
+                });
+
+                // Hide pinned divider
+                if (pinnedContainer && pinnedContainer.children.length === 0) {
+                    pinnedDivider.classList.add('hidden');
+                    pinnedContainer.classList.add('hidden');
+                }
+
+                // Hide reset button
+                const resetBtn = document.getElementById('reset-pins-btn');
+                if (resetBtn) resetBtn.classList.add('hidden');
+
+                // Clear pinned state from sessionStorage
+                try {
+                    const state = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '{}');
+                    document.querySelectorAll('.sidebar-section').forEach(section => {
+                        delete state[section.id + '_pinned'];
+                    });
+                    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                } catch (e) {
+                    console.warn('[Sidebar] Failed to clear pins from sessionStorage:', e);
+                }
+            };
+
+            // Helper to update reset button visibility
+            function updateResetPinsButton() {
+                const resetBtn = document.getElementById('reset-pins-btn');
+                if (!resetBtn) return;
+                const pinnedSections = document.querySelectorAll('.sidebar-section.is-pinned');
+                if (pinnedSections.length > 0) {
+                    resetBtn.classList.remove('hidden');
+                } else {
+                    resetBtn.classList.add('hidden');
+                }
+            }
 
             // ── Global Menu Search with debounce ──
             const globalSearch = document.getElementById('global-search');

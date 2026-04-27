@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background: #F9FAFB; font-family: 'Segoe UI', system-ui, sans-serif; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+    {% block content %}
+    <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1"><i class="fas fa-tags me-2 text-primary"></i>{{ page_title }}</h1>
+                <p class="text-muted mb-0">Document: {{ document.title }}</p>
+            </div>
+            <a href="{{ url_for('documents_detail', document_id=document.id) }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Document
+            </a>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-8">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <i class="fas fa-edit me-2"></i>Edit Metadata Values
+                    </div>
+                    <div class="card-body">
+                        <form method="POST">
+                            {% for field in fields %}
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    {{ field.field_name }}
+                                    {% if field.is_required %}<span class="text-danger">*</span>{% endif %}
+                                </label>
+                                {% if field.field_type == 'textarea' %}
+                                <textarea name="{{ field.field_code }}" class="form-control" rows="3">{{ field.field_value or field.default_value or '' }}</textarea>
+                                {% elif field.field_type == 'boolean' %}
+                                <select name="{{ field.field_code }}" class="form-select">
+                                    <option value="1" {{ 'selected' if field.field_value == '1' else '' }}>Yes</option>
+                                    <option value="0" {{ 'selected' if field.field_value == '0' else '' }}>No</option>
+                                </select>
+                                {% elif field.field_type == 'dropdown' %}
+                                <select name="{{ field.field_code }}" class="form-select">
+                                    <option value="">Select...</option>
+                                    {% for opt in (field.options_json|from_json if field.options_json else []) %}
+                                    <option value="{{ opt }}" {{ 'selected' if field.field_value == opt else '' }}>{{ opt }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% elif field.field_type == 'number' or field.field_type == 'decimal' %}
+                                <input type="number" step="any" name="{{ field.field_code }}" class="form-control" value="{{ field.field_value or field.default_value or '' }}">
+                                {% elif field.field_type == 'date' %}
+                                <input type="date" name="{{ field.field_code }}" class="form-control" value="{{ field.field_value or '' }}">
+                                {% elif field.field_type == 'datetime' %}
+                                <input type="datetime-local" name="{{ field.field_code }}" class="form-control" value="{{ field.field_value or '' }}">
+                                {% else %}
+                                <input type="text" name="{{ field.field_code }}" class="form-control" value="{{ field.field_value or field.default_value or '' }}">
+                                {% endif %}
+                                {% if field.help_text %}
+                                <small class="text-muted">{{ field.help_text }}</small>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i>Save Metadata
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="fas fa-info-circle me-2"></i>Field Definitions
+                    </div>
+                    <div class="card-body">
+                        <dl class="mb-0">
+                            {% for field in fields %}
+                            <dt>{{ field.field_name }}</dt>
+                            <dd class="text-muted small">
+                                Type: {{ field.field_type }}
+                                {% if field.is_required %} | Required{% endif %}
+                                {% if field.is_searchable %} | Searchable{% endif %}
+                            </dd>
+                            {% endfor %}
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

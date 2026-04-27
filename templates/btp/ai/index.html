@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('ai_copilot', 'AI Copilot') }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row g-4">
+        <!-- Sidebar: Chat History & Providers -->
+        <div class="col-md-3">
+            <div class="card shadow mb-3">
+                <div class="card-header py-2 d-flex align-items-center justify-content-between">
+                    <h6 class="m-0 fw-bold">
+                        <i class="fas fa-history me-1"></i> {{ t('recent_chats', 'Recent Chats') }}
+                    </h6>
+                    <button class="btn btn-sm btn-link p-0" onclick="startNewChat()" title="{{ t('new_chat', 'New Chat') }}">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <div class="card-body p-2" style="max-height: 300px; overflow-y: auto;">
+                    {% if recent_chats %}
+                        {% for chat in recent_chats %}
+                        <div class="chat-history-item d-flex align-items-center justify-content-between p-2 rounded mb-1 {% if selected_chat_id == chat.id %}bg-primary text-white{% endif %}"
+                             style="cursor: pointer;"
+                             onclick="loadChat({{ chat.id }})">
+                            <span class="text-truncate" style="max-width: 140px;">{{ chat.title or 'Chat' }}</span>
+                            <small class="opacity-75">{{ chat.message_count }} msg</small>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted small mb-0 px-2">{{ t('no_chats', 'No previous chats') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card shadow">
+                <div class="card-header py-2">
+                    <h6 class="m-0 fw-bold">
+                        <i class="fas fa-server me-1"></i> {{ t('ai_providers', 'AI Providers') }}
+                    </h6>
+                </div>
+                <div class="card-body p-2">
+                    {% if providers %}
+                        {% for provider in providers %}
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="aiProvider"
+                                       id="provider_{{ provider.id }}"
+                                       value="{{ provider.id }}"
+                                       {% if loop.first %}checked{% endif %}>
+                                <label class="form-check-label small" for="provider_{{ provider.id }}">
+                                    {{ provider.provider_name }}
+                                    <span class="badge bg-{{ 'success' if provider.is_active else 'secondary' }} ms-1">
+                                        {{ provider.provider_type }}
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="alert alert-warning py-2 small mb-0">
+                            <i class="fas fa-exclamation-triangle me-1"></i>
+                            {{ t('no_ai_provider', 'No AI provider configured') }}.
+                            <a href="{{ url_for('btp_ai_providers') }}">{{ t('configure', 'Configure') }}</a>
+                        </div>
+                    {% endif %}
+                </div>
+                {% if providers %}
+                <div class="card-footer py-2">
+                    <a href="{{ url_for('btp_ai_providers') }}" class="btn btn-sm btn-outline-secondary w-100">
+                        <i class="fas fa-cog me-1"></i> {{ t('manage_providers', 'Manage Providers') }}
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Main Chat Area -->
+        <div class="col-md-9">
+            <div class="card shadow" style="height: calc(100vh - 180px); display: flex; flex-direction: column;">
+                <!-- Chat Header -->
+                <div class="card-header py-3 d-flex align-items-center justify-content-between flex-shrink-0">
+                    <h5 class="m-0 fw-bold text-purple">
+                        <i class="fas fa-robot me-2"></i>{{ t('ai_copilot', 'AI Copilot') }}
+                    </h5>
+                    <div>
+                        {% if current_provider %}
+                        <span class="badge bg-primary">{{ current_provider.provider_name }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Messages Container -->
+                <div class="card-body p-3 overflow-auto flex-grow-1" id="chatMessages" style="background: #f8f9fa;">
+                    {% if not providers %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-brain fa-4x text-muted mb-3"></i>
+                        <h5 class="text-muted">{{ t('no_ai_provider', 'No AI Provider Configured') }}</h5>
+                        <p class="text-muted mb-3">{{ t('no_provider_msg', 'Please configure an AI provider in BTP > AI Providers to start using the AI Copilot.') }}</p>
+                        <a href="{{ url_for('btp_ai_provider_create') }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i> {{ t('add_provider', 'Add AI Provider') }}
+                        </a>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-rocket fa-3x text-primary mb-3"></i>
+                        <h5 class="text-muted">{{ t('start_conversation', 'Start a conversation') }}</h5>
+                        <p class="text-muted small">{{ t('start_conversation_hint', 'Ask anything about your data, get insights, or generate reports.') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Suggested Prompts -->
+                <div class="px-3 pb-2 flex-shrink-0" id="suggestedPrompts" style="display: none;">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-sm btn-outline-primary" onclick="sendSuggestion('Give me a summary of today\'s dashboard KPIs')">
+                            <i class="fas fa-chart-line me-1"></i> Dashboard KPIs
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="sendSuggestion('What are the pending approvals?')">
+                            <i class="fas fa-tasks me-1"></i> Pending Approvals
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="sendSuggestion('Generate a financial summary report')">
+                            <i class="fas fa-file-invoice-dollar me-1"></i> Finance Report
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="card-footer py-3 flex-shrink-0">
+                    <form id="chatForm" onsubmit="sendMessage(event)">
+                        <div class="input-group">
+                            <textarea id="messageInput" class="form-control"
+                                      placeholder="{{ t('ask_ai', 'Ask AI Copilot anything...') }}"
+                                      rows="1"
+                                      onkeydown="handleKeyDown(event)"
+                                      oninput="autoResize(this)"
+                                      {% if not providers %}disabled{% endif %}></textarea>
+                            <button type="submit" class="btn btn-primary px-4" id="sendBtn" {% if not providers %}disabled{% endif %}>
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </form>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <small class="text-muted">
+                            {% if providers %}
+                                {{ t('using_provider', 'Using') }}: {{ providers[0].provider_name }} ({{ providers[0].model_name }})
+                            {% else %}
+                                {{ t('no_provider', 'No provider configured') }}
+                            {% endif %}
+                        </small>
+                        <small class="text-muted">{{ t('powered_by', 'Powered by') }} WHDASH AI</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.text-purple { color: #6f42c1; }
+.bg-purple { background-color: #6f42c1; }
+.chat-message { margin-bottom: 1rem; }
+.chat-message.user .message-bubble {
+    background: linear-gradient(135deg, #6f42c1 0%, #4e73df 100%);
+    color: white;
+    border-radius: 18px 18px 4px 18px;
+    padding: 12px 16px;
+    max-width: 75%;
+    margin-left: auto;
+    box-shadow: 0 2px 8px rgba(111, 66, 193, 0.3);
+}
+.chat-message.assistant .message-bubble {
+    background: white;
+    color: #333;
+    border-radius: 18px 18px 18px 4px;
+    padding: 12px 16px;
+    max-width: 75%;
+    margin-right: auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border: 1px solid #e9ecef;
+}
+.chat-message .sender { font-size: 0.75rem; font-weight: 600; margin-bottom: 4px; }
+.chat-message.user .sender { text-align: right; color: #6f42c1; }
+.chat-message.assistant .sender { color: #4e73df; }
+.message-time { font-size: 0.65rem; color: #adb5bd; margin-top: 4px; display: block; }
+.chat-message.user .message-time { text-align: right; }
+.typing-indicator { display: flex; gap: 4px; padding: 8px 16px; }
+.typing-indicator span {
+    width: 8px; height: 8px; background: #6f42c1; border-radius: 50%;
+    animation: typing 1.4s infinite ease-in-out;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typing {
+    0%, 60%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-8px); }
+}
+.chat-history-item:hover:not(.bg-primary) { background: #f0f0f0; }
+.chat-history-item.bg-primary { background: #6f42c1 !important; color: white !important; }
+</style>
+
+<script>
+let currentChatId = null;
+let isWaiting = false;
+
+function startNewChat() {
+    currentChatId = null;
+    document.getElementById('chatMessages').innerHTML = `
+        <div class="text-center py-5">
+            <i class="fas fa-rocket fa-3x text-primary mb-3"></i>
+            <h5 class="text-muted">${'{{ t("start_conversation", "Start a conversation") }}'}</h5>
+            <p class="text-muted small">${'{{ t("start_conversation_hint", "Ask anything about your data, get insights, or generate reports.") }}'}</p>
+        </div>
+    `;
+    document.getElementById('suggestedPrompts').style.display = 'none';
+    document.querySelectorAll('.chat-history-item').forEach(el => el.classList.remove('bg-primary', 'text-white'));
+}
+
+function getSelectedProvider() {
+    const selected = document.querySelector('input[name="aiProvider"]:checked');
+    return selected ? selected.value : null;
+}
+
+async function sendMessage(event) {
+    event.preventDefault();
+    const input = document.getElementById('messageInput');
+    const message = input.value.trim();
+    if (!message || isWaiting) return;
+
+    const providerId = getSelectedProvider();
+    input.value = '';
+    input.style.height = 'auto';
+
+    addMessageToChat('user', message);
+    document.getElementById('suggestedPrompts').style.display = 'none';
+    showTyping();
+
+    isWaiting = true;
+    document.getElementById('sendBtn').disabled = true;
+
+    try {
+        const response = await fetch('/ai/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: message,
+                provider_id: providerId,
+                chat_id: currentChatId
+            })
+        });
+
+        const data = await response.json();
+        hideTyping();
+
+        if (data.error) {
+            addMessageToChat('assistant', 'Error: ' + data.error);
+        } else {
+            addMessageToChat('assistant', data.reply);
+            currentChatId = data.chat_id;
+            refreshChatHistory();
+        }
+    } catch (err) {
+        hideTyping();
+        addMessageToChat('assistant', 'Network error: ' + err.message);
+    } finally {
+        isWaiting = false;
+        document.getElementById('sendBtn').disabled = false;
+        scrollToBottom();
+    }
+}
+
+function addMessageToChat(role, content) {
+    const container = document.getElementById('chatMessages');
+    const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    const sender = role === 'user' ? '{{ t("you", "You") }}' : '{{ t("ai_copilot", "AI Copilot") }}';
+
+    const div = document.createElement('div');
+    div.className = `chat-message ${role}`;
+    div.innerHTML = `
+        <div class="message-bubble">
+            <div class="sender">${sender}</div>
+            <div class="message-content">${escapeHtml(content)}</div>
+            <span class="message-time">${time}</span>
+        </div>
+    `;
+    container.appendChild(div);
+    scrollToBottom();
+}
+
+function showTyping() {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = 'chat-message assistant';
+    div.id = 'typingIndicator';
+    div.innerHTML = `
+        <div class="message-bubble">
+            <div class="typing-indicator">
+                <span></span><span></span><span></span>
+            </div>
+        </div>
+    `;
+    container.appendChild(div);
+    scrollToBottom();
+}
+
+function hideTyping() {
+    const el = document.getElementById('typingIndicator');
+    if (el) el.remove();
+}
+
+function scrollToBottom() {
+    const container = document.getElementById('chatMessages');
+    container.scrollTop = container.scrollHeight;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function handleKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage(event);
+    }
+}
+
+function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 150) + 'px';
+}
+
+async function loadChat(chatId) {
+    try {
+        const response = await fetch('/ai/chat/' + chatId);
+        const data = await response.json();
+        if (data.error) return;
+
+        currentChatId = chatId;
+        const container = document.getElementById('chatMessages');
+        container.innerHTML = '';
+
+        data.messages.forEach(msg => {
+            addMessageToChat(msg.role === 'user' ? 'user' : 'assistant', msg.content);
+        });
+
+        document.querySelectorAll('.chat-history-item').forEach(el => {
+            el.classList.remove('bg-primary', 'text-white');
+        });
+
+        document.getElementById('suggestedPrompts').style.display = data.messages.length === 0 ? 'flex' : 'none';
+        scrollToBottom();
+    } catch (err) {
+        console.error('Error loading chat:', err);
+    }
+}
+
+async function refreshChatHistory() {
+    try {
+        const response = await fetch('/ai/history');
+        const data = await response.json();
+        const container = document.querySelector('.card-body.p-2');
+        if (data.chats.length > 0) {
+            container.innerHTML = data.chats.map(chat => `
+                <div class="chat-history-item d-flex align-items-center justify-content-between p-2 rounded mb-1"
+                     style="cursor: pointer;"
+                     onclick="loadChat(${chat.id})">
+                    <span class="text-truncate" style="max-width: 140px;">${escapeHtml(chat.title || 'Chat')}</span>
+                    <small class="opacity-75">${chat.message_count} msg</small>
+                </div>
+            `).join('');
+        }
+    } catch (err) {
+        console.error('Error refreshing history:', err);
+    }
+}
+
+function sendSuggestion(text) {
+    document.getElementById('messageInput').value = text;
+    sendMessage({ preventDefault: () => {} });
+}
+</script>
+{% endblock %}

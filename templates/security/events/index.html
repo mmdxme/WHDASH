@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+    <div class="mb-6 flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ t('security_events', 'Security Events') }}</h1>
+            <p class="text-gray-600 dark:text-gray-400">{{ t('security_events_desc', 'View security audit trail') }}</p>
+        </div>
+        <div class="flex gap-2">
+            <a href="{{ url_for('security.report_export', report_type='security_events', format='csv') }}" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                <i class="fa-solid fa-download mr-1"></i>{{ t('security_export_csv', 'CSV') }}
+            </a>
+            <a href="{{ url_for('security.report_export', report_type='security_events', format='excel') }}" class="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                <i class="fa-solid fa-file-excel mr-1"></i>{{ t('security_export_excel', 'Excel') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow mb-6 p-4">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ t('security_type', 'Event Type') }}</label>
+                <select name="type" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                    <option value="">All Types</option>
+                    <option value="login_success" {% if filters.type == 'login_success' %}selected{% endif %}>Login Success</option>
+                    <option value="login_failure" {% if filters.type == 'login_failure' %}selected{% endif %}>Login Failure</option>
+                    <option value="mfa_enrolled" {% if filters.type == 'mfa_enrolled' %}selected{% endif %}>MFA Enrolled</option>
+                    <option value="mfa_disabled" {% if filters.type == 'mfa_disabled' %}selected{% endif %}>MFA Disabled</option>
+                    <option value="password_changed" {% if filters.type == 'password_changed' %}selected{% endif %}>Password Changed</option>
+                    <option value="session_revoked" {% if filters.type == 'session_revoked' %}selected{% endif %}>Session Revoked</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ t('security_severity', 'Severity') }}</label>
+                <select name="severity" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+                    <option value="">All Severities</option>
+                    <option value="info" {% if filters.severity == 'info' %}selected{% endif %}>Info</option>
+                    <option value="warning" {% if filters.severity == 'warning' %}selected{% endif %}>Warning</option>
+                    <option value="critical" {% if filters.severity == 'critical' %}selected{% endif %}>Critical</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ t('security_date_from', 'From') }}</label>
+                <input type="date" name="date_from" value="{{ filters.date_from }}" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{{ t('security_date_to', 'To') }}</label>
+                <input type="date" name="date_to" value="{{ filters.date_to }}" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
+            </div>
+            <div class="md:col-span-4 flex justify-end">
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                    {{ t('security_filter', 'Filter') }}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Events Table -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow">
+        <div class="p-6">
+            {% if events %}
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-gray-200 dark:border-gray-700">
+                            <th class="text-left py-3 px-4 text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('security_timestamp', 'Timestamp') }}</th>
+                            <th class="text-left py-3 px-4 text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('security_event_type', 'Event Type') }}</th>
+                            <th class="text-left py-3 px-4 text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('security_user', 'User') }}</th>
+                            <th class="text-left py-3 px-4 text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('security_ip_address', 'IP Address') }}</th>
+                            <th class="text-left py-3 px-4 text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('security_severity', 'Severity') }}</th>
+                            <th class="text-left py-3 px-4 text-sm font-medium text-gray-500 dark:text-gray-400">{{ t('security_status', 'Status') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for event in events %}
+                        <tr class="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                            <td class="py-3 px-4 text-sm text-gray-900 dark:text-white">{{ event.timestamp }}</td>
+                            <td class="py-3 px-4">
+                                <a href="{{ url_for('security.event_detail', event_id=event.id) }}" class="text-blue-600 hover:text-blue-700">
+                                    {{ event.event_type|replace('_', ' ')|title }}
+                                </a>
+                            </td>
+                            <td class="py-3 px-4 text-sm text-gray-900 dark:text-white">{{ event.actor_username or event.target_username or '-' }}</td>
+                            <td class="py-3 px-4 text-sm text-gray-500 dark:text-gray-400">{{ event.source_ip or '-' }}</td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-1 text-xs font-medium rounded {% if event.severity == 'critical' %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200{% elif event.severity == 'warning' %}bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200{% else %}bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200{% endif %}">
+                                    {{ event.severity|title }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-1 text-xs font-medium rounded {% if event.status == 'success' %}bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200{% else %}bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200{% endif %}">
+                                    {{ event.status|title }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if total_pages > 1 %}
+            <div class="mt-4 flex justify-center gap-2">
+                {% for p in range(1, total_pages + 1) %}
+                <a href="{{ url_for('security.events', page=p, type=filters.type, severity=filters.severity) }}" class="px-3 py-1 rounded {% if p == page %}bg-blue-600 text-white{% else %}bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300{% endif %}">
+                    {{ p }}
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="text-center py-12">
+                <i class="fa-solid fa-clipboard-list text-gray-300 dark:text-gray-600 text-5xl mb-4"></i>
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">{{ t('security_no_events', 'No Security Events') }}</h3>
+                <p class="text-gray-500 dark:text-gray-400">{{ t('security_no_events_desc', 'Security events will appear here as they occur') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

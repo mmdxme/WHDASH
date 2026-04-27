@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('expenses', 'Expenses') }} - {{ platform_name }}{% endblock %}
+
+{% block content %}
+<div class="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div class="bg-slate-800/80 backdrop-blur-lg border-b border-slate-700">
+        <div class="px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold text-white">{{ t('expenses', 'Expenses') }}</h1>
+                    <p class="text-slate-400 text-sm">{{ t('track_expenses', 'Track all your expenses') }}</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/finance/expenses/export?format=csv" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg">
+                        <i class="fa fa-download mr-2"></i>{{ t('export', 'Export') }}
+                    </a>
+                    <a href="/finance/expenses/create" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg flex items-center space-x-2">
+                        <i class="fa fa-plus"></i>
+                        <span>{{ t('add_expense', 'Add Expense') }}</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="p-6">
+        <div class="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700 p-4 mb-6">
+            <form method="GET" class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">{{ t('category', 'Category') }}</label>
+                    <select name="category_id" class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                        <option value="">{{ t('all', 'All') }}</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat.id }}">{{ cat.category_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">{{ t('date_from', 'From') }}</label>
+                    <input type="date" name="date_from" class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">{{ t('date_to', 'To') }}</label>
+                    <input type="date" name="date_to" class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">{{ t('merchant', 'Merchant') }}</label>
+                    <input type="text" name="merchant_name" class="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-sm" placeholder="{{ t('search', 'Search') }}">
+                </div>
+                <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg">{{ t('filter', 'Filter') }}</button>
+            </form>
+        </div>
+
+        <div class="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700 overflow-hidden">
+            <table class="w-full">
+                <thead class="bg-slate-700/50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">{{ t('expense_number', 'Number') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">{{ t('date', 'Date') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">{{ t('merchant', 'Merchant') }}</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase">{{ t('category', 'Category') }}</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase">{{ t('amount', 'Amount') }}</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-slate-400 uppercase">{{ t('status', 'Status') }}</th>
+                        <th class="px-6 py-3 text-center text-xs font-medium text-slate-400 uppercase">{{ t('actions', 'Actions') }}</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-700">
+                    {% for record in records %}
+                    <tr class="hover:bg-slate-700/30">
+                        <td class="px-6 py-4 text-white">{{ record.expense_number }}</td>
+                        <td class="px-6 py-4 text-slate-400">{{ record.expense_date }}</td>
+                        <td class="px-6 py-4">
+                            <div class="flex items-center">
+                                {% if record.is_flagged %}
+                                <i class="fa fa-flag text-red-400 mr-2"></i>
+                                {% endif %}
+                                <span class="text-white">{{ record.merchant_name or '-' }}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 py-1 text-xs rounded-full" style="background-color: {{ record.category_color }}20; color: {{ record.category_color }}">
+                                {{ record.category_name or 'Uncategorized' }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-right text-red-400 font-semibold">{{ record.currency }} {{ "{:,.2f}".format(record.amount) }}</td>
+                        <td class="px-6 py-4 text-center">
+                            <span class="px-2 py-1 text-xs rounded-full {% if record.status == 'approved' %}bg-emerald-500/20 text-emerald-400{% else %}bg-yellow-500/20 text-yellow-400{% endif %}">
+                                {{ record.status | title }}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            <div class="flex items-center justify-center space-x-2">
+                                <a href="/finance/expenses/{{ record.id }}/edit" class="p-2 hover:bg-slate-600 rounded-lg"><i class="fa fa-edit text-slate-400"></i></a>
+                                <form action="/finance/expenses/{{ record.id }}/delete" method="POST" class="inline" onsubmit="return confirm('{{ t('confirm_delete', 'Are you sure?') }}')">
+                                    <button type="submit" class="p-2 hover:bg-red-500/20 rounded-lg"><i class="fa fa-trash text-red-400"></i></button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if not records %}
+            <div class="text-center py-12">
+                <i class="fa fa-receipt text-slate-600 text-5xl mb-4"></i>
+                <p class="text-slate-400">{{ t('no_expenses', 'No expense records found') }}</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

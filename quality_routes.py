@@ -46,8 +46,74 @@ from quality_models import (
     get_supplier_quality_report
 )
 
+# Import export utilities
+from export_utils import (
+    send_export_response,
+    get_export_columns
+)
+
+
+# =============================================================================
+# AUTHENTICATION AND PERMISSION HELPERS
+# =============================================================================
+
+def require_login(f):
+    """Decorator to require authentication."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            if request.is_json:
+                return jsonify({'error': 'Authentication required'}), 401
+            flash('Please login to access this page.', 'error')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def require_quality_permission(action):
+    """Decorator factory for quality-specific permissions."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if 'user_id' not in session:
+                if request.is_json:
+                    return jsonify({'error': 'Authentication required'}), 401
+                flash('Please login to access this page.', 'error')
+                return redirect(url_for('login'))
+            user_id = session['user_id']
+            if not user_has_permission(user_id, 'quality', action):
+                if request.is_json:
+                    return jsonify({'error': 'Permission denied'}), 403
+                flash(f"Access denied. You don't have permission to {action} quality records.", "error")
+                return redirect(url_for('index'))
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
 # Create blueprint
 quality_bp = Blueprint('quality', __name__, url_prefix='/quality')
+
+
+# =============================================================================
+# EXPORT TYPES AND COLUMNS
+# =============================================================================
+
+QUALITY_EXPORT_TYPES = [
+    'csv', 'excel_text', 'excel_general', 'json', 'xml', 'txt',
+    'pdf', 'docx', 'html', 'printable', 'barcode', 'api',
+    'email', 'zip', 'backup', 'sql_dump', 'dashboard',
+    'summary', 'detailed', 'audit_log'
+]
+
+QUALITY_EXPORT_COLUMNS = {
+    'inspections': ['inspection_id', 'type', 'reference', 'inspector', 'result', 'date'],
+    'ncr': ['ncr_number', 'type', 'title', 'severity', 'status', 'created_at'],
+    'capa': ['capa_number', 'title', 'type', 'severity', 'status', 'deadline'],
+    'audits': ['audit_id', 'program', 'type', 'auditor', 'schedule_date', 'status'],
+    'findings': ['finding_id', 'audit_id', 'severity', 'description', 'status', 'due_date'],
+    'root_causes': ['cause_id', 'ncr_number', 'category', 'description', 'verified']
+}
 
 
 # =============================================================================
@@ -197,6 +263,101 @@ def notify_disposition_required(item_name, lot_number, ncr_number):
         severity='HIGH',
         related_type='disposition'
     )
+
+
+# =============================================================================
+# API EXPORT ENDPOINTS
+# =============================================================================
+
+@quality_bp.route('/api/export/<export_type>', methods=['GET', 'POST'])
+@quality_bp.route('/api/export/<data_type>/<export_type>', methods=['GET', 'POST'])
+@require_login
+def api_quality_export(export_type, data_type=None):
+    """Export quality data in all 20 formats."""
+    if export_type not in QUALITY_EXPORT_TYPES:
+        return jsonify({
+            'error': f'Invalid export type. Valid types: {QUALITY_EXPORT_TYPES}'
+        }), 400
+
+    company_id = session.get('company_id', 0)
+
+    # Determine data type from URL or default
+    if data_type is None:
+        data_type = request.args.get('type', 'inspections')
+
+    # Get data based on type
+    if data_type == 'inspections':
+        data = get_all("""
+            SELECT i.*, i.inspection_number as reference
+            FROM quality_inspections i
+            WHERE i.company_id = ?
+            ORDER BY i.inspection_date DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = QUALITY_EXPORT_COLUMNS['inspections']
+        title = 'Quality Inspections'
+    elif data_type == 'ncr':
+        data = get_all("""
+            SELECT * FROM quality_ncr
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = QUALITY_EXPORT_COLUMNS['ncr']
+        title = 'Non-Conformance Records'
+    elif data_type == 'capa':
+        data = get_all("""
+            SELECT * FROM quality_capa
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = QUALITY_EXPORT_COLUMNS['capa']
+        title = 'CAPA Records'
+    elif data_type == 'audits':
+        data = get_all("""
+            SELECT * FROM quality_audit_plans
+            WHERE company_id = ?
+            ORDER BY schedule_date DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = QUALITY_EXPORT_COLUMNS['audits']
+        title = 'Audit Plans'
+    elif data_type == 'findings':
+        data = get_all("""
+            SELECT * FROM quality_audit_findings
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = QUALITY_EXPORT_COLUMNS['findings']
+        title = 'Audit Findings'
+    elif data_type == 'root_causes':
+        data = get_all("""
+            SELECT * FROM quality_root_causes
+            WHERE company_id = ?
+            ORDER BY created_at DESC
+            LIMIT 5000
+        """, (company_id,))
+        columns = QUALITY_EXPORT_COLUMNS['root_causes']
+        title = 'Root Cause Analysis'
+    else:
+        return jsonify({'error': f'Data type {data_type} not supported'}), 400
+
+    filename = f'quality_{data_type}_{datetime.now().strftime("%Y%m%d")}'
+
+    return send_export_response(data, export_type, filename, columns, title)
+
+
+@quality_bp.route('/api/export/list')
+@require_login
+def list_quality_export_types():
+    """List available export types for quality module."""
+    return jsonify({
+        'module': 'quality',
+        'data_types': list(QUALITY_EXPORT_COLUMNS.keys()),
+        'export_types': [{'type': t} for t in QUALITY_EXPORT_TYPES]
+    })
 
 
 # =============================================================================

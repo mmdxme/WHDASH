@@ -27,26 +27,19 @@ from datetime import datetime, timedelta
 
 from database import get_db_context, get_one, get_all, row_to_dict, rows_to_list
 
-# Import helper functions from finance_routes
-from finance_routes import get_company_id, get_current_user_id
+# Import helper functions (defined locally in this file)
+# get_company_id and get_current_user_id are defined below
 
-# Import finance model functions from finance_models
+# Import available functions from finance_routes
+from finance_routes import (
+    get_accounts, get_categories,
+    get_current_user_id, get_current_user_name,
+    get_finance_setting,
+)
+
+# Import available functions from finance_models
 from finance_models import (
-    get_accounts, get_account_by_id, get_account_balance, get_account_ledger,
-    get_fiscal_years, get_fiscal_year_by_id, get_fiscal_periods,
-    get_fiscal_period_by_id, get_fiscal_period_by_date,
-    is_period_open, close_period as model_close_period, reopen_period,
-    get_journals, get_journal_by_id, create_journal, post_journal,
-    get_bank_accounts, get_bank_account_by_id, create_bank_account,
-    get_cash_transfers, get_cash_transfer_by_id, create_cash_transfer,
-    get_customer_invoices, get_customer_invoice_by_id,
-    get_supplier_bills, get_supplier_bill_by_id,
-    get_cost_centers, get_cost_center_by_id,
-    get_tax_codes, get_tax_code_by_id,
-    get_budgets, get_budget_by_id,
-    get_assets, get_asset_by_id,
-    get_ar_aging, get_ap_aging,
-    get_trial_balance, get_financial_summary,
+    get_account_balance,
 )
 
 # Import permissions helper
