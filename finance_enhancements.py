@@ -958,7 +958,20 @@ def api_flow_send_alert():
         """, (alert_type, str(alert_data), get_company_id()))
         db.commit()
     
-    # TODO: Actually send to Flow system when Flow integration is fully available
+    # Send alert to Flow system if available
+    try:
+        from flow_models import send_channel_message
+        # Send to finance alerts channel if available
+        send_channel_message(
+            channel='finance_alerts',
+            title=f'Finance Alert: {alert_type}',
+            message=str(alert_data),
+            sender_user_id=user_id
+        )
+    except (ImportError, AttributeError) as e:
+        import logging
+        logging.getLogger(__name__).info(f"Flow integration not available, alert logged: {e}")
+
     return jsonify({
         'success': True,
         'message': 'Alert sent',

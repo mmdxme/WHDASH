@@ -2615,10 +2615,35 @@ def payslips_download(id):
         # Log download
         audit_log('DOWNLOAD', 'payroll_payslips', id, details=f"Downloaded payslip {payslip['payslip_number']}")
         
-        # In a real implementation, this would generate a PDF
-        # For now, return a placeholder message
-        flash('PDF generation would happen here. This is a placeholder.', 'info')
-        return redirect(url_for('payroll.payslips_view', id=id))
+        # Generate PDF payslip if possible
+        try:
+            from export_utils import export_to_pdf
+            
+            # Prepare payslip data
+            payslip_data = []
+            for key, value in payslip.items():
+                if key not in ['id', 'created_at', 'updated_at']:
+                    payslip_data.append({'field': key.replace('_', ' ').title(), 'value': str(value) if value else ''})
+            
+            pdf_columns = ['field', 'value']
+            pdf_output = export_to_pdf(
+                data=payslip_data,
+                filename=f"payslip_{payslip['payslip_number']}",
+                title=f"Payslip: {payslip['payslip_number']}",
+                columns=pdf_columns
+            )
+            
+            # Send PDF file
+            from flask import make_response
+            response = make_response(pdf_output)
+            response.headers.set('Content-Type', 'application/pdf')
+            response.headers.set('Content-Disposition', f'attachment; filename=payslip_{payslip["payslip_number"]}.pdf')
+            return response
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"PDF generation failed: {e}")
+            flash('PDF generation is not available. Please contact your administrator.', 'warning')
+            return redirect(url_for('payroll.payslips_view', id=id))
     finally:
         db.close()
 

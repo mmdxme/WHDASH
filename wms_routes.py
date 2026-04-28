@@ -2465,34 +2465,45 @@ def register_wms_routes(app, get_db):
         ''').fetchone()['qty']
 
         # Near expiry stock
-        near_expiry_days = int(db.execute("SELECT setting_value FROM wms_settings WHERE setting_key = 'near_expiry_days'").fetchone()['setting_value'] or 30)
-        near_expiry = db.execute(f'''
+        try:
+            near_expiry_days = int(db.execute("SELECT setting_value FROM wms_settings WHERE setting_key = 'near_expiry_days'").fetchone()['setting_value'] or 30)
+        except (ValueError, TypeError):
+            near_expiry_days = 30
+        near_expiry = db.execute('''
             SELECT COALESCE(SUM(l.quantity), 0) as qty FROM wms_lots l
             WHERE l.expiry_date IS NOT NULL
-            AND l.expiry_date <= date('now', '+{near_expiry_days} days')
+            AND l.expiry_date <= date('now', '+' || ? || ' days')
             AND l.expiry_date > date('now')
             AND l.quantity > 0
-            {wh_filter.replace('warehouse_id', 'l.warehouse_id')}
-        ''').fetchone()['qty']
+        ''', (str(near_expiry_days),)).fetchone()['qty']
 
         # Expired stock
-        expired_stock = db.execute(f'''
+        expired_stock_qry = '''
             SELECT COALESCE(SUM(l.quantity), 0) as qty FROM wms_lots l
             WHERE l.expiry_date IS NOT NULL
             AND l.expiry_date < date('now')
             AND l.quantity > 0
-            {wh_filter.replace('warehouse_id', 'l.warehouse_id')}
-        ''').fetchone()['qty']
+        '''
+        if wh_filter:
+            expired_stock_qry += ' AND ' + wh_filter.replace('warehouse_id', 'l.warehouse_id')
+        expired_stock = db.execute(expired_stock_qry).fetchone()['qty']
 
         # Empty locations
-        empty_locations = db.execute(f'''
-            SELECT COUNT(*) as cnt FROM wms_locations
-            WHERE is_empty = 1 AND is_active = 1 {wh_filter}
-        ''').fetchone()['cnt']
+        if wh_filter:
+            empty_locations = db.execute(f'''
+                SELECT COUNT(*) as cnt FROM wms_locations
+                WHERE is_empty = 1 AND is_active = 1 {wh_filter}
+            ''').fetchone()['cnt']
+        else:
+            empty_locations = db.execute('''
+                SELECT COUNT(*) as cnt FROM wms_locations
+                WHERE is_empty = 1 AND is_active = 1
+            ''').fetchone()['cnt']
 
         # Total locations
-        total_locations = db.execute(f'''
-            SELECT COUNT(*) as cnt FROM wms_locations
+        if wh_filter:
+            total_locations = db.execute(f'''
+                SELECT COUNT(*) as cnt FROM wms_locations
             WHERE is_active = 1 {wh_filter}
         ''').fetchone()['cnt']
 

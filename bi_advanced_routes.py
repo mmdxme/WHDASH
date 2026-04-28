@@ -162,7 +162,7 @@ def bi_permission_required(action: str = 'view'):
             from permissions import user_has_permission
             user_id = session.get('user_id')
 
-            if not user_has_permission(user_id, 'reports', 'custom', action):
+            if not user_has_permission(user_id, 'reports', 'drilldown', action):
                 if request.is_json:
                     return jsonify({'error': 'Permission denied'}), 403
                 return redirect(url_for('index'))

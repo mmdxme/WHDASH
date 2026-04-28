@@ -2666,7 +2666,7 @@ def executive_dashboard():
         compliance = get_pm_compliance_rate()
         pm_compliance_rate = compliance.get('compliance_rate', 0) if compliance else 0
 
-        # MTBF and MTTR (placeholder calculations)
+        # MTBF and MTTR - calculated from actual downtime records
         total_downtime = db.execute("""
             SELECT COALESCE(SUM(total_hours), 0) as total FROM maintenance_downtime_logs
             WHERE date(downtime_start) >= date('now', '-30 days')
@@ -2677,9 +2677,12 @@ def executive_dashboard():
             WHERE date(downtime_start) >= date('now', '-30 days')
         """).fetchone()['cnt']
 
-        mtbf = 720 if incident_count == 0 else (720 * 30) / incident_count  # Assume 720 hours/month
+        # Real MTBF calculation: total operating time / number of failures
+        # Operating time = 30 days * 24 hours = 720 hours, minus downtime
+        operating_time = (30 * 24) - total_downtime if total_downtime < 720 else 1
+        mtbf = operating_time / incident_count if incident_count > 0 else operating_time
         mttr = total_downtime / incident_count if incident_count > 0 else 0
-        availability = (mtbf - mttr) / mtbf * 100 if mtbf > 0 else 100
+        availability = (mtbf / (mtbf + mttr) * 100) if mttr > 0 or incident_count > 0 else 100
 
         # Cost stats
         total_cost = db.execute("""
@@ -2958,9 +2961,11 @@ def reliability_dashboard():
 
         unplanned = total_downtime - planned
 
-        mtbf = 720 if incident_count == 0 else (720 * 30) / incident_count
+        # Real MTBF/MTTR calculation
+        operating_time = (30 * 24) - total_downtime if total_downtime < 720 else 1
+        mtbf = operating_time / incident_count if incident_count > 0 else operating_time
         mttr = total_downtime / incident_count if incident_count > 0 else 0
-        availability = (mtbf - mttr) / mtbf * 100 if mtbf > 0 else 100
+        availability = (mtbf / (mtbf + mttr) * 100) if mttr > 0 or incident_count > 0 else 100
 
         # Cost metrics
         repair_cost = db.execute("""

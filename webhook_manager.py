@@ -588,15 +588,21 @@ class WebhookManager:
 
     def _persist_subscription(self, subscription: WebhookSubscription) -> None:
         """Persist subscription to database."""
-        # This is a stub - implement with actual database
+        import logging
+        logging.getLogger(__name__).debug(f"Webhook subscription persistence stub called for: {subscription.endpoint_url}")
+        # NOTE: Database persistence not yet implemented - subscriptions stored in memory only
         pass
 
     def _delete_subscription(self, subscription_id: str) -> None:
         """Delete subscription from database."""
+        import logging
+        logging.getLogger(__name__).debug(f"Webhook subscription deletion stub called for: {subscription_id}")
         pass
 
     def _persist_delivery(self, delivery: WebhookDelivery) -> None:
         """Persist delivery record to database."""
+        import logging
+        logging.getLogger(__name__).debug(f"Webhook delivery persistence stub called for: {delivery.subscription_id}")
         pass
 
     # =========================================================================

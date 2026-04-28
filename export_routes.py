@@ -222,8 +222,13 @@ def _get_integration_data(filters=None):
 
 def _get_btp_data(filters=None):
     """Get BTP module data."""
-    from btp_models import get_btp_overview
-    return get_btp_overview()
+    try:
+        from btp_models import get_btp_overview
+        return get_btp_overview()
+    except (ImportError, AttributeError) as e:
+        import logging
+        logging.getLogger(__name__).warning(f"BTP overview not available: {e}")
+        return []
 
 
 def _get_project_data(filters=None):
@@ -252,32 +257,92 @@ def _get_logistics_data(filters=None):
 
 def _get_wms_data(filters=None):
     """Get WMS module data."""
-    from wms_models import get_all_inventory
-    return get_all_inventory()
+    try:
+        from database import get_db_context
+        with get_db_context() as db:
+            rows = db.execute("""
+                SELECT 
+                    ib.id,
+                    ib.item_id,
+                    i.item_code,
+                    i.name as item_name,
+                    w.name as warehouse_name,
+                    l.location_code,
+                    l.zone,
+                    ib.lot_id,
+                    lb.lot_number,
+                    lb.expiry_date,
+                    ib.quantity as on_hand,
+                    ib.reserved,
+                    ib.available,
+                    ib.quarantine,
+                    ib.blocked,
+                    ib.status,
+                    i.barcode,
+                    i.part_number,
+                    i.uom_code,
+                    i.min_stock_level,
+                    i.reorder_point
+                FROM wms_inventory_balances ib
+                LEFT JOIN wms_items i ON ib.item_id = i.id
+                LEFT JOIN wms_warehouses w ON ib.warehouse_id = w.id
+                LEFT JOIN wms_locations l ON ib.location_id = l.id
+                LEFT JOIN wms_lots lb ON ib.lot_id = lb.id
+                ORDER BY i.item_code, w.name, l.location_code
+                LIMIT 10000
+            """).fetchall()
+            return [dict(r) for r in rows]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"WMS data not available: {e}")
+        return []
 
 
 def _get_scm_data(filters=None):
     """Get SCM module data."""
-    from scm_models import get_scm_data
-    return get_scm_data()
+    try:
+        from scm_models import get_scm_data
+        return get_scm_data()
+    except (ImportError, AttributeError) as e:
+        import logging
+        logging.getLogger(__name__).warning(f"SCM data not available: {e}")
+        return []
 
 
 def _get_talent_data(filters=None):
     """Get Talent module data."""
-    from talent_models import get_talent_pool
-    return get_talent_pool()
+    try:
+        from talent_models import get_talent_pool_members
+        # Get talent pool members if the function exists
+        if hasattr(talent_models, 'get_talent_pool'):
+            return talent_models.get_talent_pool()
+        return []
+    except (ImportError, AttributeError) as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Talent data not available: {e}")
+        return []
 
 
 def _get_payroll_data(filters=None):
     """Get Payroll module data."""
-    from payroll_models import get_payroll_records
-    return get_payroll_records()
+    try:
+        from payroll_models import get_payroll_records
+        return get_payroll_records()
+    except (ImportError, AttributeError) as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Payroll data not available: {e}")
+        return []
 
 
 def _get_finance_data(filters=None):
     """Get Finance module data."""
-    from finance_models import get_finance_data
-    return get_finance_data()
+    try:
+        from finance_models import get_finance_data
+        return get_finance_data()
+    except (ImportError, AttributeError) as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Finance data not available: {e}")
+        return []
 
 
 def _get_workflow_data(filters=None):
