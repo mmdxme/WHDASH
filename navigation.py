@@ -14462,31 +14462,46 @@ def filter_menu_by_permission(menu: Dict, user_permissions: set) -> bool:
 def get_main_menu(user_id: int, language: str = 'en') -> List[Dict]:
     """
     Build the main menu for a user based on their permissions.
-    
+    Results are cached based on user_id and language.
+
     Args:
         user_id: Current user ID
         language: Language code for labels
-    
+
     Returns:
         List of top-level menu items with nested sub-items
     """
+    from database import cached_query
+
+    return cached_query(
+        f'main_menu:{user_id}:{language}',
+        900,  # 15 minutes TTL (matches NAVIGATION cache TTL)
+        lambda: _build_main_menu(user_id, language)
+    )
+
+
+def _build_main_menu(user_id: int, language: str) -> List[Dict]:
+    """
+    Internal function to build the main menu from database/permissions.
+    Called by get_main_menu when cache miss occurs.
+    """
     from permissions import get_user_permissions_cached
-    
+
     permissions = get_user_permissions_cached(user_id)
-    
+
     menu = []
-    
+
     # Sort modules by order
     sorted_modules = sorted(
         MENU_STRUCTURE.items(),
         key=lambda x: x[1].get('order', 999)
     )
-    
+
     for module_key, module_data in sorted_modules:
         # Check if user has permission for this module
         if not filter_menu_by_permission(module_data, permissions):
             continue
-        
+
         # Build module entry
         module_entry = {
             'key': module_key,
@@ -14496,7 +14511,7 @@ def get_main_menu(user_id: int, language: str = 'en') -> List[Dict]:
             'route': module_data.get('route'),
             'items': []
         }
-        
+
         # Add sub-items if present
         if module_data.get('items'):
             for item_key, item_data in module_data['items'].items():
@@ -14508,9 +14523,9 @@ def get_main_menu(user_id: int, language: str = 'en') -> List[Dict]:
                         'route': item_data.get('route'),
                         'badge': item_data.get('badge'),
                     })
-        
+
         menu.append(module_entry)
-    
+
     return menu
 
 
@@ -14710,30 +14725,50 @@ def is_menu_item_active(item_route: str, current_path: str) -> bool:
 def get_active_module(current_path: str) -> Optional[str]:
     """
     Get the active top-level module key for the current path.
-    
+    Results are cached per request path.
+
     Args:
         current_path: Current request path
-    
+
     Returns:
         Module key or None
     """
+    # Check cache first (per-request cache via g object)
+    from flask import has_request_context, g, request
+    if has_request_context() and hasattr(g, '_active_module_cache'):
+        cached = g._active_module_cache.get(current_path)
+        if cached is not None:
+            return cached
+
+    result = None
     for module_key, module_data in MENU_STRUCTURE.items():
         route = module_data.get('route')
         if route and current_path.startswith(route):
-            return module_key
-        
+            result = module_key
+            break
+
         # Check sub-items
-        items = module_data.get('items', {})
-        for item_key, item_data in items.items():
-            item_route = item_data.get('route')
-            if item_route and current_path.startswith(item_route):
-                return module_key
-    
+        if not result:
+            items = module_data.get('items', {})
+            for item_key, item_data in items.items():
+                item_route = item_data.get('route')
+                if item_route and current_path.startswith(item_route):
+                    result = module_key
+                    break
+        if result:
+            break
+
     # Check dashboard specially
     if current_path == '/':
-        return 'dashboard'
-    
-    return None
+        result = 'dashboard'
+
+    # Cache result
+    if has_request_context():
+        if not hasattr(g, '_active_module_cache'):
+            g._active_module_cache = {}
+        g._active_module_cache[current_path] = result
+
+    return result
 
 
 # ============================================================================
@@ -14741,7 +14776,17 @@ def get_active_module(current_path: str) -> Optional[str]:
 # ============================================================================
 
 def get_notification_badge(user_id: int) -> int:
-    """Get count of unread notifications for badge display."""
+    """Get count of unread notifications for badge display with caching."""
+    from database import cached_query
+    return cached_query(
+        f'notification_badge:{user_id}',
+        60,  # 60 seconds TTL from config
+        lambda: _fetch_notification_badge(user_id)
+    )
+
+
+def _fetch_notification_badge(user_id: int) -> int:
+    """Internal function to fetch notification count from database."""
     from database import get_db_context
     with get_db_context() as db:
         result = db.execute(
@@ -14751,7 +14796,17 @@ def get_notification_badge(user_id: int) -> int:
 
 
 def get_task_badge(user_id: int) -> int:
-    """Get count of open tasks assigned to user."""
+    """Get count of open tasks assigned to user with caching."""
+    from database import cached_query
+    return cached_query(
+        f'task_badge:{user_id}',
+        60,  # 60 seconds TTL from config
+        lambda: _fetch_task_badge(user_id)
+    )
+
+
+def _fetch_task_badge(user_id: int) -> int:
+    """Internal function to fetch task count from database."""
     from database import get_db_context
     with get_db_context() as db:
         result = db.execute(

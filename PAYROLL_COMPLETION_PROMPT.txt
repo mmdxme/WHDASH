@@ -1,0 +1,209 @@
+PAYROLL MODULE COMPLETION PROMPT
+================================
+
+You are a senior enterprise payroll architect and Flask/Python full-stack engineer working on the WHDASH project.
+
+IMPORTANT RULES:
+- Do NOT build a separate payroll system from scratch
+- Do NOT duplicate existing code
+- Only work within the existing WHDASH project at C:/Users/sdads/WHDASH
+- Preserve and extend what already exists
+
+TASK: Complete the WHDASH Payroll Module
+
+The Payroll module already has a solid foundation (42 database tables, 47+ templates, ~3900 lines of routes, comprehensive menu structure, RBAC permissions). Your job is to complete these three remaining items:
+
+
+
+================================================================================
+1. FLOW INTEGRATION - Real payroll notifications
+================================================================================
+
+Current state: The function send_payroll_flow_notification() exists at line 138 of payroll_routes.py but is never called.
+
+Your job:
+- Find all places in payroll_routes.py where payroll events occur
+- Add calls to send_payroll_notification() at these points:
+  - When a payroll period status changes (Open -> Processing -> Approved -> Locked -> Closed)
+  - When payroll exceptions are created
+  - When payroll exceptions are resolved
+  - When payroll runs complete
+  - When approvals are pending (send to approvers)
+  - When period cutoff date approaches (7 days before, 3 days before, 1 day before)
+  - When overtime needs review
+  - When loans are approved/suspended
+
+The function signature:
+send_payroll_flow_notification(title, message, priority='normal', user_ids=None, period_id=None)
+
+Example usage:
+send_payroll_flow_notification(
+    title=f"Payroll Approval Required: {period_name}",
+    message=f"Payroll run for {period_name} is pending your approval. Total: AED {total_net}",
+    priority='high',
+    user_ids=[approver_user_id],
+    period_id=period_id
+)
+
+
+
+================================================================================
+2. ADVANCED EXPORT WITH COLUMN SELECTION
+================================================================================
+
+Current state: The export at /payroll/reports/export and export_center.html only supports basic CSV with hardcoded columns.
+
+Your job:
+
+A. Enhance templates/payroll/reports/export_center.html
+
+Add a configuration card BEFORE the Quick Export section with a form that allows:
+- Export Type selection (summary, earnings, deductions, employee, department, branch, variance, loan_recovery)
+- Period selection
+- Column selection checkboxes
+- Format selection (CSV, XLSX, PDF)
+
+B. Update reports_export() route in payroll_routes.py
+
+Modify the route (around line 3678) to:
+1. Accept cols (list of selected column keys) and format (csv/xlsx/pdf) from request
+2. Build the query dynamically based on selected columns
+3. Generate output in the requested format
+4. For XLSX: use openpyxl or xlwt library
+5. For PDF: use reportlab library if available
+
+Column mapping example:
+COLUMN_MAP = {
+    'employee_code': 'e.employee_code',
+    'employee_name': "e.first_name || ' ' || e.last_name",
+    'department': 'd.name',
+    'basic_salary': 'per.basic_salary',
+    'gross_salary': 'per.gross_salary',
+    'total_deductions': 'per.total_deductions',
+    'net_salary': 'per.net_salary',
+    'tax': 'per.total_tax',
+    'insurance': 'per.total_insurance',
+    'overtime': 'per.total_overtime',
+    'arrears': 'per.total_arrears',
+}
+
+
+
+================================================================================
+3. ENHANCED SAMPLE DATA
+================================================================================
+
+Current state: seed_payroll_data.py exists but creates minimal data.
+
+Your job: Enhance seed_payroll_data.py to create a comprehensive demo environment.
+
+Required sample data:
+
+1. EMPLOYEES (60 employees with varied salaries)
+   - Salary grades: Junior (8000-15000), Mid (15000-25000), Senior (25000-40000), Manager (40000-60000), Director (60000-80000)
+   - Include both active and some recently terminated employees
+
+2. PAYROLL COMPONENTS (create all if not exist)
+   - Earnings: BASIC, HRA, TRANSPORT, MEDICAL, OVERTIME_REG, OVERTIME_WKND, OVERTIME_HOL, BONUS, COMMISSION, ALLOWANCE
+   - Deductions: TAX, PF_EE, PF_ER, LOAN_RECV, ADV_RECV, ABSENT, LATE, PENALTY
+
+3. PAYROLL PERIODS (full year + next year preview)
+   - Current month: Open/Processing
+   - Previous month: Locked/Pending Approval
+   - 2 months ago: Locked/Approved
+   - 3-6 months ago: Closed with payslips
+   - 7-12 months ago: Archived
+   - Future months: Open (not started)
+
+4. PAYROLL RUNS
+   - For each closed period: Draft -> Calculating -> Calculated -> In Review -> Approved -> Locked -> Closed
+   - Include payroll_employee_records with earnings and deductions breakdowns
+
+5. LOANS (8-10 active loans)
+   - Personal loans: 24-48 month tenure
+   - Car loans: 60 month tenure
+   - Home loans: 120-180 month tenure
+   - Some with 50%+ repaid, some new with 1-2 installments paid
+   - Include installment schedule in payroll_loan_installments
+
+6. SALARY ADVANCES (3-5)
+   - Various amounts from 5000 to 20000 AED
+   - Different repayment statuses
+
+7. RETRO ADJUSTMENTS (4-6)
+   - Some pending approval
+   - Some processed in current period
+   - Include: salary change backdated, overtime correction, deduction reversal
+
+8. COMPLIANCE EXCEPTIONS (6-8)
+   - Missing bank details, Tax ID not verified, Duplicate entries, Amount variance > 10%
+   - Status: Open, Resolved, Ignored
+
+9. PAYSLIPS (for closed periods)
+   - Generate for all employees in closed periods
+   - Include payroll_payslip_details with itemized earnings/deductions
+
+10. FINANCE POSTINGS (for closed periods)
+    - Journal entries for gross salary, deductions, taxes
+    - Include payroll_finance_lines with cost center allocations
+
+11. FLOW NOTIFICATIONS (10-15)
+    - Period reminders, Approval requests, Exception alerts, Run completion notices
+
+12. EXPORT CONFIGURATIONS (3-4)
+    - Save common export configurations including defaults
+
+
+
+================================================================================
+EXISTING FILES YOU MUST NOT BREAK
+================================================================================
+
+These files have working code - extend them, don't replace:
+- C:/Users/sdads/WHDASH/payroll_models.py - Database models
+- C:/Users/sdads/WHDASH/payroll_routes.py - Route handlers
+- C:/Users/sdads/WHDASH/templates/payroll/ - All HTML templates
+- C:/Users/sdads/WHDASH/navigation.py - Menu structure
+- C:/Users/sdads/WHDASH/permissions.py - RBAC system
+- C:/Users/sdads/WHDASH/seed_payroll_data.py - Sample data seeder
+
+
+
+================================================================================
+VERIFICATION CHECKLIST
+================================================================================
+
+After completing, verify:
+
+Flow Integration:
+[ ] Notifications appear in Flow when payroll run completes
+[ ] Notifications appear when exceptions are created
+[ ] Approval notifications go to correct approvers
+[ ] Period reminders fire before cutoff dates
+
+Export:
+[ ] Export page shows column selection checkboxes
+[ ] Selecting different columns produces different output
+[ ] XLSX format produces valid Excel file
+[ ] PDF format produces valid PDF
+[ ] Export history is logged
+
+Sample Data:
+[ ] Running seed_payroll_data.py completes without errors
+[ ] 60+ employees exist with varied salaries
+[ ] 12 months of periods exist with proper statuses
+[ ] 3+ closed periods have payslips
+[ ] 8+ active loans have installment schedules
+[ ] Flow notifications exist in the database
+
+
+
+================================================================================
+OUTPUT REQUIREMENTS
+================================================================================
+
+When finished, provide:
+1. List of files modified
+2. List of files created (if any)
+3. Verification that each checklist item works
+4. Any remaining issues or future enhancements

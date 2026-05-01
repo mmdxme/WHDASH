@@ -2729,6 +2729,7 @@ def get_api_docs(filters=None, page=1, per_page=50):
 def get_api_gateway_stats():
     """Get API Gateway dashboard statistics."""
     stats = {}
+    from datetime import datetime, timedelta
 
     # Client stats
     stats['total_clients'] = get_count("api_clients", "")
@@ -2736,10 +2737,18 @@ def get_api_gateway_stats():
     stats['pending_clients'] = get_count("api_clients", "status='pending'")
 
     # Request stats (last 24 hours)
-    from datetime import datetime, timedelta
     yesterday = (datetime.utcnow() - timedelta(days=1)).isoformat()
     stats['requests_today'] = get_count("api_request_logs", f"created_at >= '{yesterday}'")
     stats['errors_today'] = get_count("api_error_logs", f"is_resolved = 0 AND created_at >= '{yesterday}'")
+
+    # Calculate error rate
+    total_today = get_count("api_request_logs", f"created_at >= '{yesterday}'")
+    stats['error_rate_today'] = (stats['errors_today'] / total_today * 100) if total_today > 0 else 0
+
+    # Error breakdown
+    stats['client_errors_today'] = get_count("api_error_logs", f"error_type = 'client' AND created_at >= '{yesterday}'")
+    stats['server_errors_today'] = get_count("api_error_logs", f"error_type = 'server' AND created_at >= '{yesterday}'")
+    stats['timeout_errors_today'] = get_count("api_error_logs", f"error_type = 'timeout' AND created_at >= '{yesterday}'")
 
     # Webhook stats
     stats['total_subscriptions'] = get_count("webhook_subscriptions", "")
@@ -2747,15 +2756,76 @@ def get_api_gateway_stats():
     stats['deliveries_today'] = get_count("webhook_deliveries", f"created_at >= '{yesterday}'")
     stats['failed_deliveries_today'] = get_count("webhook_deliveries", f"delivery_status='failed' AND created_at >= '{yesterday}'")
 
+    # Calculate webhook success rate
+    successful_deliveries = get_count("webhook_deliveries", f"delivery_status='success' AND created_at >= '{yesterday}'")
+    stats['webhook_success_rate'] = (successful_deliveries / stats['deliveries_today'] * 100) if stats['deliveries_today'] > 0 else 100
+
     # Integration stats
     stats['total_integrations'] = get_count("integration_profiles", "")
     stats['active_integrations'] = get_count("integration_profiles", "is_active=1")
+    stats['pending_integrations'] = get_count("integration_profiles", "is_active=0")
 
     # Route stats
     stats['total_routes'] = get_count("api_route_registry", "")
+    stats['active_routes'] = get_count("api_route_registry", "is_active=1")
 
     # Scope stats
     stats['total_scopes'] = get_count("api_scopes", "is_active=1")
+
+    # Performance metrics
+    with get_db_context() as db:
+        # P95 response time
+        p95 = db.execute("""
+            SELECT response_time_ms FROM api_request_logs
+            WHERE created_at >= ? AND response_time_ms IS NOT NULL
+            ORDER BY response_time_ms ASC
+            LIMIT 1 OFFSET (
+                SELECT COUNT(*) * 95 / 100 FROM api_request_logs
+                WHERE created_at >= ? AND response_time_ms IS NOT NULL
+            )
+        """, (yesterday, yesterday)).fetchone()
+        stats['avg_response_p95'] = round(p95[0], 2) if p95 else 0
+
+        # Current active connections (rough estimate from recent logs)
+        recent_connections = db.execute("""
+            SELECT COUNT(DISTINCT client_id) FROM api_request_logs
+            WHERE created_at >= datetime('now', '-5 minutes')
+        """).fetchone()[0]
+        stats['active_connections'] = recent_connections
+
+    # Success rate
+    stats['successful_requests'] = stats['requests_today'] - stats['errors_today']
+    stats['success_rate'] = ((stats['successful_requests']) / stats['requests_today'] * 100) if stats['requests_today'] > 0 else 100
+
+    # Requests per second (rough estimate)
+    stats['requests_per_second'] = round(stats['requests_today'] / 86400, 2)
+
+    # Growth metrics (comparing to previous period)
+    two_days_ago = (datetime.utcnow() - timedelta(days=2)).isoformat()
+    prev_requests = get_count("api_request_logs", f"created_at >= '{two_days_ago}' AND created_at < '{yesterday}'")
+    stats['request_growth'] = (((stats['requests_today'] - prev_requests) / prev_requests * 100) if prev_requests > 0 else 0)
+
+    # Client growth (month over month)
+    thirty_days_ago = (datetime.utcnow() - timedelta(days=30)).isoformat()
+    prev_clients = get_count("api_clients", f"created_at >= '{thirty_days_ago}'")
+    stats['client_growth'] = (((stats['total_clients'] - prev_clients) / prev_clients * 100) if prev_clients > 0 else 0)
+
+    # Response time trend
+    week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
+    two_weeks_ago = (datetime.utcnow() - timedelta(days=14)).isoformat()
+    with get_db_context() as db:
+        current_avg = db.execute("""
+            SELECT AVG(response_time_ms) FROM api_request_logs
+            WHERE created_at >= ?
+        """, (yesterday,)).fetchone()[0] or 0
+        prev_avg = db.execute("""
+            SELECT AVG(response_time_ms) FROM api_request_logs
+            WHERE created_at >= ? AND created_at < ?
+        """, (two_weeks_ago, week_ago)).fetchone()[0] or 0
+        stats['response_time_trend'] = (((current_avg - prev_avg) / prev_avg * 100) if prev_avg > 0 else 0)
+
+    # Rate limit near capacity warning
+    stats['rate_limit_near_capacity'] = get_count("api_request_logs", "response_status_code = 429 AND created_at >= '{yesterday}'") > 0
 
     return stats
 

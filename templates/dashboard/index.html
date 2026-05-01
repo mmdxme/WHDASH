@@ -1,855 +1,6 @@
 {% extends "base.html" %}
 
-{% block content %}
-<div class="enterprise-dashboard fade-in" id="enterprise-dashboard">
-    
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         ZONE 1: GLOBAL HEADER / WELCOME BAR
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <section class="dashboard-zone zone-header" id="zone-header">
-        <div class="welcome-bar">
-            <!-- Left: Greeting & Context -->
-            <div class="welcome-left">
-                <div class="greeting-block">
-                    <div class="greeting-icon">
-                        <i class="fas fa-sparkles"></i>
-                    </div>
-                    <div class="greeting-text">
-                        <h1 class="greeting-title">{{ dashboard.greeting }}</h1>
-                        <p class="greeting-subtitle">
-                            <span class="greeting-date">{{ dashboard.current_date }}</span>
-                            <span class="greeting-divider">•</span>
-                            <span class="greeting-company">{{ session.get('company_name', 'All Companies') }}</span>
-                        </p>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Center: Quick Search -->
-            <div class="welcome-search">
-                <div class="global-search-wrapper">
-                    <i class="fas fa-search global-search-icon"></i>
-                    <input type="text" 
-                           id="dashboard-global-search" 
-                           class="global-search-input" 
-                           placeholder="{{ t('dashboard_search_placeholder', 'Search modules, reports, actions...') }}"
-                           autocomplete="off">
-                    <kbd class="search-kbd">⌘K</kbd>
-                </div>
-            </div>
-            
-            <!-- Right: User & Notifications -->
-            <div class="welcome-right">
-                <div class="header-actions">
-                    <!-- Quick Actions Dropdown -->
-                    <div class="quick-actions-dropdown">
-                        <button class="header-action-btn" id="quick-actions-trigger" title="{{ t('quick_actions', 'Quick Actions') }}">
-                            <i class="fas fa-bolt"></i>
-                            <span class="action-label">{{ t('actions', 'Actions') }}</span>
-                            <i class="fas fa-chevron-down action-chevron"></i>
-                        </button>
-                        <div class="quick-actions-menu" id="quick-actions-menu">
-                            <div class="menu-header">{{ t('quick_actions', 'Quick Actions') }}</div>
-                            {% for action in dashboard.quick_actions %}
-                            <a href="{{ action.url }}" class="quick-action-item">
-                                <i class="fas fa-{{ action.icon }}"></i>
-                                <span>{{ action.label }}</span>
-                            </a>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    
-                    <!-- Notifications Bell -->
-                    <button class="header-icon-btn" id="notifications-trigger" title="{{ t('notifications', 'Notifications') }}">
-                        <i class="fas fa-bell"></i>
-                        {% if dashboard['notifications']['unread'] > 0 %}
-                        <span class="notification-badge">{{ dashboard['notifications']['unread'] }}</span>
-                        {% endif %}
-                    </button>
-                    
-                    <!-- User Avatar -->
-                    <div class="user-profile-dropdown">
-                        <button class="user-avatar-btn" id="user-profile-trigger">
-                            <div class="user-avatar">
-                                {% if session.get('profile_pic') %}
-                                <img src="{{ url_for('static', filename='uploads/' + session.get('profile_pic', '')) }}" alt="Profile">
-                                {% else %}
-                                <i class="fas fa-user"></i>
-                                {% endif %}
-                            </div>
-                            <div class="user-info-mini">
-                                <span class="user-name-mini">{{ session.get('username', 'User') }}</span>
-                                <span class="user-role-badge">{{ session.get('user_role', 'User') }}</span>
-                            </div>
-                            <i class="fas fa-chevron-down user-chevron"></i>
-                        </button>
-                        <div class="user-profile-menu" id="user-profile-menu">
-                            <div class="profile-menu-header">
-                                <div class="profile-avatar-lg">
-                                    {% if session.get('profile_pic') %}
-                                    <img src="{{ url_for('static', filename='uploads/' + session.get('profile_pic', '')) }}" alt="Profile">
-                                    {% else %}
-                                    <i class="fas fa-user"></i>
-                                    {% endif %}
-                                </div>
-                                <div class="profile-info">
-                                    <span class="profile-name">{{ session.get('username', 'User') }}</span>
-                                    <span class="profile-email">{{ session.get('email', 'user@company.com') }}</span>
-                                </div>
-                            </div>
-                            <div class="profile-menu-items">
-                                <a href="{{ url_for('profile') }}" class="profile-menu-item">
-                                    <i class="fas fa-user-circle"></i>
-                                    <span>{{ t('my_profile', 'My Profile') }}</span>
-                                </a>
-                                <a href="{{ url_for('preferences') }}" class="profile-menu-item">
-                                    <i class="fas fa-sliders-h"></i>
-                                    <span>{{ t('preferences', 'Preferences') }}</span>
-                                </a>
-                                <div class="menu-divider"></div>
-                                <a href="{{ url_for('logout') }}" class="profile-menu-item text-danger">
-                                    <i class="fas fa-sign-out-alt"></i>
-                                    <span>{{ t('logout', 'Logout') }}</span>
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         ZONE 2: EXECUTIVE KPI STRIP
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <section class="dashboard-zone zone-kpi-strip" id="zone-kpi">
-        <div class="kpi-strip-header">
-            <h2 class="zone-title">
-                <i class="fas fa-chart-line zone-title-icon"></i>
-                {{ t('executive_kpis', 'Executive KPIs') }}
-            </h2>
-            <div class="kpi-controls">
-                <button class="kpi-control-btn" id="kpi-refresh" title="{{ t('refresh', 'Refresh') }}">
-                    <i class="fas fa-sync-alt"></i>
-                </button>
-                <div class="kpi-period-selector">
-                    <button class="period-btn active" data-period="today">{{ t('today', 'Today') }}</button>
-                    <button class="period-btn" data-period="week">{{ t('this_week', 'This Week') }}</button>
-                    <button class="period-btn" data-period="month">{{ t('this_month', 'This Month') }}</button>
-                </div>
-            </div>
-        </div>
-        <div class="kpi-cards-container" id="kpi-cards-container">
-            {% for kpi in dashboard.kpis %}
-            <div class="kpi-card glass-panel kpi-card--{{ kpi.severity }}" 
-                 data-kpi-id="{{ kpi.id }}"
-                 data-link="{{ kpi.link|default('#') }}"
-                 onclick="handleKpiClick(this)">
-                <div class="kpi-card-accent"></div>
-                <div class="kpi-card-content">
-                    <div class="kpi-card-icon-wrap">
-                        <div class="kpi-card-icon kpi-card-icon--{{ kpi.severity }}">
-                            <i class="fas fa-{{ kpi.icon }}"></i>
-                        </div>
-                    </div>
-                    <div class="kpi-card-body">
-                        <span class="kpi-card-label">{{ kpi.label }}</span>
-                        <span class="kpi-card-value">{{ kpi.formatted_value }}</span>
-                        {% if kpi.subtext %}
-                        <span class="kpi-card-subtext">{{ kpi.subtext }}</span>
-                        {% endif %}
-                    </div>
-                    <div class="kpi-card-meta">
-                        {% if kpi.trend %}
-                        <div class="kpi-trend kpi-trend--{{ kpi.trend_direction }}">
-                            <i class="fas fa-{{ 'arrow-up' if kpi.trend_direction == 'up' else 'arrow-down' }}"></i>
-                            <span>{{ kpi.trend }}</span>
-                        </div>
-                        {% endif %}
-                        <div class="kpi-card-actions">
-                            <i class="fas fa-external-link-alt kpi-drill-down"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         ZONE 3: SMART QUICK ACCESS / MODULE LAUNCHER
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <section class="dashboard-zone zone-module-launcher" id="zone-modules">
-        <div class="module-launcher-header">
-            <h2 class="zone-title">
-                <i class="fas fa-th-large zone-title-icon"></i>
-                {{ t('module_launcher', 'Module Launcher') }}
-            </h2>
-            <div class="module-launcher-controls">
-                <div class="view-toggle">
-                    <button class="view-toggle-btn active" data-view="grid" title="{{ t('grid_view', 'Grid View') }}">
-                        <i class="fas fa-th"></i>
-                    </button>
-                    <button class="view-toggle-btn" data-view="compact" title="{{ t('compact_view', 'Compact View') }}">
-                        <i class="fas fa-th-large"></i>
-                    </button>
-                </div>
-                <button class="module-filter-btn" id="show-favorites-only">
-                    <i class="fas fa-star"></i>
-                    {{ t('favorites', 'Favorites') }}
-                </button>
-            </div>
-        </div>
-        
-        <!-- Recently Used Section -->
-        {% if dashboard.recent_modules %}
-        <div class="module-section recently-used">
-            <h3 class="module-section-title">
-                <i class="fas fa-clock"></i>
-                {{ t('recently_used', 'Recently Used') }}
-            </h3>
-            <div class="module-grid module-grid--recent">
-                {% for module in dashboard.recent_modules %}
-                <a href="{{ module.url }}" class="module-tile module-tile--recent" title="{{ module.label }}">
-                    <div class="module-tile-icon">
-                        <i class="fas fa-{{ module.icon }}"></i>
-                    </div>
-                    <span class="module-tile-label">{{ module.label }}</span>
-                </a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-        
-        <!-- Favorites Section -->
-        {% if dashboard.favorite_modules %}
-        <div class="module-section favorites">
-            <h3 class="module-section-title">
-                <i class="fas fa-star"></i>
-                {{ t('favorites', 'Favorites') }}
-            </h3>
-            <div class="module-grid module-grid--favorites">
-                {% for module in dashboard.favorite_modules %}
-                <a href="{{ module.url }}" class="module-tile module-tile--favorite" data-module-id="{{ module.id }}">
-                    <div class="module-tile-icon">
-                        <i class="fas fa-{{ module.icon }}"></i>
-                    </div>
-                    <span class="module-tile-label">{{ module.label }}</span>
-                    <button class="module-tile-star active" onclick="event.preventDefault(); toggleFavorite('{{ module.id }}')">
-                        <i class="fas fa-star"></i>
-                    </button>
-                </a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endif %}
-        
-        <!-- Module Categories -->
-        {% for category in dashboard.module_categories %}
-        <div class="module-section" data-category="{{ category.id }}">
-            <h3 class="module-section-title">
-                <i class="fas fa-{{ category.icon }}"></i>
-                {{ category.label }}
-            </h3>
-            <div class="module-grid">
-                {% for module in category.modules %}
-                <a href="{{ module.url }}" 
-                   class="module-tile {% if module.is_favorite %}module-tile--favorite{% endif %}"
-                   data-module-id="{{ module.id }}"
-                   data-permission="{{ module.permission }}">
-                    <div class="module-tile-icon">
-                        <i class="fas fa-{{ module.icon }}"></i>
-                    </div>
-                    <div class="module-tile-content">
-                        <span class="module-tile-label">{{ module.label }}</span>
-                        {% if module.description %}
-                        <span class="module-tile-desc">{{ module.description }}</span>
-                        {% endif %}
-                    </div>
-                    {% if module.is_favorite %}
-                    <button class="module-tile-star active" onclick="event.preventDefault(); toggleFavorite('{{ module.id }}')">
-                        <i class="fas fa-star"></i>
-                    </button>
-                    {% else %}
-                    <button class="module-tile-star" onclick="event.preventDefault(); toggleFavorite('{{ module.id }}')">
-                        <i class="far fa-star"></i>
-                    </button>
-                    {% endif %}
-                </a>
-                {% endfor %}
-            </div>
-        </div>
-        {% endfor %}
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         ZONE 4 & 5: ALERTS + OPERATIONAL OVERVIEW (Two Column)
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <div class="dashboard-row dashboard-row--5035">
-        
-        <!-- Zone 4: Alerts / Exceptions -->
-        <section class="dashboard-zone zone-alerts" id="zone-alerts">
-            <div class="zone-header">
-                <h2 class="zone-title">
-                    <i class="fas fa-exclamation-circle zone-title-icon text-danger"></i>
-                    {{ t('alerts_exceptions', 'Alerts & Exceptions') }}
-                    {% if dashboard.alerts['total_count'] > 0 %}
-                    <span class="zone-badge zone-badge--danger">{{ dashboard.alerts['total_count'] }}</span>
-                    {% endif %}
-                </h2>
-                <div class="zone-actions">
-                    <div class="alert-filters">
-                        <button class="alert-filter-btn active" data-filter="all">{{ t('all', 'All') }}</button>
-                        <button class="alert-filter-btn" data-filter="critical">{{ t('critical', 'Critical') }}</button>
-                        <button class="alert-filter-btn" data-filter="warning">{{ t('warning', 'Warning') }}</button>
-                    </div>
-                    <a href="{{ url_for('dashboard.api_alerts') }}" class="zone-action-link">
-                        {{ t('view_all', 'View All') }}
-                        <i class="fas fa-arrow-right"></i>
-                    </a>
-                </div>
-            </div>
-            <div class="alerts-list" id="alerts-list">
-                {% if dashboard.alerts['items'] %}
-                    {% for alert in dashboard.alerts['items'] %}
-                    <div class="alert-item alert-item--{{ alert.severity }}" data-alert-id="{{ alert.id }}">
-                        <div class="alert-severity-indicator"></div>
-                        <div class="alert-icon">
-                            <i class="fas fa-{{ alert.icon }}"></i>
-                        </div>
-                        <div class="alert-content">
-                            <div class="alert-header-row">
-                                <span class="alert-title">{{ alert.title }}</span>
-                                <span class="alert-time">{{ alert.time_ago }}</span>
-                            </div>
-                            <p class="alert-message">{{ alert.message }}</p>
-                            {% if alert.action_label %}
-                            <div class="alert-actions">
-                                <a href="{{ alert.action_url }}" class="alert-action-btn alert-action-btn--primary">
-                                    {{ alert.action_label }}
-                                </a>
-                                {% if alert.dismissible %}
-                                <button class="alert-action-btn alert-action-btn--ghost" onclick="dismissAlert('{{ alert.id }}')">
-                                    {{ t('dismiss', 'Dismiss') }}
-                                </button>
-                                {% endif %}
-                            </div>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                <div class="empty-state">
-                    <i class="fas fa-check-circle"></i>
-                    <p>{{ t('no_alerts', 'No alerts at this time') }}</p>
-                </div>
-                {% endif %}
-            </div>
-        </section>
-        
-        <!-- Zone 5: Operational Overview -->
-        <section class="dashboard-zone zone-operational" id="zone-operational">
-            <div class="zone-header">
-                <h2 class="zone-title">
-                    <i class="fas fa-cogs zone-title-icon text-info"></i>
-                    {{ t('operational_overview', 'Operational Overview') }}
-                </h2>
-                <a href="{{ url_for('admin_dashboard') }}" class="zone-action-link">
-                    {{ t('full_view', 'Full View') }}
-                    <i class="fas fa-arrow-right"></i>
-                </a>
-            </div>
-            <div class="operational-widgets">
-                {% for widget in dashboard.operational_widgets %}
-                <div class="operational-widget" data-widget-type="{{ widget.type }}">
-                    <div class="widget-header">
-                        <div class="widget-icon">
-                            <i class="fas fa-{{ widget.icon }}"></i>
-                        </div>
-                        <h3 class="widget-title">{{ widget.title }}</h3>
-                        {% if widget.badge %}
-                        <span class="widget-badge widget-badge--{{ widget.badge_type }}">{{ widget.badge }}</span>
-                        {% endif %}
-                    </div>
-                    <div class="widget-body">
-                        {% if widget.type == 'kpi' %}
-                        <div class="widget-kpi">
-                            <span class="widget-kpi-value">{{ widget.value }}</span>
-                            {% if widget.subtitle %}
-                            <span class="widget-kpi-subtitle">{{ widget.subtitle }}</span>
-                            {% endif %}
-                        </div>
-                        {% elif widget.type == 'list' %}
-                        <ul class="widget-list">
-                            {% for item in widget.items %}
-                            <li class="widget-list-item">
-                                <span class="item-label">{{ item.label }}</span>
-                                <span class="item-value">{{ item.value }}</span>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                        {% elif widget.type == 'mini-chart' %}
-                        <canvas class="widget-mini-chart" data-chart-type="{{ widget.chart_type }}" data-chart-data="{{ widget.chart_data|tojson }}"></canvas>
-                        {% endif %}
-                    </div>
-                    {% if widget.link %}
-                    <a href="{{ widget.link }}" class="widget-footer-link">
-                        {{ t('view_details', 'View Details') }}
-                        <i class="fas fa-arrow-right"></i>
-                    </a>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-        </section>
-    </div>
-
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         ZONE 6 & 7: FINANCIAL SNAPSHOT + WORKFLOW (Two Column)
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <div class="dashboard-row dashboard-row--5050">
-        
-        <!-- Zone 6: Financial & Business Snapshot -->
-        <section class="dashboard-zone zone-financial" id="zone-financial">
-            <div class="zone-header">
-                <h2 class="zone-title">
-                    <i class="fas fa-chart-pie zone-title-icon text-success"></i>
-                    {{ t('financial_snapshot', 'Financial Snapshot') }}
-                </h2>
-                <a href="{{ url_for('finance.dashboard') }}" class="zone-action-link">
-                    {{ t('full_finance', 'Finance') }}
-                    <i class="fas fa-arrow-right"></i>
-                </a>
-            </div>
-            <div class="financial-widgets">
-                {% for widget in dashboard.financial_widgets %}
-                <div class="financial-widget">
-                    <div class="financial-widget-header">
-                        <span class="financial-widget-title">{{ widget.title }}</span>
-                        <i class="fas fa-{{ widget.icon }} financial-widget-icon"></i>
-                    </div>
-                    <div class="financial-widget-body">
-                        <span class="financial-widget-value">{{ widget.value }}</span>
-                        {% if widget.comparison %}
-                        <div class="financial-widget-comparison">
-                            <span class="comparison-label">{{ widget.comparison.label }}:</span>
-                            <span class="comparison-value comparison-value--{{ widget.comparison.direction }}">
-                                {{ widget.comparison.value }}
-                            </span>
-                        </div>
-                        {% endif %}
-                    </div>
-                    {% if widget.chart_data %}
-                    <canvas class="financial-widget-chart" data-chart-data="{{ widget.chart_data|tojson }}"></canvas>
-                    {% endif %}
-                </div>
-                {% endfor %}
-            </div>
-        </section>
-        
-        <!-- Zone 7: Workflow / Approval / SLA -->
-        <section class="dashboard-zone zone-workflow" id="zone-workflow">
-            <div class="zone-header">
-                <h2 class="zone-title">
-                    <i class="fas fa-project-diagram zone-title-icon text-purple"></i>
-                    {{ t('workflow_approval', 'Workflow & Approvals') }}
-                    {% if dashboard['workflow']['pending_count'] > 0 %}
-                    <span class="zone-badge zone-badge--warning">{{ dashboard['workflow']['pending_count'] }}</span>
-                    {% endif %}
-                </h2>
-                <a href="{{ url_for('flow.index') }}" class="zone-action-link">
-                    {{ t('workflow_center', 'Workflow Center') }}
-                    <i class="fas fa-arrow-right"></i>
-                </a>
-            </div>
-            <div class="workflow-content">
-                <!-- My Pending Approvals -->
-                <div class="workflow-section">
-                    <h3 class="workflow-section-title">
-                        <i class="fas fa-clipboard-check"></i>
-                        {{ t('my_pending_approvals', 'My Pending Approvals') }}
-                    </h3>
-                    <div class="approvals-list">
-                        {% if dashboard['workflow']['pending_approvals'] %}
-                            {% for approval in dashboard['workflow']['pending_approvals'] %}
-                            <div class="approval-item">
-                                <div class="approval-icon">
-                                    <i class="fas fa-{{ approval.icon }}"></i>
-                                </div>
-                                <div class="approval-content">
-                                    <span class="approval-title">{{ approval.title }}</span>
-                                    <span class="approval-meta">
-                                        {{ approval.requester }} • {{ approval.time_ago }}
-                                    </span>
-                                </div>
-                                <div class="approval-actions">
-                                    <button class="approval-btn approval-btn--approve" onclick="quickApprove('{{ approval.id }}')">
-                                        <i class="fas fa-check"></i>
-                                    </button>
-                                    <button class="approval-btn approval-btn--reject" onclick="quickReject('{{ approval.id }}')">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        {% else %}
-                        <div class="empty-state empty-state--sm">
-                            <i class="fas fa-check-double"></i>
-                            <p>{{ t('no_pending_approvals', 'No pending approvals') }}</p>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-                
-                <!-- SLA Status -->
-                <div class="workflow-section">
-                    <h3 class="workflow-section-title">
-                        <i class="fas fa-tachometer-alt"></i>
-                        {{ t('sla_status', 'SLA Status') }}
-                    </h3>
-                    <div class="sla-metrics">
-                        <div class="sla-metric">
-                            <div class="sla-metric-header">
-                                <span class="sla-metric-label">{{ t('compliance', 'Compliance') }}</span>
-                                <span class="sla-metric-value">{{ dashboard['workflow']['sla']['compliance'] }}%</span>
-                            </div>
-                            <div class="sla-progress-bar">
-                                <div class="sla-progress-fill sla-progress-fill--{{ dashboard['workflow']['sla']['compliance_color'] }}"></div>
-                            </div>
-                        </div>
-                        <div class="sla-metric">
-                            <div class="sla-metric-header">
-                                <span class="sla-metric-label">{{ t('breaches', 'Breaches') }}</span>
-                                <span class="sla-metric-value text-danger">{{ dashboard['workflow']['sla']['breaches'] }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </div>
-
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         ZONE 8 & 9: FLOW + PERSONAL PRODUCTIVITY (Two Column)
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <div class="dashboard-row dashboard-row--5050">
-        
-        <!-- Zone 8: Flow / Communication -->
-        <section class="dashboard-zone zone-flow" id="zone-flow">
-            <div class="zone-header">
-                <h2 class="zone-title">
-                    <i class="fas fa-comments zone-title-icon text-brand"></i>
-                    {{ t('flow_communication', 'Flow & Communication') }}
-                    {% if dashboard['flow']['unread_count'] > 0 %}
-                    <span class="zone-badge zone-badge--info">{{ dashboard['flow']['unread_count'] }}</span>
-                    {% endif %}
-                </h2>
-                <div class="flow-tabs">
-                    <button class="flow-tab-btn active" data-tab="announcements">{{ t('announcements', 'Announcements') }}</button>
-                    <button class="flow-tab-btn" data-tab="mentions">{{ t('mentions', 'Mentions') }}</button>
-                </div>
-            </div>
-            <div class="flow-content">
-                <div class="flow-tab-content active" id="flow-announcements">
-                    {% if dashboard['flow']['announcements'] %}
-                    {% for item in dashboard['flow']['announcements'] %}
-                    <div class="flow-item">
-                        <div class="flow-item-avatar">
-                            {% if item.author_avatar %}
-                            <img src="{{ item.author_avatar }}" alt="{{ item.author }}">
-                            {% else %}
-                            <i class="fas fa-user"></i>
-                            {% endif %}
-                        </div>
-                        <div class="flow-item-content">
-                            <div class="flow-item-header">
-                                <span class="flow-item-author">{{ item.author }}</span>
-                                <span class="flow-item-time">{{ item.time_ago }}</span>
-                            </div>
-                            <p class="flow-item-message">{{ item.message }}</p>
-                            {% if item.pinned %}
-                            <span class="flow-item-pinned">
-                                <i class="fas fa-thumbtack"></i> {{ t('pinned', 'Pinned') }}
-                            </span>
-                            {% endif %}
-                        </div>
-                    </div>
-                    {% endfor %}
-                    {% else %}
-                    <div class="empty-state">
-                        <i class="fas fa-bullhorn"></i>
-                        <p>{{ t('no_announcements', 'No announcements yet') }}</p>
-                    </div>
-                    {% endif %}
-                </div>
-                <div class="flow-tab-content" id="flow-mentions">
-                    {% if dashboard['flow']['mentions'] %}
-                    {% for mention in dashboard['flow']['mentions'] %}
-                    <div class="flow-item flow-item--mention">
-                        <div class="flow-item-avatar">
-                            <i class="fas fa-at"></i>
-                        </div>
-                        <div class="flow-item-content">
-                            <p class="flow-item-message">{{ mention.message }}</p>
-                            <span class="flow-item-context">{{ mention.context }}</span>
-                        </div>
-                    </div>
-                    {% endfor %}
-                    {% else %}
-                    <div class="empty-state">
-                        <i class="fas fa-at"></i>
-                        <p>{{ t('no_mentions', 'No mentions') }}</p>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-            <div class="zone-footer">
-                <a href="{{ url_for('flow.index') }}" class="zone-footer-link">
-                    <i class="fas fa-external-link-alt"></i>
-                    {{ t('open_flow', 'Open Flow') }}
-                </a>
-            </div>
-        </section>
-        
-        <!-- Zone 9: Personal Productivity -->
-        <section class="dashboard-zone zone-personal" id="zone-personal">
-            <div class="zone-header">
-                <h2 class="zone-title">
-                    <i class="fas fa-user-check zone-title-icon text-teal"></i>
-                    {{ t('personal_productivity', 'Personal Productivity') }}
-                </h2>
-            </div>
-            <div class="personal-widgets">
-                <!-- My Tasks -->
-                <div class="personal-widget">
-                    <div class="personal-widget-header">
-                        <div class="personal-widget-icon">
-                            <i class="fas fa-tasks"></i>
-                        </div>
-                        <h3 class="personal-widget-title">{{ t('my_tasks', 'My Tasks') }}</h3>
-                        <span class="personal-widget-badge">{{ dashboard['personal']['tasks']['total'] }}</span>
-                    </div>
-                    <div class="personal-widget-body">
-                        <div class="task-summary">
-                            <div class="task-stat task-stat--overdue">
-                                <span class="task-stat-value">{{ dashboard['personal']['tasks']['overdue'] }}</span>
-                                <span class="task-stat-label">{{ t('overdue', 'Overdue') }}</span>
-                            </div>
-                            <div class="task-stat task-stat--today">
-                                <span class="task-stat-value">{{ dashboard['personal']['tasks']['today'] }}</span>
-                                <span class="task-stat-label">{{ t('due_today', 'Due Today') }}</span>
-                            </div>
-                            <div class="task-stat task-stat--upcoming">
-                                <span class="task-stat-value">{{ dashboard['personal']['tasks']['upcoming'] }}</span>
-                                <span class="task-stat-label">{{ t('upcoming', 'Upcoming') }}</span>
-                            </div>
-                        </div>
-                        {% if dashboard['personal']['tasks']['items'] %}
-                        <ul class="task-list">
-                            {% for task in dashboard['personal']['tasks']['items'][:5] %}
-                            <li class="task-item">
-                                <label class="task-checkbox">
-                                    <input type="checkbox" {% if task.completed %}checked{% endif %} onchange="toggleTask('{{ task.id }}')">
-                                    <span class="task-checkmark"></span>
-                                </label>
-                                <span class="task-title {% if task.completed %}task-completed{% endif %}">{{ task.title }}</span>
-                                <span class="task-due {% if task.overdue %}text-danger{% endif %}">{{ task.due_date }}</span>
-                            </li>
-                            {% endfor %}
-                        </ul>
-                        {% endif %}
-                    </div>
-                    <a href="{{ url_for('task_center.my_tasks') }}" class="personal-widget-footer">
-                        {{ t('view_all_tasks', 'View All Tasks') }}
-                        <i class="fas fa-arrow-right"></i>
-                    </a>
-                </div>
-                
-                <!-- My Issues -->
-                <div class="personal-widget">
-                    <div class="personal-widget-header">
-                        <div class="personal-widget-icon">
-                            <i class="fas fa-exclamation-circle"></i>
-                        </div>
-                        <h3 class="personal-widget-title">{{ t('my_issues', 'My Issues') }}</h3>
-                        <span class="personal-widget-badge">{{ dashboard['personal']['issues']['total'] }}</span>
-                    </div>
-                    <div class="personal-widget-body">
-                        <div class="issue-priority-summary">
-                            {% for priority in dashboard['personal']['issues']['by_priority'] %}
-                            <div class="priority-item priority-item--{{ priority.level }}">
-                                <span class="priority-count">{{ priority.count }}</span>
-                                <span class="priority-label">{{ priority.label }}</span>
-                            </div>
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <a href="{{ url_for('issue_tracker.my_issues') }}" class="personal-widget-footer">
-                        {{ t('view_all_issues', 'View All Issues') }}
-                        <i class="fas fa-arrow-right"></i>
-                    </a>
-                </div>
-            </div>
-        </section>
-    </div>
-
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         ZONE 10: REPORTS & ANALYTICS
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <section class="dashboard-zone zone-reports" id="zone-reports">
-        <div class="zone-header">
-            <h2 class="zone-title">
-                <i class="fas fa-analytics zone-title-icon text-indigo"></i>
-                {{ t('reports_analytics', 'Reports & Analytics') }}
-            </h2>
-            <div class="zone-actions">
-                <a href="{{ url_for('documents_reports') }}" class="zone-action-link">
-                    {{ t('all_reports', 'All Reports') }}
-                    <i class="fas fa-arrow-right"></i>
-                </a>
-            </div>
-        </div>
-        <div class="reports-grid">
-            {% for report in dashboard.reports %}
-            <a href="{{ report.url }}" class="report-card">
-                <div class="report-card-icon">
-                    <i class="fas fa-{{ report.icon }}"></i>
-                </div>
-                <div class="report-card-content">
-                    <h3 class="report-card-title">{{ report.title }}</h3>
-                    <p class="report-card-desc">{{ report.description }}</p>
-                    <div class="report-card-meta">
-                        {% if report.last_run %}
-                        <span class="report-meta-item">
-                            <i class="fas fa-clock"></i>
-                            {{ report.last_run }}
-                        </span>
-                        {% endif %}
-                        {% if report.frequency %}
-                        <span class="report-meta-item">
-                            <i class="fas fa-sync"></i>
-                            {{ report.frequency }}
-                        </span>
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="report-card-arrow">
-                    <i class="fas fa-arrow-right"></i>
-                </div>
-            </a>
-            {% endfor %}
-        </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         ZONE 11: AI INSIGHTS / RECOMMENDATIONS
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <section class="dashboard-zone zone-insights" id="zone-insights">
-        <div class="zone-header">
-            <h2 class="zone-title">
-                <i class="fas fa-brain zone-title-icon text-ai"></i>
-                {{ t('ai_insights', 'AI Insights & Recommendations') }}
-            </h2>
-            <div class="insight-filters">
-                <button class="insight-filter-btn active" data-filter="all">{{ t('all_insights', 'All') }}</button>
-                <button class="insight-filter-btn" data-filter="attention">{{ t('attention', 'Attention') }}</button>
-                <button class="insight-filter-btn" data-filter="recommendations">{{ t('recommendations', 'Actions') }}</button>
-            </div>
-        </div>
-        <div class="insights-grid">
-            {% for insight in dashboard.insights %}
-            <div class="insight-card insight-card--{{ insight.type }}" data-insight-id="{{ insight.id }}">
-                <div class="insight-card-header">
-                    <div class="insight-type-icon">
-                        <i class="fas fa-{{ insight.icon }}"></i>
-                    </div>
-                    <div class="insight-type-info">
-                        <span class="insight-type-label">{{ insight.type_label }}</span>
-                        {% if insight.confidence %}
-                        <div class="insight-confidence">
-                            <div class="confidence-bar">
-                                <div class="confidence-fill" style="width: {{ insight.confidence }}%"></div>
-                            </div>
-                            <span class="confidence-value">{{ insight.confidence }}%</span>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-                <div class="insight-card-body">
-                    <h3 class="insight-title">{{ insight.title }}</h3>
-                    <p class="insight-description">{{ insight.description }}</p>
-                    {% if insight.affected_items %}
-                    <div class="insight-affected">
-                        <span class="affected-label">{{ t('affected', 'Affected') }}:</span>
-                        <span class="affected-items">{{ insight.affected_items }}</span>
-                    </div>
-                    {% endif %}
-                </div>
-                {% if insight.actions %}
-                <div class="insight-card-actions">
-                    {% for action in insight.actions %}
-                    <a href="{{ action.url }}" class="insight-action-btn insight-action-btn--{{ action.type }}">
-                        <i class="fas fa-{{ action.icon }}"></i>
-                        {{ action.label }}
-                    </a>
-                    {% endfor %}
-                </div>
-                {% endif %}
-                <div class="insight-card-footer">
-                    <span class="insight-source">{{ insight.source_module }}</span>
-                    <span class="insight-time">{{ insight.time_ago }}</span>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </section>
-
-    <!-- ═══════════════════════════════════════════════════════════════════════
-         ZONE 12: ACTIVITY TIMELINE / AUDIT HIGHLIGHTS
-         ═══════════════════════════════════════════════════════════════════════ -->
-    <section class="dashboard-zone zone-timeline" id="zone-timeline">
-        <div class="zone-header">
-            <h2 class="zone-title">
-                <i class="fas fa-history zone-title-icon text-secondary"></i>
-                {{ t('activity_timeline', 'Activity Timeline') }}
-            </h2>
-            <div class="timeline-filters">
-                <button class="timeline-filter-btn active" data-filter="all">{{ t('all', 'All') }}</button>
-                <button class="timeline-filter-btn" data-filter="approvals">{{ t('approvals', 'Approvals') }}</button>
-                <button class="timeline-filter-btn" data-filter="documents">{{ t('documents', 'Documents') }}</button>
-                <button class="timeline-filter-btn" data-filter="system">{{ t('system', 'System') }}</button>
-            </div>
-        </div>
-        <div class="timeline-container" id="activity-timeline">
-            {% for event in dashboard.timeline %}
-            <div class="timeline-item timeline-item--{{ event.category }}">
-                <div class="timeline-marker"></div>
-                <div class="timeline-content">
-                    <div class="timeline-header">
-                        <span class="timeline-event">{{ event.event }}</span>
-                        <span class="timeline-time">{{ event.time_ago }}</span>
-                    </div>
-                    <p class="timeline-details">{{ event.details }}</p>
-                    {% if event.user %}
-                    <span class="timeline-user">
-                        <i class="fas fa-user"></i>
-                        {{ event.user }}
-                    </span>
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-        <div class="zone-footer">
-            <a href="{{ url_for('documents_audit_logs') }}" class="zone-footer-link">
-                <i class="fas fa-book"></i>
-                {{ t('view_full_audit_log', 'View Full Audit Log') }}
-            </a>
-        </div>
-    </section>
-
-</div>
-
+{% block extra_head %}
 <style>
     /* ================================================================
        ENTERPRISE DASHBOARD STYLES
@@ -3178,6 +2329,857 @@
         }
     }
 </style>
+{% endblock %}
+
+{% block content %}
+<div class="enterprise-dashboard fade-in" id="enterprise-dashboard">
+    
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 1: GLOBAL HEADER / WELCOME BAR
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-header" id="zone-header">
+        <div class="welcome-bar">
+            <!-- Left: Greeting & Context -->
+            <div class="welcome-left">
+                <div class="greeting-block">
+                    <div class="greeting-icon">
+                        <i class="fas fa-sparkles"></i>
+                    </div>
+                    <div class="greeting-text">
+                        <h1 class="greeting-title">{{ dashboard.greeting }}</h1>
+                        <p class="greeting-subtitle">
+                            <span class="greeting-date">{{ dashboard.current_date }}</span>
+                            <span class="greeting-divider">•</span>
+                            <span class="greeting-company">{{ session.get('company_name', 'All Companies') }}</span>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Center: Quick Search -->
+            <div class="welcome-search">
+                <div class="global-search-wrapper">
+                    <i class="fas fa-search global-search-icon"></i>
+                    <input type="text" 
+                           id="dashboard-global-search" 
+                           class="global-search-input" 
+                           placeholder="{{ t('dashboard_search_placeholder', 'Search modules, reports, actions...') }}"
+                           autocomplete="off">
+                    <kbd class="search-kbd">⌘K</kbd>
+                </div>
+            </div>
+            
+            <!-- Right: User & Notifications -->
+            <div class="welcome-right">
+                <div class="header-actions">
+                    <!-- Quick Actions Dropdown -->
+                    <div class="quick-actions-dropdown">
+                        <button class="header-action-btn" id="quick-actions-trigger" title="{{ t('quick_actions', 'Quick Actions') }}">
+                            <i class="fas fa-bolt"></i>
+                            <span class="action-label">{{ t('actions', 'Actions') }}</span>
+                            <i class="fas fa-chevron-down action-chevron"></i>
+                        </button>
+                        <div class="quick-actions-menu" id="quick-actions-menu">
+                            <div class="menu-header">{{ t('quick_actions', 'Quick Actions') }}</div>
+                            {% for action in dashboard.quick_actions %}
+                            <a href="{{ action.url }}" class="quick-action-item">
+                                <i class="fas fa-{{ action.icon }}"></i>
+                                <span>{{ action.label }}</span>
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <!-- Notifications Bell -->
+                    <button class="header-icon-btn" id="notifications-trigger" title="{{ t('notifications', 'Notifications') }}">
+                        <i class="fas fa-bell"></i>
+                        {% if dashboard['notifications']['unread'] > 0 %}
+                        <span class="notification-badge">{{ dashboard['notifications']['unread'] }}</span>
+                        {% endif %}
+                    </button>
+                    
+                    <!-- User Avatar -->
+                    <div class="user-profile-dropdown">
+                        <button class="user-avatar-btn" id="user-profile-trigger">
+                            <div class="user-avatar">
+                                {% if session.get('profile_pic') %}
+                                <img src="{{ url_for('static', filename='uploads/' + session.get('profile_pic', '')) }}" alt="Profile">
+                                {% else %}
+                                <i class="fas fa-user"></i>
+                                {% endif %}
+                            </div>
+                            <div class="user-info-mini">
+                                <span class="user-name-mini">{{ session.get('username', 'User') }}</span>
+                                <span class="user-role-badge">{{ session.get('user_role', 'User') }}</span>
+                            </div>
+                            <i class="fas fa-chevron-down user-chevron"></i>
+                        </button>
+                        <div class="user-profile-menu" id="user-profile-menu">
+                            <div class="profile-menu-header">
+                                <div class="profile-avatar-lg">
+                                    {% if session.get('profile_pic') %}
+                                    <img src="{{ url_for('static', filename='uploads/' + session.get('profile_pic', '')) }}" alt="Profile">
+                                    {% else %}
+                                    <i class="fas fa-user"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="profile-info">
+                                    <span class="profile-name">{{ session.get('username', 'User') }}</span>
+                                    <span class="profile-email">{{ session.get('email', 'user@company.com') }}</span>
+                                </div>
+                            </div>
+                            <div class="profile-menu-items">
+                                <a href="{{ url_for('profile') }}" class="profile-menu-item">
+                                    <i class="fas fa-user-circle"></i>
+                                    <span>{{ t('my_profile', 'My Profile') }}</span>
+                                </a>
+                                <a href="{{ url_for('preferences') }}" class="profile-menu-item">
+                                    <i class="fas fa-sliders-h"></i>
+                                    <span>{{ t('preferences', 'Preferences') }}</span>
+                                </a>
+                                <div class="menu-divider"></div>
+                                <a href="{{ url_for('logout') }}" class="profile-menu-item text-danger">
+                                    <i class="fas fa-sign-out-alt"></i>
+                                    <span>{{ t('logout', 'Logout') }}</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 2: EXECUTIVE KPI STRIP
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-kpi-strip" id="zone-kpi">
+        <div class="kpi-strip-header">
+            <h2 class="zone-title">
+                <i class="fas fa-chart-line zone-title-icon"></i>
+                {{ t('executive_kpis', 'Executive KPIs') }}
+            </h2>
+            <div class="kpi-controls">
+                <button class="kpi-control-btn" id="kpi-refresh" title="{{ t('refresh', 'Refresh') }}">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+                <div class="kpi-period-selector">
+                    <button class="period-btn active" data-period="today">{{ t('today', 'Today') }}</button>
+                    <button class="period-btn" data-period="week">{{ t('this_week', 'This Week') }}</button>
+                    <button class="period-btn" data-period="month">{{ t('this_month', 'This Month') }}</button>
+                </div>
+            </div>
+        </div>
+        <div class="kpi-cards-container" id="kpi-cards-container">
+            {% for kpi in dashboard.kpis %}
+            <div class="kpi-card glass-panel kpi-card--{{ kpi.severity }}" 
+                 data-kpi-id="{{ kpi.id }}"
+                 data-link="{{ kpi.link|default('#') }}"
+                 onclick="handleKpiClick(this)">
+                <div class="kpi-card-accent"></div>
+                <div class="kpi-card-content">
+                    <div class="kpi-card-icon-wrap">
+                        <div class="kpi-card-icon kpi-card-icon--{{ kpi.severity }}">
+                            <i class="fas fa-{{ kpi.icon }}"></i>
+                        </div>
+                    </div>
+                    <div class="kpi-card-body">
+                        <span class="kpi-card-label">{{ kpi.label }}</span>
+                        <span class="kpi-card-value">{{ kpi.formatted_value }}</span>
+                        {% if kpi.subtext %}
+                        <span class="kpi-card-subtext">{{ kpi.subtext }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="kpi-card-meta">
+                        {% if kpi.trend %}
+                        <div class="kpi-trend kpi-trend--{{ kpi.trend_direction }}">
+                            <i class="fas fa-{{ 'arrow-up' if kpi.trend_direction == 'up' else 'arrow-down' }}"></i>
+                            <span>{{ kpi.trend }}</span>
+                        </div>
+                        {% endif %}
+                        <div class="kpi-card-actions">
+                            <i class="fas fa-external-link-alt kpi-drill-down"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 3: SMART QUICK ACCESS / MODULE LAUNCHER
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-module-launcher" id="zone-modules">
+        <div class="module-launcher-header">
+            <h2 class="zone-title">
+                <i class="fas fa-th-large zone-title-icon"></i>
+                {{ t('module_launcher', 'Module Launcher') }}
+            </h2>
+            <div class="module-launcher-controls">
+                <div class="view-toggle">
+                    <button class="view-toggle-btn active" data-view="grid" title="{{ t('grid_view', 'Grid View') }}">
+                        <i class="fas fa-th"></i>
+                    </button>
+                    <button class="view-toggle-btn" data-view="compact" title="{{ t('compact_view', 'Compact View') }}">
+                        <i class="fas fa-th-large"></i>
+                    </button>
+                </div>
+                <button class="module-filter-btn" id="show-favorites-only">
+                    <i class="fas fa-star"></i>
+                    {{ t('favorites', 'Favorites') }}
+                </button>
+            </div>
+        </div>
+        
+        <!-- Recently Used Section -->
+        {% if dashboard.recent_modules %}
+        <div class="module-section recently-used">
+            <h3 class="module-section-title">
+                <i class="fas fa-clock"></i>
+                {{ t('recently_used', 'Recently Used') }}
+            </h3>
+            <div class="module-grid module-grid--recent">
+                {% for module in dashboard.recent_modules %}
+                <a href="{{ module.url }}" class="module-tile module-tile--recent" title="{{ module.label }}">
+                    <div class="module-tile-icon">
+                        <i class="fas fa-{{ module.icon }}"></i>
+                    </div>
+                    <span class="module-tile-label">{{ module.label }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Favorites Section -->
+        {% if dashboard.favorite_modules %}
+        <div class="module-section favorites">
+            <h3 class="module-section-title">
+                <i class="fas fa-star"></i>
+                {{ t('favorites', 'Favorites') }}
+            </h3>
+            <div class="module-grid module-grid--favorites">
+                {% for module in dashboard.favorite_modules %}
+                <a href="{{ module.url }}" class="module-tile module-tile--favorite" data-module-id="{{ module.id }}">
+                    <div class="module-tile-icon">
+                        <i class="fas fa-{{ module.icon }}"></i>
+                    </div>
+                    <span class="module-tile-label">{{ module.label }}</span>
+                    <button class="module-tile-star active" onclick="event.preventDefault(); toggleFavorite('{{ module.id }}')">
+                        <i class="fas fa-star"></i>
+                    </button>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Module Categories -->
+        {% for category in dashboard.module_categories %}
+        <div class="module-section" data-category="{{ category.id }}">
+            <h3 class="module-section-title">
+                <i class="fas fa-{{ category.icon }}"></i>
+                {{ category.label }}
+            </h3>
+            <div class="module-grid">
+                {% for module in category.modules %}
+                <a href="{{ module.url }}" 
+                   class="module-tile {% if module.is_favorite %}module-tile--favorite{% endif %}"
+                   data-module-id="{{ module.id }}"
+                   data-permission="{{ module.permission }}">
+                    <div class="module-tile-icon">
+                        <i class="fas fa-{{ module.icon }}"></i>
+                    </div>
+                    <div class="module-tile-content">
+                        <span class="module-tile-label">{{ module.label }}</span>
+                        {% if module.description %}
+                        <span class="module-tile-desc">{{ module.description }}</span>
+                        {% endif %}
+                    </div>
+                    {% if module.is_favorite %}
+                    <button class="module-tile-star active" onclick="event.preventDefault(); toggleFavorite('{{ module.id }}')">
+                        <i class="fas fa-star"></i>
+                    </button>
+                    {% else %}
+                    <button class="module-tile-star" onclick="event.preventDefault(); toggleFavorite('{{ module.id }}')">
+                        <i class="far fa-star"></i>
+                    </button>
+                    {% endif %}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 4 & 5: ALERTS + OPERATIONAL OVERVIEW (Two Column)
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <div class="dashboard-row dashboard-row--5035">
+        
+        <!-- Zone 4: Alerts / Exceptions -->
+        <section class="dashboard-zone zone-alerts" id="zone-alerts">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-exclamation-circle zone-title-icon text-danger"></i>
+                    {{ t('alerts_exceptions', 'Alerts & Exceptions') }}
+                    {% if dashboard.alerts['total_count'] > 0 %}
+                    <span class="zone-badge zone-badge--danger">{{ dashboard.alerts['total_count'] }}</span>
+                    {% endif %}
+                </h2>
+                <div class="zone-actions">
+                    <div class="alert-filters">
+                        <button class="alert-filter-btn active" data-filter="all">{{ t('all', 'All') }}</button>
+                        <button class="alert-filter-btn" data-filter="critical">{{ t('critical', 'Critical') }}</button>
+                        <button class="alert-filter-btn" data-filter="warning">{{ t('warning', 'Warning') }}</button>
+                    </div>
+                    <a href="{{ url_for('dashboard.api_alerts') }}" class="zone-action-link">
+                        {{ t('view_all', 'View All') }}
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="alerts-list" id="alerts-list">
+                {% if dashboard.alerts['items'] %}
+                    {% for alert in dashboard.alerts['items'] %}
+                    <div class="alert-item alert-item--{{ alert.severity }}" data-alert-id="{{ alert.id }}">
+                        <div class="alert-severity-indicator"></div>
+                        <div class="alert-icon">
+                            <i class="fas fa-{{ alert.icon }}"></i>
+                        </div>
+                        <div class="alert-content">
+                            <div class="alert-header-row">
+                                <span class="alert-title">{{ alert.title }}</span>
+                                <span class="alert-time">{{ alert.time_ago }}</span>
+                            </div>
+                            <p class="alert-message">{{ alert.message }}</p>
+                            {% if alert.action_label %}
+                            <div class="alert-actions">
+                                <a href="{{ alert.action_url }}" class="alert-action-btn alert-action-btn--primary">
+                                    {{ alert.action_label }}
+                                </a>
+                                {% if alert.dismissible %}
+                                <button class="alert-action-btn alert-action-btn--ghost" onclick="dismissAlert('{{ alert.id }}')">
+                                    {{ t('dismiss', 'Dismiss') }}
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-check-circle"></i>
+                    <p>{{ t('no_alerts', 'No alerts at this time') }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+        
+        <!-- Zone 5: Operational Overview -->
+        <section class="dashboard-zone zone-operational" id="zone-operational">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-cogs zone-title-icon text-info"></i>
+                    {{ t('operational_overview', 'Operational Overview') }}
+                </h2>
+                <a href="{{ url_for('admin_dashboard') }}" class="zone-action-link">
+                    {{ t('full_view', 'Full View') }}
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+            <div class="operational-widgets">
+                {% for widget in dashboard.operational_widgets %}
+                <div class="operational-widget" data-widget-type="{{ widget.type }}">
+                    <div class="widget-header">
+                        <div class="widget-icon">
+                            <i class="fas fa-{{ widget.icon }}"></i>
+                        </div>
+                        <h3 class="widget-title">{{ widget.title }}</h3>
+                        {% if widget.badge %}
+                        <span class="widget-badge widget-badge--{{ widget.badge_type }}">{{ widget.badge }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="widget-body">
+                        {% if widget.type == 'kpi' %}
+                        <div class="widget-kpi">
+                            <span class="widget-kpi-value">{{ widget.value }}</span>
+                            {% if widget.subtitle %}
+                            <span class="widget-kpi-subtitle">{{ widget.subtitle }}</span>
+                            {% endif %}
+                        </div>
+                        {% elif widget.type == 'list' %}
+                        <ul class="widget-list">
+                            {% for item in widget.items %}
+                            <li class="widget-list-item">
+                                <span class="item-label">{{ item.label }}</span>
+                                <span class="item-value">{{ item.value }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% elif widget.type == 'mini-chart' %}
+                        <canvas class="widget-mini-chart" data-chart-type="{{ widget.chart_type }}" data-chart-data="{{ widget.chart_data|tojson }}"></canvas>
+                        {% endif %}
+                    </div>
+                    {% if widget.link %}
+                    <a href="{{ widget.link }}" class="widget-footer-link">
+                        {{ t('view_details', 'View Details') }}
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 6 & 7: FINANCIAL SNAPSHOT + WORKFLOW (Two Column)
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <div class="dashboard-row dashboard-row--5050">
+        
+        <!-- Zone 6: Financial & Business Snapshot -->
+        <section class="dashboard-zone zone-financial" id="zone-financial">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-chart-pie zone-title-icon text-success"></i>
+                    {{ t('financial_snapshot', 'Financial Snapshot') }}
+                </h2>
+                <a href="{{ url_for('finance.dashboard') }}" class="zone-action-link">
+                    {{ t('full_finance', 'Finance') }}
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+            <div class="financial-widgets">
+                {% for widget in dashboard.financial_widgets %}
+                <div class="financial-widget">
+                    <div class="financial-widget-header">
+                        <span class="financial-widget-title">{{ widget.title }}</span>
+                        <i class="fas fa-{{ widget.icon }} financial-widget-icon"></i>
+                    </div>
+                    <div class="financial-widget-body">
+                        <span class="financial-widget-value">{{ widget.value }}</span>
+                        {% if widget.comparison %}
+                        <div class="financial-widget-comparison">
+                            <span class="comparison-label">{{ widget.comparison.label }}:</span>
+                            <span class="comparison-value comparison-value--{{ widget.comparison.direction }}">
+                                {{ widget.comparison.value }}
+                            </span>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% if widget.chart_data %}
+                    <canvas class="financial-widget-chart" data-chart-data="{{ widget.chart_data|tojson }}"></canvas>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        
+        <!-- Zone 7: Workflow / Approval / SLA -->
+        <section class="dashboard-zone zone-workflow" id="zone-workflow">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-project-diagram zone-title-icon text-purple"></i>
+                    {{ t('workflow_approval', 'Workflow & Approvals') }}
+                    {% if dashboard['workflow']['pending_count'] > 0 %}
+                    <span class="zone-badge zone-badge--warning">{{ dashboard['workflow']['pending_count'] }}</span>
+                    {% endif %}
+                </h2>
+                <a href="{{ url_for('flow.index') }}" class="zone-action-link">
+                    {{ t('workflow_center', 'Workflow Center') }}
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+            <div class="workflow-content">
+                <!-- My Pending Approvals -->
+                <div class="workflow-section">
+                    <h3 class="workflow-section-title">
+                        <i class="fas fa-clipboard-check"></i>
+                        {{ t('my_pending_approvals', 'My Pending Approvals') }}
+                    </h3>
+                    <div class="approvals-list">
+                        {% if dashboard['workflow']['pending_approvals'] %}
+                            {% for approval in dashboard['workflow']['pending_approvals'] %}
+                            <div class="approval-item" data-approval-id="{{ approval.id }}">
+                                <div class="approval-icon">
+                                    <i class="fas fa-{{ approval.icon }}"></i>
+                                </div>
+                                <div class="approval-content">
+                                    <span class="approval-title">{{ approval.title }}</span>
+                                    <span class="approval-meta">
+                                        {{ approval.requester }} • {{ approval.time_ago }}
+                                    </span>
+                                </div>
+                                <div class="approval-actions">
+                                    <button class="approval-btn approval-btn--approve" onclick="quickApprove('{{ approval.id }}')">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                    <button class="approval-btn approval-btn--reject" onclick="quickReject('{{ approval.id }}')">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                        <div class="empty-state empty-state--sm">
+                            <i class="fas fa-check-double"></i>
+                            <p>{{ t('no_pending_approvals', 'No pending approvals') }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- SLA Status -->
+                <div class="workflow-section">
+                    <h3 class="workflow-section-title">
+                        <i class="fas fa-tachometer-alt"></i>
+                        {{ t('sla_status', 'SLA Status') }}
+                    </h3>
+                    <div class="sla-metrics">
+                        <div class="sla-metric">
+                            <div class="sla-metric-header">
+                                <span class="sla-metric-label">{{ t('compliance', 'Compliance') }}</span>
+                                <span class="sla-metric-value">{{ dashboard['workflow']['sla']['compliance'] }}%</span>
+                            </div>
+                            <div class="sla-progress-bar">
+                                <div class="sla-progress-fill sla-progress-fill--{{ dashboard['workflow']['sla']['compliance_color'] }}"></div>
+                            </div>
+                        </div>
+                        <div class="sla-metric">
+                            <div class="sla-metric-header">
+                                <span class="sla-metric-label">{{ t('breaches', 'Breaches') }}</span>
+                                <span class="sla-metric-value text-danger">{{ dashboard['workflow']['sla']['breaches'] }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 8 & 9: FLOW + PERSONAL PRODUCTIVITY (Two Column)
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <div class="dashboard-row dashboard-row--5050">
+        
+        <!-- Zone 8: Flow / Communication -->
+        <section class="dashboard-zone zone-flow" id="zone-flow">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-comments zone-title-icon text-brand"></i>
+                    {{ t('flow_communication', 'Flow & Communication') }}
+                    {% if dashboard['flow']['unread_count'] > 0 %}
+                    <span class="zone-badge zone-badge--info">{{ dashboard['flow']['unread_count'] }}</span>
+                    {% endif %}
+                </h2>
+                <div class="flow-tabs">
+                    <button class="flow-tab-btn active" data-tab="announcements">{{ t('announcements', 'Announcements') }}</button>
+                    <button class="flow-tab-btn" data-tab="mentions">{{ t('mentions', 'Mentions') }}</button>
+                </div>
+            </div>
+            <div class="flow-content">
+                <div class="flow-tab-content active" id="flow-announcements">
+                    {% if dashboard['flow']['announcements'] %}
+                    {% for item in dashboard['flow']['announcements'] %}
+                    <div class="flow-item">
+                        <div class="flow-item-avatar">
+                            {% if item.author_avatar %}
+                            <img src="{{ item.author_avatar }}" alt="{{ item.author }}">
+                            {% else %}
+                            <i class="fas fa-user"></i>
+                            {% endif %}
+                        </div>
+                        <div class="flow-item-content">
+                            <div class="flow-item-header">
+                                <span class="flow-item-author">{{ item.author }}</span>
+                                <span class="flow-item-time">{{ item.time_ago }}</span>
+                            </div>
+                            <p class="flow-item-message">{{ item.message }}</p>
+                            {% if item.pinned %}
+                            <span class="flow-item-pinned">
+                                <i class="fas fa-thumbtack"></i> {{ t('pinned', 'Pinned') }}
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-bullhorn"></i>
+                        <p>{{ t('no_announcements', 'No announcements yet') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="flow-tab-content" id="flow-mentions">
+                    {% if dashboard['flow']['mentions'] %}
+                    {% for mention in dashboard['flow']['mentions'] %}
+                    <div class="flow-item flow-item--mention">
+                        <div class="flow-item-avatar">
+                            <i class="fas fa-at"></i>
+                        </div>
+                        <div class="flow-item-content">
+                            <p class="flow-item-message">{{ mention.message }}</p>
+                            <span class="flow-item-context">{{ mention.context }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-at"></i>
+                        <p>{{ t('no_mentions', 'No mentions') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="zone-footer">
+                <a href="{{ url_for('flow.index') }}" class="zone-footer-link">
+                    <i class="fas fa-external-link-alt"></i>
+                    {{ t('open_flow', 'Open Flow') }}
+                </a>
+            </div>
+        </section>
+        
+        <!-- Zone 9: Personal Productivity -->
+        <section class="dashboard-zone zone-personal" id="zone-personal">
+            <div class="zone-header">
+                <h2 class="zone-title">
+                    <i class="fas fa-user-check zone-title-icon text-teal"></i>
+                    {{ t('personal_productivity', 'Personal Productivity') }}
+                </h2>
+            </div>
+            <div class="personal-widgets">
+                <!-- My Tasks -->
+                <div class="personal-widget">
+                    <div class="personal-widget-header">
+                        <div class="personal-widget-icon">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <h3 class="personal-widget-title">{{ t('my_tasks', 'My Tasks') }}</h3>
+                        <span class="personal-widget-badge">{{ dashboard['personal']['tasks']['total'] }}</span>
+                    </div>
+                    <div class="personal-widget-body">
+                        <div class="task-summary">
+                            <div class="task-stat task-stat--overdue">
+                                <span class="task-stat-value">{{ dashboard['personal']['tasks']['overdue'] }}</span>
+                                <span class="task-stat-label">{{ t('overdue', 'Overdue') }}</span>
+                            </div>
+                            <div class="task-stat task-stat--today">
+                                <span class="task-stat-value">{{ dashboard['personal']['tasks']['today'] }}</span>
+                                <span class="task-stat-label">{{ t('due_today', 'Due Today') }}</span>
+                            </div>
+                            <div class="task-stat task-stat--upcoming">
+                                <span class="task-stat-value">{{ dashboard['personal']['tasks']['upcoming'] }}</span>
+                                <span class="task-stat-label">{{ t('upcoming', 'Upcoming') }}</span>
+                            </div>
+                        </div>
+                        {% if dashboard['personal']['tasks']['items'] %}
+                        <ul class="task-list">
+                            {% for task in dashboard['personal']['tasks']['items'][:5] %}
+                            <li class="task-item">
+                                <label class="task-checkbox">
+                                    <input type="checkbox" {% if task.completed %}checked{% endif %} onchange="toggleTask('{{ task.id }}')">
+                                    <span class="task-checkmark"></span>
+                                </label>
+                                <span class="task-title {% if task.completed %}task-completed{% endif %}">{{ task.title }}</span>
+                                <span class="task-due {% if task.overdue %}text-danger{% endif %}">{{ task.due_date }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% endif %}
+                    </div>
+                    <a href="{{ url_for('task_center.my_tasks') }}" class="personal-widget-footer">
+                        {{ t('view_all_tasks', 'View All Tasks') }}
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+                
+                <!-- My Issues -->
+                <div class="personal-widget">
+                    <div class="personal-widget-header">
+                        <div class="personal-widget-icon">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <h3 class="personal-widget-title">{{ t('my_issues', 'My Issues') }}</h3>
+                        <span class="personal-widget-badge">{{ dashboard['personal']['issues']['total'] }}</span>
+                    </div>
+                    <div class="personal-widget-body">
+                        <div class="issue-priority-summary">
+                            {% for priority in dashboard['personal']['issues']['by_priority'] %}
+                            <div class="priority-item priority-item--{{ priority.level }}">
+                                <span class="priority-count">{{ priority.count }}</span>
+                                <span class="priority-label">{{ priority.label }}</span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <a href="{{ url_for('issue_tracker.my_issues') }}" class="personal-widget-footer">
+                        {{ t('view_all_issues', 'View All Issues') }}
+                        <i class="fas fa-arrow-right"></i>
+                    </a>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 10: REPORTS & ANALYTICS
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-reports" id="zone-reports">
+        <div class="zone-header">
+            <h2 class="zone-title">
+                <i class="fas fa-analytics zone-title-icon text-indigo"></i>
+                {{ t('reports_analytics', 'Reports & Analytics') }}
+            </h2>
+            <div class="zone-actions">
+                <a href="{{ url_for('documents_reports') }}" class="zone-action-link">
+                    {{ t('all_reports', 'All Reports') }}
+                    <i class="fas fa-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+        <div class="reports-grid">
+            {% for report in dashboard.reports %}
+            <a href="{{ report.url }}" class="report-card">
+                <div class="report-card-icon">
+                    <i class="fas fa-{{ report.icon }}"></i>
+                </div>
+                <div class="report-card-content">
+                    <h3 class="report-card-title">{{ report.title }}</h3>
+                    <p class="report-card-desc">{{ report.description }}</p>
+                    <div class="report-card-meta">
+                        {% if report.last_run %}
+                        <span class="report-meta-item">
+                            <i class="fas fa-clock"></i>
+                            {{ report.last_run }}
+                        </span>
+                        {% endif %}
+                        {% if report.frequency %}
+                        <span class="report-meta-item">
+                            <i class="fas fa-sync"></i>
+                            {{ report.frequency }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="report-card-arrow">
+                    <i class="fas fa-arrow-right"></i>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 11: AI INSIGHTS / RECOMMENDATIONS
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-insights" id="zone-insights">
+        <div class="zone-header">
+            <h2 class="zone-title">
+                <i class="fas fa-brain zone-title-icon text-ai"></i>
+                {{ t('ai_insights', 'AI Insights & Recommendations') }}
+            </h2>
+            <div class="insight-filters">
+                <button class="insight-filter-btn active" data-filter="all">{{ t('all_insights', 'All') }}</button>
+                <button class="insight-filter-btn" data-filter="attention">{{ t('attention', 'Attention') }}</button>
+                <button class="insight-filter-btn" data-filter="recommendations">{{ t('recommendations', 'Actions') }}</button>
+            </div>
+        </div>
+        <div class="insights-grid">
+            {% for insight in dashboard.insights %}
+            <div class="insight-card insight-card--{{ insight.type }}" data-insight-id="{{ insight.id }}">
+                <div class="insight-card-header">
+                    <div class="insight-type-icon">
+                        <i class="fas fa-{{ insight.icon }}"></i>
+                    </div>
+                    <div class="insight-type-info">
+                        <span class="insight-type-label">{{ insight.type_label }}</span>
+                        {% if insight.confidence %}
+                        <div class="insight-confidence">
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" style="width: {{ insight.confidence }}%"></div>
+                            </div>
+                            <span class="confidence-value">{{ insight.confidence }}%</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="insight-card-body">
+                    <h3 class="insight-title">{{ insight.title }}</h3>
+                    <p class="insight-description">{{ insight.description }}</p>
+                    {% if insight.affected_items %}
+                    <div class="insight-affected">
+                        <span class="affected-label">{{ t('affected', 'Affected') }}:</span>
+                        <span class="affected-items">{{ insight.affected_items }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if insight.actions %}
+                <div class="insight-card-actions">
+                    {% for action in insight.actions %}
+                    <a href="{{ action.url }}" class="insight-action-btn insight-action-btn--{{ action.type }}">
+                        <i class="fas fa-{{ action.icon }}"></i>
+                        {{ action.label }}
+                    </a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <div class="insight-card-footer">
+                    <span class="insight-source">{{ insight.source_module }}</span>
+                    <span class="insight-time">{{ insight.time_ago }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         ZONE 12: ACTIVITY TIMELINE / AUDIT HIGHLIGHTS
+         ═══════════════════════════════════════════════════════════════════════ -->
+    <section class="dashboard-zone zone-timeline" id="zone-timeline">
+        <div class="zone-header">
+            <h2 class="zone-title">
+                <i class="fas fa-history zone-title-icon text-secondary"></i>
+                {{ t('activity_timeline', 'Activity Timeline') }}
+            </h2>
+            <div class="timeline-filters">
+                <button class="timeline-filter-btn active" data-filter="all">{{ t('all', 'All') }}</button>
+                <button class="timeline-filter-btn" data-filter="approvals">{{ t('approvals', 'Approvals') }}</button>
+                <button class="timeline-filter-btn" data-filter="documents">{{ t('documents', 'Documents') }}</button>
+                <button class="timeline-filter-btn" data-filter="system">{{ t('system', 'System') }}</button>
+            </div>
+        </div>
+        <div class="timeline-container" id="activity-timeline">
+            {% for event in dashboard.timeline %}
+            <div class="timeline-item timeline-item--{{ event.category }}">
+                <div class="timeline-marker"></div>
+                <div class="timeline-content">
+                    <div class="timeline-header">
+                        <span class="timeline-event">{{ event.event }}</span>
+                        <span class="timeline-time">{{ event.time_ago }}</span>
+                    </div>
+                    <p class="timeline-details">{{ event.details }}</p>
+                    {% if event.user %}
+                    <span class="timeline-user">
+                        <i class="fas fa-user"></i>
+                        {{ event.user }}
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="zone-footer">
+            <a href="{{ url_for('documents_audit_logs') }}" class="zone-footer-link">
+                <i class="fas fa-book"></i>
+                {{ t('view_full_audit_log', 'View Full Audit Log') }}
+            </a>
+        </div>
+    </section>
+
+</div>
 
 <script>
     // ================================================================

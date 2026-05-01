@@ -1108,6 +1108,108 @@ def api_workflow_reject():
     """Quick reject a workflow item."""
     data = request.get_json()
     approval_id = data.get('approval_id')
-    
+
     # In production, process rejection through workflow engine
     return jsonify({'success': True, 'approval_id': approval_id})
+
+
+@dashboard_bp.route('/api/export/<export_type>')
+def api_export(export_type):
+    """Export dashboard data in various formats."""
+    from export_utils import send_export_response
+
+    # Get current user data
+    user_role = get_user_role()
+    company_id = get_company_id()
+
+    # Build comprehensive dashboard data
+    export_data = {
+        'greeting': 'Dashboard Export',
+        'current_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'user_role': user_role,
+        'company_id': company_id,
+        'kpis': build_kpis(user_role, company_id),
+        'module_categories': build_module_categories(user_role, 'en'),
+        'alerts': build_alerts(user_role),
+        'operational_widgets': build_operational_widgets(user_role),
+        'financial_widgets': build_financial_widgets(user_role),
+        'workflow': build_workflow_data(user_role),
+        'flow': build_flow_data(),
+        'personal': build_personal_data(get_current_user_id()),
+        'reports': build_reports(user_role),
+        'insights': build_insights(),
+        'timeline': build_timeline()
+    }
+
+    # Flatten data for export
+    rows = []
+    for kpi in export_data['kpis']:
+        rows.append({
+            'Type': 'KPI',
+            'Label': kpi.get('label', ''),
+            'Value': kpi.get('value', ''),
+            'Formatted Value': kpi.get('formatted_value', ''),
+            'Icon': kpi.get('icon', ''),
+            'Severity': kpi.get('severity', ''),
+            'Trend': kpi.get('trend', ''),
+            'Subtext': kpi.get('subtext', ''),
+            'Link': kpi.get('link', '')
+        })
+
+    for widget in export_data['operational_widgets']:
+        rows.append({
+            'Type': 'Operational Widget',
+            'Label': widget.get('title', ''),
+            'Value': widget.get('value', ''),
+            'Subtitle': widget.get('subtitle', ''),
+            'Badge': widget.get('badge', ''),
+            'Icon': widget.get('icon', '')
+        })
+
+    for widget in export_data['financial_widgets']:
+        rows.append({
+            'Type': 'Financial Widget',
+            'Label': widget.get('title', ''),
+            'Value': widget.get('value', ''),
+            'Icon': widget.get('icon', ''),
+            'Comparison Label': widget.get('comparison', {}).get('label', ''),
+            'Comparison Value': widget.get('comparison', {}).get('value', '')
+        })
+
+    for alert in export_data['alerts'].get('items', []):
+        rows.append({
+            'Type': 'Alert',
+            'Title': alert.get('title', ''),
+            'Message': alert.get('message', ''),
+            'Severity': alert.get('severity', ''),
+            'Time': alert.get('time_ago', ''),
+            'Action URL': alert.get('action_url', '')
+        })
+
+    for insight in export_data['insights']:
+        rows.append({
+            'Type': 'AI Insight',
+            'Title': insight.get('title', ''),
+            'Description': insight.get('description', ''),
+            'Type Label': insight.get('type_label', ''),
+            'Confidence': insight.get('confidence', ''),
+            'Source': insight.get('source_module', ''),
+            'Time': insight.get('time_ago', '')
+        })
+
+    for event in export_data['timeline']:
+        rows.append({
+            'Type': 'Timeline Event',
+            'Event': event.get('event', ''),
+            'Details': event.get('details', ''),
+            'Category': event.get('category', ''),
+            'User': event.get('user', ''),
+            'Time': event.get('time_ago', '')
+        })
+
+    columns = ['Type', 'Label', 'Value', 'Formatted Value', 'Icon', 'Severity',
+               'Trend', 'Subtext', 'Link', 'Subtitle', 'Badge', 'Comparison Label',
+               'Comparison Value', 'Message', 'Time', 'Action URL', 'Description',
+               'Type Label', 'Confidence', 'Source', 'Details', 'Category', 'User']
+
+    return send_export_response(rows, export_type, 'dashboard_export', columns, 'Dashboard Export')

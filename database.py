@@ -11,25 +11,36 @@ KEY PRINCIPLES:
 - Centralized transaction management
 - Support for multiple database files if needed
 - Connection pooling readiness
+- Query result caching for performance
 
 Usage:
     from database import get_db, get_dashboard_stats
-    
+
     # Standard read operation
     db = get_db()
     users = db.execute("SELECT * FROM users").fetchall()
     db.close()
-    
+
     # Using context manager (preferred)
     with get_db() as db:
         db.execute("INSERT INTO users (...) VALUES (...)", ...)
         db.commit()
+
+    # Cached query (for frequently accessed data)
+    from database import cached_query
+    users = cached_query('all_users', 300, lambda: get_all("SELECT * FROM users"))
 """
 
 import sqlite3
 import os
+import time
+import hashlib
+import json
+import threading
 from contextlib import contextmanager
 from functools import wraps
+from collections import OrderedDict
+import queue
 
 # ============================================================================
 # DATABASE CONFIGURATION
@@ -425,35 +436,57 @@ def get_user_notifications(user_id, unread_only=False, limit=50):
 # PLATFORM SETTINGS (UNIFIED)
 # ============================================================================
 
+# In-memory cache for platform settings
+_platform_settings_cache = {}
+_platform_settings_cache_time = {}
+_PLATFORM_SETTINGS_CACHE_TTL = 300  # 5 minutes
+
+
 def get_platform_setting(key, default=None, category=None):
     """
-    Get a platform-wide setting value.
-    
+    Get a platform-wide setting value with caching.
+
     Args:
         key: Setting key
         default: Default value if not found
         category: Optional category filter
-    
+
     Returns:
         Setting value as string, or default
     """
+    import time
+
+    # Check cache first
+    cache_key = f"{key}:{category}"
+    now = time.time()
+    if cache_key in _platform_settings_cache:
+        cached_time, cached_value = _platform_settings_cache[cache_key]
+        if now - cached_time < _PLATFORM_SETTINGS_CACHE_TTL:
+            return cached_value
+
+    # Cache miss - fetch from database
     _ensure_settings_table()
-    
+
     sql = "SELECT setting_value FROM platform_settings WHERE setting_key = ?"
     params = [key]
-    
+
     if category:
         sql += " AND category = ?"
         params.append(category)
-    
+
     result = get_one(sql, params)
-    return result['setting_value'] if result else default
+    value = result['setting_value'] if result else default
+
+    # Store in cache
+    _platform_settings_cache[cache_key] = (now, value)
+
+    return value
 
 
 def set_platform_setting(key, value, category="GENERAL", description=None):
     """
     Set a platform-wide setting value.
-    
+
     Args:
         key: Setting key
         value: Setting value (will be converted to string)
@@ -461,12 +494,12 @@ def set_platform_setting(key, value, category="GENERAL", description=None):
         description: Optional description
     """
     _ensure_settings_table()
-    
+
     with get_db_context() as db:
         existing = db.execute(
             "SELECT id FROM platform_settings WHERE setting_key = ?", (key,)
         ).fetchone()
-        
+
         if existing:
             db.execute(
                 "UPDATE platform_settings SET setting_value = ?, category = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE setting_key = ?",
@@ -478,6 +511,10 @@ def set_platform_setting(key, value, category="GENERAL", description=None):
                 (key, str(value), category, description)
             )
         db.commit()
+
+    # Invalidate cache for this setting
+    cache_key = f"{key}:{category}"
+    _platform_settings_cache.pop(cache_key, None)
 
 
 def _ensure_settings_table():
@@ -611,6 +648,552 @@ STATUS_COLORS = {
 def get_status_color(status):
     """Get the standard color for a status value."""
     return STATUS_COLORS.get(status, 'gray')
+
+
+# ============================================================================
+# CONNECTION POOLING (for scalability)
+# ============================================================================
+
+class ConnectionPool:
+    """
+    Thread-safe connection pool for SQLite.
+    Maintains a pool of reusable connections to reduce connection overhead.
+    """
+    def __init__(self, database_path, pool_size=5, max_overflow=10, timeout=30.0):
+        self.database_path = database_path
+        self.pool_size = pool_size
+        self.max_overflow = max_overflow
+        self.timeout = timeout
+        self._pool = []
+        self._overflow = []
+        self._lock = threading.Lock()
+        self._pragmas = STANDARD_PRAGMAS.copy()
+
+    def _create_connection(self):
+        """Create a new connection with standardized settings."""
+        conn = sqlite3.connect(self.database_path, timeout=self.timeout)
+        conn.row_factory = sqlite3.Row
+        for pragma_sql, _ in self._pragmas:
+            conn.execute(pragma_sql)
+        return conn
+
+    def get_connection(self):
+        """
+        Get a connection from the pool.
+        Blocks if pool is exhausted until a connection is available or timeout.
+        """
+        deadline = time.time() + self.timeout
+
+        while True:
+            with self._lock:
+                # Try pool first
+                if self._pool:
+                    return self._pool.pop()
+
+                # Try overflow if under limit
+                if len(self._overflow) < self.max_overflow:
+                    conn = self._create_connection()
+                    self._overflow.append(conn)
+                    return conn
+
+            # Wait and retry
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                raise RuntimeError("Connection pool timeout - too many concurrent requests")
+            time.sleep(0.05)
+
+    def return_connection(self, conn):
+        """Return a connection to the pool."""
+        with self._lock:
+            if len(self._pool) < self.pool_size:
+                self._pool.append(conn)
+            else:
+                conn.close()
+                if self._overflow:
+                    self._overflow.pop()
+
+    def close_all(self):
+        """Close all connections in pool."""
+        with self._lock:
+            for conn in self._pool + self._overflow:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+            self._pool.clear()
+            self._overflow.clear()
+
+
+# Global connection pool instance (initialized lazily)
+_pool = None
+
+
+def get_pool():
+    """Get or create the global connection pool."""
+    global _pool
+    if _pool is None:
+        pool_size = int(os.environ.get('DB_POOL_SIZE', '5'))
+        max_overflow = int(os.environ.get('DB_MAX_OVERFLOW', '10'))
+        _pool = ConnectionPool(DATABASE_PATH, pool_size=pool_size, max_overflow=max_overflow)
+    return _pool
+
+
+# Pool-enabled get_db()
+def get_db_pooled():
+    """
+    Get a database connection from the pool.
+    Use return_connection() to return to pool when done.
+
+    Usage:
+        pool = get_pool()
+        conn = pool.get_connection()
+        try:
+            result = conn.execute("SELECT * FROM users").fetchall()
+        finally:
+            pool.return_connection(conn)
+    """
+    return get_pool().get_connection()
+
+
+def return_connection(conn):
+    """Return a connection to the pool after use."""
+    get_pool().return_connection(conn)
+
+
+# ============================================================================
+# QUERY RESULT CACHING (for performance)
+# ============================================================================
+
+class QueryCache:
+    """
+    Thread-safe in-memory query result cache.
+    Uses LRU eviction when max_size is reached.
+    """
+    def __init__(self, max_size=1000, default_ttl=300):
+        self.max_size = max_size
+        self.default_ttl = default_ttl
+        self._cache = OrderedDict()
+        self._lock = threading.Lock()
+        self._hits = 0
+        self._misses = 0
+
+    def _make_key(self, prefix, *args, **kwargs):
+        """Generate a cache key from prefix and arguments."""
+        key_parts = [prefix] + [str(arg) for arg in args]
+        key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items()))
+        key_str = ':'.join(key_parts)
+        return hashlib.md5(key_str.encode()).hexdigest()
+
+    def get(self, prefix, *args, **kwargs):
+        """Get cached result or return None."""
+        key = self._make_key(prefix, *args, **kwargs)
+        with self._lock:
+            if key in self._cache:
+                entry = self._cache[key]
+                if time.time() < entry['expires_at']:
+                    self._hits += 1
+                    # Move to end (most recently used)
+                    self._cache.move_to_end(key)
+                    return entry['data']
+                else:
+                    # Expired - remove
+                    del self._cache[key]
+            self._misses += 1
+        return None
+
+    def set(self, data, prefix, *args, **kwargs):
+        """Cache a result with TTL."""
+        # Extract TTL before key generation (don't include in cache key)
+        ttl = kwargs.pop('_ttl', self.default_ttl)
+        # Also extract any other internal params that shouldn't be in key
+        internal_keys = ['_ttl']
+        filtered_kwargs = {k: v for k, v in kwargs.items() if k not in internal_keys}
+
+        key = self._make_key(prefix, *args, **filtered_kwargs)
+        expires_at = time.time() + ttl
+
+        with self._lock:
+            # Evict oldest if at capacity
+            while len(self._cache) >= self.max_size:
+                self._cache.popitem(last=False)
+
+            self._cache[key] = {
+                'data': data,
+                'expires_at': expires_at
+            }
+
+    def invalidate(self, prefix=None, *args, **kwargs):
+        """Invalidate cache entries matching pattern."""
+        with self._lock:
+            if prefix is None:
+                self._cache.clear()
+                return
+
+            # Invalidate by prefix match
+            keys_to_delete = []
+            for key in self._cache:
+                # Check if key starts with prefix (approximate match via string comparison)
+                cache_entry = self._cache[key]
+                # We don't have stored prefix info, so just clear all for now
+                # A more sophisticated implementation would store prefix with each entry
+            self._cache.clear()
+
+    def get_stats(self):
+        """Return cache hit/miss statistics."""
+        with self._lock:
+            total = self._hits + self._misses
+            hit_rate = (self._hits / total * 100) if total > 0 else 0
+            return {
+                'hits': self._hits,
+                'misses': self._misses,
+                'size': len(self._cache),
+                'hit_rate': hit_rate
+            }
+
+
+# ============================================================================
+# CIRCUIT BREAKER PATTERN (8.1)
+# ============================================================================
+
+class CircuitBreaker:
+    """
+    Thread-safe circuit breaker for fault tolerance.
+    Prevents repeated calls to failing services.
+
+    States:
+        - CLOSED: Normal operation, requests pass through
+        - OPEN: Service is down, requests fail fast
+        - HALF_OPEN: Testing if service recovered
+    """
+    CLOSED = 'closed'
+    OPEN = 'open'
+    HALF_OPEN = 'half_open'
+
+    def __init__(self, failure_threshold=5, timeout=60, success_threshold=2):
+        """
+        Args:
+            failure_threshold: Number of failures before opening circuit
+            timeout: Seconds to wait before trying again (OPEN -> HALF_OPEN)
+            success_threshold: Successes needed to close circuit (HALF_OPEN -> CLOSED)
+        """
+        self.failure_threshold = failure_threshold
+        self.timeout = timeout
+        self.success_threshold = success_threshold
+        self._failures = 0
+        self._successes = 0
+        self._last_failure_time = None
+        self._state = self.CLOSED
+        self._lock = threading.Lock()
+
+    @property
+    def state(self):
+        """Get current circuit state."""
+        with self._lock:
+            if self._state == self.OPEN:
+                # Check if timeout expired
+                if time.time() - self._last_failure_time >= self.timeout:
+                    self._state = self.HALF_OPEN
+                    self._successes = 0
+            return self._state
+
+    def call(self, func, *args, **kwargs):
+        """
+        Execute function through circuit breaker.
+
+        Returns:
+            Result of func, or raises CircuitBreakerOpen if circuit is OPEN
+        """
+        state = self.state
+
+        if state == self.OPEN:
+            raise CircuitBreakerOpen('Circuit breaker is OPEN')
+
+        try:
+            result = func(*args, **kwargs)
+
+            with self._lock:
+                if state == self.HALF_OPEN:
+                    self._successes += 1
+                    if self._successes >= self.success_threshold:
+                        self._state = self.CLOSED
+                        self._failures = 0
+
+            return result
+
+        except Exception as e:
+            with self._lock:
+                self._failures += 1
+                self._last_failure_time = time.time()
+
+                if self._failures >= self.failure_threshold:
+                    self._state = self.OPEN
+
+            raise e
+
+    def reset(self):
+        """Manually reset circuit breaker to closed state."""
+        with self._lock:
+            self._state = self.CLOSED
+            self._failures = 0
+            self._successes = 0
+            self._last_failure_time = None
+
+
+class CircuitBreakerOpen(Exception):
+    """Exception raised when circuit breaker is open."""
+    pass
+
+
+# ============================================================================
+# FALLBACK RESPONSE HELPERS (8.2)
+# ============================================================================
+
+def get_with_fallback(cache_key, fallback_func, ttl=300, cache=None):
+    """
+    Get from cache with fallback to function on miss/error.
+
+    Args:
+        cache_key: Cache key prefix for this data
+        fallback_func: Function to call on cache miss
+        ttl: Time-to-live for cached result (seconds)
+        cache: Cache instance to use (defaults to global cache)
+
+    Returns:
+        Cached or freshly computed result
+    """
+    if cache is None:
+        cache = get_cache()
+
+    # Try cache first
+    try:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+    except Exception:
+        pass  # Cache error, continue to fallback
+
+    # Try fallback function
+    try:
+        result = fallback_func()
+        # Cache the result if possible
+        try:
+            cache.set(result, cache_key, _ttl=ttl)
+        except Exception:
+            pass  # Cache write error, return anyway
+        return result
+    except Exception as e:
+        # Fallback also failed - return empty but valid response
+        return {
+            'error': str(e),
+            'data': [],
+            'cached': False,
+            'fallback_failed': True
+        }
+
+
+def batch_get_with_fallback(items, key_func, fallback_func, ttl=300, batch_size=100):
+    """
+    Get multiple items with fallback, with optional batching.
+
+    Args:
+        items: List of item identifiers
+        key_func: Function(item) -> cache key
+        fallback_func: Function(list of items) -> dict of results
+        ttl: TTL for cached results
+        batch_size: Number of items per fallback call
+
+    Returns:
+        Dict of {item_id: result} for all items
+    """
+    cache = get_cache()
+    results = {}
+    missing = []
+
+    # Check cache for each item
+    for item in items:
+        key = key_func(item)
+        cached = cache.get(key)
+        if cached is not None:
+            results[item] = cached
+        else:
+            missing.append(item)
+
+    # Batch fetch missing items
+    if missing:
+        for i in range(0, len(missing), batch_size):
+            batch = missing[i:i + batch_size]
+            try:
+                fetched = fallback_func(batch)
+                if isinstance(fetched, dict):
+                    for item_id, value in fetched.items():
+                        key = key_func(item_id)
+                        results[item_id] = value
+                        try:
+                            cache.set(value, key, _ttl=ttl)
+                        except Exception:
+                            pass
+                else:
+                    # Non-dict fallback result, assign to all
+                    for item_id in batch:
+                        results[item_id] = fetched
+            except Exception as e:
+                # Fallback failed - assign error to missing items
+                for item_id in batch:
+                    results[item_id] = {
+                        'error': str(e),
+                        'data': None,
+                        'cached': False
+                    }
+
+    return results
+
+
+# Global query cache instance
+_query_cache = None
+
+
+def get_cache():
+    """Get or create the global query cache."""
+    global _query_cache
+    if _query_cache is None:
+        max_size = int(os.environ.get('QUERY_CACHE_SIZE', '1000'))
+        default_ttl = int(os.environ.get('QUERY_CACHE_TTL', '300'))
+        _query_cache = QueryCache(max_size=max_size, default_ttl=default_ttl)
+    return _query_cache
+
+
+def cached_query(prefix, ttl, query_func, *args, **kwargs):
+    """
+    Execute a query with caching.
+
+    Args:
+        prefix: Cache key prefix
+        ttl: Time-to-live in seconds
+        query_func: Function to execute if cache miss
+        *args, **kwargs: Arguments passed to both cache key and query_func
+
+    Returns:
+        Cached or freshly computed result
+    """
+    cache = get_cache()
+
+    # Try to get from cache
+    result = cache.get(prefix, *args, **kwargs)
+    if result is not None:
+        return result
+
+    # Execute query
+    result = query_func(*args, **kwargs)
+
+    # Cache result
+    cache.set(result, prefix, *args, _ttl=ttl, **kwargs)
+
+    return result
+
+
+# ============================================================================
+# INDEX OPTIMIZATION
+# ============================================================================
+
+def ensure_index(table_name, index_name, columns, unique=False):
+    """
+    Ensure an index exists on a table, creating it if necessary.
+
+    Args:
+        table_name: Name of the table
+        index_name: Name for the index (use 'idx_' prefix convention)
+        columns: List of column names or single column string
+        unique: Whether index should be unique
+
+    Example:
+        ensure_index('users', 'idx_users_email', ['email'])
+        ensure_index('orders', 'idx_orders_customer_date', ['customer_id', 'order_date'])
+    """
+    if isinstance(columns, str):
+        columns = [columns]
+
+    # Check if index already exists
+    existing = get_one("""
+        SELECT 1 FROM sqlite_master
+        WHERE type='index' AND name=?
+    """, (index_name,))
+
+    if existing:
+        return False  # Index already exists
+
+    # Create index
+    columns_str = ', '.join(columns)
+    unique_str = 'UNIQUE ' if unique else ''
+
+    sql = f"CREATE {unique_str}INDEX IF NOT EXISTS {index_name} ON {table_name} ({columns_str})"
+
+    try:
+        with get_db_context() as db:
+            db.execute(sql)
+        return True  # Index created
+    except Exception as e:
+        # Log but don't fail - index might be created by table creation
+        return False
+
+
+def ensure_indexes_for_table(table_name, indexes):
+    """
+    Ensure multiple indexes exist for a table.
+
+    Args:
+        table_name: Name of the table
+        indexes: List of (index_name, columns, unique) tuples
+
+    Example:
+        ensure_indexes_for_table('orders', [
+            ('idx_orders_customer', ['customer_id'], False),
+            ('idx_orders_status', ['status'], False),
+            ('idx_orders_date', ['order_date'], False),
+        ])
+    """
+    created = []
+    for index_def in indexes:
+        if len(index_def) == 3:
+            index_name, columns, unique = index_def
+        else:
+            index_name, columns = index_def
+            unique = False
+
+        if ensure_index(table_name, index_name, columns, unique):
+            created.append(index_name)
+    return created
+
+
+# Standard platform indexes for high-traffic queries
+PLATFORM_INDEXES = [
+    # Users table
+    ('users', 'idx_users_email', ['email'], False),
+    ('users', 'idx_users_role', ['role_id'], False),
+    ('users', 'idx_users_company', ['company_id'], False),
+    ('users', 'idx_users_status', ['is_active'], False),
+
+    # Notifications
+    ('platform_notifications', 'idx_notif_user_read', ['user_id', 'is_read'], False),
+    ('platform_notifications', 'idx_notif_created', ['created_at'], False),
+
+    # Audit logs
+    ('platform_audit_log', 'idx_audit_entity', ['entity_type', 'entity_id'], False),
+    ('platform_audit_log', 'idx_audit_user', ['user_id', 'created_at'], False),
+    ('platform_audit_log', 'idx_audit_action', ['action', 'created_at'], False),
+
+    # Sessions
+    ('user_sessions', 'idx_sessions_user', ['user_id'], False),
+    ('user_sessions', 'idx_sessions_token', ['session_token'], False),
+]
+
+
+def initialize_platform_indexes():
+    """Initialize all recommended platform indexes."""
+    created = []
+    for table, index_name, columns, unique in PLATFORM_INDEXES:
+        if ensure_index(table, index_name, columns, unique):
+            created.append(index_name)
+    return created
 
 
 # ============================================================================
@@ -977,7 +1560,10 @@ def initialize_platform_schema():
     _ensure_privacy_settings_table()
     _ensure_linked_accounts_table()
     _ensure_sessions_table()
-    
+
+    # Initialize platform indexes for query optimization
+    initialize_platform_indexes()
+
     # Seed default platform settings if not exist
     default_settings = [
         ('platform_name', 'MMDx', 'GENERAL', 'Platform display name'),

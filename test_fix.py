@@ -1,16 +1,26 @@
-#!/usr/bin/env python3
+import re
+from pathlib import Path
 
-with open('translations.py', encoding='utf-8') as f:
-    lines = f.readlines()
+filepath = Path('templates/documents/report_access_log.html')
+content = filepath.read_text(encoding='utf-8')
 
-# Create a test file with lines 1-21089 + properly formatted ru dict
-test_content = ''.join(lines[:21090]) + "\n    'ru': {\n        # Test\n    }\n}\n"
+print('Lines around include:')
+for i, line in enumerate(content.split('\n')[:20], 1):
+    print(f'{i:3}: {repr(line)}')
 
-try:
-    import ast
-    ast.parse(test_content)
-    print("Test content parses OK!")
-except SyntaxError as e:
-    print(f"Test content fails at line {e.lineno}: {e.msg}")
-    print("Content ending:")
-    print(repr(test_content[-200:]))
+# Check include regex
+INCLUDE_RE = re.compile(r"^\s*\{\% include ['\"]base\.html['\"] \%\}")
+match = INCLUDE_RE.search(content)
+print('\nInclude match:', match)
+
+# Check block content
+block_match = re.search(r"\{% block content %\}", content)
+print('Block match:', block_match)
+
+# Check endblock
+endblock_match = re.search(r"\{% endblock %\}", content)
+print('Endblock match:', endblock_match)
+
+# Try simpler include regex
+simple = re.search(r"\{\% include 'base\.html' \%\}", content)
+print('Simple include:', simple)

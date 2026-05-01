@@ -31,6 +31,15 @@ except ImportError:
     TALENT_MODELS_AVAILABLE = False
     get_db = None
 
+# Import export utilities
+try:
+    from export_utils import send_export_response, get_export_columns
+    EXPORT_UTILS_AVAILABLE = True
+except ImportError:
+    EXPORT_UTILS_AVAILABLE = False
+    send_export_response = None
+    get_export_columns = None
+
 # Try to import from hr_models for shared utilities
 try:
     from hr_models import get_db as hr_get_db
@@ -1311,6 +1320,323 @@ def api_pool_members(pool_id):
     return jsonify({'success': True, 'data': members})
 
 
+@talent_bp.route('/api/charts/headcount')
+@talent_login_required
+@talent_permission_required('view')
+def api_chart_headcount():
+    """API endpoint for headcount by department chart data."""
+    db = get_t_db()
+    try:
+        data = _get_headcount_by_department(db)
+        return jsonify({'success': True, 'data': data})
+    finally:
+        db.close()
+
+
+@talent_bp.route('/api/charts/readiness-distribution')
+@talent_login_required
+@talent_permission_required('view')
+def api_chart_readiness():
+    """API endpoint for readiness distribution chart data."""
+    db = get_t_db()
+    try:
+        data = _get_readiness_distribution_chart(db)
+        return jsonify({'success': True, 'data': data})
+    finally:
+        db.close()
+
+
+@talent_bp.route('/api/charts/hipo-pipeline')
+@talent_login_required
+@talent_permission_required('view')
+def api_chart_hipo_pipeline():
+    """API endpoint for HiPo pipeline chart data."""
+    db = get_t_db()
+    try:
+        data = _get_hipo_pipeline_chart(db)
+        return jsonify({'success': True, 'data': data})
+    finally:
+        db.close()
+
+
+@talent_bp.route('/api/charts/performance-distribution')
+@talent_login_required
+@talent_permission_required('view')
+def api_chart_performance():
+    """API endpoint for performance distribution chart data."""
+    db = get_t_db()
+    try:
+        data = _get_performance_distribution_chart(db)
+        return jsonify({'success': True, 'data': data})
+    finally:
+        db.close()
+
+
+@talent_bp.route('/api/charts/succession-coverage')
+@talent_login_required
+@talent_permission_required('view')
+def api_chart_succession():
+    """API endpoint for succession coverage chart data."""
+    db = get_t_db()
+    try:
+        data = _get_succession_coverage_chart(db)
+        return jsonify({'success': True, 'data': data})
+    finally:
+        db.close()
+
+
+@talent_bp.route('/api/charts/competency-gaps')
+@talent_login_required
+@talent_permission_required('view')
+def api_chart_competency_gaps():
+    """API endpoint for competency gap chart data."""
+    db = get_t_db()
+    try:
+        data = _get_competency_gaps_chart(db)
+        return jsonify({'success': True, 'data': data})
+    finally:
+        db.close()
+
+
+@talent_bp.route('/api/charts/nine-box')
+@talent_login_required
+@talent_permission_required('view')
+def api_chart_nine_box():
+    """API endpoint for 9-box grid chart data."""
+    db = get_t_db()
+    try:
+        review_id = request.args.get('review_id', type=int)
+        data = _get_nine_box_chart_data(db, review_id)
+        return jsonify({'success': True, 'data': data})
+    finally:
+        db.close()
+
+
+@talent_bp.route('/api/search/talents')
+@talent_login_required
+@talent_permission_required('view')
+def api_search_talents():
+    """API endpoint for global talent search."""
+    db = get_t_db()
+    try:
+        query = request.args.get('q', '').strip()
+        if len(query) < 2:
+            return jsonify({'success': True, 'data': []})
+
+        talents = db.execute("""
+            SELECT tp.employee_id, e.first_name, e.last_name, e.employee_code,
+                   d.name as department_name, p.title as position_title,
+                   tp.potential_rating, tp.hi_po
+            FROM tm_talent_profiles tp
+            JOIN hr_employees e ON tp.employee_id = e.id
+            LEFT JOIN hr_employee_employment ee ON e.id = ee.employee_id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            LEFT JOIN hr_positions p ON ee.position_id = p.id
+            WHERE e.status = 'Active'
+            AND (e.first_name LIKE ? OR e.last_name LIKE ? OR e.employee_code LIKE ?
+                 OR d.name LIKE ? OR p.title LIKE ?)
+            ORDER BY e.last_name LIMIT 20
+        """, (f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%', f'%{query}%')).fetchall()
+
+        return jsonify({'success': True, 'data': [dict(t) for t in talents]})
+    finally:
+        db.close()
+
+
+@talent_bp.route('/export/profiles/advanced', methods=['POST'])
+@talent_login_required
+@talent_permission_required('view')
+def export_profiles_advanced():
+    """Advanced export with multiple format support."""
+    if not EXPORT_UTILS_AVAILABLE:
+        flash(t('export_not_available', 'Export functionality not available.'), 'error')
+        return redirect(url_for('talent.export_center'))
+
+    db = get_t_db()
+    try:
+        format_type = request.form.get('format', 'csv')
+        department = request.form.get('department', '')
+        potential = request.form.get('potential', '')
+        readiness = request.form.get('readiness', '')
+
+        query = """
+            SELECT e.employee_code, e.first_name, e.last_name, e.email, e.hire_date,
+                   d.name as department_name, p.title as position_title,
+                   m.first_name || ' ' || m.last_name as manager_name,
+                   tp.potential_rating, tp.potential_score,
+                   tp.readiness_level, tp.readiness_score,
+                   tp.performance_rating, tp.performance_score,
+                   tp.hi_po, tp.flight_risk, tp.succession_candidate,
+                   tp.career_interests, tp.mobility_preference,
+                   tp.last_reviewed, tp.notes
+            FROM tm_talent_profiles tp
+            JOIN hr_employees e ON tp.employee_id = e.id
+            LEFT JOIN hr_employee_employment ee ON e.id = ee.employee_id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            LEFT JOIN hr_positions p ON ee.position_id = p.id
+            LEFT JOIN hr_employees m ON ee.reporting_to_id = m.id
+            WHERE e.status = 'Active'
+        """
+        params = []
+
+        if department:
+            query += " AND ee.department_id = ?"
+            params.append(department)
+        if potential:
+            query += " AND tp.potential_rating = ?"
+            params.append(potential)
+        if readiness:
+            query += " AND tp.readiness_level = ?"
+            params.append(readiness)
+
+        query += " ORDER BY e.last_name"
+        profiles = db.execute(query, params).fetchall()
+        data = [dict(p) for p in profiles]
+
+        columns = [
+            'employee_code', 'first_name', 'last_name', 'email', 'hire_date',
+            'department_name', 'position_title', 'manager_name',
+            'potential_rating', 'potential_score', 'readiness_level', 'readiness_score',
+            'performance_rating', 'performance_score', 'hi_po', 'flight_risk',
+            'succession_candidate', 'career_interests', 'mobility_preference',
+            'last_reviewed', 'notes'
+        ]
+
+        return send_export_response(
+            data, format_type, 'talent_profiles_advanced', columns,
+            'Talent Profiles Report'
+        )
+    finally:
+        db.close()
+
+
+@talent_bp.route('/export/succession-matrix', methods=['POST'])
+@talent_login_required
+@talent_permission_required('view')
+def export_succession_matrix():
+    """Export succession matrix."""
+    if not EXPORT_UTILS_AVAILABLE:
+        flash(t('export_not_available', 'Export functionality not available.'), 'error')
+        return redirect(url_for('talent.export_center'))
+
+    db = get_t_db()
+    try:
+        format_type = request.form.get('format', 'excel')
+
+        data = _get_succession_coverage_report(db)
+
+        columns = [
+            'position_title', 'department_name', 'incumbent_name',
+            'successor_count', 'successor_names', 'best_readiness',
+            'criticality_level', 'status'
+        ]
+
+        return send_export_response(
+            data, format_type, 'succession_matrix', columns,
+            'Succession Coverage Report'
+        )
+    finally:
+        db.close()
+
+
+@talent_bp.route('/export/competency-matrix', methods=['POST'])
+@talent_login_required
+@talent_permission_required('view')
+def export_competency_matrix():
+    """Export competency matrix."""
+    if not EXPORT_UTILS_AVAILABLE:
+        flash(t('export_not_available', 'Export functionality not available.'), 'error')
+        return redirect(url_for('talent.export_center'))
+
+    db = get_t_db()
+    try:
+        format_type = request.form.get('format', 'excel')
+        department_id = request.form.get('department_id', '')
+
+        query = """
+            SELECT e.employee_code, e.first_name, e.last_name,
+                   d.name as department_name, p.title as position_title,
+                   c.name as competency_name, cat.name as category_name,
+                   ec.proficiency_level, ec.required_level, ec.gap_score
+            FROM tm_employee_competencies ec
+            JOIN hr_employees e ON ec.employee_id = e.id
+            JOIN tm_competencies c ON ec.competency_id = c.id
+            LEFT JOIN tm_competency_categories cat ON c.category_id = cat.id
+            LEFT JOIN hr_employee_employment ee ON e.id = ee.employee_id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            LEFT JOIN hr_positions p ON ee.position_id = p.id
+            WHERE ec.status = 'Active'
+        """
+        params = []
+
+        if department_id:
+            query += " AND ee.department_id = ?"
+            params.append(department_id)
+
+        query += " ORDER BY cat.sort_order, c.name, e.last_name"
+        competencies = db.execute(query, params).fetchall()
+
+        data = [dict(c) for c in competencies]
+
+        columns = [
+            'employee_code', 'first_name', 'last_name', 'department_name',
+            'position_title', 'competency_name', 'category_name',
+            'proficiency_level', 'required_level', 'gap_score'
+        ]
+
+        return send_export_response(
+            data, format_type, 'competency_matrix', columns,
+            'Competency Matrix Report'
+        )
+    finally:
+        db.close()
+
+
+@talent_bp.route('/export/hipo-report', methods=['POST'])
+@talent_login_required
+@talent_permission_required('view')
+def export_hipo_report():
+    """Export Hi-Po report."""
+    if not EXPORT_UTILS_AVAILABLE:
+        flash(t('export_not_available', 'Export functionality not available.'), 'error')
+        return redirect(url_for('talent.export_center'))
+
+    db = get_t_db()
+    try:
+        format_type = request.form.get('format', 'pdf')
+
+        hipos = db.execute("""
+            SELECT tp.*, e.first_name, e.last_name, e.employee_code, e.email,
+                   e.hire_date, d.name as department_name, p.title as position_title,
+                   m.first_name || ' ' || m.last_name as manager_name,
+                   tp.potential_score, tp.readiness_level, tp.performance_rating
+            FROM tm_talent_profiles tp
+            JOIN hr_employees e ON tp.employee_id = e.id
+            LEFT JOIN hr_employee_employment ee ON e.id = ee.employee_id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            LEFT JOIN hr_positions p ON ee.position_id = p.id
+            LEFT JOIN hr_employees m ON ee.reporting_to_id = m.id
+            WHERE tp.hi_po = 1 AND e.status = 'Active'
+            ORDER BY tp.potential_score DESC, e.last_name
+        """).fetchall()
+
+        data = [dict(h) for h in hipos]
+
+        columns = [
+            'employee_code', 'first_name', 'last_name', 'email', 'hire_date',
+            'department_name', 'position_title', 'manager_name',
+            'potential_score', 'readiness_level', 'performance_rating',
+            'flight_risk', 'career_interests'
+        ]
+
+        return send_export_response(
+            data, format_type, 'hipo_report', columns,
+            'High Potential Talent Report'
+        )
+    finally:
+        db.close()
+
+
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
@@ -1957,6 +2283,198 @@ def _get_pool_members_fallback(db, pool_id):
             WHERE m.pool_id = ? AND m.status = 'Active'
         """, (pool_id,)).fetchall()
         return [dict(m) for m in members]
+    except:
+        return []
+
+
+# =============================================================================
+# CHART DATA HELPERS
+# =============================================================================
+
+def _get_headcount_by_department(db):
+    """Get headcount data by department for charts."""
+    try:
+        data = db.execute("""
+            SELECT d.name as department,
+                   COUNT(DISTINCT tp.employee_id) as headcount,
+                   SUM(CASE WHEN tp.hi_po = 1 THEN 1 ELSE 0 END) as hipo_count
+            FROM tm_talent_profiles tp
+            JOIN hr_employees e ON tp.employee_id = e.id
+            LEFT JOIN hr_employee_employment ee ON e.id = ee.employee_id AND ee.is_primary = 1
+            LEFT JOIN hr_departments d ON ee.department_id = d.id
+            WHERE e.status = 'Active'
+            GROUP BY d.id, d.name
+            ORDER BY headcount DESC
+        """).fetchall()
+        return [dict(d) for d in data]
+    except:
+        return []
+
+
+def _get_readiness_distribution_chart(db):
+    """Get readiness distribution for pie/donut charts."""
+    try:
+        data = db.execute("""
+            SELECT COALESCE(readiness_level, 'Not Set') as readiness,
+                   COUNT(*) as count
+            FROM tm_talent_profiles
+            GROUP BY readiness_level
+        """).fetchall()
+        return {
+            'labels': [d['readiness'] for d in data],
+            'values': [d['count'] for d in data],
+            'colors': ['#10b981', '#3b82f6', '#f59e0b', '#6366f1', '#94a3b8']
+        }
+    except:
+        return {'labels': [], 'values': [], 'colors': []}
+
+
+def _get_hipo_pipeline_chart(db):
+    """Get HiPo pipeline health for bar charts."""
+    try:
+        data = db.execute("""
+            SELECT COALESCE(readiness_level, 'Not Set') as readiness,
+                   COUNT(*) as count
+            FROM tm_talent_profiles tp
+            JOIN hr_employees e ON tp.employee_id = e.id
+            WHERE tp.hi_po = 1 AND e.status = 'Active'
+            GROUP BY readiness_level
+        """).fetchall()
+        return {
+            'labels': [d['readiness'] for d in data],
+            'values': [d['count'] for d in data],
+            'colors': ['#10b981', '#3b82f6', '#f59e0b', '#6366f1']
+        }
+    except:
+        return {'labels': [], 'values': [], 'colors': []}
+
+
+def _get_performance_distribution_chart(db):
+    """Get performance rating distribution for histograms."""
+    try:
+        data = db.execute("""
+            SELECT COALESCE(performance_rating, 'Not Rated') as rating,
+                   COUNT(*) as count
+            FROM tm_talent_profiles
+            WHERE performance_rating IS NOT NULL
+            GROUP BY performance_rating
+        """).fetchall()
+        return {
+            'labels': [d['rating'] for d in data],
+            'values': [d['count'] for d in data],
+            'colors': ['#ef4444', '#f59e0b', '#3b82f6', '#10b981', '#22c55e']
+        }
+    except:
+        return {'labels': [], 'values': [], 'colors': []}
+
+
+def _get_succession_coverage_chart(db):
+    """Get succession coverage data for charts."""
+    try:
+        total = db.execute("SELECT COUNT(*) as cnt FROM tm_critical_roles WHERE status = 'Active'").fetchone()['cnt']
+        covered = db.execute("""
+            SELECT COUNT(DISTINCT cr.id) as cnt
+            FROM tm_critical_roles cr
+            JOIN tm_succession_plans sp ON cr.id = sp.critical_role_id
+            WHERE cr.status = 'Active' AND sp.status = 'Approved'
+        """).fetchone()['cnt']
+        at_risk = total - covered
+        return {
+            'labels': ['Covered', 'At Risk'],
+            'values': [covered, at_risk],
+            'colors': ['#10b981', '#ef4444']
+        }
+    except:
+        return {'labels': [], 'values': [], 'colors': []}
+
+
+def _get_competency_gaps_chart(db):
+    """Get competency gap data for bar charts."""
+    try:
+        data = db.execute("""
+            SELECT cat.name as category,
+                   AVG(ec.gap_score) as avg_gap,
+                   COUNT(DISTINCT ec.employee_id) as employee_count
+            FROM tm_employee_competencies ec
+            JOIN tm_competencies c ON ec.competency_id = c.id
+            LEFT JOIN tm_competency_categories cat ON c.category_id = cat.id
+            WHERE ec.status = 'Active' AND ec.gap_score < 0
+            GROUP BY cat.id, cat.name
+            ORDER BY avg_gap
+            LIMIT 10
+        """).fetchall()
+        return {
+            'labels': [d['category'] for d in data],
+            'values': [abs(d['avg_gap']) for d in data],
+            'colors': ['#ef4444', '#f97316', '#f59e0b', '#eab308']
+        }
+    except:
+        return {'labels': [], 'values': [], 'colors': []}
+
+
+def _get_nine_box_chart_data(db, review_id=None):
+    """Get 9-box grid data for visualization."""
+    try:
+        query = """
+            SELECT
+                CASE
+                    WHEN potential_rating IN ('Very High', 'High') AND performance_rating IN ('Exceeds', 'Exceptional') THEN 'top_performers'
+                    WHEN potential_rating IN ('Very High', 'High') AND performance_rating IN ('Meets') THEN 'high_potential'
+                    WHEN potential_rating IN ('Medium') AND performance_rating IN ('Exceeds', 'Exceptional') THEN 'solid_players'
+                    WHEN potential_rating IN ('Medium') AND performance_rating IN ('Meets') THEN 'core_players'
+                    WHEN potential_rating IN ('Low', 'Developing') AND performance_rating IN ('Exceeds', 'Exceptional') THEN 'inconsistent'
+                    WHEN potential_rating IN ('Low', 'Developing') AND performance_rating IN ('Meets') THEN 'underperformers'
+                    ELSE 'needs_development'
+                END as segment,
+                COUNT(*) as count
+            FROM tm_talent_profiles tp
+            JOIN hr_employees e ON tp.employee_id = e.id
+            WHERE e.status = 'Active'
+        """
+        params = []
+        if review_id:
+            query = """
+                SELECT
+                    CASE
+                        WHEN p.potential_rating IN ('Very High', 'High') AND p.performance_rating IN ('Exceeds', 'Exceptional') THEN 'top_performers'
+                        WHEN p.potential_rating IN ('Very High', 'High') AND p.performance_rating IN ('Meets') THEN 'high_potential'
+                        WHEN p.potential_rating IN ('Medium') AND p.performance_rating IN ('Exceeds', 'Exceptional') THEN 'solid_players'
+                        WHEN p.potential_rating IN ('Medium') AND p.performance_rating IN ('Meets') THEN 'core_players'
+                        WHEN p.potential_rating IN ('Low', 'Developing') AND p.performance_rating IN ('Exceeds', 'Exceptional') THEN 'inconsistent'
+                        WHEN p.potential_rating IN ('Low', 'Developing') AND p.performance_rating IN ('Meets') THEN 'underperformers'
+                        ELSE 'needs_development'
+                    END as segment,
+                    COUNT(*) as count
+                FROM tm_talent_review_participants p
+                JOIN hr_employees e ON p.employee_id = e.id
+                WHERE p.review_id = ?
+            """
+            params = [review_id]
+
+        data = db.execute(query, params).fetchall()
+
+        segments = {
+            'top_performers': {'label': 'Top Performers', 'x': 9, 'y': 9, 'color': '#22c55e'},
+            'high_potential': {'label': 'High Potential', 'x': 8, 'y': 7, 'color': '#10b981'},
+            'solid_players': {'label': 'Solid Players', 'x': 6, 'y': 5, 'color': '#3b82f6'},
+            'core_players': {'label': 'Core Players', 'x': 5, 'y': 4, 'color': '#6366f1'},
+            'inconsistent': {'label': 'Inconsistent', 'x': 4, 'y': 3, 'color': '#f59e0b'},
+            'underperformers': {'label': 'Underperformers', 'x': 2, 'y': 2, 'color': '#f97316'},
+            'needs_development': {'label': 'Needs Development', 'x': 1, 'y': 1, 'color': '#94a3b8'}
+        }
+
+        result = []
+        for d in data:
+            seg = segments.get(d['segment'], segments['needs_development'])
+            result.append({
+                'segment': seg['label'],
+                'count': d['count'],
+                'x': seg['x'],
+                'y': seg['y'],
+                'color': seg['color']
+            })
+
+        return result
     except:
         return []
 

@@ -26,7 +26,7 @@ import uuid
 import hashlib
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, request, redirect, url_for, flash, session, render_template, send_file, jsonify, Response
+from flask import Flask, request, redirect, url_for, flash, session, render_template, send_file, jsonify, Response, make_response
 from werkzeug.utils import secure_filename
 from database import get_db, get_db_context, get_one, get_all, log_audit, create_notification, table_exists, column_exists, add_column_if_not_exists
 
@@ -2028,19 +2028,97 @@ def register_document_routes(app):
     def documents_audit_logs():
         """View document audit logs."""
         user_id = get_current_user_id()
-        
-        date_from = request.args.get('date_from', (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d'))
+
+        date_from = request.args.get('date_from', (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
         date_to = request.args.get('date_to', datetime.now().strftime('%Y-%m-%d'))
-        
-        logs = get_all("""
-            SELECT * FROM document_access_logs
-            WHERE date(created_at) BETWEEN ? AND ?
-            ORDER BY created_at DESC
-            LIMIT 500
-        """, (date_from, date_to))
-        
+        action_filter = request.args.get('action', '')
+
+        export_format = request.args.get('export', '')
+
+        # Build query
+        sql = """
+            SELECT dal.*, u.username
+            FROM document_access_logs dal
+            LEFT JOIN users u ON dal.user_id = u.id
+            WHERE date(dal.created_at) BETWEEN ? AND ?
+        """
+        params = [date_from, date_to]
+
+        if action_filter:
+            sql += " AND dal.access_action = ?"
+            params.append(action_filter)
+
+        sql += " ORDER BY dal.created_at DESC LIMIT 500"
+
+        logs = get_all(sql, params)
+
+        # Stats
+        stats = {
+            'total': len(logs),
+            'views': sum(1 for l in logs if l.get('access_action') == 'View'),
+            'downloads': sum(1 for l in logs if l.get('access_action') == 'Download'),
+            'uploads': sum(1 for l in logs if l.get('access_action') == 'Upload'),
+        }
+
+        # Export handling
+        if export_format == 'csv':
+            import csv
+            import io
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(['Document ID', 'User', 'Action', 'Access Type', 'IP Address', 'Time'])
+            for log in logs:
+                writer.writerow([
+                    log.get('document_id', ''),
+                    log.get('username', 'System'),
+                    log.get('access_action', ''),
+                    log.get('access_type', ''),
+                    log.get('ip_address', ''),
+                    log.get('created_at', '')[:19]
+                ])
+            response = make_response(output.getvalue())
+            response.headers['Content-Type'] = 'text/csv'
+            response.headers['Content-Disposition'] = f'attachment; filename=document_audit_logs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+            return response
+
+        elif export_format == 'json':
+            data = [{
+                'document_id': log.get('document_id'),
+                'user': log.get('username', 'System'),
+                'action': log.get('access_action'),
+                'access_type': log.get('access_type'),
+                'ip_address': log.get('ip_address'),
+                'time': log.get('created_at', '')[:19]
+            } for log in logs]
+            response = make_response(json.dumps(data, indent=2))
+            response.headers['Content-Type'] = 'application/json'
+            response.headers['Content-Disposition'] = f'attachment; filename=document_audit_logs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+            return response
+
+        elif export_format == 'excel':
+            import csv
+            import io
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(['Document ID', 'User', 'Action', 'Access Type', 'IP Address', 'Time'])
+            for log in logs:
+                writer.writerow([
+                    log.get('document_id', ''),
+                    log.get('username', 'System'),
+                    log.get('access_action', ''),
+                    log.get('access_type', ''),
+                    log.get('ip_address', ''),
+                    log.get('created_at', '')[:19]
+                ])
+            response = make_response(output.getvalue())
+            response.headers['Content-Type'] = 'application/vnd.ms-excel'
+            response.headers['Content-Disposition'] = f'attachment; filename=document_audit_logs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xls'
+            return response
+
         return render_template('documents/audit_logs.html',
             logs=logs,
+            stats=stats,
+            action_filter=action_filter,
             date_from=date_from,
             date_to=date_to,
             page_title='Document Audit Logs')

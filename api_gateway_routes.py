@@ -66,13 +66,40 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
                     flash("Please login to access this page.", "error")
                     return redirect(url_for('login'))
 
-                # API Admin can access all API Gateway features
+                # Check for API Admin or Global Admin role
+                user_role = session.get('role_name', '')
+                if 'API Admin' in user_role or 'Global Admin' in user_role:
+                    return f(*args, **kwargs)
+
+                # Check permission via platform permission system
                 if not require_permission(user_id, 'platform', 'settings', 'edit'):
-                    # Check for specific API Gateway roles
-                    user_role = session.get('role_name', '')
-                    if 'API Admin' not in user_role and 'Global Admin' not in user_role:
-                        flash("Access Denied. You need API Gateway admin permissions.", "error")
-                        return redirect(url_for('index'))
+                    flash("Access Denied. You need API Gateway admin permissions.", "error")
+                    return redirect(url_for('index'))
+
+                return f(*args, **kwargs)
+            return decorated_function
+        return decorator
+
+    def api_gateway_readonly():
+        """API Gateway read-only permission decorator for monitors and auditors."""
+        def decorator(f):
+            @wraps(f)
+            def decorated_function(*args, **kwargs):
+                user_id = session.get('user_id')
+                if not user_id:
+                    flash("Please login to access this page.", "error")
+                    return redirect(url_for('login'))
+
+                # Allow API Admin, Global Admin, API Monitor, API Support, Auditor
+                user_role = session.get('role_name', '')
+                allowed_roles = ['API Admin', 'Global Admin', 'API Monitor', 'API Support', 'Auditor']
+                if any(role in user_role for role in allowed_roles):
+                    return f(*args, **kwargs)
+
+                # Check if user has at least read access
+                if not require_permission(user_id, 'platform', 'settings', 'view'):
+                    flash("Access Denied. You need API Gateway view permissions.", "error")
+                    return redirect(url_for('index'))
 
                 return f(*args, **kwargs)
             return decorated_function
@@ -111,11 +138,13 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
 
         from api_gateway_models import get_api_gateway_stats, get_api_usage_metrics, get_api_request_logs, get_api_error_logs, get_webhook_subscriptions
 
+        days = int(request.args.get('days', 7))
+
         # Get dashboard stats
         stats = get_api_gateway_stats()
 
-        # Get usage metrics for last 7 days
-        metrics = get_api_usage_metrics(7)
+        # Get usage metrics for selected period
+        metrics = get_api_usage_metrics(days)
 
         # Get recent request logs
         recent_logs = get_api_request_logs(page=1, per_page=10)
@@ -124,10 +153,19 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         # Get active webhooks
         active_webhooks = get_webhook_subscriptions({'active': True}, page=1, per_page=5)
 
+        # Prepare chart data
+        metrics_labels = [m['date'] for m in metrics] if metrics else []
+        metrics_requests = [m['requests'] for m in metrics] if metrics else []
+        metrics_errors = [m['errors'] for m in metrics] if metrics else []
+
         context = get_base_context()
         context.update({
             'stats': stats,
             'metrics': metrics,
+            'metrics_labels': metrics_labels,
+            'metrics_requests': metrics_requests,
+            'metrics_errors': metrics_errors,
+            'days': days,
             'recent_logs': recent_logs['logs'],
             'recent_errors': recent_errors['logs'],
             'active_webhooks': active_webhooks['subscriptions'],
@@ -289,7 +327,7 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         if 'user_id' not in session:
             return redirect(url_for('login'))
 
-        from api_gateway_models import get_api_clients
+        from api_gateway_models import get_api_clients, get_count
 
         filters = {
             'search': request.args.get('search'),
@@ -302,6 +340,31 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
 
         clients = get_api_clients(filters=filters, page=page, per_page=per_page)
 
+        # Get additional stats
+        total_clients = get_count("api_clients", "")
+        active_count = get_count("api_clients", "status='active'")
+        pending_count = get_count("api_clients", "status='pending'")
+        credentials_count = get_count("api_client_credentials", "is_active=1")
+
+        # Add usage stats to each client
+        from database import get_all
+        from datetime import datetime, timedelta
+        week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
+
+        for client in clients['clients']:
+            usage = get_all("""
+                SELECT COUNT(*) as count FROM api_request_logs
+                WHERE client_id = ? AND created_at >= ?
+            """, (client['id'], week_ago))
+            client['usage_count'] = usage[0]['count'] if usage else 0
+
+            # Calculate usage percentage of rate limit
+            if client.get('max_requests_per_day'):
+                daily_limit = client['max_requests_per_day']
+                client['usage_pct'] = min((client['usage_count'] / daily_limit / 7) * 100, 100)
+            else:
+                client['usage_pct'] = 0
+
         context = get_base_context()
         context.update({
             'clients': clients['clients'],
@@ -310,6 +373,9 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
             'pages': clients['pages'],
             'per_page': per_page,
             'filters': filters,
+            'active_count': active_count,
+            'pending_count': pending_count,
+            'credentials_count': credentials_count,
             'page_title': 'API Clients'
         })
 
@@ -637,7 +703,7 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         if 'user_id' not in session:
             return redirect(url_for('login'))
 
-        from api_gateway_models import get_webhook_subscriptions
+        from api_gateway_models import get_webhook_subscriptions, get_count
 
         filters = {
             'active': request.args.get('active'),
@@ -650,6 +716,12 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
 
         subscriptions = get_webhook_subscriptions(filters=filters, page=page, per_page=per_page)
 
+        # Get webhook stats
+        total_subs = get_count("webhook_subscriptions", "")
+        active_subs = get_count("webhook_subscriptions", "active=1")
+        deliveries_today = get_count("webhook_deliveries", "created_at >= datetime('now', '-1 day')")
+        failed_today = get_count("webhook_deliveries", "delivery_status='failed' AND created_at >= datetime('now', '-1 day')")
+
         context = get_base_context()
         context.update({
             'subscriptions': subscriptions['subscriptions'],
@@ -658,6 +730,10 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
             'pages': subscriptions['pages'],
             'per_page': per_page,
             'filters': filters,
+            'total_subs': total_subs,
+            'active_subs': active_subs,
+            'deliveries_today': deliveries_today,
+            'failed_today': failed_today,
             'page_title': 'Webhook Subscriptions'
         })
 
@@ -808,7 +884,8 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         if 'user_id' not in session:
             return redirect(url_for('login'))
 
-        from api_gateway_models import get_webhook_deliveries, get_webhook_subscriptions
+        from api_gateway_models import get_webhook_deliveries, get_webhook_subscriptions, get_count
+        from datetime import datetime, timedelta
 
         filters = {
             'subscription_id': request.args.get('subscription_id'),
@@ -824,6 +901,35 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         deliveries = get_webhook_deliveries(filters=filters, page=page, per_page=per_page)
         subscriptions = get_webhook_subscriptions(page=1, per_page=100)
 
+        # Calculate stats
+        week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
+        total_deliveries = get_count("webhook_deliveries", f"created_at >= '{week_ago}'")
+        success_count = get_count("webhook_deliveries", f"delivery_status='success' AND created_at >= '{week_ago}'")
+        failed_count = get_count("webhook_deliveries", f"delivery_status='failed' AND created_at >= '{week_ago}'")
+        pending_count = get_count("webhook_deliveries", f"delivery_status='pending' AND created_at >= '{week_ago}'")
+
+        success_rate = (success_count / total_deliveries * 100) if total_deliveries > 0 else 100
+
+        # Average delivery time
+        from database import get_one
+        avg_result = get_one("""
+            SELECT AVG(response_time_ms) FROM webhook_deliveries
+            WHERE created_at >= ? AND response_time_ms IS NOT NULL
+        """, (week_ago,))
+        avg_delivery_time = round(avg_result[0], 2) if avg_result and avg_result[0] else 0
+
+        # Trend data for chart (last 7 days)
+        trend_labels = []
+        success_trend = []
+        failed_trend = []
+        for i in range(7):
+            day = (datetime.utcnow() - timedelta(days=i)).date().isoformat()
+            trend_labels.insert(0, day)
+            day_start = f"{day} 00:00:00"
+            day_end = f"{day} 23:59:59"
+            success_trend.insert(0, get_count("webhook_deliveries", f"delivery_status='success' AND created_at >= '{day_start}' AND created_at <= '{day_end}'"))
+            failed_trend.insert(0, get_count("webhook_deliveries", f"delivery_status='failed' AND created_at >= '{day_start}' AND created_at <= '{day_end}'"))
+
         context = get_base_context()
         context.update({
             'deliveries': deliveries['deliveries'],
@@ -833,6 +939,15 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
             'per_page': per_page,
             'subscriptions': subscriptions['subscriptions'],
             'filters': filters,
+            'total_deliveries': total_deliveries,
+            'success_count': success_count,
+            'failed_count': failed_count,
+            'pending_count': pending_count,
+            'success_rate': success_rate,
+            'avg_delivery_time': avg_delivery_time,
+            'trend_labels': trend_labels,
+            'success_trend': success_trend,
+            'failed_trend': failed_trend,
             'page_title': 'Webhook Deliveries'
         })
 
@@ -1223,39 +1338,126 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         if 'user_id' not in session:
             return redirect(url_for('login'))
 
-        from api_gateway_models import get_api_usage_metrics, get_api_request_logs
+        from api_gateway_models import get_api_usage_metrics
 
         days = int(request.args.get('days', 7))
         metrics = get_api_usage_metrics(days)
 
         # Get top clients by request count
-        from database import get_all
+        from database import get_all, get_count
         top_clients = get_all("""
             SELECT ac.client_name, ac.client_code, COUNT(*) as request_count
             FROM api_request_logs arl
             JOIN api_clients ac ON arl.client_id = ac.id
-            WHERE arl.created_at >= datetime('now', '-7 days')
+            WHERE arl.created_at >= datetime('now', '-{} days')
             GROUP BY ac.id
             ORDER BY request_count DESC
             LIMIT 10
-        """)
+        """.format(days))
 
         # Get top endpoints by request count
         top_endpoints = get_all("""
             SELECT method, path, COUNT(*) as request_count
             FROM api_request_logs
-            WHERE created_at >= datetime('now', '-7 days')
+            WHERE created_at >= datetime('now', '-{} days')
             GROUP BY method, path
             ORDER BY request_count DESC
             LIMIT 10
-        """)
+        """.format(days))
+
+        # Calculate totals and averages
+        total_requests = sum(m['requests'] for m in metrics) if metrics else 0
+        total_errors = sum(m['errors'] for m in metrics) if metrics else 0
+        avg_response = sum(m['avg_response_ms'] for m in metrics) / len(metrics) if metrics and metrics else 0
+
+        # Error rate and success rate
+        success_rate = ((total_requests - total_errors) / total_requests * 100) if total_requests > 0 else 100
+
+        # P50, P90, P95, P99 from database
+        from api_gateway_models import get_db
+        p50, p90, p95, p99, p95_response, timeout_count = 0, 0, 0, 0, 0, 0
+        try:
+            with get_db() as db:
+                # P50 (median)
+                p50_row = db.execute("""
+                    SELECT response_time_ms FROM api_request_logs
+                    WHERE created_at >= datetime('now', '-{} days') AND response_time_ms IS NOT NULL
+                    ORDER BY response_time_ms ASC
+                    LIMIT 1 OFFSET (SELECT COUNT(*) / 2 FROM api_request_logs
+                                    WHERE created_at >= datetime('now', '-{} days') AND response_time_ms IS NOT NULL)
+                """.format(days, days)).fetchone()
+                p50 = p50_row[0] if p50_row else 0
+
+                # P95
+                p95_row = db.execute("""
+                    SELECT response_time_ms FROM api_request_logs
+                    WHERE created_at >= datetime('now', '-{} days') AND response_time_ms IS NOT NULL
+                    ORDER BY response_time_ms ASC
+                    LIMIT 1 OFFSET (SELECT COUNT(*) * 95 / 100 FROM api_request_logs
+                                    WHERE created_at >= datetime('now', '-{} days') AND response_time_ms IS NOT NULL)
+                """.format(days, days)).fetchone()
+                p95 = p95_row[0] if p95_row else 0
+
+                # P99
+                p99_row = db.execute("""
+                    SELECT response_time_ms FROM api_request_logs
+                    WHERE created_at >= datetime('now', '-{} days') AND response_time_ms IS NOT NULL
+                    ORDER BY response_time_ms ASC
+                    LIMIT 1 OFFSET (SELECT COUNT(*) * 99 / 100 FROM api_request_logs
+                                    WHERE created_at >= datetime('now', '-{} days') AND response_time_ms IS NOT NULL)
+                """.format(days, days)).fetchone()
+                p99 = p99_row[0] if p99_row else 0
+
+                # Timeout count
+                timeout_row = db.execute("""
+                    SELECT COUNT(*) FROM api_request_logs
+                    WHERE created_at >= datetime('now', '-{} days') AND response_time_ms > 30000
+                """.format(days)).fetchone()
+                timeout_count = timeout_row[0] if timeout_row else 0
+
+                # P95 for display
+                p95_response = p95
+        except:
+            pass
+
+        # Prepare chart data
+        metrics_labels = [m['date'] for m in metrics] if metrics else []
+        metrics_requests = [m['requests'] for m in metrics] if metrics else []
+        metrics_errors = [m['errors'] for m in metrics] if metrics else []
+        error_rates = [m['error_rate'] for m in metrics] if metrics else []
+
+        # Client chart data
+        client_names = [c['client_name'] for c in top_clients] if top_clients else []
+        client_counts = [c['request_count'] for c in top_clients] if top_clients else []
+
+        # Endpoint chart data
+        endpoint_labels = [f"{e['method']} {e['path'][:30]}" for e in top_endpoints] if top_endpoints else []
+        endpoint_counts = [e['request_count'] for e in top_endpoints] if top_endpoints else []
 
         context = get_base_context()
         context.update({
             'metrics': metrics,
+            'metrics_labels': metrics_labels,
+            'metrics_requests': metrics_requests,
+            'metrics_errors': metrics_errors,
+            'error_rates': error_rates,
             'days': days,
+            'total_requests': total_requests,
+            'total_errors': total_errors,
+            'success_rate': success_rate,
+            'avg_response': round(avg_response, 2),
+            'p50': p50,
+            'p90': p90,
+            'p95': p95,
+            'p99': p99,
+            'p95_response': p95_response,
+            'timeout_count': timeout_count,
             'top_clients': top_clients,
             'top_endpoints': top_endpoints,
+            'client_names': client_names,
+            'client_counts': client_counts,
+            'endpoint_labels': endpoint_labels,
+            'endpoint_counts': endpoint_counts,
             'page_title': 'Usage Metrics'
         })
 
@@ -1282,7 +1484,7 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         errors = get_api_error_logs(filters=filters, page=page, per_page=per_page)
 
         # Get error summary
-        from database import get_all
+        from database import get_all, get_count
         error_summary = get_all("""
             SELECT error_code, error_type, COUNT(*) as count
             FROM api_error_logs
@@ -1291,6 +1493,28 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
             ORDER BY count DESC
             LIMIT 20
         """)
+
+        # Error counts by type
+        from datetime import datetime, timedelta
+        week_ago = (datetime.utcnow() - timedelta(days=7)).isoformat()
+
+        client_errors = get_count("api_error_logs", f"error_type = 'client' AND created_at >= '{week_ago}'")
+        server_errors = get_count("api_error_logs", f"error_type = 'server' AND created_at >= '{week_ago}'")
+        timeout_errors = get_count("api_error_logs", f"error_type = 'timeout' AND created_at >= '{week_ago}'")
+        auth_errors = get_count("api_error_logs", f"error_type = 'auth' AND created_at >= '{week_ago}'")
+        resolved_errors = get_count("api_error_logs", f"is_resolved = 1 AND created_at >= '{week_ago}'")
+
+        # Average resolution time (in minutes)
+        avg_resolution_time = 0
+
+        # Error trend data for chart (last 7 days)
+        error_trend_labels = []
+        error_trend_data = []
+        for i in range(7):
+            day = (datetime.utcnow() - timedelta(days=i)).date().isoformat()
+            error_trend_labels.insert(0, day)
+            count = get_count("api_error_logs", f"created_at >= '{day} 00:00:00' AND created_at <= '{day} 23:59:59'")
+            error_trend_data.insert(0, count)
 
         context = get_base_context()
         context.update({
@@ -1301,10 +1525,83 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
             'per_page': per_page,
             'error_summary': error_summary,
             'filters': filters,
+            'client_errors': client_errors,
+            'server_errors': server_errors,
+            'timeout_errors': timeout_errors,
+            'auth_errors': auth_errors,
+            'resolved_errors': resolved_errors,
+            'avg_resolution_time': avg_resolution_time,
+            'error_trend_labels': error_trend_labels,
+            'error_trend_data': error_trend_data,
             'page_title': 'Error Metrics'
         })
 
         return render_template('api_gateway/monitoring/errors.html', **context)
+
+    @app.route('/api-gateway/export/errors/csv/')
+    def api_gateway_export_errors_csv():
+        """Export error logs as CSV."""
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+
+        from api_gateway_models import get_api_error_logs
+
+        filters = {
+            'error_type': request.args.get('error_type'),
+            'date_from': request.args.get('date_from'),
+            'date_to': request.args.get('date_to'),
+        }
+
+        errors = get_api_error_logs(filters=filters, page=1, per_page=10000)
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Error ID', 'Error Code', 'Type', 'Message', 'Method', 'Path', 'Client', 'Resolved', 'Created At'])
+
+        for e in errors['logs']:
+            writer.writerow([
+                e.get('error_id'),
+                e.get('error_code'),
+                e.get('error_type'),
+                e.get('error_message'),
+                e.get('method'),
+                e.get('path'),
+                e.get('client_code'),
+                'Yes' if e.get('is_resolved') else 'No',
+                e.get('created_at'),
+            ])
+
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'api_errors_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        )
+
+    @app.route('/api-gateway/export/errors/json/')
+    def api_gateway_export_errors_json():
+        """Export error logs as JSON."""
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+
+        from api_gateway_models import get_api_error_logs
+
+        filters = {
+            'error_type': request.args.get('error_type'),
+            'date_from': request.args.get('date_from'),
+            'date_to': request.args.get('date_to'),
+        }
+
+        errors = get_api_error_logs(filters=filters, page=1, per_page=10000)
+
+        response = jsonify({
+            'export_date': datetime.now().isoformat(),
+            'total_records': len(errors['logs']),
+            'errors': errors['logs']
+        })
+        response.headers['Content-Disposition'] = f'attachment; filename=api_errors_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        return response
 
     @app.route('/api-gateway/monitoring/rate-limits/')
     def api_gateway_rate_limits():
@@ -1342,7 +1639,9 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         if 'user_id' not in session:
             return redirect(url_for('login'))
 
-        from database import get_one
+        from api_gateway_models import get_api_versions
+        from database import get_one, get_all, get_count
+        from datetime import datetime, timedelta
 
         # Check database
         db_status = 'healthy'
@@ -1351,19 +1650,79 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         except:
             db_status = 'unhealthy'
 
-        # Check API versions
-        from api_gateway_models import get_api_versions
+        # Get versions
         versions = get_api_versions()
 
-        # Get recent error rate
-        from database import get_count
-        from datetime import datetime, timedelta
-        yesterday = (datetime.utcnow() - timedelta(days=1)).isoformat()
+        # Get route count per version
+        with get_db() as db:
+            for v in versions:
+                count = db.execute("SELECT COUNT(*) FROM api_route_registry WHERE version_id = ?", (v['id'],)).fetchone()[0]
+                v['route_count'] = count
 
+        # Get metrics
+        yesterday = (datetime.utcnow() - timedelta(days=1)).isoformat()
         total_requests = get_count("api_request_logs", f"created_at >= '{yesterday}'")
         total_errors = get_count("api_error_logs", f"is_resolved = 0 AND created_at >= '{yesterday}'")
         error_rate = (total_errors / total_requests * 100) if total_requests > 0 else 0
 
+        # Get latency percentiles
+        p50, p90, p95, p99 = 0, 0, 0, 0
+        avg_latency = 0
+        try:
+            with get_db() as db:
+                # Average latency
+                avg_row = db.execute("""
+                    SELECT AVG(response_time_ms) FROM api_request_logs
+                    WHERE created_at >= ? AND response_time_ms IS NOT NULL
+                """, (yesterday,)).fetchone()
+                avg_latency = round(avg_row[0], 2) if avg_row and avg_row[0] else 0
+
+                # P50
+                p50_row = db.execute("""
+                    SELECT response_time_ms FROM api_request_logs
+                    WHERE created_at >= ? AND response_time_ms IS NOT NULL
+                    ORDER BY response_time_ms ASC
+                    LIMIT 1 OFFSET (SELECT COUNT(*) / 2 FROM api_request_logs
+                                    WHERE created_at >= ? AND response_time_ms IS NOT NULL)
+                """, (yesterday, yesterday)).fetchone()
+                p50 = p50_row[0] if p50_row else 0
+
+                # P90
+                p90_row = db.execute("""
+                    SELECT response_time_ms FROM api_request_logs
+                    WHERE created_at >= ? AND response_time_ms IS NOT NULL
+                    ORDER BY response_time_ms ASC
+                    LIMIT 1 OFFSET (SELECT COUNT(*) * 90 / 100 FROM api_request_logs
+                                    WHERE created_at >= ? AND response_time_ms IS NOT NULL)
+                """, (yesterday, yesterday)).fetchone()
+                p90 = p90_row[0] if p90_row else 0
+
+                # P95
+                p95_row = db.execute("""
+                    SELECT response_time_ms FROM api_request_logs
+                    WHERE created_at >= ? AND response_time_ms IS NOT NULL
+                    ORDER BY response_time_ms ASC
+                    LIMIT 1 OFFSET (SELECT COUNT(*) * 95 / 100 FROM api_request_logs
+                                    WHERE created_at >= ? AND response_time_ms IS NOT NULL)
+                """, (yesterday, yesterday)).fetchone()
+                p95 = p95_row[0] if p95_row else 0
+
+                # P99
+                p99_row = db.execute("""
+                    SELECT response_time_ms FROM api_request_logs
+                    WHERE created_at >= ? AND response_time_ms IS NOT NULL
+                    ORDER BY response_time_ms ASC
+                    LIMIT 1 OFFSET (SELECT COUNT(*) * 99 / 100 FROM api_request_logs
+                                    WHERE created_at >= ? AND response_time_ms IS NOT NULL)
+                """, (yesterday, yesterday)).fetchone()
+                p99 = p99_row[0] if p99_row else 0
+        except:
+            pass
+
+        # Calculate uptime (rough estimate based on error rate)
+        uptime = 100 - error_rate
+
+        # Components
         components = [
             {'name': 'Database', 'status': db_status, 'latency_ms': 5},
             {'name': 'API Gateway Core', 'status': 'healthy', 'latency_ms': 12},
@@ -1378,6 +1737,13 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
             'total_requests': total_requests,
             'total_errors': total_errors,
             'error_rate': round(error_rate, 2),
+            'uptime': round(uptime, 2),
+            'avg_latency': avg_latency,
+            'p50': round(p50, 2),
+            'p90': round(p90, 2),
+            'p95': round(p95, 2),
+            'p99': round(p99, 2),
+            'last_checked': datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC'),
             'page_title': 'Health Status'
         })
 
@@ -1491,6 +1857,8 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         if 'user_id' not in session:
             return redirect(url_for('login'))
 
+        export_format = request.args.get('format', 'csv')
+
         from api_gateway_models import get_api_request_logs
 
         filters = {
@@ -1501,6 +1869,15 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         }
 
         logs = get_api_request_logs(filters=filters, page=1, per_page=10000)
+
+        if export_format == 'json':
+            response = jsonify({
+                'export_date': datetime.now().isoformat(),
+                'total_records': len(logs['logs']),
+                'logs': logs['logs']
+            })
+            response.headers['Content-Disposition'] = f'attachment; filename=api_logs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+            return response
 
         output = io.StringIO()
         writer = csv.writer(output)
@@ -1531,6 +1908,110 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
             mimetype='text/csv',
             as_attachment=True,
             download_name=f'api_logs_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        )
+
+    @app.route('/api-gateway/export/usage/csv/')
+    def api_gateway_export_usage_csv():
+        """Export usage metrics as CSV."""
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+
+        from api_gateway_models import get_api_usage_metrics
+
+        days = int(request.args.get('days', 30))
+        metrics = get_api_usage_metrics(days)
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Date', 'Requests', 'Errors', 'Error Rate (%)', 'Avg Response (ms)'])
+
+        for m in metrics:
+            writer.writerow([m['date'], m['requests'], m['errors'], f"{m['error_rate']:.2f}", m['avg_response_ms']])
+
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'api_usage_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        )
+
+    @app.route('/api-gateway/export/usage/json/')
+    def api_gateway_export_usage_json():
+        """Export usage metrics as JSON."""
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+
+        from api_gateway_models import get_api_usage_metrics
+
+        days = int(request.args.get('days', 30))
+        metrics = get_api_usage_metrics(days)
+
+        response = jsonify({
+            'export_date': datetime.now().isoformat(),
+            'period_days': days,
+            'metrics': metrics
+        })
+        response.headers['Content-Disposition'] = f'attachment; filename=api_usage_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        return response
+
+    @app.route('/api-gateway/export/usage/excel/')
+    def api_gateway_export_usage_excel():
+        """Export usage metrics as Excel (CSV with formatting for Excel)."""
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+
+        from api_gateway_models import get_api_usage_metrics, get_api_request_logs
+        from database import get_all
+
+        days = int(request.args.get('days', 30))
+        metrics = get_api_usage_metrics(days)
+
+        # Get top clients
+        top_clients = get_all("""
+            SELECT ac.client_name, ac.client_code, COUNT(*) as request_count
+            FROM api_request_logs arl
+            JOIN api_clients ac ON arl.client_id = ac.id
+            WHERE arl.created_at >= datetime('now', '-{} days')
+            GROUP BY ac.id
+            ORDER BY request_count DESC
+            LIMIT 10
+        """.format(days))
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+
+        # Write Usage Report sheet
+        writer.writerow(['API Usage Report - Last {} Days'.format(days)])
+        writer.writerow(['Generated: {}'.format(datetime.now().strftime('%Y-%m-%d %H:%M:%S'))])
+        writer.writerow([])
+        writer.writerow(['Date', 'Requests', 'Errors', 'Error Rate (%)', 'Avg Response (ms)', 'Success Rate (%)'])
+
+        total_requests = 0
+        total_errors = 0
+        for m in metrics:
+            total_requests += m['requests']
+            total_errors += m['errors']
+            success_rate = ((m['requests'] - m['errors']) / m['requests'] * 100) if m['requests'] > 0 else 100
+            writer.writerow([m['date'], m['requests'], m['errors'], f"{m['error_rate']:.2f}", m['avg_response_ms'], f"{success_rate:.2f}"])
+
+        writer.writerow([])
+        writer.writerow(['Total', total_requests, total_errors, f"{(total_errors/total_requests*100) if total_requests > 0 else 0:.2f}", '', ''])
+
+        # Write Top Clients sheet
+        writer.writerow([])
+        writer.writerow(['Top API Clients by Request Count'])
+        writer.writerow(['Client Name', 'Client Code', 'Requests', 'Share (%)'])
+        for c in top_clients:
+            share = (c['request_count'] / total_requests * 100) if total_requests > 0 else 0
+            writer.writerow([c['client_name'], c['client_code'], c['request_count'], f"{share:.2f}"])
+
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            mimetype='application/vnd.ms-excel',
+            as_attachment=True,
+            download_name=f'api_usage_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xls'
         )
 
     @app.route('/api-gateway/export/webhooks/csv/')
@@ -1632,3 +2113,78 @@ def register_api_gateway_routes(app: Flask, require_login, require_permission, g
         update_integration_profile(profile_id, {'is_active': new_active})
 
         return jsonify({'success': True, 'new_active': new_active})
+
+    # =============================================================================
+    # EXPORT ROUTES
+    # =============================================================================
+
+    @app.route('/api-gateway/export/clients/csv/')
+    def api_gateway_export_clients_csv():
+        """Export API clients as CSV."""
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+
+        from api_gateway_models import get_api_clients
+
+        clients = get_api_clients(page=1, per_page=10000)
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Client Code', 'Client Name', 'Type', 'Owner', 'Email', 'Department', 'Status', 'Rate Limit', 'Created'])
+
+        for c in clients['clients']:
+            writer.writerow([
+                c.get('client_code'),
+                c.get('client_name'),
+                c.get('client_type'),
+                c.get('owner_name'),
+                c.get('owner_email'),
+                c.get('department'),
+                c.get('status'),
+                c.get('rate_limit_profile'),
+                c.get('created_at'),
+            ])
+
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name=f'api_clients_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+        )
+
+    @app.route('/api-gateway/export/clients/json/')
+    def api_gateway_export_clients_json():
+        """Export API clients as JSON."""
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+
+        from api_gateway_models import get_api_clients
+
+        clients = get_api_clients(page=1, per_page=10000)
+
+        response = jsonify({
+            'export_date': datetime.now().isoformat(),
+            'total_records': len(clients['clients']),
+            'clients': clients['clients']
+        })
+        response.headers['Content-Disposition'] = f'attachment; filename=api_clients_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        return response
+
+    @app.route('/api-gateway/export/webhooks/json/')
+    def api_gateway_export_webhooks_json():
+        """Export webhook subscriptions as JSON."""
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+
+        from api_gateway_models import get_webhook_subscriptions
+
+        subscriptions = get_webhook_subscriptions(page=1, per_page=10000)
+
+        response = jsonify({
+            'export_date': datetime.now().isoformat(),
+            'total_records': len(subscriptions['subscriptions']),
+            'subscriptions': subscriptions['subscriptions']
+        })
+        response.headers['Content-Disposition'] = f'attachment; filename=webhooks_{datetime.now().strftime("%Y%m%d_%H%M%S")}.json'
+        return response

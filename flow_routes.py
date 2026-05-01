@@ -2818,6 +2818,55 @@ def api_get_flow_post(post_id):
         return jsonify({'error': str(e)}), 500
 
 
+@flow_bp.route('/post/<post_id>')
+@require_login
+def view_flow_post(post_id):
+    """View a single Flow post page."""
+    user = get_current_user()
+    try:
+        from flow_models import get_one, get_all
+
+        post = get_one('SELECT * FROM flow_posts WHERE id = ? AND is_deleted = 0', (post_id,))
+        if not post:
+            return render_template('flow/post.html', error='Post not found'), 404
+
+        # Get author info
+        author = get_one('SELECT id, name, avatar FROM users WHERE id = ?', (post['author_id'],))
+        post['author'] = author
+
+        # Get reactions
+        reactions = get_all('''
+            SELECT emoji, user_id FROM flow_post_reactions WHERE post_id = ?
+        ''', (post_id,))
+
+        reaction_dict = {}
+        for r in reactions:
+            if r['emoji'] not in reaction_dict:
+                reaction_dict[r['emoji']] = []
+            reaction_dict[r['emoji']].append(r['user_id'])
+        post['reactions'] = reaction_dict
+
+        # Get comments with author info
+        comments = get_all('''
+            SELECT c.*, u.name as author_name, u.avatar as author_avatar
+            FROM flow_post_comments c
+            LEFT JOIN users u ON c.author_id = u.id
+            WHERE c.post_id = ? AND c.is_deleted = 0
+            ORDER BY c.created_at ASC
+        ''', (post_id,))
+        post['comments'] = comments
+
+        # Get user info for current user
+        current_user_info = get_one('SELECT id, name, avatar FROM users WHERE id = ?', (user['id'],))
+
+        return render_template('flow/post.html', post=post, user=current_user_info)
+    except Exception as e:
+        logger.error(f'View post error: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return render_template('flow/post.html', error=str(e)), 500
+
+
 @flow_bp.route('/api/flow/posts/<post_id>/comment', methods=['POST'])
 @require_login
 def api_flow_post_comment(post_id):

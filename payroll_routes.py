@@ -1627,7 +1627,26 @@ def periods_lock(id):
         
         db.commit()
         audit_log('LOCK', 'payroll_periods', id, details=f"Locked period: {lock_type}")
-        
+
+        # Send Flow notification for period lock
+        period = db.execute("SELECT * FROM payroll_periods WHERE id = ?", (id,)).fetchone()
+        if period:
+            # Notify payroll managers about the lock
+            managers = db.execute("""
+                SELECT u.id FROM users u
+                JOIN user_roles ur ON u.role_id = ur.role_id
+                JOIN roles r ON ur.role_id = r.id
+                WHERE r.name IN ('Global Admin', 'Payroll Admin', 'Payroll Manager')
+            """).fetchall()
+            manager_ids = [m['id'] for m in managers]
+            send_payroll_flow_notification(
+                title=f"Payroll Period Locked: {period['name']}",
+                message=f"Period {period['name']} has been locked by {user['username']}. Reason: {reason}",
+                priority='normal',
+                user_ids=manager_ids,
+                period_id=id
+            )
+
         flash('Period locked successfully.', 'success')
         return redirect(url_for('payroll.periods_view', id=id))
     except Exception as e:
@@ -1672,7 +1691,25 @@ def periods_unlock(id):
         
         db.commit()
         audit_log('UNLOCK', 'payroll_periods', id, details="Unlocked period")
-        
+
+        # Send Flow notification for period unlock
+        period = db.execute("SELECT * FROM payroll_periods WHERE id = ?", (id,)).fetchone()
+        if period:
+            managers = db.execute("""
+                SELECT u.id FROM users u
+                JOIN user_roles ur ON u.role_id = ur.role_id
+                JOIN roles r ON ur.role_id = r.id
+                WHERE r.name IN ('Global Admin', 'Payroll Admin', 'Payroll Manager')
+            """).fetchall()
+            manager_ids = [m['id'] for m in managers]
+            send_payroll_flow_notification(
+                title=f"Payroll Period Unlocked: {period['name']}",
+                message=f"Period {period['name']} has been unlocked by {user['username']}. Payroll can now be modified.",
+                priority='high',
+                user_ids=manager_ids,
+                period_id=id
+            )
+
         flash('Period unlocked successfully.', 'success')
         return redirect(url_for('payroll.periods_view', id=id))
     except Exception as e:
@@ -1700,6 +1737,24 @@ def periods_close(id):
         
         db.commit()
         audit_log('CLOSE', 'payroll_periods', id, details="Closed period")
+        
+        # Send Flow notification - period closed
+        period = db.execute("SELECT * FROM payroll_periods WHERE id = ?", (id,)).fetchone()
+        if period:
+            managers = db.execute("""
+                SELECT u.id FROM users u
+                JOIN user_roles ur ON u.id = ur.user_id
+                JOIN roles r ON ur.role_id = r.id
+                WHERE r.name IN ('Global Admin', 'Payroll Admin', 'Payroll Manager')
+            """).fetchall()
+            manager_ids = [m['id'] for m in managers]
+            send_payroll_flow_notification(
+                title=f"Payroll Period Closed: {period['name']}",
+                message=f"Payroll period {period['name']} has been closed by {user['username']}.",
+                priority='normal',
+                user_ids=manager_ids,
+                period_id=id
+            )
         
         flash('Period closed successfully.', 'success')
         return redirect(url_for('payroll.periods_view', id=id))
@@ -1812,6 +1867,24 @@ def processing_run_new():
             db.commit()
             audit_log('CREATE', 'payroll_runs', run_id, period_id=period_id, 
                       details=f"Created payroll run: {run_type}")
+            
+            # Send Flow notification - period changed to Processing
+            period = db.execute("SELECT * FROM payroll_periods WHERE id = ?", (period_id,)).fetchone()
+            if period:
+                managers = db.execute("""
+                    SELECT u.id FROM users u
+                    JOIN user_roles ur ON u.id = ur.user_id
+                    JOIN roles r ON ur.role_id = r.id
+                    WHERE r.name IN ('Global Admin', 'Payroll Admin', 'Payroll Manager')
+                """).fetchall()
+                manager_ids = [m['id'] for m in managers]
+                send_payroll_flow_notification(
+                    title=f"Payroll Processing Started: {period['name']}",
+                    message=f"Payroll run has been initiated for {period['name']} by {user['username']}. Status changed to Processing.",
+                    priority='normal',
+                    user_ids=manager_ids,
+                    period_id=period_id
+                )
             
             flash('Payroll run created successfully. You can now add employees and process.', 'success')
             return redirect(url_for('payroll.processing_run_view', id=run_id))
@@ -2036,7 +2109,26 @@ def processing_run_calculate(id):
         
         db.commit()
         audit_log('CALCULATE', 'payroll_runs', id, details=f"Calculated payroll for {calculated_count} employees")
-        
+
+        # Send Flow notification for payroll calculation completion
+        run_data = db.execute("SELECT * FROM payroll_runs WHERE id = ?", (id,)).fetchone()
+        period = db.execute("SELECT * FROM payroll_periods WHERE id = ?", (run_data['period_id'],)).fetchone()
+        if period:
+            managers = db.execute("""
+                SELECT u.id FROM users u
+                JOIN user_roles ur ON u.role_id = ur.role_id
+                JOIN roles r ON ur.role_id = r.id
+                WHERE r.name IN ('Global Admin', 'Payroll Admin', 'Payroll Manager')
+            """).fetchall()
+            manager_ids = [m['id'] for m in managers]
+            send_payroll_flow_notification(
+                title=f"Payroll Calculation Complete: {period['name']}",
+                message=f"Payroll calculation for {period['name']} completed. {calculated_count} employees processed. Total gross: AED {run_data['total_gross'] or 0:,.2f}",
+                priority='normal',
+                user_ids=manager_ids,
+                period_id=period['id']
+            )
+
         flash(f'Payroll calculated for {calculated_count} employees.', 'success')
         return redirect(url_for('payroll.processing_run_view', id=id))
     except Exception as e:
@@ -2126,6 +2218,25 @@ def processing_run_approve(id):
         
         db.commit()
         audit_log('APPROVE', 'payroll_runs', id, details="Approved payroll run")
+        
+        # Send Flow notification - period pending approval
+        if run:
+            period = db.execute("SELECT * FROM payroll_periods WHERE id = ?", (run['period_id'],)).fetchone()
+            if period:
+                managers = db.execute("""
+                    SELECT u.id FROM users u
+                    JOIN user_roles ur ON u.id = ur.user_id
+                    JOIN roles r ON ur.role_id = r.id
+                    WHERE r.name IN ('Global Admin', 'Payroll Admin', 'Payroll Manager')
+                """).fetchall()
+                manager_ids = [m['id'] for m in managers]
+                send_payroll_flow_notification(
+                    title=f"Payroll Pending Approval: {period['name']}",
+                    message=f"Payroll run for {period['name']} has been approved by {user['username']} and is now pending final approval.",
+                    priority='high',
+                    user_ids=manager_ids,
+                    period_id=run['period_id']
+                )
         
         flash('Payroll run approved successfully.', 'success')
         return redirect(url_for('payroll.processing_run_view', id=id))
@@ -2796,7 +2907,17 @@ def loans_new():
             db.commit()
             audit_log('CREATE', 'payroll_loans', loan_id, employee_id=employee_id,
                       details=f"Created loan: {loan_number}")
-            
+
+            # Send Flow notification for new loan
+            employee = db.execute("SELECT first_name || ' ' || last_name as name FROM hr_employees WHERE id = ?", (employee_id,)).fetchone()
+            send_payroll_flow_notification(
+                title=f"New Loan Created: {loan_number}",
+                message=f"New {data.get('loan_type', 'Personal')} loan created for {employee['name'] if employee else 'Employee'}. Amount: AED {principal:,.2f}, Monthly: AED {monthly_installment:,.2f}",
+                priority='normal',
+                user_ids=None,  # Could notify HR/Finance roles
+                period_id=None
+            )
+
             flash('Loan created successfully.', 'success')
             return redirect(url_for('payroll.loans_list'))
         except Exception as e:
@@ -2868,6 +2989,29 @@ def loans_suspend(id):
         
         db.commit()
         audit_log('SUSPEND', 'payroll_loans', id, details=f"Suspended loan: {reason}")
+        
+        # Send Flow notification - loan suspended
+        loan = db.execute("""
+            SELECT pl.*, e.first_name || ' ' || e.last_name as employee_name 
+            FROM payroll_loans pl 
+            JOIN hr_employees e ON pl.employee_id = e.id 
+            WHERE pl.id = ?
+        """, (id,)).fetchone()
+        if loan:
+            managers = db.execute("""
+                SELECT u.id FROM users u
+                JOIN user_roles ur ON u.id = ur.user_id
+                JOIN roles r ON ur.role_id = r.id
+                WHERE r.name IN ('Global Admin', 'Payroll Admin', 'Payroll Manager')
+            """).fetchall()
+            manager_ids = [m['id'] for m in managers]
+            send_payroll_flow_notification(
+                title=f"Loan Suspended: {loan['loan_number']}",
+                message=f"Loan {loan['loan_number']} for {loan['employee_name']} has been suspended by {user['username']}. Reason: {reason}",
+                priority='high',
+                user_ids=manager_ids,
+                period_id=None
+            )
         
         flash('Loan suspended successfully.', 'success')
         return redirect(url_for('payroll.loans_view', id=id))
@@ -3218,6 +3362,25 @@ def compliance_exceptions_resolve(id):
         
         db.commit()
         audit_log('RESOLVE', 'payroll_exceptions', id, details=f"Resolved exception: {resolution}")
+        
+        # Send Flow notification - exception resolved
+        exception = db.execute("SELECT * FROM payroll_exceptions WHERE id = ?", (id,)).fetchone()
+        if exception and exception['employee_id']:
+            employee = db.execute("SELECT first_name || ' ' || last_name as name FROM hr_employees WHERE id = ?", (exception['employee_id'],)).fetchone()
+            managers = db.execute("""
+                SELECT u.id FROM users u
+                JOIN user_roles ur ON u.id = ur.user_id
+                JOIN roles r ON ur.role_id = r.id
+                WHERE r.name IN ('Global Admin', 'Payroll Admin', 'Payroll Manager')
+            """).fetchall()
+            manager_ids = [m['id'] for m in managers]
+            send_payroll_flow_notification(
+                title=f"Payroll Exception Resolved",
+                message=f"Exception '{exception['exception_type']}' for {employee['name'] if employee else 'Employee'} has been resolved by {user['username']}. Resolution: {resolution}",
+                priority='normal',
+                user_ids=manager_ids,
+                period_id=exception.get('period_id')
+            )
         
         flash('Exception resolved.', 'success')
         return redirect(url_for('payroll.compliance_exceptions'))
@@ -3648,8 +3811,16 @@ def reports_export_center():
     """Export Center."""
     user = get_current_user()
     db = get_db()
-    
+
     try:
+        # Get all periods for the dropdown
+        periods = db.execute("""
+            SELECT id, name, year, month, status
+            FROM payroll_periods
+            ORDER BY year DESC, month DESC
+            LIMIT 24
+        """).fetchall()
+
         # Get export history
         history = db.execute("""
             SELECT peh.*, u.username as exported_by_name
@@ -3658,16 +3829,17 @@ def reports_export_center():
             ORDER BY peh.exported_at DESC
             LIMIT 50
         """).fetchall()
-        
+
         # Get saved configs
         configs = db.execute("""
             SELECT * FROM payroll_export_configs
             WHERE created_by_id = ? OR is_default = 1
             ORDER BY created_at DESC
         """, (user['id'],)).fetchall()
-        
+
         return render_template('payroll/reports/export_center.html',
             title='Export Center',
+            periods=[dict(p) for p in periods],
             history=[dict(h) for h in history],
             configs=[dict(c) for c in configs]
         )
@@ -3679,36 +3851,68 @@ def reports_export_center():
 @payroll_login_required
 @payroll_permission_required('export')
 def reports_export():
-    """Export payroll data."""
+    """Export payroll data with configurable columns and formats."""
     user = get_current_user()
     db = get_db()
-    
+
     try:
-        export_type = request.args.get('type', 'summary')
+        # Get parameters from form or query string
+        export_type = request.args.get('export_type') or request.args.get('type', 'summary')
         period_id = request.args.get('period_id', type=int)
-        
+        selected_cols = request.args.getlist('cols') or ['employee_code', 'employee_name', 'gross_salary', 'net_salary']
+        export_format = request.args.get('format', 'csv')
+
         if not period_id:
             current = get_active_payroll_period()
             if current:
                 period_id = current['id']
-        
-        # Get data based on type
+
+        # Column mapping
+        COLUMN_MAP = {
+            'employee_code': ('e.employee_code', 'Employee Code'),
+            'employee_name': ("e.first_name || ' ' || e.last_name", 'Employee Name'),
+            'department': ('d.name', 'Department'),
+            'designation': ("pos.title", 'Designation'),
+            'basic_salary': ('per.basic_salary', 'Basic Salary'),
+            'gross_salary': ('per.gross_salary', 'Gross Salary'),
+            'total_deductions': ('per.total_deductions', 'Total Deductions'),
+            'net_salary': ('per.net_salary', 'Net Salary'),
+            'tax': ('per.total_tax', 'Tax'),
+            'insurance': ('per.total_insurance', 'Insurance'),
+            'overtime': ('per.total_overtime', 'Overtime'),
+            'arrears': ('per.total_arrears', 'Arrears'),
+            'bank_account': ('pp.bank_account_number', 'Bank Account'),
+            'payment_method': ('pp.payment_method', 'Payment Method'),
+            'loan_deduction': ('0', 'Loan Deduction'),  # Would need join
+            'advance_deduction': ('0', 'Advance Deduction'),  # Would need join
+        }
+
+        # Build query based on export type
         if export_type == 'summary' and period_id:
-            data = db.execute("""
-                SELECT e.employee_code, e.first_name || ' ' || e.last_name as employee_name,
-                       per.basic_salary, per.total_earnings, per.total_deductions,
-                       per.total_overtime, per.total_tax, per.gross_salary, per.net_salary,
-                       per.days_worked, per.days_absent
+            col_clauses = []
+            col_headers = []
+            for col in selected_cols:
+                if col in COLUMN_MAP:
+                    col_clauses.append(f"{COLUMN_MAP[col][0]} as {col}")
+                    col_headers.append(COLUMN_MAP[col][1])
+
+            select_cols = ', '.join(col_clauses) if col_clauses else 'e.employee_code, e.first_name || " " || e.last_name as employee_name, per.gross_salary, per.net_salary'
+            actual_headers = col_headers if col_headers else ['Employee Code', 'Employee Name', 'Gross Salary', 'Net Salary']
+
+            data = db.execute(f"""
+                SELECT {select_cols}
                 FROM payroll_employee_records per
                 JOIN hr_employees e ON per.employee_id = e.id
+                LEFT JOIN hr_employee_employment emp ON e.id = emp.employee_id AND emp.is_primary = 1
+                LEFT JOIN hr_departments d ON emp.department_id = d.id
+                LEFT JOIN hr_positions pos ON emp.position_id = pos.id
+                LEFT JOIN payroll_profiles pp ON e.id = pp.employee_id
                 WHERE per.period_id = ?
                 ORDER BY e.first_name, e.last_name
             """, (period_id,)).fetchall()
-            
-            filename = f'payroll_summary_{datetime.now().strftime("%Y%m%d")}.csv'
-            headers = ['Employee Code', 'Employee Name', 'Basic Salary', 'Earnings', 
-                      'Deductions', 'Overtime', 'Tax', 'Gross', 'Net', 'Days Worked', 'Days Absent']
-        
+
+            filename = f'payroll_summary_{datetime.now().strftime("%Y%m%d")}'
+
         elif export_type == 'earnings' and period_id:
             data = db.execute("""
                 SELECT e.employee_code, e.first_name || ' ' || e.last_name as employee_name,
@@ -3719,34 +3923,167 @@ def reports_export():
                 WHERE per.period_id = ?
                 ORDER BY e.first_name, pee.component_name
             """, (period_id,)).fetchall()
-            
-            filename = f'payroll_earnings_{datetime.now().strftime("%Y%m%d")}.csv'
-            headers = ['Employee Code', 'Employee Name', 'Component', 'Amount']
-        
+            filename = f'payroll_earnings_{datetime.now().strftime("%Y%m%d")}'
+            actual_headers = ['Employee Code', 'Employee Name', 'Component', 'Amount']
+
+        elif export_type == 'deductions' and period_id:
+            data = db.execute("""
+                SELECT e.employee_code, e.first_name || ' ' || e.last_name as employee_name,
+                       ped.component_name, ped.amount
+                FROM payroll_employee_deductions ped
+                JOIN payroll_employee_records per ON ped.record_id = per.id
+                JOIN hr_employees e ON per.employee_id = e.id
+                WHERE per.period_id = ?
+                ORDER BY e.first_name, ped.component_name
+            """, (period_id,)).fetchall()
+            filename = f'payroll_deductions_{datetime.now().strftime("%Y%m%d")}'
+            actual_headers = ['Employee Code', 'Employee Name', 'Component', 'Amount']
+
+        elif export_type == 'department' and period_id:
+            data = db.execute("""
+                SELECT d.name as department,
+                       COUNT(DISTINCT per.employee_id) as employee_count,
+                       SUM(per.gross_salary) as total_gross,
+                       SUM(per.total_deductions) as total_deductions,
+                       SUM(per.net_salary) as total_net
+                FROM payroll_employee_records per
+                JOIN hr_employees e ON per.employee_id = e.id
+                LEFT JOIN hr_employee_employment emp ON e.id = emp.employee_id AND emp.is_primary = 1
+                LEFT JOIN hr_departments d ON emp.department_id = d.id
+                WHERE per.period_id = ?
+                GROUP BY d.name
+                ORDER BY d.name
+            """, (period_id,)).fetchall()
+            filename = f'payroll_department_{datetime.now().strftime("%Y%m%d")}'
+            actual_headers = ['Department', 'Employees', 'Total Gross', 'Total Deductions', 'Total Net']
+
+        elif export_type == 'loan_recovery':
+            data = db.execute("""
+                SELECT pl.loan_number, e.employee_code,
+                       e.first_name || ' ' || e.last_name as employee_name,
+                       pl.principal_amount, pl.monthly_installment,
+                       pl.amount_remaining, pl.installments_remaining, pl.status
+                FROM payroll_loans pl
+                JOIN hr_employees e ON pl.employee_id = e.id
+                WHERE pl.status IN ('Active', 'Completed')
+                ORDER BY pl.created_at DESC
+            """).fetchall()
+            filename = f'payroll_loan_recovery_{datetime.now().strftime("%Y%m%d")}'
+            actual_headers = ['Loan Number', 'Employee Code', 'Employee Name', 'Principal', 'Monthly Installment', 'Balance', 'Installments Left', 'Status']
+
         else:
             data = []
-            filename = 'payroll_export.csv'
-            headers = []
-        
+            filename = 'payroll_export'
+            actual_headers = []
+
+        # Add file extension based on format
+        if export_format == 'xlsx':
+            filename += '.xlsx'
+        elif export_format == 'pdf':
+            filename += '.pdf'
+        else:
+            filename += '.csv'
+
         # Log export
         db.execute("""
             INSERT INTO payroll_export_history (
                 export_type, period_id, file_name, record_count, exported_by_id
             ) VALUES (?, ?, ?, ?, ?)
         """, (export_type, period_id, filename, len(data), user['id']))
-        
+
         db.commit()
         audit_log('EXPORT', 'payroll_export', 0, period_id=period_id,
-                  details=f"Exported {export_type}: {len(data)} records")
-        
-        # Generate CSV
+                  details=f"Exported {export_type}: {len(data)} records as {export_format}")
+
+        # Generate output based on format
+        if export_format == 'xlsx':
+            try:
+                import openpyxl
+                from io import BytesIO
+                wb = openpyxl.Workbook()
+                ws = wb.active
+                ws.title = export_type.title()
+
+                # Write headers
+                ws.append(actual_headers)
+
+                # Write data
+                for row in data:
+                    ws.append([row[col] if isinstance(row, dict) else row[i] for i, col in enumerate(row.keys())])
+
+                output = BytesIO()
+                wb.save(output)
+                output.seek(0)
+
+                return Response(
+                    output.getvalue(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={'Content-Disposition': f'attachment; filename={filename}'}
+                )
+            except ImportError:
+                flash('openpyxl not installed. Using CSV format.', 'warning')
+                export_format = 'csv'
+
+        if export_format == 'pdf':
+            try:
+                from reportlab.lib.pagesizes import A4, landscape
+                from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
+                from reportlab.lib.styles import getSampleStyleSheet
+                from io import BytesIO
+
+                buffer = BytesIO()
+                doc = SimpleDocTemplate(buffer, pagesize=landscape(A4))
+                elements = []
+
+                styles = getSampleStyleSheet()
+                elements.append(Paragraph(f"Payroll Export - {export_type.title()}", styles['Title']))
+                elements.append(Paragraph(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles['Normal']))
+                elements.append(Paragraph(" ", styles['Normal']))
+
+                # Convert data to table format
+                table_data = [actual_headers]
+                for row in data:
+                    table_data.append([str(row[col] if isinstance(row, dict) else row[i]) for i, col in enumerate(row.keys())])
+
+                t = Table(table_data)
+                t.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), '#4F46E5'),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), '#FFFFFF'),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                    ('BACKGROUND', (0, 1), (-1, -1), '#F9FAFB'),
+                    ('GRID', (0, 0), (-1, -1), 1, '#E5E7EB'),
+                ]))
+                elements.append(t)
+
+                doc.build(elements)
+                buffer.seek(0)
+
+                return Response(
+                    buffer.getvalue(),
+                    mimetype='application/pdf',
+                    headers={'Content-Disposition': f'attachment; filename={filename}'}
+                )
+            except ImportError:
+                flash('reportlab not installed. Using CSV format.', 'warning')
+                export_format = 'csv'
+
+        # Default: Generate CSV
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(headers)
+
+        # Write headers
+        if actual_headers:
+            writer.writerow(actual_headers)
+        else:
+            writer.writerow(['No data available'])
+
+        # Write data
         for row in data:
-            writer.writerow([row[h.lower().replace(' ', '_')] if isinstance(row, dict) else row[i] 
-                           for i, h in enumerate(headers)])
-        
+            writer.writerow([row[col] if isinstance(row, dict) else row[i] for i, col in enumerate(row.keys())])
+
         output.seek(0)
         return Response(
             output.getvalue(),
@@ -3757,6 +4094,7 @@ def reports_export():
         flash(f'Error exporting: {str(e)}', 'error')
         return redirect(url_for('payroll.reports_export_center'))
     finally:
+        db.close()
         db.close()
 
 
@@ -3827,7 +4165,18 @@ def approvals_approve(id):
         
         db.commit()
         audit_log('APPROVE', 'payroll_approval_instances', id, details="Approved")
-        
+
+        # Send Flow notification for approval
+        approval = db.execute("SELECT * FROM payroll_approval_instances WHERE id = ?", (id,)).fetchone()
+        if approval:
+            send_payroll_flow_notification(
+                title=f"Payroll Approved: {approval['approval_type']}",
+                message=f"Your {approval['approval_type']} request has been approved by {user['username']}. {comments if comments else 'No comments.'}",
+                priority='normal',
+                user_ids=[approval['created_by_id']] if approval['created_by_id'] else None,
+                period_id=approval['period_id']
+            )
+
         flash('Approved successfully.', 'success')
         return redirect(url_for('payroll.approvals_list'))
     except Exception as e:
@@ -3859,7 +4208,18 @@ def approvals_reject(id):
         
         db.commit()
         audit_log('REJECT', 'payroll_approval_instances', id, details="Rejected")
-        
+
+        # Send Flow notification for rejection
+        approval = db.execute("SELECT * FROM payroll_approval_instances WHERE id = ?", (id,)).fetchone()
+        if approval:
+            send_payroll_flow_notification(
+                title=f"Payroll Rejected: {approval['approval_type']}",
+                message=f"Your {approval['approval_type']} request has been rejected by {user['username']}. Reason: {comments if comments else 'No reason provided.'}",
+                priority='high',
+                user_ids=[approval['created_by_id']] if approval['created_by_id'] else None,
+                period_id=approval['period_id']
+            )
+
         flash('Rejected.', 'success')
         return redirect(url_for('payroll.approvals_list'))
     finally:

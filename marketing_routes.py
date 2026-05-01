@@ -998,15 +998,16 @@ def channels_edit(id):
 def campaigns_list():
     """List marketing campaigns."""
     db = get_db()
-    
+    company_id = session.get('company_id', 0)
+
     page = int(request.args.get('page', 1))
     per_page = 20
     offset = (page - 1) * per_page
-    
+
     search = request.args.get('search', '')
     status = request.args.get('status', '')
     campaign_type = request.args.get('campaign_type', '')
-    
+
     query = """
         SELECT c.*, u.username as owner_name,
                b.name as brand_name,
@@ -1015,31 +1016,31 @@ def campaigns_list():
         LEFT JOIN users u ON c.owner_user_id = u.id
         LEFT JOIN marketing_brands b ON c.target_brand_id = b.id
         LEFT JOIN marketing_customer_segments s ON c.target_segment_id = s.id
-        WHERE 1=1
+        WHERE c.company_id = ?
     """
-    count_query = "SELECT COUNT(*) as cnt FROM marketing_campaigns WHERE 1=1"
-    params = []
-    count_params = []
-    
+    count_query = "SELECT COUNT(*) as cnt FROM marketing_campaigns WHERE company_id = ?"
+    params = [company_id]
+    count_params = [company_id]
+
     if search:
         query += " AND (c.name LIKE ? OR c.code LIKE ?)"
         count_query += " AND (name LIKE ? OR code LIKE ?)"
         search_term = f"%{search}%"
         params.extend([search_term, search_term])
         count_params.extend([search_term, search_term])
-    
+
     if status:
         query += " AND c.status = ?"
         count_query += " AND status = ?"
         params.append(status)
         count_params.append(status)
-    
+
     if campaign_type:
         query += " AND c.campaign_type = ?"
         count_query += " AND campaign_type = ?"
         params.append(campaign_type)
         count_params.append(campaign_type)
-    
+
     total = db.execute(count_query, count_params).fetchone()['cnt']
     query += " ORDER BY c.created_at DESC LIMIT ? OFFSET ?"
     params.extend([per_page, offset])
@@ -2922,65 +2923,18 @@ def channel_report():
 
 
 @mkt_bp.route('/reports/export/<report_type>')
+@mkt_bp.route('/reports/export/<report_type>/<export_format>')
 @mkt_login_required
-def reports_export(report_type):
-    """Export report data."""
-    db = get_db()
-    
-    if report_type == 'campaigns':
-        data = db.execute("""
-            SELECT c.*, u.username as owner_name, b.name as brand_name
-            FROM marketing_campaigns c
-            LEFT JOIN users u ON c.owner_user_id = u.id
-            LEFT JOIN marketing_brands b ON c.target_brand_id = b.id
-            ORDER BY c.start_date DESC
-        """).fetchall()
-        filename = 'campaigns_report.csv'
-        columns = ['id', 'name', 'code', 'campaign_type', 'status', 'start_date', 'end_date',
-                   'budget', 'actual_cost', 'leads_generated', 'inquiries_generated',
-                   'purchases_generated', 'sales_generated', 'roi', 'owner_name', 'brand_name']
-    
-    elif report_type == 'leads':
-        data = db.execute("""
-            SELECT l.*, ls.name as source_name, u.username as assigned_name
-            FROM marketing_leads l
-            LEFT JOIN marketing_lead_sources ls ON l.source_id = ls.id
-            LEFT JOIN users u ON l.assigned_salesperson_id = u.id
-            ORDER BY l.created_at DESC
-        """).fetchall()
-        filename = 'leads_report.csv'
-        columns = ['id', 'lead_name', 'phone', 'email', 'source_name', 'lead_status',
-                   'importance_level', 'estimated_value', 'conversion_probability',
-                   'assigned_name', 'created_at']
-    
-    elif report_type == 'channel':
-        data = get_channel_performance(db)
-        filename = 'channel_report.csv'
-        columns = ['name', 'channel_type', 'budget', 'actual_spend', 'leads_generated',
-                   'inquiries_generated', 'sales_generated', 'cost_per_lead']
-        data = [type('obj', (object,), d) for d in data]
-    
-    else:
-        flash('Unknown report type.', 'error')
-        return redirect(url_for('marketing.reports_menu'))
-    
-    db.close()
-    
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(columns)
-    
-    for row in data:
-        if isinstance(row, dict):
-            writer.writerow([row.get(col, '') for col in columns])
-        else:
-            writer.writerow([getattr(row, col, '') for col in columns])
-    
-    return Response(
-        output.getvalue(),
-        mimetype='text/csv',
-        headers={'Content-Disposition': f'attachment; filename={filename}'}
-    )
+def reports_export(report_type, export_format='csv'):
+    """Export report data in multiple formats."""
+    # Reuse the api_marketing_export handler for all formats
+    valid_formats = ['csv', 'excel_text', 'excel_general', 'json', 'xml', 'txt',
+                     'pdf', 'docx', 'html', 'printable', 'barcode', 'api',
+                     'email', 'zip', 'backup', 'sql_dump', 'dashboard',
+                     'summary', 'detailed', 'audit_log']
+    if export_format not in valid_formats:
+        export_format = 'csv'
+    return api_marketing_export(export_type=export_format, data_type=report_type)
 
 
 # =============================================================================

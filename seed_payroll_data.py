@@ -101,29 +101,43 @@ def seed_payroll_data():
             WHERE status = 'Active' LIMIT 50
         """).fetchall()
         
-        if not employees:
-            print("No employees found. Creating sample employees first...")
-            # Create sample employees
-            sample_employees = [
-                ('EMP001', 'Ahmed', 'Al Mansouri', 'Active'),
-                ('EMP002', 'Fatima', 'Al Zahra', 'Active'),
-                ('EMP003', 'Mohammed', 'Hassan', 'Active'),
-                ('EMP004', 'Sara', 'Khalid', 'Active'),
-                ('EMP005', 'Omar', 'Ibrahim', 'Active'),
-                ('EMP006', 'Layla', 'Mohammed', 'Active'),
-                ('EMP007', 'Yusuf', 'Ahmed', 'Active'),
-                ('EMP008', 'Noor', 'Hassan', 'Active'),
-                ('EMP009', 'Ali', 'Omar', 'Active'),
-                ('EMP010', 'Mariam', 'Khalid', 'Active'),
+        if len(employees) < 50:
+            print(f"Only {len(employees)} employees found. Creating sample employees to reach 60...")
+            
+            # Salary grades as per prompt
+            salary_grades = [
+                ('Junior', 8000, 15000, 10),      # 10 Junior employees
+                ('Mid', 15000, 25000, 20),         # 20 Mid-level employees
+                ('Senior', 25000, 40000, 15),      # 15 Senior employees
+                ('Manager', 40000, 60000, 10),     # 10 Manager employees
+                ('Director', 60000, 80000, 5),     # 5 Director employees
             ]
-            for code, fname, lname, status in sample_employees:
-                db.execute("""
-                    INSERT INTO hr_employees (employee_code, first_name, last_name, status, hire_date)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (code, fname, lname, status, date(2020, 1, 1)))
+            
+            first_names = ['Ahmed', 'Fatima', 'Mohammed', 'Sara', 'Omar', 'Layla', 'Yusuf', 'Noor', 'Ali', 'Mariam',
+                          'Khalid', 'Hassan', 'Rashid', 'Salma', 'Tariq', 'Amina', 'Kareem', 'Nadia', 'Samir', 'Zainab',
+                          'Bilal', 'Aisha', 'Omar', 'Reem', 'Jamal', 'Huda', 'Faisal', 'Lina', 'Majid', 'Rania']
+            last_names = ['Al Mansouri', 'Al Zahra', 'Hassan', 'Khalid', 'Ibrahim', 'Mohammed', 'Ahmed', 'Omar', 'Khalid', 'Tariq',
+                          'Ali', 'Malik', 'Nasser', 'Said', 'Bakr', 'Qureshi', 'Singh', 'Chen', 'Wang', 'Kumar']
+            
+            emp_count = 0
+            for grade, min_sal, max_sal, count in salary_grades:
+                for i in range(count):
+                    code = f"EMP{(emp_count+1):03d}"
+                    fname = random.choice(first_names)
+                    lname = random.choice(last_names)
+                    status = 'Active' if emp_count < 55 else 'Terminated'  # 55 Active, 5 Terminated
+                    hire_year = random.randint(2018, 2024)
+                    hire_month = random.randint(1, 12)
+                    
+                    db.execute("""
+                        INSERT INTO hr_employees (employee_code, first_name, last_name, status, hire_date)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (code, fname, lname, status, date(hire_year, hire_month, 1)))
+                    emp_count += 1
+            
             employees = db.execute("""
                 SELECT id, first_name, last_name, employee_code FROM hr_employees 
-                WHERE status = 'Active' LIMIT 50
+                WHERE status = 'Active' LIMIT 60
             """).fetchall()
         
         # 4. Create payroll profiles for employees
@@ -215,19 +229,22 @@ def seed_payroll_data():
                     WHERE profile_id = ? AND component_id = ?
                 """, (profile_id, basic_id)).fetchone()
                 
-                basic_salary = basic['amount'] if basic else 10000
-                total_allowances = basic_salary * 0.30
+                basic_salary = basic['amount'] if basic else random.randint(10000, 40000)
+                total_allowances = basic_salary * random.uniform(0.25, 0.40)
                 gross = basic_salary + total_allowances
-                deductions = gross * 0.10
+                deductions = gross * random.uniform(0.08, 0.15)
                 net = gross - deductions
+                
+                record_status = 'Approved' if run_status in ['Approved', 'Locked', 'Closed'] else 'Calculated'
                 
                 db.execute("""
                     INSERT INTO payroll_employee_records (run_id, period_id, employee_id, profile_id,
                         basic_salary, total_allowances, total_deductions, gross_salary, net_salary,
                         days_worked, status, approved_by_id, approved_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Approved', 1, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                 """, (run_id, period_id, emp['id'], profile_id, basic_salary, total_allowances,
-                      deductions, gross, net, 30, datetime.now() - timedelta(days=30*(current_month-month_num))))
+                      deductions, gross, net, 30, record_status,
+                      datetime.now() - timedelta(days=30*(current_month-month_num))))
                 
                 total_gross += gross
                 total_ded += deductions
@@ -380,6 +397,53 @@ def seed_payroll_data():
                 action, emp['id'], emp['id'], period_ids.get(current_month - 1),
                 f"Sample {action.lower()} action",
                 datetime.now() - timedelta(hours=random.randint(1, 720))
+            ))
+        
+        # 14. Create Flow notifications for payroll events
+        flow_notification_templates = [
+            ('Period Reminder', 'normal', f'Payroll period for {months[current_month-2][0]} {current_year} cutoff is in 3 days. Please ensure all submissions are complete.'),
+            ('Approval Required', 'high', f'Payroll for {months[current_month-2][0]} {current_year} requires your approval. Total: AED 1,250,000'),
+            ('Calculation Complete', 'normal', f'Payroll calculation for {months[current_month-2][0]} {current_year} completed. 50 employees processed.'),
+            ('Exception Alert', 'high', f'5 compliance exceptions detected in {months[current_month-2][0]} {current_year} payroll.'),
+            ('Period Reminder', 'normal', f'Payroll period for {months[current_month-1][0]} {current_year} is now open for processing.'),
+            ('Run Started', 'normal', f'New payroll run initiated for {months[current_month-1][0]} {current_year}.'),
+            ('Lock Warning', 'high', f'Payroll period {months[current_month-3][0]} {current_year} will lock in 2 days.'),
+            ('Approval Pending', 'high', f'Your approval is pending for {months[current_month-2][0]} {current_year} payroll.'),
+            ('Run Complete', 'normal', f'Payroll run for {months[current_month-3][0]} {current_year} completed successfully.'),
+            ('Overtime Review', 'medium', f'3 employees have overtime exceeding 50 hours in {months[current_month-1][0]} {current_year}.'),
+            ('Loan Update', 'normal', f'12 loan deductions processed for {months[current_month-1][0]} {current_year}.'),
+            ('Period Closed', 'normal', f'Payroll period {months[current_month-3][0]} {current_year} has been closed.'),
+            ('Exception Resolved', 'normal', f'Missing bank details exception for employee EMP005 has been resolved.'),
+        ]
+        
+        for i, (title, priority, message) in enumerate(flow_notification_templates):
+            period_id = period_ids.get(current_month - (i % 3) - 1) if current_month > 2 else period_ids.get(1)
+            db.execute("""
+                INSERT INTO payroll_flow_notifications (title, message, notification_type, priority,
+                    period_id, is_read, created_at)
+                VALUES (?, ?, 'payroll', ?, ?, 0, ?)
+            """, (
+                title, message, priority,
+                period_id,
+                datetime.now() - timedelta(days=i)
+            ))
+        
+        # 15. Create export configurations
+        export_configs = [
+            ('Monthly Summary Export', 'summary', 'employee_code,employee_name,department,gross_salary,net_salary', 'csv', True),
+            ('Detailed Earnings Report', 'earnings', 'employee_code,employee_name,basic_salary,overtime,allowances,gross_salary', 'xlsx', False),
+            ('Department Summary', 'department', 'department,employee_count,total_gross,total_net', 'xlsx', False),
+            ('Loan Recovery Report', 'loan_recovery', 'employee_code,employee_name,loan_type,monthly_installment,amount_remaining', 'csv', False),
+        ]
+        
+        for name, ex_type, cols, fmt, is_default in export_configs:
+            db.execute("""
+                INSERT INTO payroll_export_configs (config_name, export_type, column_config, format_type,
+                    is_default, created_by_id, created_at)
+                VALUES (?, ?, ?, ?, ?, 1, ?)
+            """, (
+                name, ex_type, cols, fmt, is_default,
+                datetime.now() - timedelta(days=random.randint(1, 90))
             ))
         
         # 14. Create payroll settings if not exist

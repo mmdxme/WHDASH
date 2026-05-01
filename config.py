@@ -87,6 +87,12 @@ POSTGRESQL_USER = os.environ.get('POSTGRESQL_USER', 'whdash_user')
 POSTGRESQL_PASSWORD = os.environ.get('POSTGRESQL_PASSWORD', '')
 POSTGRESQL_SCHEMA = os.environ.get('POSTGRESQL_SCHEMA', 'public')
 
+# PostgreSQL Connection Pooling
+POSTGRESQL_POOL_SIZE = int(os.environ.get('POSTGRESQL_POOL_SIZE', '20'))
+POSTGRESQL_MAX_OVERFLOW = int(os.environ.get('POSTGRESQL_MAX_OVERFLOW', '40'))
+POSTGRESQL_POOL_TIMEOUT = int(os.environ.get('POSTGRESQL_POOL_TIMEOUT', '30'))
+POSTGRESQL_POOL_RECYCLE = int(os.environ.get('POSTGRESQL_POOL_RECYCLE', '3600'))  # Recycle after 1 hour
+
 # Build PostgreSQL connection URL
 if DB_ENGINE == 'postgresql' and POSTGRESQL_PASSWORD:
     POSTGRESQL_URL = f"postgresql://{POSTGRESQL_USER}:{POSTGRESQL_PASSWORD}@{POSTGRESQL_HOST}:{POSTGRESQL_PORT}/{POSTGRESQL_DATABASE}"
@@ -94,6 +100,10 @@ elif DB_ENGINE == 'postgresql':
     POSTGRESQL_URL = f"postgresql://{POSTGRESQL_USER}@{POSTGRESQL_HOST}:{POSTGRESQL_PORT}/{POSTGRESQL_DATABASE}"
 else:
     POSTGRESQL_URL = None
+
+# SQLite Connection Pool Settings (for app-level pooling)
+DB_POOL_SIZE = int(os.environ.get('DB_POOL_SIZE', '5'))
+DB_MAX_OVERFLOW = int(os.environ.get('DB_MAX_OVERFLOW', '10'))
 
 # =============================================================================
 # REDIS CONFIGURATION (Session & Cache)
@@ -114,6 +124,23 @@ SESSION_TYPE = 'redis' if REDIS_URL else 'filesystem'
 # Cache configuration
 CACHE_TYPE = 'redis' if REDIS_CACHE_URL or REDIS_URL else 'simple'
 CACHE_DEFAULT_TIMEOUT = int(os.environ.get('CACHE_DEFAULT_TIMEOUT', '300'))
+
+# Redis Cache TTL Settings (in seconds)
+REDIS_CACHE_TTL = {
+    'user_permissions': int(os.environ.get('CACHE_TTL_USER_PERMS', '300')),      # 5 minutes
+    'dashboard_kpis': int(os.environ.get('CACHE_TTL_KPIS', '300')),              # 5 minutes
+    'navigation': int(os.environ.get('CACHE_TTL_NAV', '900')),                   # 15 minutes
+    'settings': int(os.environ.get('CACHE_TTL_SETTINGS', '1800')),              # 30 minutes
+    'category_list': int(os.environ.get('CACHE_TTL_CATEGORIES', '3600')),        # 1 hour
+    'report_data': int(os.environ.get('CACHE_TTL_REPORTS', '600')),             # 10 minutes
+    'query_result': int(os.environ.get('CACHE_TTL_QUERY', '300')),              # 5 minutes
+    'master_data': int(os.environ.get('CACHE_TTL_MASTER', '1800')),             # 30 minutes
+    'notification_count': int(os.environ.get('CACHE_TTL_NOTIF_COUNT', '60')),    # 1 minute
+}
+
+# Query Cache Settings
+QUERY_CACHE_SIZE = int(os.environ.get('QUERY_CACHE_SIZE', '1000'))
+QUERY_CACHE_TTL = int(os.environ.get('QUERY_CACHE_TTL', '300'))
 
 
 # =============================================================================
