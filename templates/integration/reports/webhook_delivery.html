@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-bolt fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('webhook_delivery', 'Webhook Delivery Report') }}
+        </h1>
+        <div class="d-flex gap-2">
+            <button onclick="exportReport()" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-download me-1"></i> {{ t('export', 'Export') }}
+            </button>
+            <a href="{{ url_for('integration_reports') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back_to_reports', 'Back to Reports') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary KPIs -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ webhooks|length }}</div>
+                    <div class="small">{{ t('active_webhooks', 'Active Webhooks') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ webhooks|sum(attribute='total') }}</div>
+                    <div class="small">{{ t('total_deliveries', 'Total Deliveries') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ webhooks|sum(attribute='success') }}</div>
+                    <div class="small">{{ t('successful', 'Successful') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ webhooks|sum(attribute='failures') }}</div>
+                    <div class="small">{{ t('failures', 'Failures') }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-xl-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('delivery_success_rate', 'Delivery Success Rate') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="successRateChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('deliveries_by_webhook', 'Deliveries by Webhook') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="deliveriesChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Webhook Details Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('webhook_details', 'Webhook Details') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('webhook_name', 'Webhook Name') }}</th>
+                                    <th>{{ t('event_type', 'Event Type') }}</th>
+                                    <th class="text-center">{{ t('total_deliveries', 'Total') }}</th>
+                                    <th class="text-center text-success">{{ t('success', 'Success') }}</th>
+                                    <th class="text-center text-danger">{{ t('failures', 'Failures') }}</th>
+                                    <th class="text-center">{{ t('success_rate', 'Success Rate') }}</th>
+                                    <th class="text-center">{{ t('status', 'Status') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for wh in webhooks %}
+                                <tr>
+                                    <td><strong>{{ wh.name }}</strong></td>
+                                    <td><span class="badge bg-secondary">{{ wh.event_type or 'N/A' }}</span></td>
+                                    <td class="text-center">{{ wh.total }}</td>
+                                    <td class="text-center text-success">{{ wh.success }}</td>
+                                    <td class="text-center text-danger">{{ wh.failures }}</td>
+                                    <td class="text-center">
+                                        {% set rate = wh.success_rate %}
+                                        {% if rate >= 95 %}
+                                            <span class="badge bg-success">{{ rate }}%</span>
+                                        {% elif rate >= 80 %}
+                                            <span class="badge bg-warning text-dark">{{ rate }}%</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ rate }}%</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if rate >= 95 %}
+                                            <span class="text-success"><i class="fas fa-check-circle"></i></span>
+                                        {% elif rate >= 80 %}
+                                            <span class="text-warning"><i class="fas fa-exclamation-triangle"></i></span>
+                                        {% else %}
+                                            <span class="text-danger"><i class="fas fa-times-circle"></i></span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">
+                                        {{ t('no_webhook_data', 'No webhook data available') }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const webhooks = {{ webhooks|tojson }};
+    
+    const totalSuccess = webhooks.reduce((s, w) => s + (w.success || 0), 0);
+    const totalFailures = webhooks.reduce((s, w) => s + (w.failures || 0), 0);
+    const total = totalSuccess + totalFailures;
+
+    // Doughnut - overall success/failure
+    const successCtx = document.getElementById('successRateChart').getContext('2d');
+    new Chart(successCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['{{ t("successful", "Successful") }}', '{{ t("failures", "Failures") }}'],
+            datasets: [{
+                data: [totalSuccess, totalFailures],
+                backgroundColor: ['#28a745', '#dc3545'],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const pct = total > 0 ? ((context.raw / total) * 100).toFixed(1) : 0;
+                            return `${context.label}: ${context.raw} (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Horizontal bar - deliveries by webhook
+    const deliveriesCtx = document.getElementById('deliveriesChart').getContext('2d');
+    new Chart(deliveriesCtx, {
+        type: 'bar',
+        data: {
+            labels: webhooks.map(w => w.name.length > 15 ? w.name.substring(0, 15) + '...' : w.name),
+            datasets: [
+                {
+                    label: '{{ t("success", "Success") }}',
+                    data: webhooks.map(w => w.success || 0),
+                    backgroundColor: '#28a745'
+                },
+                {
+                    label: '{{ t("failures", "Failures") }}',
+                    data: webhooks.map(w => w.failures || 0),
+                    backgroundColor: '#dc3545'
+                }
+            ]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { beginAtZero: true }
+            },
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+});
+
+function exportReport() {
+    const webhooks = {{ webhooks|tojson }};
+    if (typeof XLSX !== 'undefined') {
+        const ws = XLSX.utils.json_to_sheet(webhooks.map(w => ({
+            'Webhook Name': w.name,
+            'Event Type': w.event_type || '',
+            'Total Deliveries': w.total,
+            'Success': w.success,
+            'Failures': w.failures,
+            'Success Rate (%)': w.success_rate
+        })));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Webhook Delivery');
+        XLSX.writeFile(wb, 'webhook_delivery.xlsx');
+    }
+}
+</script>
+{% endblock %}

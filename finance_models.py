@@ -163,6 +163,7 @@ FINANCE_TABLES = [
         tags TEXT DEFAULT '',
         is_active INTEGER DEFAULT 1,
         is_archived INTEGER DEFAULT 0,
+        owner_user_id INTEGER DEFAULT 1,
         created_at TEXT DEFAULT (datetime('now')),
         created_by INTEGER DEFAULT 1,
         updated_at TEXT DEFAULT (datetime('now')),
@@ -193,6 +194,7 @@ FINANCE_TABLES = [
         notes TEXT DEFAULT '',
         is_active INTEGER DEFAULT 1,
         is_archived INTEGER DEFAULT 0,
+        owner_user_id INTEGER DEFAULT 1,
         created_at TEXT DEFAULT (datetime('now')),
         created_by INTEGER DEFAULT 1,
         updated_at TEXT DEFAULT (datetime('now')),
@@ -371,6 +373,7 @@ FINANCE_TABLES = [
         status TEXT DEFAULT 'held',
         is_active INTEGER DEFAULT 1,
         is_archived INTEGER DEFAULT 0,
+        owner_user_id INTEGER DEFAULT 1,
         created_at TEXT DEFAULT (datetime('now')),
         created_by INTEGER DEFAULT 1,
         updated_at TEXT DEFAULT (datetime('now')),
@@ -1542,8 +1545,8 @@ def get_savings_progress(goal_id: int) -> Dict:
     
     remaining = target - current
     days_remaining = 0
-    if goal['target_date']:
-        target_date = datetime.strptime(goal['target_date'], '%Y-%m-%d')
+    if goal['target_date'] and goal['target_date'] not in ("''", ""):
+        target_date = datetime.strptime(goal['target_date'].strip("'"), '%Y-%m-%d')
         days_remaining = (target_date - datetime.now()).days
     
     required_monthly = remaining / max(days_remaining / 30, 1) if days_remaining > 0 else remaining

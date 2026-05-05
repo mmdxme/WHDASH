@@ -20,7 +20,101 @@
         </div>
     </div>
 
+    <!-- Connector Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">{{ t('btp_total_connectors', 'Total Connectors') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ analytics|sum(attribute='total') }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-plug fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">{{ t('btp_total_active', 'Total Active') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ analytics|sum(attribute='active') }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">{{ t('btp_avg_health', 'Avg Health Score') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ "%.1f"|format((analytics|sum(attribute='avg_health')) / (analytics|length if analytics else 1)) }}%
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-heartbeat fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">{{ t('btp_categories', 'Categories') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ analytics|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-folder fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_connectors_by_category', 'Connectors by Category') }}</h6>
+                </div>
+                <div class="card-body" style="height: 280px;">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_health_by_category', 'Health Score by Category') }}</h6>
+                </div>
+                <div class="card-body" style="height: 280px;">
+                    <canvas id="healthChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics Table -->
     <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+            <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_category_breakdown', 'Category Breakdown') }}</h6>
+        </div>
         <div class="card-body">
             {% if analytics %}
             <div class="table-responsive">
@@ -30,20 +124,31 @@
                             <th>{{ t('btp_category', 'Category') }}</th>
                             <th>{{ t('btp_total_connectors', 'Total') }}</th>
                             <th>{{ t('btp_active_connectors', 'Active') }}</th>
+                            <th>{{ t('btp_inactive', 'Inactive') }}</th>
                             <th>{{ t('btp_health_score', 'Avg Health') }}</th>
+                            <th>{{ t('btp_health_bar', 'Health Bar') }}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for item in analytics %}
+                        {% set inactive = item.total - item.active %}
                         <tr>
-                            <td><strong>{{ item.category }}</strong></td>
-                            <td>{{ item.total }}</td>
-                            <td>{{ item.active }}</td>
                             <td>
+                                <span class="badge bg-primary me-1">{{ item.category }}</span>
+                            </td>
+                            <td><strong>{{ item.total }}</strong></td>
+                            <td><span class="badge bg-success">{{ item.active }}</span></td>
+                            <td><span class="badge bg-secondary">{{ inactive }}</span></td>
+                            <td>
+                                <span class="fw-bold text-{{ 'success' if item.avg_health >= 80 else 'warning' if item.avg_health >= 50 else 'danger' }}">
+                                    {{ "%.1f"|format(item.avg_health) }}%
+                                </span>
+                            </td>
+                            <td style="min-width: 150px;">
                                 <div class="progress" style="height: 20px;">
                                     <div class="progress-bar bg-{{ 'success' if item.avg_health >= 80 else 'warning' if item.avg_health >= 50 else 'danger' }}"
                                          role="progressbar" style="width: {{ item.avg_health }}%">
-                                        {{ item.avg_health }}%
+                                        {{ "%.0f"|format(item.avg_health) }}%
                                     </div>
                                 </div>
                             </td>
@@ -58,4 +163,66 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    Chart.defaults.font.family = "'Inter', 'Segoe UI', sans-serif";
+    Chart.defaults.color = '#6c757d';
+
+    // Connectors by Category (Doughnut)
+    const catCtx = document.getElementById('categoryChart').getContext('2d');
+    const catLabels = [{% for item in analytics %}'{{ item.category }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+    const catTotals = [{% for item in analytics %}{{ item.total }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+    new Chart(catCtx, {
+        type: 'doughnut',
+        data: {
+            labels: catLabels.length ? catLabels : ['No Data'],
+            datasets: [{
+                data: catTotals.length ? catTotals : [1],
+                backgroundColor: ['#4e73df', '#28a745', '#17a2b8', '#ffc107', '#dc3545', '#6c757d', '#6610f2', '#e83e8c'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { padding: 15, usePointStyle: true, pointStyle: 'circle' }
+                }
+            }
+        }
+    });
+
+    // Health by Category (Horizontal Bar)
+    const healthCtx = document.getElementById('healthChart').getContext('2d');
+    const healthData = [{% for item in analytics %}{{ item.avg_health }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+    new Chart(healthCtx, {
+        type: 'bar',
+        data: {
+            labels: catLabels.length ? catLabels : ['No Data'],
+            datasets: [{
+                data: healthData.length ? healthData : [0],
+                backgroundColor: healthData.map(function(v) {
+                    return v >= 80 ? '#28a745' : v >= 50 ? '#ffc107' : '#dc3545';
+                }),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { beginAtZero: true, max: 100 }
+            }
+        }
+    });
+});
+</script>
 {% endblock %}

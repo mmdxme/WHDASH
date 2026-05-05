@@ -8,44 +8,172 @@
             <i class="fas fa-envelope-square fa-fw me-2" style="color: var(--danger-color, #e74a3b);"></i>
             {{ t('btp_dead_letter_queue', 'Dead Letter Queue') }}
         </h1>
+        <div class="btn-group">
+            <button class="btn btn-outline-danger btn-sm" onclick="retryAll()">
+                <i class="fas fa-redo me-1"></i> {{ t('retry_all', 'Retry All Failed') }}
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" onclick="discardAll()">
+                <i class="fas fa-trash me-1"></i> {{ t('discard_all', 'Discard All') }}
+            </button>
+        </div>
+    </div>
+
+    <!-- Error Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">{{ t('btp_failed_items', 'Failed Items') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ dlq_items|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">{{ t('btp_total_attempts', 'Total Attempts') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ dlq_items|sum(attribute='attempts') }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-sync fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">{{ t('btp_oldest_failure', 'Oldest Failure') }}</div>
+                            <div class="h6 mb-0 font-weight-bold text-gray-800">
+                                {% if dlq_items %}
+                                {{ dlq_items|firstattr('created_at')[:10] }}
+                                {% else %}
+                                N/A
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-secondary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-secondary text-uppercase mb-1">{{ t('btp_resolution_rate', 'Resolution Rate') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">--</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-double fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Type Distribution -->
+    <div class="row mb-4">
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_errors_by_type', 'Errors by Type') }}</h6>
+                </div>
+                <div class="card-body" style="height: 220px;">
+                    <canvas id="errorTypeChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_errors_by_connector', 'Errors by Connector') }}</h6>
+                </div>
+                <div class="card-body" style="height: 220px;">
+                    <canvas id="errorConnectorChart"></canvas>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- DLQ Table -->
     <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+            <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_failed_messages', 'Failed Messages') }}</h6>
+            <div class="d-flex">
+                <input type="search" class="form-control form-control-sm" placeholder="{{ t('search', 'Search') }}..." id="dlqSearch">
+            </div>
+        </div>
         <div class="card-body">
             {% if dlq_items %}
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover" id="dlqTable">
                     <thead>
                         <tr>
                             <th>ID</th>
                             <th>{{ t('btp_connector_name', 'Connector') }}</th>
                             <th>{{ t('btp_job_name', 'Job') }}</th>
                             <th>{{ t('btp_event_type', 'Event Type') }}</th>
-                            <th>{{ t('btp_reason', 'Reason') }}</th>
+                            <th>{{ t('btp_failure_reason', 'Failure Reason') }}</th>
                             <th>{{ t('btp_attempts', 'Attempts') }}</th>
-                            <th>{{ t('btp_status', 'Status') }}</th>
+                            <th>{{ t('btp_last_attempt', 'Last Attempt') }}</th>
                             <th>{{ t('btp_created_at', 'Created') }}</th>
                             <th>{{ t('actions', 'Actions') }}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for item in dlq_items %}
-                        <tr>
-                            <td>{{ item.id }}</td>
-                            <td>{{ item.connector_name or 'N/A' }}</td>
-                            <td>{{ item.job_name or item.job_id or 'N/A' }}</td>
-                            <td>{{ item.event_type or 'N/A' }}</td>
-                            <td><small>{{ item.failure_reason or item.reason or 'N/A' }}</small></td>
-                            <td>{{ item.attempts }}</td>
+                        <tr class="{{ 'table-danger' if item.attempts >= 3 else 'table-warning' }}">
+                            <td><strong>{{ item.id }}</strong></td>
                             <td>
-                                <span class="badge bg-danger">{{ item.status }}</span>
-                            </td>
-                            <td><small>{{ item.created_at }}</small></td>
-                            <td>
-                                <a href="{{ url_for('btp_dlq_replay', dlq_id=item.id) }}" class="btn btn-outline-success btn-sm">
-                                    <i class="fas fa-play"></i> {{ t('replay', 'Replay') }}
+                                {% if item.connector_name %}
+                                <a href="{{ url_for('btp_connector_detail', connector_id=item.connector_id) }}">
+                                    {{ item.connector_name }}
                                 </a>
+                                {% else %}
+                                <span class="text-muted">N/A</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ item.job_name or item.job_id or 'N/A' }}</td>
+                            <td><span class="badge bg-secondary">{{ item.event_type or 'N/A' }}</span></td>
+                            <td>
+                                <small class="text-danger">{{ item.failure_reason or item.reason or 'Unknown error' }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ 'danger' if item.attempts >= 3 else 'warning' }}">
+                                    {{ item.attempts }} {{ t('btp_attempts', 'attempts') }}
+                                </span>
+                            </td>
+                            <td><small>{{ item.last_attempt_at or 'Never' }}</small></td>
+                            <td><small class="text-muted">{{ item.created_at[:19] }}</small></td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ url_for('btp_dlq_replay', dlq_id=item.id) }}" class="btn btn-outline-success" title="{{ t('replay', 'Replay') }}">
+                                        <i class="fas fa-play"></i>
+                                    </a>
+                                    <button class="btn btn-outline-info" onclick="viewDetails({{ item.id }})" title="{{ t('view_details', 'View Details') }}">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button class="btn btn-outline-danger" onclick="discardItem({{ item.id }})" title="{{ t('discard', 'Discard') }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -54,11 +182,124 @@
             </div>
             {% else %}
             <div class="text-center py-5">
-                <i class="fas fa-inbox fa-4x text-gray-300 mb-3"></i>
+                <i class="fas fa-check-circle fa-4x text-success mb-3"></i>
                 <h5 class="text-gray-500">No dead letter items - everything processed successfully!</h5>
             </div>
             {% endif %}
         </div>
     </div>
 </div>
+
+<!-- Details Modal -->
+<div class="modal fade" id="dlqDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ t('btp_message_details', 'Message Details') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="dlqDetailsContent">
+                <pre class="bg-light p-3 rounded"><code id="dlqPayload"></code></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('close', 'Close') }}</button>
+                <button type="button" class="btn btn-success" id="modalReplayBtn">
+                    <i class="fas fa-redo me-1"></i> {{ t('replay', 'Replay') }}
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    Chart.defaults.font.family = "'Inter', 'Segoe UI', sans-serif";
+    Chart.defaults.color = '#6c757d';
+
+    // Error by Type (Doughnut)
+    const typeCtx = document.getElementById('errorTypeChart').getContext('2d');
+    const typeLabels = [{% for item in dlq_items %}'{{ item.event_type or "unknown" }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+    const typeData = [{% for item in dlq_items %}1{% if not loop.last %}, {% endif %}{% endfor %}];
+
+    new Chart(typeCtx, {
+        type: 'doughnut',
+        data: {
+            labels: typeLabels.length ? typeLabels : ['No Data'],
+            datasets: [{
+                data: typeData.length ? typeData : [1],
+                backgroundColor: ['#dc3545', '#fd7e14', '#ffc107', '#28a745', '#17a2b8', '#6c757d'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { padding: 12, usePointStyle: true }
+                }
+            }
+        }
+    });
+
+    // Error by Connector (Horizontal Bar)
+    const connCtx = document.getElementById('errorConnectorChart').getContext('2d');
+    const connLabels = [{% for item in dlq_items %}'{{ item.connector_name or "Unknown" }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+
+    new Chart(connCtx, {
+        type: 'bar',
+        data: {
+            labels: connLabels.length ? connLabels : ['No Data'],
+            datasets: [{
+                data: typeData.length ? typeData : [0],
+                backgroundColor: '#dc3545',
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+        }
+    });
+
+    // Search functionality
+    document.getElementById('dlqSearch').addEventListener('keyup', function() {
+        const query = this.value.toLowerCase();
+        document.querySelectorAll('#dlqTable tbody tr').forEach(row => {
+            row.style.display = row.textContent.toLowerCase().includes(query) ? '' : 'none';
+        });
+    });
+});
+
+function viewDetails(id) {
+    // Placeholder - would fetch details via API
+    document.getElementById('dlqPayload').textContent = 'Message payload for ID: ' + id;
+    new bootstrap.Modal(document.getElementById('dlqDetailsModal')).show();
+}
+
+function retryAll() {
+    if (confirm('Retry all failed items?')) {
+        window.location.href = '{{ url_for("btp_dlq") }}?action=retry_all';
+    }
+}
+
+function discardAll() {
+    if (confirm('Discard all failed items? This cannot be undone.')) {
+        window.location.href = '{{ url_for("btp_dlq") }}?action=discard_all';
+    }
+}
+
+function discardItem(id) {
+    if (confirm('Discard this item? This cannot be undone.')) {
+        window.location.href = '{{ url_for("btp_dlq_replay", dlq_id=0) }}'.replace('0', id) + '?action=discard';
+    }
+}
+</script>
 {% endblock %}

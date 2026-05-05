@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-chart-area fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('api_usage', 'API Usage Report') }}
+        </h1>
+        <div class="d-flex gap-2">
+            <button onclick="exportReport()" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-download me-1"></i> {{ t('export', 'Export') }}
+            </button>
+            <a href="{{ url_for('integration_reports') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back_to_reports', 'Back to Reports') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary KPIs -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ groups|length }}</div>
+                    <div class="small">{{ t('endpoint_groups', 'Endpoint Groups') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ groups|sum(attribute='total_usage')|default(0) }}</div>
+                    <div class="small">{{ t('total_requests', 'Total Requests') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ groups|sum(attribute='total_errors')|default(0) }}</div>
+                    <div class="small">{{ t('total_errors', 'Total Errors') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white shadow">
+                <div class="card-body text-center">
+                    {% set total = groups|sum(attribute='total_usage')|default(0) %}
+                    {% set errors = groups|sum(attribute='total_errors')|default(0) %}
+                    <div class="h2 mb-0">{{ "%.2f"|format(errors / total * 100) if total > 0 else 0 }}%</div>
+                    <div class="small">{{ t('error_rate', 'Error Rate') }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Usage Bar Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('usage_by_group', 'Usage by Endpoint Group') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="usageByGroupChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Rate Bar Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-danger">{{ t('error_rate_by_group', 'Error Rate by Endpoint Group') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 250px;">
+                    <canvas id="errorRateChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('endpoint_group_details', 'Endpoint Group Details') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('group', 'Endpoint Group') }}</th>
+                                    <th class="text-center">{{ t('endpoints', 'Endpoints') }}</th>
+                                    <th class="text-center">{{ t('total_usage', 'Total Usage') }}</th>
+                                    <th class="text-center text-danger">{{ t('errors', 'Errors') }}</th>
+                                    <th class="text-center">{{ t('error_rate', 'Error Rate') }}</th>
+                                    <th class="text-center">{{ t('health', 'Health') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for group in groups %}
+                                <tr>
+                                    <td><strong>{{ group.group }}</strong></td>
+                                    <td class="text-center">{{ group.endpoint_count }}</td>
+                                    <td class="text-center">{{ group.total_usage|default(0) }}</td>
+                                    <td class="text-center text-danger">{{ group.total_errors|default(0) }}</td>
+                                    <td class="text-center">
+                                        <div class="progress" style="height: 20px; min-width: 100px;">
+                                            <div class="progress-bar bg-danger" role="progressbar" style="width: {{ group.error_rate }}%">
+                                                {{ "%.2f"|format(group.error_rate) }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if group.error_rate < 1 %}
+                                            <span class="badge bg-success">{{ t('healthy', 'Healthy') }}</span>
+                                        {% elif group.error_rate < 5 %}
+                                            <span class="badge bg-warning text-dark">{{ t('warning', 'Warning') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ t('critical', 'Critical') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">
+                                        {{ t('no_endpoint_data', 'No endpoint data available') }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const groups = {{ groups|tojson }};
+    
+    // Bar chart - usage by group
+    const usageCtx = document.getElementById('usageByGroupChart').getContext('2d');
+    new Chart(usageCtx, {
+        type: 'bar',
+        data: {
+            labels: groups.map(g => g.group),
+            datasets: [{
+                label: '{{ t("total_usage", "Total Usage") }}',
+                data: groups.map(g => g.total_usage || 0),
+                backgroundColor: '#4e73df',
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true },
+                x: { ticks: { maxRotation: 45, minRotation: 45 } }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+
+    // Bar chart - error rate by group
+    const errorCtx = document.getElementById('errorRateChart').getContext('2d');
+    new Chart(errorCtx, {
+        type: 'bar',
+        data: {
+            labels: groups.map(g => g.group),
+            datasets: [{
+                label: '{{ t("error_rate", "Error Rate") }}',
+                data: groups.map(g => g.error_rate || 0),
+                backgroundColor: groups.map(g => g.error_rate < 1 ? '#28a745' : g.error_rate < 5 ? '#ffc107' : '#dc3545'),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, ticks: { callback: v => v + '%' } },
+                x: { ticks: { maxRotation: 45, minRotation: 45 } }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+});
+
+function exportReport() {
+    const groups = {{ groups|tojson }};
+    if (typeof XLSX !== 'undefined') {
+        const ws = XLSX.utils.json_to_sheet(groups.map(g => ({
+            'Endpoint Group': g.group,
+            'Endpoints': g.endpoint_count,
+            'Total Usage': g.total_usage || 0,
+            'Errors': g.total_errors || 0,
+            'Error Rate (%)': g.error_rate
+        })));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'API Usage');
+        XLSX.writeFile(wb, 'api_usage.xlsx');
+    }
+}
+</script>
+{% endblock %}

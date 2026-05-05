@@ -38,7 +38,8 @@ from form_models import (
 
 from database import get_db_context, log_audit
 
-# Import export utilities
+# Import unified permission decorator
+from permissions import require_permission
 from export_utils import (
     send_export_response,
     get_export_columns
@@ -80,21 +81,6 @@ def require_login(f):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
-
-
-def require_permission(resource, action):
-    """Decorator to require a specific permission."""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            if 'user_id' not in session:
-                flash("Please login to access this page.", "error")
-                return redirect(url_for('login'))
-            # For now, check if user has forms module access
-            # In production, this would check: permissions.user_has_permission(session['user_id'], 'forms', resource, action)
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
 
 
 def get_current_user():

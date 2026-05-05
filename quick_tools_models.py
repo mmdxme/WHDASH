@@ -446,3 +446,223 @@ def get_default_favorites_for_user(user_id):
         {'label': 'Task Center', 'url': '/tasks/dashboard', 'icon': 'fa-tasks', 'color': 'green'},
         {'label': 'Issue Tracker', 'url': '/issues', 'icon': 'fa-bug', 'color': 'red'},
     ]
+
+
+# ============================================================================
+# USAGE ANALYTICS & REPORTING
+# ============================================================================
+
+def ensure_usage_tracking_table():
+    """Ensure the tool_usage_tracking table exists for analytics."""
+    if not table_exists('tool_usage_tracking'):
+        with get_db_context() as db:
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS tool_usage_tracking (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    tool_name TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    metadata TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            db.execute("CREATE INDEX IF NOT EXISTS idx_usage_user ON tool_usage_tracking(user_id)")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_usage_tool ON tool_usage_tracking(tool_name)")
+            db.execute("CREATE INDEX IF NOT EXISTS idx_usage_date ON tool_usage_tracking(created_at)")
+            db.commit()
+
+
+def track_tool_usage(user_id, tool_name, action, metadata=None):
+    """Track tool usage for analytics."""
+    ensure_usage_tracking_table()
+    with get_db_context() as db:
+        import json
+        meta_str = json.dumps(metadata) if metadata else None
+        db.execute(
+            "INSERT INTO tool_usage_tracking (user_id, tool_name, action, metadata) VALUES (?, ?, ?, ?)",
+            (user_id, tool_name, action, meta_str)
+        )
+
+
+def get_usage_analytics(user_id=None, days=30):
+    """Get usage analytics - most used tools, frequency, active users."""
+    ensure_usage_tracking_table()
+    import json
+
+    date_from = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+
+    # Tool usage counts
+    tool_usage = get_all("""
+        SELECT tool_name, COUNT(*) as usage_count
+        FROM tool_usage_tracking
+        WHERE created_at >= ?
+        GROUP BY tool_name
+        ORDER BY usage_count DESC
+    """, (date_from,))
+
+    # Daily usage trend
+    daily_usage = get_all("""
+        SELECT DATE(created_at) as date, COUNT(*) as count
+        FROM tool_usage_tracking
+        WHERE created_at >= ?
+        GROUP BY DATE(created_at)
+        ORDER BY date DESC
+        LIMIT 30
+    """, (date_from,))
+
+    # Active users count
+    active_users = get_one("""
+        SELECT COUNT(DISTINCT user_id) as active_users
+        FROM tool_usage_tracking
+        WHERE created_at >= ?
+    """, (date_from,))
+
+    # Peak hours
+    peak_hours = get_all("""
+        SELECT strftime('%H', created_at) as hour, COUNT(*) as count
+        FROM tool_usage_tracking
+        WHERE created_at >= ?
+        GROUP BY hour
+        ORDER BY count DESC
+        LIMIT 5
+    """, (date_from,))
+
+    # Per-user stats if admin
+    user_stats = []
+    if user_id is not None:
+        user_stats = get_all("""
+            SELECT tool_name, action, COUNT(*) as count
+            FROM tool_usage_tracking
+            WHERE user_id = ? AND created_at >= ?
+            GROUP BY tool_name, action
+            ORDER BY count DESC
+        """, (user_id, date_from,))
+
+    return {
+        'tool_usage': tool_usage,
+        'daily_usage': daily_usage,
+        'active_users': active_users['active_users'] if active_users else 0,
+        'peak_hours': peak_hours,
+        'user_stats': user_stats,
+        'period_days': days
+    }
+
+
+def get_notes_report(user_id=None, days=30):
+    """Get notes analytics - by category, recent, shared, archive stats."""
+    ensure_quick_notes_table()
+    date_from = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+
+    # Notes by color/category
+    by_color = get_all("""
+        SELECT color, COUNT(*) as count
+        FROM quick_notes
+        WHERE created_at >= ?
+        GROUP BY color
+        ORDER BY count DESC
+    """, (date_from,))
+
+    # Recent notes
+    recent = get_all("""
+        SELECT * FROM quick_notes
+        ORDER BY updated_at DESC
+        LIMIT 10
+    """) if user_id else []
+
+    # Pinned vs unpinned
+    pinned_stats = get_one("""
+        SELECT
+            SUM(CASE WHEN is_pinned = 1 THEN 1 ELSE 0 END) as pinned_count,
+            SUM(CASE WHEN is_pinned = 0 THEN 1 ELSE 0 END) as unpinned_count,
+            COUNT(*) as total
+        FROM quick_notes
+        WHERE user_id = ?
+    """, (user_id,)) if user_id else {'pinned_count': 0, 'unpinned_count': 0, 'total': 0}
+
+    return {
+        'by_color': by_color,
+        'recent_notes': recent,
+        'pinned_count': pinned_stats['pinned_count'] or 0,
+        'unpinned_count': pinned_stats['unpinned_count'] or 0,
+        'total_notes': pinned_stats['total'] or 0,
+        'period_days': days
+    }
+
+
+def get_tasks_report(user_id=None, days=30):
+    """Get task analytics - completion rates, overdue, productivity."""
+    date_from = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+
+    # Task completion stats
+    completion_stats = get_one("""
+        SELECT
+            COUNT(*) as total_created,
+            SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) as completed,
+            SUM(CASE WHEN status != 'Completed' AND due_at < CURRENT_TIMESTAMP THEN 1 ELSE 0 END) as overdue,
+            SUM(CASE WHEN status != 'Completed' AND due_at >= CURRENT_TIMESTAMP THEN 1 ELSE 0 END) as pending
+        FROM task_items
+        WHERE created_at >= ?
+    """, (date_from,)) if table_exists('task_items') else {'total_created': 0, 'completed': 0, 'overdue': 0, 'pending': 0}
+
+    # Priority distribution
+    priority_dist = get_all("""
+        SELECT priority, COUNT(*) as count
+        FROM task_items
+        WHERE created_at >= ?
+        GROUP BY priority
+        ORDER BY count DESC
+    """, (date_from,)) if table_exists('task_items') else []
+
+    # Completion rate
+    completion_rate = 0
+    if completion_stats['total_created'] > 0:
+        completion_rate = round((completion_stats['completed'] / completion_stats['total_created']) * 100, 1)
+
+    return {
+        'total_created': completion_stats['total_created'] or 0,
+        'completed': completion_stats['completed'] or 0,
+        'overdue': completion_stats['overdue'] or 0,
+        'pending': completion_stats['pending'] or 0,
+        'completion_rate': completion_rate,
+        'priority_distribution': priority_dist,
+        'period_days': days
+    }
+
+
+def get_reminders_report(user_id=None, days=30):
+    """Get reminder analytics - fulfillment, snooze frequency, overdue."""
+    ensure_quick_reminders_table()
+    date_from = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+
+    # Reminder stats
+    reminder_stats = get_one("""
+        SELECT
+            COUNT(*) as total_created,
+            SUM(CASE WHEN is_done = 1 THEN 1 ELSE 0 END) as fulfilled,
+            SUM(CASE WHEN is_done = 0 AND remind_at < CURRENT_TIMESTAMP THEN 1 ELSE 0 END) as overdue,
+            SUM(CASE WHEN is_done = 0 AND remind_at >= CURRENT_TIMESTAMP THEN 1 ELSE 0 END) as upcoming
+        FROM quick_reminders
+        WHERE created_at >= ?
+    """, (date_from,))
+
+    # Snooze frequency (if we had snooze tracking - use as proxy)
+    snooze_stats = get_one("""
+        SELECT COUNT(*) as snooze_count
+        FROM quick_reminders
+        WHERE created_at >= ? AND is_done = 0
+    """, (date_from,))
+
+    # Fulfillment rate
+    fulfillment_rate = 0
+    if reminder_stats['total_created'] > 0:
+        fulfillment_rate = round((reminder_stats['fulfilled'] / reminder_stats['total_created']) * 100, 1)
+
+    return {
+        'total_created': reminder_stats['total_created'] or 0,
+        'fulfilled': reminder_stats['fulfilled'] or 0,
+        'overdue': reminder_stats['overdue'] or 0,
+        'upcoming': reminder_stats['upcoming'] or 0,
+        'fulfillment_rate': fulfillment_rate,
+        'snooze_count': snooze_stats['snooze_count'] if snooze_stats else 0,
+        'period_days': days
+    }

@@ -9,24 +9,23 @@ try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    pass  # python-dotenv not installed, rely on system environment variables
+    import logging
+    _logger = logging.getLogger('app_init')
+    _logger.debug("python-dotenv not installed, relying on system environment variables")
 
 import secrets
 import hmac
 import hashlib
 import sqlite3
-import os
 import re
 import json
 import csv
 import io
 from collections import Counter
-from openpyxl import Workbook, load_workbook
 import pandas as pd
 import time
 import tempfile
 import openpyxl
-from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from datetime import datetime, timedelta
 from issue_seed_data import ISSUE_SEED_DATA
@@ -108,7 +107,7 @@ from navigation import (
     MENU_STRUCTURE, get_main_menu, get_breadcrumbs,
     get_page_title, get_active_module,
     prepare_menu_for_template, get_notification_badge,
-    get_menu_label
+    get_task_badge, get_menu_label
 )
 from master_data import (
     get_canonical_customer, get_all_canonical_customers,
@@ -156,6 +155,24 @@ import html
 def _escape_html(text):
     return html.escape(text) if text else ''
 
+@app.template_filter('date')
+def _date_filter(value, format='%Y-%m-%d'):
+    """Format date - handles 'now' string, datetime objects, and ISO date strings."""
+    import datetime
+    if value == 'now' or value is None:
+        return datetime.datetime.now().strftime(format)
+    if isinstance(value, str):
+        try:
+            value = datetime.datetime.fromisoformat(value)
+        except ValueError:
+            try:
+                value = datetime.datetime.strptime(value, '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                return value
+    if isinstance(value, (datetime.datetime, datetime.date)):
+        return value.strftime(format)
+    return value
+
 import json
 @app.template_filter('from_json')
 def _from_json(text):
@@ -166,10 +183,41 @@ def _from_json(text):
     except (json.JSONDecodeError, TypeError):
         return []
 
+
+@app.template_filter('cache_render')
+def _cache_render(text, ttl=300):
+    """
+    Template filter to mark content for caching.
+    Usage in template: {{ some_content | cache_render(900) }}
+
+    Note: This is a placeholder that returns the content as-is.
+    Actual fragment caching is implemented via the @cache_result decorator
+    in route handlers. This filter exists for documentation purposes.
+    """
+    return text
+
+
+@app.template_filter('cached_fragment')
+def _cached_fragment(key, ttl=900):
+    """
+    Retrieve a cached template fragment by key.
+    Usage in template: {{ 'dashboard_kpis' | cached_fragment }}
+
+    Returns cached HTML or empty string if not cached.
+    For actual fragment caching, use the cache_result decorator in routes.
+    """
+    from database import cached_query
+    def _load_fragment():
+        return ""  # Fragment not found
+    result = cached_query(f'fragment:{key}', ttl, _load_fragment)
+    return result if result else ''
+
+
 # Session cookie security settings
 app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to session cookie
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF protection for cookies
-app.config['SESSION_COOKIE_SECURE'] = ENV == 'production'  # Only send cookie over HTTPS in production
+# Only send cookie over HTTPS if FLASK_ENV is explicitly set to 'production'
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV', '').lower() == 'production'
 
 DATABASE = os.environ.get('DATABASE_PATH', CONFIG_DATABASE_PATH)
 UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', CONFIG_UPLOAD_FOLDER)
@@ -183,8 +231,10 @@ try:
     if hasattr(config_module, 'SESSION_FILE_DIR'):
         app.config['SESSION_FILE_DIR'] = config_module.SESSION_FILE_DIR
         os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
-except ImportError:
-    pass
+except ImportError as e:
+    import logging
+    _logger = logging.getLogger('app_init')
+    _logger.warning(f"Could not import app_config for session config: {e}")
 
 
 def ensure_database_directory():
@@ -446,16 +496,76 @@ def require_login(f):
     """Decorator factory that redirects unauthenticated users to login."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        allowed_routes = ['login', 'static', 'set_language']
+        allowed_routes = ['login', 'static', 'set_language', 'health', 'ready', 'live']
         if request.endpoint not in allowed_routes and 'user_id' not in session:
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
 
 
+# =============================================================================
+# HEALTH CHECK ENDPOINTS
+# =============================================================================
+
+@app.route('/health')
+def health():
+    """Basic health check endpoint for load balancers and monitoring.
+
+    Returns 200 if the application is running.
+    """
+    return {'status': 'healthy', 'service': 'MMDx'}, 200
+
+
+@app.route('/ready')
+def ready():
+    """Readiness check endpoint - verifies database connectivity.
+
+    Returns 200 if all dependencies are available.
+    Returns 503 if any dependency is unavailable.
+    """
+    checks = {}
+    healthy = True
+
+    # Check database connectivity
+    try:
+        db = get_db()
+        db.execute('SELECT 1').fetchone()
+        db.close()
+        checks['database'] = 'ok'
+    except Exception as e:
+        checks['database'] = f'error: {str(e)}'
+        healthy = False
+
+    # Check schema initialization
+    try:
+        from database import table_exists
+        schema_ok = table_exists('companies') and table_exists('users')
+        checks['schema'] = 'ok' if schema_ok else 'not_initialized'
+        if not schema_ok:
+            healthy = False
+    except Exception as e:
+        checks['schema'] = f'error: {str(e)}'
+        healthy = False
+
+    status = 200 if healthy else 503
+    return {'status': 'ready' if healthy else 'not_ready', 'checks': checks}, status
+
+
+@app.route('/live')
+def live():
+    """Liveness check endpoint - basic application running status.
+
+    Returns 200 if the application process is alive.
+    """
+    return {'status': 'live'}, 200
+
+
+# =============================================================================
+# MODULE REGISTRATION
+# =============================================================================
+
 register_google_workspace(app, get_db)
 register_email_manager(app, get_db)
-register_hr_routes(app)
 register_talent_routes(app, get_db)
 register_wms_routes(app, get_db)
 register_company_routes(app)
@@ -1274,6 +1384,10 @@ def init_db():
         pass
     try:
         db.execute("ALTER TABLE user_preferences ADD COLUMN language TEXT DEFAULT 'en'")
+    except Exception:
+        pass
+    try:
+        db.execute("ALTER TABLE user_preferences ADD COLUMN nav_preferences TEXT DEFAULT '{}'")
     except Exception:
         pass
 
@@ -2893,6 +3007,52 @@ def quick_preference_update():
     saved_preferences = save_user_preferences_record(db, user_id, current_preferences)
     db.commit()
     return jsonify({'success': True, 'message': 'Preference saved.', 'preferences': saved_preferences})
+
+
+@app.route('/api/navigation/prefs', methods=['POST'])
+def api_navigation_prefs():
+    """Save navigation preferences (favorites, order, hidden sections, expanded state)."""
+    data = request.get_json() or {}
+    user_id = session.get('user_id')
+
+    if not user_id:
+        return jsonify({'success': False, 'message': 'Not authenticated'}), 401
+
+    db = get_db()
+
+    # Get existing nav prefs JSON
+    row = db.execute(
+        "SELECT nav_preferences FROM user_preferences WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()
+
+    nav_prefs = {}
+    if row and row[0]:
+        try:
+            import json
+            nav_prefs = json.loads(row[0])
+        except Exception:
+            nav_prefs = {}
+
+    # Update with new values
+    if 'favorites' in data:
+        nav_prefs['favorites'] = data['favorites']
+    if 'order' in data:
+        nav_prefs['order'] = data['order']
+    if 'hidden' in data:
+        nav_prefs['hidden'] = data['hidden']
+    if 'expanded' in data:
+        nav_prefs['expanded'] = data['expanded']
+
+    # Save back
+    import json
+    db.execute(
+        "UPDATE user_preferences SET nav_preferences = ? WHERE user_id = ?",
+        (json.dumps(nav_prefs), user_id)
+    )
+    db.commit()
+
+    return jsonify({'success': True, 'message': 'Navigation preferences saved.'})
 
 
 @app.route('/api/theme/switch', methods=['POST'])
@@ -7816,7 +7976,7 @@ def api_sync_import_csv():
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 @app.route('/api/sync/import-excel', methods=['POST'])
 @stock_admin_required
@@ -7854,7 +8014,7 @@ def api_sync_import_excel():
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 @app.route('/api/inventory/update_hs', methods=['POST'])
 @admin_required
@@ -7877,7 +8037,7 @@ def update_hs_group():
         db.commit()
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 @app.route('/api/inventory/remove_hs', methods=['POST'])
 @admin_required
@@ -7896,7 +8056,7 @@ def remove_hs_group():
         db.commit()
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 @app.route('/api/inventory/delete_part', methods=['POST'])
 @admin_required
@@ -7923,7 +8083,7 @@ def delete_part_endpoint():
         db.commit()
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 
 @app.route('/api/inventory/dashboard_bulk_action', methods=['POST'])
@@ -8028,7 +8188,7 @@ def inventory_dashboard_bulk_action():
         db.commit()
         return jsonify({'success': True, 'affected': affected})
     except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 @app.route('/hs-codes/export')
 @admin_required
@@ -8203,7 +8363,7 @@ def save_subtask():
             return jsonify({'success': True, 'message': 'Subtask created', 'id': new_subtask_id})
     except Exception as e:
         db.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 
 @app.route('/subtasks/delete', methods=['POST'])
@@ -8230,7 +8390,7 @@ def delete_subtask():
         return jsonify({'success': True, 'message': 'Subtask deleted'})
     except Exception as e:
         db.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 
 @app.route('/subtasks/bulk_action', methods=['POST'])
@@ -8284,7 +8444,7 @@ def subtask_bulk_action():
         return jsonify({'success': True, 'message': f'{affected} subtask(s) updated'})
     except Exception as e:
         db.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 
 @app.route('/subtasks/toggle_complete/<int:subtask_id>', methods=['POST'])
@@ -8488,7 +8648,7 @@ def save_task_transaction():
             return jsonify({'success': True, 'message': 'Transaction created', 'id': cursor.lastrowid})
     except Exception as e:
         db.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 
 @app.route('/task-transactions/delete', methods=['POST'])
@@ -8510,7 +8670,7 @@ def delete_task_transaction():
         return jsonify({'success': True, 'message': 'Transaction deleted'})
     except Exception as e:
         db.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 
 @app.route('/task-transactions/by-task/<int:task_id>')
@@ -8835,7 +8995,7 @@ def save_task_report_snapshot():
         return jsonify({'success': True, 'message': 'Snapshot saved', 'id': cursor.lastrowid})
     except Exception as e:
         db.rollback()
-        return jsonify({'success': False, 'message': str(e)}), 500
+        return jsonify({'success': False, 'message': 'Internal server error'}), 500
 
 
 @app.route('/task-reports/snapshots')
@@ -9075,7 +9235,7 @@ def save_task_list_columns():
 def health_check():
     """
     Comprehensive health check endpoint for monitoring and load balancers.
-    Returns status of database, cache, and system resources.
+    Returns status of database, cache, Redis, and system resources.
     """
     from datetime import datetime
     import sys
@@ -9093,6 +9253,13 @@ def health_check():
         db.execute('SELECT 1').fetchone()
         db.close()
         health['checks']['database'] = 'ok'
+
+        # Add query stats
+        try:
+            from database import get_query_stats
+            health['checks']['db_stats'] = get_query_stats()
+        except Exception:
+            pass
     except Exception as e:
         health['checks']['database'] = f'error: {str(e)}'
         health['status'] = 'degraded'
@@ -9101,16 +9268,42 @@ def health_check():
     try:
         cache = get_cache()
         stats = cache.get_stats()
-        health['checks']['cache'] = {
-            'status': 'ok',
-            'hits': stats['hits'],
-            'misses': stats['misses'],
-            'size': stats['size'],
-            'hit_rate': f"{stats['hit_rate']:.1f}%"
-        }
+        # Handle both old and new cache stats format
+        if 'backend' in stats:
+            # New RedisQueryCache format
+            health['checks']['cache'] = {
+                'status': 'ok',
+                'backend': stats.get('backend', 'memory'),
+                'hits': stats.get('hits', 0),
+                'misses': stats.get('misses', 0),
+                'local_hits': stats.get('local_hits', 0),
+                'local_cache_size': stats.get('local_cache_size', 0),
+                'hit_rate': f"{stats.get('hit_rate', 0):.1f}%"
+            }
+        else:
+            # Old QueryCache format
+            health['checks']['cache'] = {
+                'status': 'ok',
+                'hits': stats.get('hits', 0),
+                'misses': stats.get('misses', 0),
+                'size': stats.get('size', 0),
+                'hit_rate': f"{stats.get('hit_rate', 0):.1f}%"
+            }
     except Exception as e:
         health['checks']['cache'] = f'error: {str(e)}'
         health['status'] = 'degraded'
+
+    # Redis direct check (for distributed caching status)
+    try:
+        from database import get_redis_client
+        redis_client = get_redis_client()
+        if redis_client:
+            redis_client.ping()
+            health['checks']['redis'] = 'ok'
+        else:
+            health['checks']['redis'] = 'not configured'
+    except Exception as e:
+        health['checks']['redis'] = f'error: {str(e)}'
 
     # Memory info (approximate)
     try:
@@ -9480,6 +9673,89 @@ def validate_sort(request_obj):
     if sort and not all(c in allowed_chars for c in str(sort)):
         return False
     return True
+
+
+# ============================================================================
+# PAGINATION HELPERS WITH MAX LIMIT ENFORCEMENT (1.3)
+# ============================================================================
+
+def paginate_query_params(params, page=1, per_page=25, max_per_page=100):
+    """
+    Normalize and enforce pagination limits.
+
+    Args:
+        params: dict with optional 'page' and 'per_page' keys
+        page: default page number if not in params
+        per_page: default items per page if not in params
+        max_per_page: maximum allowed items per page
+
+    Returns:
+        tuple: (page, per_page, offset)
+    """
+    page = int(params.get('page', page)) if params.get('page') else page
+    per_page = int(params.get('per_page', per_page)) if params.get('per_page') else per_page
+
+    # Enforce limits
+    page = max(1, page)
+    per_page = max(1, min(per_page, max_per_page))
+
+    offset = (page - 1) * per_page
+    return page, per_page, offset
+
+
+def paginate_list(items, page=1, per_page=25, max_per_page=100):
+    """
+    Paginate a list with enforced limits.
+
+    Args:
+        items: list to paginate
+        page: page number (1-indexed)
+        per_page: items per page
+        max_per_page: maximum allowed items per page
+
+    Returns:
+        dict with items, total, page, per_page, pages, has_next, has_prev
+    """
+    page, per_page, offset = paginate_query_params(
+        {'page': page, 'per_page': per_page}, page, per_page, max_per_page
+    )
+
+    total = len(items)
+    start = min(offset, total)
+    end = min(offset + per_page, total)
+
+    return {
+        'items': items[start:end],
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'pages': (total + per_page - 1) // per_page if per_page > 0 else 0,
+        'has_next': end < total,
+        'has_prev': page > 1,
+        'offset': offset
+    }
+
+
+def cursor_paginate_query(query, cursor, limit=50, max_limit=200):
+    """
+    Cursor-based pagination for large tables.
+
+    Args:
+        query: SQL query to append pagination to
+        cursor: ID to start from (items with id < cursor)
+        limit: number of items to fetch
+        max_limit: maximum allowed items per page
+
+    Returns:
+        tuple: (modified_query, params)
+    """
+    limit = min(limit, max_limit)
+
+    if cursor:
+        query += " AND id < ?"
+        return query, [cursor, limit]
+    else:
+        return query + " LIMIT ?", [limit]
 
 
 # ============================================================================

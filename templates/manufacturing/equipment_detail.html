@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-1 text-gray-800">
+                <i class="fas fa-tools me-2" style="color: var(--primary-color, #4e73df);"></i>
+                {{ equipment.code }}: <span class="text-primary">{{ equipment.name }}</span>
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('manufacturing.dashboard') }}">{{ t('dashboard', 'Dashboard') }}</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('manufacturing.equipment_list') }}">{{ t('equipment', 'Equipment') }}</a></li>
+                    <li class="breadcrumb-item active">{{ equipment.code }}</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('manufacturing.equipment_list') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back', 'Back') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Equipment Info -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-info-circle me-2"></i>{{ t('equipment_details', 'Equipment Details') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless mb-0">
+                        <tr>
+                            <td class="text-muted" style="width: 40%;">{{ t('code', 'Code') }}:</td>
+                            <td><strong>{{ equipment.code }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('name', 'Name') }}:</td>
+                            <td>{{ equipment.name }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('work_center', 'Work Center') }}:</td>
+                            <td>{{ equipment.work_center_name or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('type', 'Type') }}:</td>
+                            <td>{{ equipment.equipment_type or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('status', 'Status') }}:</td>
+                            <td>
+                                {% if equipment.status == 'ACTIVE' %}
+                                    <span class="badge bg-success">ACTIVE</span>
+                                {% elif equipment.status == 'MAINTENANCE' %}
+                                    <span class="badge bg-warning">MAINTENANCE</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ equipment.status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('serial_number', 'Serial Number') }}:</td>
+                            <td>{{ equipment.serial_number or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('install_date', 'Install Date') }}:</td>
+                            <td>{{ equipment.install_date or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('last_maintenance', 'Last Maintenance') }}:</td>
+                            <td>{{ equipment.last_maintenance[:10] if equipment.last_maintenance else '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('next_maintenance', 'Next Maintenance') }}:</td>
+                            <td>{{ equipment.next_maintenance[:10] if equipment.next_maintenance else '-' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-wrench me-2"></i>{{ t('record_maintenance', 'Record Maintenance') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('manufacturing.record_maintenance', equipment_id=equipment.id) }}">
+                        <div class="mb-3">
+                            <label for="maintenance_type" class="form-label">{{ t('type', 'Type') }}</label>
+                            <select class="form-select" id="maintenance_type" name="maintenance_type" required>
+                                <option value="">{{ t('select_type', 'Select Type') }}</option>
+                                <option value="PREVENTIVE">{{ t('preventive', 'Preventive') }}</option>
+                                <option value="CORRECTIVE">{{ t('corrective', 'Corrective') }}</option>
+                                <option value="PREDICTIVE">{{ t('predictive', 'Predictive') }}</option>
+                                <option value="EMERGENCY">{{ t('emergency', 'Emergency') }}</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label">{{ t('description', 'Description') }}</label>
+                            <textarea class="form-control" id="description" name="description" rows="2" required></textarea>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="cost" class="form-label">{{ t('cost', 'Cost') }}</label>
+                                <input type="number" class="form-control" id="cost" name="cost" step="0.01" min="0" value="0">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="duration_minutes" class="form-label">{{ t('duration_min', 'Duration (min)') }}</label>
+                                <input type="number" class="form-control" id="duration_minutes" name="duration_minutes" min="0" value="0">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="parts_used" class="form-label">{{ t('parts_used', 'Parts Used') }}</label>
+                            <input type="text" class="form-control" id="parts_used" name="parts_used">
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-save me-1"></i> {{ t('record', 'Record Maintenance') }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Maintenance History -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-history me-2"></i>{{ t('maintenance_history', 'Maintenance History') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if maintenance_logs %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ t('date', 'Date') }}</th>
+                                    <th>{{ t('type', 'Type') }}</th>
+                                    <th>{{ t('description', 'Description') }}</th>
+                                    <th>{{ t('performed_by', 'Performed By') }}</th>
+                                    <th class="text-right">{{ t('cost', 'Cost') }}</th>
+                                    <th class="text-right">{{ t('duration', 'Duration') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in maintenance_logs %}
+                                <tr>
+                                    <td>{{ log.performed_at[:10] if log.performed_at else '-' }}</td>
+                                    <td>
+                                        {% if log.maintenance_type == 'PREVENTIVE' %}
+                                            <span class="badge bg-info">PREVENTIVE</span>
+                                        {% elif log.maintenance_type == 'CORRECTIVE' %}
+                                            <span class="badge bg-warning">CORRECTIVE</span>
+                                        {% elif log.maintenance_type == 'EMERGENCY' %}
+                                            <span class="badge bg-danger">EMERGENCY</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ log.maintenance_type }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ log.description }}</td>
+                                    <td>{{ log.performed_by_name or '-' }}</td>
+                                    <td class="text-right">${{ "%.2f"|format(log.cost) if log.cost else '0.00' }}</td>
+                                    <td class="text-right">{{ log.duration_minutes }} min</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-wrench fa-3x mb-3"></i>
+                        <p class="mb-0">{{ t('no_maintenance_history', 'No maintenance history recorded yet.') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -291,12 +291,22 @@ def structure_unit_detail(unit_id):
     """View details of a specific org unit."""
     user = get_current_user()
     lang = get_user_language()
-    
+
     unit = get_org_unit(unit_id)
     if not unit:
-        flash('Organization unit not found.', 'error')
+        flash(t('org_unit_not_found', lang), 'error')
         return redirect(url_for('org_planning.structure'))
-    
+
+    # Check if user has access to this company's org structure
+    if unit.get('company_id'):
+        user_companies = get_all("""
+            SELECT company_id FROM op_org_unit_access
+            WHERE user_id = ? AND company_id = ?
+        """, (session['user_id'], unit['company_id']))
+        if not user_companies and not is_admin():
+            flash(t('access_denied_unit', lang), 'error')
+            return redirect(url_for('org_planning.structure'))
+
     # Get child units
     children = get_org_units(parent_id=unit_id)
     
@@ -1606,15 +1616,41 @@ def reports():
 def report_structure():
     """Organization structure report."""
     lang = get_user_language()
-    
+
     companies = get_companies()
-    org_units = get_org_units()
-    
+    selected_company = request.args.get('company', type=int)
+    if selected_company:
+        org_units = get_org_units(company_id=selected_company)
+    else:
+        org_units = get_org_units()
+
+    total_units = len(org_units)
+    total_companies = len(companies)
+    total_employees = sum(u.employee_count or 0 for u in org_units)
+    active_units = sum(1 for u in org_units if u.is_active == 1)
+
+    units_by_type = {}
+    for u in org_units:
+        utype = u.unit_type or 'unknown'
+        units_by_type[utype] = units_by_type.get(utype, 0) + 1
+
+    units_by_company = {}
+    for u in org_units:
+        cname = u.company_name or 'Unknown'
+        units_by_company[cname] = units_by_company.get(cname, 0) + 1
+
     return render_template('org_planning/reports/structure.html',
         page_title=t('org_structure_report', lang),
         lang=lang,
         companies=companies,
         org_units=org_units,
+        selected_company=selected_company,
+        total_units=total_units,
+        total_companies=total_companies,
+        total_employees=total_employees,
+        active_units=active_units,
+        units_by_type=units_by_type.items(),
+        units_by_company=units_by_company.items(),
         breadcrumbs=[
             {'label': t('home', lang), 'url': '/'},
             {'label': t('org_planning', lang), 'url': '/org-planning'},
@@ -1629,17 +1665,24 @@ def report_structure():
 def report_headcount():
     """Headcount report."""
     lang = get_user_language()
-    
+
     year = request.args.get('year', date.today().year, type=int)
     metrics = get_headcount_metrics()
     plans = get_headcount_plans(plan_year=year)
-    
+
+    total_approved = sum(m.total_approved or 0 for m in metrics)
+    total_current = sum(m.total_current or 0 for m in metrics)
+    total_vacant = sum(m.total_vacant or 0 for m in metrics)
+
     return render_template('org_planning/reports/headcount.html',
         page_title=t('headcount_report', lang),
         lang=lang,
         metrics=metrics,
         plans=plans,
         selected_year=year,
+        total_approved=total_approved,
+        total_current=total_current,
+        total_vacant=total_vacant,
         breadcrumbs=[
             {'label': t('home', lang), 'url': '/'},
             {'label': t('org_planning', lang), 'url': '/org-planning'},
@@ -1654,12 +1697,18 @@ def report_headcount():
 def report_process_performance():
     """Process performance report."""
     lang = get_user_language()
-    
+
     days = request.args.get('days', 30, type=int)
     metrics = get_process_metrics(days=days)
     sla_stats = get_sla_compliance_stats(days=days)
     bottlenecks = get_bottleneck_steps(days=days)
-    
+
+    total_instances = sum(m.total_instances or 0 for m in metrics)
+    total_completed = sum(m.completed or 0 for m in metrics)
+    total_rejected = sum(m.rejected or 0 for m in metrics)
+    completion_rate = round((total_completed / total_instances * 100) if total_instances > 0 else 100, 1)
+    avg_cycle_time = round(sum((m.avg_hours or 0) for m in metrics) / len(metrics) if metrics else 0, 1)
+
     return render_template('org_planning/reports/process_performance.html',
         page_title=t('process_performance_report', lang),
         lang=lang,
@@ -1667,6 +1716,11 @@ def report_process_performance():
         sla_stats=sla_stats,
         bottlenecks=bottlenecks,
         days=days,
+        total_instances=total_instances,
+        total_completed=total_completed,
+        total_rejected=total_rejected,
+        completion_rate=completion_rate,
+        avg_cycle_time=avg_cycle_time,
         breadcrumbs=[
             {'label': t('home', lang), 'url': '/'},
             {'label': t('org_planning', lang), 'url': '/org-planning'},
@@ -1681,20 +1735,112 @@ def report_process_performance():
 def report_sla_compliance():
     """SLA compliance report."""
     lang = get_user_language()
-    
+
     days = request.args.get('days', 30, type=int)
     sla_stats = get_sla_compliance_stats(days=days)
-    
+
+    total_records = sum(s.total_records or 0 for s in sla_stats)
+    total_breaches = sum(s.breaches or 0 for s in sla_stats)
+    total_on_time = total_records - total_breaches
+    compliance_rate = round((total_on_time / total_records * 100) if total_records > 0 else 100, 1)
+    critical_breaches = [s for s in sla_stats if s.get('breaches', 0) > 0 and s.get('priority') in ['critical', 'high']]
+
     return render_template('org_planning/reports/sla_compliance.html',
         page_title=t('sla_compliance_report', lang),
         lang=lang,
         sla_stats=sla_stats,
         days=days,
+        total_records=total_records,
+        total_breaches=total_breaches,
+        total_on_time=total_on_time,
+        compliance_rate=compliance_rate,
+        critical_breaches=critical_breaches,
         breadcrumbs=[
             {'label': t('home', lang), 'url': '/'},
             {'label': t('org_planning', lang), 'url': '/org-planning'},
             {'label': t('reports', lang), 'url': '/org-planning/reports'},
             {'label': t('sla_compliance_report', lang), 'url': '#'}
+        ]
+    )
+
+@org_planning_bp.route('/reports/workflow')
+@op_login_required
+@op_permission_required('reports', 'view')
+def report_workflow():
+    """Workflow report with cycle time analysis."""
+    lang = get_user_language()
+
+    workflow_stats = get_all("""
+        SELECT
+            wd.name as workflow_name,
+            wd.category,
+            COUNT(CASE WHEN pi.status = 'in_progress' THEN 1 END) as active_instances,
+            COUNT(CASE WHEN pi.status = 'completed' AND pi.completed_at >= date('now', '-30 days') THEN 1 END) as completed_30d,
+            COUNT(CASE WHEN pi.status = 'rejected' AND pi.completed_at >= date('now', '-30 days') THEN 1 END) as rejected_30d,
+            AVG(CASE WHEN pi.status = 'completed' AND pi.completed_at >= date('now', '-30 days')
+                THEN (julianday(pi.completed_at) - julianday(pi.started_at)) * 24 END) as avg_cycle_hours
+        FROM op_workflow_definitions wd
+        LEFT JOIN op_process_instances pi ON pi.workflow_definition_id = wd.id
+        GROUP BY wd.id, wd.name, wd.category
+        ORDER BY completed_30d DESC
+    """)
+
+    for w in workflow_stats:
+        total = (w.completed_30d or 0) + (w.rejected_30d or 0)
+        w['approval_rate'] = round((w.completed_30d or 0) / total * 100) if total > 0 else 100
+
+    active_workflows = get_one("SELECT COUNT(*) as cnt FROM op_workflow_definitions WHERE status = 'published'")[0]['cnt'] if get_one("SELECT COUNT(*) as cnt FROM op_workflow_definitions WHERE status = 'published'") else 0
+
+    completed_week = get_one("SELECT COUNT(*) as cnt FROM op_process_instances WHERE status = 'completed' AND completed_at >= date('now', '-7 days')")[0]['cnt'] if get_one("SELECT COUNT(*) as cnt FROM op_process_instances WHERE status = 'completed' AND completed_at >= date('now', '-7 days')") else 0
+
+    avg_cycle_result = get_one("""
+        SELECT AVG((julianday(completed_at) - julianday(started_at)) * 24) as avg_hours
+        FROM op_process_instances
+        WHERE status = 'completed' AND completed_at >= date('now', '-30 days')
+    """)
+    avg_cycle_time = round(avg_cycle_result[0]['avg_hours'] or 0, 1) if avg_cycle_result and avg_cycle_result[0] else 0
+
+    outcome_result = get_one("""
+        SELECT
+            SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as approved,
+            SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected,
+            SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled
+        FROM op_process_instances
+        WHERE completed_at >= date('now', '-30 days')
+    """)
+    total_approved = outcome_result[0]['approved'] if outcome_result and outcome_result[0] else 0
+    total_rejected = outcome_result[0]['rejected'] if outcome_result and outcome_result[0] else 0
+    total_cancelled = outcome_result[0]['cancelled'] if outcome_result and outcome_result[0] else 0
+
+    total_outcomes = total_approved + total_rejected + total_cancelled
+    approval_rate = round(total_approved / total_outcomes * 100) if total_outcomes > 0 else 100
+
+    recent_completions = get_all("""
+        SELECT pi.title, wd.name as workflow_name, pi.completed_at,
+               (julianday(pi.completed_at) - julianday(pi.started_at)) * 24 as cycle_hours
+        FROM op_process_instances pi
+        JOIN op_workflow_definitions wd ON pi.workflow_definition_id = wd.id
+        WHERE pi.status = 'completed' AND pi.completed_at >= date('now', '-7 days')
+        ORDER BY pi.completed_at DESC
+    """)
+
+    return render_template('org_planning/reports/workflow.html',
+        page_title=t('workflow_report', lang),
+        lang=lang,
+        workflow_stats=workflow_stats,
+        active_workflows=active_workflows or 0,
+        completed_week=completed_week or 0,
+        avg_cycle_time=avg_cycle_time,
+        approval_rate=approval_rate,
+        total_approved=total_approved,
+        total_rejected=total_rejected,
+        total_cancelled=total_cancelled,
+        recent_completions=recent_completions,
+        breadcrumbs=[
+            {'label': t('home', lang), 'url': '/'},
+            {'label': t('org_planning', lang), 'url': '/org-planning'},
+            {'label': t('reports', lang), 'url': '/org-planning/reports'},
+            {'label': t('workflow_report', lang), 'url': '#'}
         ]
     )
 

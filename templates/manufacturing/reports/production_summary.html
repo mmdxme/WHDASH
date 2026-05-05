@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-1 text-gray-800">
+                <i class="fas fa-clipboard-list me-2" style="color: var(--primary-color, #4e73df);"></i>
+                {{ t('production_summary', 'Production Summary Report') }}
+            </h1>
+            <p class="text-muted mb-0">{{ t('report_period', 'Report Period') }}: {{ t('last_30_days', 'Last 30 Days') }}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('manufacturing.export_data', export_type='orders', format='csv', report='orders') }}"
+               class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-download me-1"></i> CSV
+            </a>
+            <a href="{{ url_for('manufacturing.export_data', export_type='orders', format='excel', report='orders') }}"
+               class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-file-excel me-1"></i> Excel
+            </a>
+            <a href="{{ url_for('manufacturing.reports') }}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back_to_reports', 'Back to Reports') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-primary shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">{{ t('total_orders', 'Total Orders') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_orders }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clipboard-list fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-success shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">{{ t('completed', 'Completed') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completed_orders }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-info shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">{{ t('completion_rate', 'Completion Rate') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% if total_orders > 0 %}{{ ((completed_orders / total_orders * 100)|round(1)) }}{% else %}0{% endif %}%
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-line fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-warning shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">{{ t('in_progress', 'In Progress') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% for s in orders_by_status if s.status == 'IN_PROGRESS' %}{{ s.count }}{% endfor %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-spinner fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="row g-4">
+        <!-- Orders by Status -->
+        <div class="col-lg-6">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-pie-chart me-2"></i>{{ t('orders_by_status', 'Orders by Status') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if orders_by_status %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ t('status', 'Status') }}</th>
+                                    <th class="text-center">{{ t('count', 'Count') }}</th>
+                                    <th class="text-center">{{ t('total_qty', 'Total Qty') }}</th>
+                                    <th class="text-center">{{ t('completed_qty', 'Completed Qty') }}</th>
+                                    <th>{{ t('distribution', 'Distribution') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in orders_by_status %}
+                                <tr>
+                                    <td>
+                                        {% if row.status == 'COMPLETED' %}
+                                            <span class="badge bg-success">{{ row.status }}</span>
+                                        {% elif row.status == 'IN_PROGRESS' %}
+                                            <span class="badge bg-primary">{{ row.status }}</span>
+                                        {% elif row.status == 'SCHEDULED' %}
+                                            <span class="badge bg-info">{{ row.status }}</span>
+                                        {% elif row.status == 'DRAFT' %}
+                                            <span class="badge bg-secondary">{{ row.status }}</span>
+                                        {% elif row.status == 'CANCELLED' %}
+                                            <span class="badge bg-danger">{{ row.status }}</span>
+                                        {% else %}
+                                            <span class="badge bg-warning">{{ row.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">{{ row.count }}</td>
+                                    <td class="text-center">{{ row.total_qty or 0 }}</td>
+                                    <td class="text-center">{{ row.completed_qty or 0 }}</td>
+                                    <td>
+                                        <div class="progress mb-0" style="height: 8px;">
+                                            <div class="progress-bar bg-{% if row.status == 'COMPLETED' %}success{% elif row.status == 'IN_PROGRESS' %}primary{% elif row.status == 'SCHEDULED' %}info{% else %}secondary{% endif %}"
+                                                 role="progressbar"
+                                                 style="width: {% if total_orders > 0 %}{{ (row.count / total_orders * 100)|round }}{% else %}0{% endif %}%">
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-muted mb-0">{{ t('no_data', 'No order data available') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Orders by Priority -->
+        <div class="col-lg-6">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-exclamation-circle me-2"></i>{{ t('orders_by_priority', 'Orders by Priority') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if orders_by_priority %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ t('priority', 'Priority') }}</th>
+                                    <th class="text-center">{{ t('count', 'Count') }}</th>
+                                    <th>{{ t('distribution', 'Distribution') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in orders_by_priority %}
+                                <tr>
+                                    <td>
+                                        {% if row.priority == 'URGENT' %}
+                                            <span class="badge bg-danger">URGENT</span>
+                                        {% elif row.priority == 'HIGH' %}
+                                            <span class="badge bg-warning">HIGH</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">NORMAL</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">{{ row.count }}</td>
+                                    <td>
+                                        <div class="progress mb-0" style="height: 8px;">
+                                            <div class="progress-bar bg-{% if row.priority == 'URGENT' %}danger{% elif row.priority == 'HIGH' %}warning{% else %}secondary{% endif %}"
+                                                 role="progressbar"
+                                                 style="width: {% if total_orders > 0 %}{{ (row.count / total_orders * 100)|round }}{% else %}0{% endif %}%">
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-muted mb-0">{{ t('no_data', 'No priority data available') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Production Trend -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-chart-area me-2"></i>{{ t('production_trend', 'Production Trend (Last 30 Days)') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if recent_production %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ t('date', 'Date') }}</th>
+                                    <th class="text-center">{{ t('units_produced', 'Units Produced') }}</th>
+                                    <th>{{ t('trend', 'Trend') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in recent_production %}
+                                <tr>
+                                    <td>{{ entry.prod_date }}</td>
+                                    <td class="text-center">{{ entry.total }}</td>
+                                    <td>
+                                        <div class="progress mb-0" style="height: 8px;">
+                                            {% set max_val = recent_production|max(attribute='total') %}
+                                            {% set pct = (entry.total / max_val.total * 100)|round if max_val.total > 0 else 0 %}
+                                            <div class="progress-bar bg-info" role="progressbar" style="width: {{ pct }}%"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-chart-line fa-3x mb-3"></i>
+                        <p class="mb-0">{{ t('no_production_data', 'No production tracking data for the last 30 days.') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

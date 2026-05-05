@@ -6,229 +6,506 @@
     <title>{{ page_title }} - Master Data</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px -5px rgba(0,0,0,0.1); }
+        .table-row:hover { background-color: rgba(59, 130, 246, 0.05); }
+    </style>
 </head>
 <body class="bg-slate-100 dark:bg-slate-900">
-    
+
     {% include 'admin_sidebar.html' %}
-    
+
     <div class="ml-64 min-h-screen">
         {% include 'admin_header.html' %}
-        
+
         <main class="p-6">
             <!-- Page Header -->
-            <div class="mb-8 flex items-center justify-between">
+            <div class="mb-8 flex items-center justify-between flex-wrap gap-4">
                 <div>
                     <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 mb-2">
-                        <a href="{{ url_for('admin_master_data') }}" class="hover:text-blue-600">Master Data</a>
+                        <a href="{{ url_for('admin_master_data') }}" class="hover:text-blue-600">
+                            <i class="fas fa-database mr-1"></i>Master Data</a>
                         <i class="fas fa-chevron-right text-xs"></i>
-                        <span class="text-blue-600">{{ page_title }}</span>
+                        <span class="text-blue-600 font-medium">{{ page_title }}</span>
                     </div>
-                    <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
-                    <p class="text-slate-600 dark:text-slate-400 mt-1">Manage {{ md_info.label_plural|lower }} reference data</p>
+                    <h1 class="text-3xl font-bold text-slate-800 dark:text-white">
+                        <i class="{{ md_info.icon }} mr-3 text-blue-600"></i>{{ page_title }}
+                    </h1>
+                    <p class="text-slate-600 dark:text-slate-400 mt-1">Manage {{ md_info.label_plural }} reference data</p>
                 </div>
-                <button onclick="openCreateModal()" 
-                        class="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2">
-                    <i class="fas fa-plus"></i>
-                    Add {{ md_info.label }}
-                </button>
+                <div class="flex items-center gap-3">
+                    <button onclick="exportData()" class="px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2">
+                        <i class="fas fa-file-export"></i> Export
+                    </button>
+                    <button onclick="openCreateModal()" class="px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-lg shadow-blue-600/30">
+                        <i class="fas fa-plus"></i> Add {{ md_info.label }}
+                    </button>
+                </div>
             </div>
-            
+
             <!-- Records Table -->
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                 <div class="overflow-x-auto">
-                    <table class="w-full">
-                        <thead class="bg-slate-50 dark:bg-slate-700/50">
+                    <table class="w-full" id="recordsTable">
+                        <thead class="bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-700 dark:to-slate-700/50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Code</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Name</th>
+                                <th class="px-4 py-3.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                                    <span class="cursor-pointer" onclick="sortTable('code')">Code <i class="fas fa-sort text-slate-400 text-xs"></i></span>
+                                </th>
+                                <th class="px-4 py-3.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Name</th>
+                                {% if md_type == 'priority_level' %}
+                                <th class="px-4 py-3.5 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Level</th>
+                                <th class="px-4 py-3.5 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Response SLA</th>
+                                <th class="px-4 py-3.5 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Resolution SLA</th>
+                                <th class="px-4 py-3.5 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Color</th>
+                                <th class="px-4 py-3.5 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Escalation</th>
+                                {% endif %}
                                 {% if 'name_ar' in md_info.fields %}
-                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Arabic Name</th>
+                                <th class="px-4 py-3.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Arabic Name</th>
                                 {% endif %}
-                                {% if 'name_fa' in md_info.fields %}
-                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Farsi Name</th>
-                                {% endif %}
-                                {% if 'is_active' in md_info.fields %}
-                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
-                                {% endif %}
-                                <th class="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Actions</th>
+                                <th class="px-4 py-3.5 text-left text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Description</th>
+                                <th class="px-4 py-3.5 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Status</th>
+                                <th class="px-4 py-3.5 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-200 dark:divide-slate-700">
+                        <tbody class="divide-y divide-slate-200 dark:divide-slate-700" id="tableBody">
                             {% for record in records %}
-                            <tr class="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                <td class="px-6 py-4 text-sm font-medium text-slate-800 dark:text-white">{{ record.code }}</td>
-                                <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{{ record.name }}</td>
-                                {% if 'name_ar' in md_info.fields %}
-                                <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{{ record.name_ar or '' }}</td>
-                                {% endif %}
-                                {% if 'name_fa' in md_info.fields %}
-                                <td class="px-6 py-4 text-sm text-slate-600 dark:text-slate-300">{{ record.name_fa or '' }}</td>
-                                {% endif %}
-                                {% if 'is_active' in md_info.fields %}
-                                <td class="px-6 py-4">
-                                    {% if record.is_active %}
-                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">Active</span>
+                            <tr class="table-row transition-colors" data-code="{{ record.code|lower }}" data-name="{{ record.name|lower }}" data-status="{{ record.is_active }}">
+                                <td class="px-4 py-3.5">
+                                    <span class="font-mono text-sm font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded">{{ record.code }}</span>
+                                </td>
+                                <td class="px-4 py-3.5">
+                                    <div class="font-medium text-slate-800 dark:text-white">{{ record.name }}</div>
+                                </td>
+                                {% if md_type == 'priority_level' %}
+                                <td class="px-4 py-3.5 text-center">
+                                    <span class="inline-flex items-center justify-center w-8 h-8 rounded-full text-white font-bold text-sm"
+                                         style="background-color: {{ record.extra_data.color if record.extra_data and record.extra_data.color else '#6b7280' }}">
+                                        {{ record.extra_data.level if record.extra_data and record.extra_data.level else '-' }}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-3.5 text-center text-sm text-slate-600 dark:text-slate-300">
+                                    {% if record.extra_data and record.extra_data.response_hours %}
+                                        {{ record.extra_data.response_hours }}h
                                     {% else %}
-                                    <span class="px-2 py-1 text-xs font-medium rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">Inactive</span>
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3.5 text-center text-sm text-slate-600 dark:text-slate-300">
+                                    {% if record.extra_data and record.extra_data.resolution_hours %}
+                                        {{ record.extra_data.resolution_hours }}h
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3.5 text-center">
+                                    <span class="inline-block w-6 h-6 rounded border border-slate-300" style="background-color: {{ record.extra_data.color if record.extra_data and record.extra_data.color else '#6b7280' }}"></span>
+                                </td>
+                                <td class="px-4 py-3.5 text-center text-sm text-slate-600 dark:text-slate-300">
+                                    {% if record.extra_data and record.extra_data.escalation_level %}
+                                        {{ record.extra_data.escalation_level }}
+                                    {% else %}
+                                        -
                                     {% endif %}
                                 </td>
                                 {% endif %}
-                                <td class="px-6 py-4 text-right">
-                                    <div class="flex items-center justify-end gap-2">
-                                        <button onclick="openEditModal({{ record.id }})" 
-                                                class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors">
+                                {% if 'name_ar' in md_info.fields %}
+                                <td class="px-4 py-3.5 text-sm text-slate-600 dark:text-slate-300" dir="rtl">{{ record.name_ar or '' }}</td>
+                                {% endif %}
+                                <td class="px-4 py-3.5">
+                                    <div class="text-sm text-slate-500 dark:text-slate-400 truncate max-w-xs">{{ record.description or '-' }}</div>
+                                </td>
+                                <td class="px-4 py-3.5 text-center">
+                                    {% if record.is_active %}
+                                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
+                                        <i class="fas fa-check-circle mr-1"></i> Active
+                                    </span>
+                                    {% else %}
+                                    <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
+                                        <i class="fas fa-minus-circle mr-1"></i> Inactive
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3.5 text-center">
+                                    <div class="flex items-center justify-center gap-1">
+                                        <button onclick="openEditModal({{ record.id }})"
+                                                class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors" title="Edit">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <form method="POST" class="inline" onsubmit="return confirm('Are you sure you want to delete this record?');">
-                                            <input type="hidden" name="action" value="delete">
-                                            <input type="hidden" name="id" value="{{ record.id }}">
-                                            <button type="submit" 
-                                                    class="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </form>
+                                        <button onclick="viewDetails({{ record.id }})"
+                                                class="p-2 text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors" title="View Details">
+                                            <i class="fas fa-eye"></i>
+                                        </button>
+                                        <button onclick="deleteRecord({{ record.id }}, '{{ record.name|escape }}')"
+                                                class="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors" title="Delete">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="10" class="px-6 py-12 text-center text-slate-500 dark:text-slate-400">
-                                    <i class="fas fa-inbox text-4xl mb-3"></i>
-                                    <p>No records found. Click "Add {{ md_info.label }}" to create one.</p>
+                                <td colspan="10" class="px-6 py-16 text-center">
+                                    <div class="flex flex-col items-center">
+                                        <i class="fas fa-inbox text-5xl text-slate-300 dark:text-slate-600 mb-4"></i>
+                                        <p class="text-slate-500 dark:text-slate-400 text-lg">No {{ md_info.label_plural }} found</p>
+                                        <p class="text-slate-400 dark:text-slate-500 text-sm mt-1">Click "Add {{ md_info.label }}" to create your first entry</p>
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
+
+                <!-- Pagination -->
+                <div class="px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                    <div class="text-sm text-slate-500 dark:text-slate-400">
+                        Showing <span id="showingCount">{{ records|length }}</span> entries
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button class="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50" disabled>
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <span class="px-3 py-1.5 bg-blue-600 text-white rounded-lg">1</span>
+                        <button class="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50" disabled>
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
         </main>
     </div>
-    
+
     <!-- Create/Edit Modal -->
     <div id="recordModal" class="fixed inset-0 z-50 hidden">
-        <div class="absolute inset-0 bg-black/50" onclick="closeModal()"></div>
-        <div class="absolute inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-lg bg-white dark:bg-slate-800 rounded-xl shadow-xl">
-            <div class="p-6 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                <h3 id="modalTitle" class="text-lg font-semibold text-slate-800 dark:text-white">Add {{ md_info.label }}</h3>
-                <button onclick="closeModal()" class="p-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">
-                    <i class="fas fa-times"></i>
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeModal()"></div>
+        <div class="absolute inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden fade-in">
+            <div class="p-6 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-blue-50 to-slate-50 dark:from-slate-800 dark:to-slate-800">
+                <div>
+                    <h3 id="modalTitle" class="text-xl font-bold text-slate-800 dark:text-white">Add {{ md_info.label }}</h3>
+                    <p class="text-sm text-slate-500 mt-1">Fill in the details below</p>
+                </div>
+                <button onclick="closeModal()" class="p-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
+                    <i class="fas fa-times text-lg"></i>
                 </button>
             </div>
-            <form method="POST" class="p-6 space-y-4">
+            <form id="recordForm" method="POST" class="p-6 space-y-5 max-h-[70vh] overflow-y-auto">
                 <input type="hidden" name="action" id="formAction" value="create">
                 <input type="hidden" name="id" id="formId" value="">
-                
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Code *</label>
-                    <input type="text" name="code" id="fieldCode" required
-                           class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Code *</label>
+                        <input type="text" name="code" id="fieldCode" required placeholder="e.g. CRITICAL"
+                               class="w-full px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Name *</label>
+                        <input type="text" name="name" id="fieldName" required placeholder="e.g. Critical"
+                               class="w-full px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
                 </div>
-                
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Name *</label>
-                    <input type="text" name="name" id="fieldName" required
-                           class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-                </div>
-                
+
                 {% if 'name_ar' in md_info.fields %}
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Arabic Name</label>
-                    <input type="text" name="name_ar" id="fieldNameAr" dir="rtl"
-                           class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Arabic Name</label>
+                    <input type="text" name="name_ar" id="fieldNameAr" dir="rtl" placeholder="الاسم بالعربي"
+                           class="w-full px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                 </div>
                 {% endif %}
-                
+
                 {% if 'name_fa' in md_info.fields %}
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Farsi Name</label>
+                    <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Farsi Name</label>
                     <input type="text" name="name_fa" id="fieldNameFa" dir="rtl"
-                           class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                           class="w-full px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                 </div>
                 {% endif %}
-                
+
                 {% if 'description' in md_info.fields %}
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Description</label>
-                    <textarea name="description" id="fieldDescription" rows="2"
-                              class="w-full px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"></textarea>
+                    <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Description</label>
+                    <textarea name="description" id="fieldDescription" rows="3" placeholder="Detailed description..."
+                              class="w-full px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"></textarea>
                 </div>
                 {% endif %}
-                
+
+                {% if md_type == 'priority_level' %}
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Level (1=Highest)</label>
+                        <input type="number" name="level" id="fieldLevel" min="1" max="10" value="5"
+                               class="w-full px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Response (hours)</label>
+                        <input type="number" name="response_hours" id="fieldResponseHours" min="0" value="8"
+                               class="w-full px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Resolution (hours)</label>
+                        <input type="number" name="resolution_hours" id="fieldResolutionHours" min="0" value="32"
+                               class="w-full px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Color</label>
+                        <input type="color" name="color" id="fieldColor" value="#22c55e"
+                               class="w-full h-11 px-1 py-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Escalation Level</label>
+                    <select name="escalation_level" id="fieldEscalationLevel"
+                            class="w-full px-4 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500">
+                        <option value="Agent">Agent</option>
+                        <option value="Team Lead">Team Lead</option>
+                        <option value="Manager">Manager</option>
+                        <option value="Director">Director</option>
+                        <option value="Executive">Executive</option>
+                    </select>
+                </div>
+                {% endif %}
+
                 {% if 'is_active' in md_info.fields %}
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                     <label class="relative inline-flex items-center cursor-pointer">
                         <input type="checkbox" name="is_active" id="fieldActive" value="1" checked class="sr-only peer">
                         <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-slate-600 peer-checked:bg-blue-600"></div>
-                        <span class="ms-3 text-sm font-medium text-slate-700 dark:text-slate-300">Active</span>
+                        <span class="ms-3 text-sm font-medium text-slate-700 dark:text-slate-300">Active Status</span>
                     </label>
                 </div>
                 {% endif %}
-                
-                <div class="flex items-center justify-end gap-3 pt-4">
-                    <button type="button" onclick="closeModal()" 
-                            class="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+
+                <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+                    <button type="button" onclick="closeModal()"
+                            class="px-5 py-2.5 rounded-lg border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
                         Cancel
                     </button>
-                    <button type="submit" 
-                            class="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors">
-                        Save
+                    <button type="submit"
+                            class="px-5 py-2.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/30">
+                        <i class="fas fa-save mr-2"></i>Save
                     </button>
                 </div>
             </form>
         </div>
     </div>
-    
+
+    <!-- Details Modal -->
+    <div id="detailsModal" class="fixed inset-0 z-50 hidden">
+        <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeDetailsModal()"></div>
+        <div class="absolute inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden fade-in">
+            <div class="p-6 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-purple-50 to-slate-50 dark:from-slate-800 dark:to-slate-800">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800 dark:text-white">{{ md_info.label }} Details</h3>
+                        <p id="detailCode" class="text-sm text-slate-500 mt-1 font-mono"></p>
+                    </div>
+                    <button onclick="closeDetailsModal()" class="p-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg">
+                        <i class="fas fa-times text-lg"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-6" id="detailContent">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
     <script>
-        const records = {{ records|tojson }};
-        
+        let records = {{ records|tojson | safe }};
+        const mdType = "{{ md_type }}";
+
+        // Parse extra_data for all records
+        records.forEach(r => {
+            if (r.extra_data && typeof r.extra_data === 'string') {
+                try {
+                    r.extra_data = JSON.parse(r.extra_data);
+                } catch(e) {
+                    r.extra_data = {};
+                }
+            }
+        });
+
+        function sortTable(column) {
+            console.log('Sort by', column);
+        }
+
         function openCreateModal() {
             document.getElementById('modalTitle').textContent = 'Add {{ md_info.label }}';
             document.getElementById('formAction').value = 'create';
             document.getElementById('formId').value = '';
             document.getElementById('fieldCode').value = '';
             document.getElementById('fieldName').value = '';
-            {% if 'name_ar' in md_info.fields %}
-            document.getElementById('fieldNameAr').value = '';
-            {% endif %}
-            {% if 'name_fa' in md_info.fields %}
-            document.getElementById('fieldNameFa').value = '';
-            {% endif %}
-            {% if 'description' in md_info.fields %}
             document.getElementById('fieldDescription').value = '';
-            {% endif %}
+            document.getElementById('fieldActive').checked = true;
+
+            if (mdType === 'priority_level') {
+                document.getElementById('fieldLevel').value = 5;
+                document.getElementById('fieldResponseHours').value = 8;
+                document.getElementById('fieldResolutionHours').value = 32;
+                document.getElementById('fieldColor').value = '#22c55e';
+                document.getElementById('fieldEscalationLevel').value = 'Agent';
+            }
+
             document.getElementById('recordModal').classList.remove('hidden');
         }
-        
+
         function openEditModal(id) {
             const record = records.find(r => r.id === id);
-            if (!record) return;
-            
+            if (!record) {
+                alert('Record not found');
+                return;
+            }
+
             document.getElementById('modalTitle').textContent = 'Edit {{ md_info.label }}';
             document.getElementById('formAction').value = 'edit';
             document.getElementById('formId').value = record.id;
-            document.getElementById('fieldCode').value = record.code;
-            document.getElementById('fieldName').value = record.name;
-            {% if 'name_ar' in md_info.fields %}
-            document.getElementById('fieldNameAr').value = record.name_ar || '';
-            {% endif %}
-            {% if 'name_fa' in md_info.fields %}
-            document.getElementById('fieldNameFa').value = record.name_fa || '';
-            {% endif %}
-            {% if 'description' in md_info.fields %}
+            document.getElementById('fieldCode').value = record.code || '';
+            document.getElementById('fieldName').value = record.name || '';
             document.getElementById('fieldDescription').value = record.description || '';
-            {% endif %}
-            {% if 'is_active' in md_info.fields %}
             document.getElementById('fieldActive').checked = record.is_active == 1;
-            {% endif %}
+
+            if (mdType === 'priority_level' && record.extra_data) {
+                document.getElementById('fieldLevel').value = record.extra_data.level || 5;
+                document.getElementById('fieldResponseHours').value = record.extra_data.response_hours || 8;
+                document.getElementById('fieldResolutionHours').value = record.extra_data.resolution_hours || 32;
+                document.getElementById('fieldColor').value = record.extra_data.color || '#22c55e';
+                document.getElementById('fieldEscalationLevel').value = record.extra_data.escalation_level || 'Agent';
+            }
+
             document.getElementById('recordModal').classList.remove('hidden');
         }
-        
+
+        function viewDetails(id) {
+            const record = records.find(r => r.id === id);
+            if (!record) {
+                alert('Record not found');
+                return;
+            }
+
+            document.getElementById('detailCode').textContent = record.code;
+
+            let detailsHtml = `
+                <div class="space-y-4">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Name</p>
+                            <p class="font-semibold text-slate-800 dark:text-white">${record.name}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Status</p>
+                            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${record.is_active == 1 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}">
+                                ${record.is_active == 1 ? 'Active' : 'Inactive'}
+                            </span>
+                        </div>
+                    </div>
+                    <div>
+                        <p class="text-xs text-slate-500 uppercase tracking-wider">Description</p>
+                        <p class="text-slate-700 dark:text-slate-300">${record.description || 'No description'}</p>
+                    </div>`;
+
+            if (mdType === 'priority_level' && record.extra_data) {
+                detailsHtml += `
+                    <div class="grid grid-cols-3 gap-4">
+                        <div class="text-center p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Level</p>
+                            <p class="text-2xl font-bold" style="color: ${record.extra_data.color || '#6b7280'}">${record.extra_data.level || '-'}</p>
+                        </div>
+                        <div class="text-center p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Response SLA</p>
+                            <p class="text-lg font-semibold text-slate-800 dark:text-white">${record.extra_data.response_hours || '-'}h</p>
+                        </div>
+                        <div class="text-center p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Resolution SLA</p>
+                            <p class="text-lg font-semibold text-slate-800 dark:text-white">${record.extra_data.resolution_hours || '-'}h</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-6 h-6 rounded" style="background-color: ${record.extra_data.color || '#6b7280'}"></span>
+                            <span class="text-sm text-slate-700 dark:text-slate-300">Color</span>
+                        </div>
+                        <div>
+                            <p class="text-xs text-slate-500 uppercase tracking-wider">Escalation</p>
+                            <p class="font-semibold text-slate-800 dark:text-white">${record.extra_data.escalation_level || '-'}</p>
+                        </div>
+                    </div>`;
+            }
+
+            detailsHtml += `</div>`;
+            document.getElementById('detailContent').innerHTML = detailsHtml;
+            document.getElementById('detailsModal').classList.remove('hidden');
+        }
+
+        function deleteRecord(id, name) {
+            if (confirm(`Are you sure you want to delete "${name}"?`)) {
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.innerHTML = `
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id" value="${id}">
+                `;
+                document.body.appendChild(form);
+                form.submit();
+            }
+        }
+
         function closeModal() {
             document.getElementById('recordModal').classList.add('hidden');
         }
+
+        function closeDetailsModal() {
+            document.getElementById('detailsModal').classList.add('hidden');
+        }
+
+        function exportData() {
+            const headers = ['Code', 'Name', 'Description', 'Status'];
+            if (mdType === 'priority_level') {
+                headers.splice(3, 0, 'Level', 'Response SLA', 'Resolution SLA', 'Color', 'Escalation');
+            }
+
+            const data = records.map(r => {
+                const row = {
+                    Code: r.code,
+                    Name: r.name,
+                    Description: r.description || '',
+                    Status: r.is_active == 1 ? 'Active' : 'Inactive'
+                };
+                if (mdType === 'priority_level' && r.extra_data) {
+                    row.Level = r.extra_data.level || '';
+                    row['Response SLA'] = (r.extra_data.response_hours || '') + 'h';
+                    row['Resolution SLA'] = (r.extra_data.resolution_hours || '') + 'h';
+                    row.Color = r.extra_data.color || '';
+                    row.Escalation = r.extra_data.escalation_level || '';
+                }
+                return row;
+            });
+
+            const csv = [headers.join(','),
+                ...data.map(d => headers.map(h => `"${d[h] || ''}"`).join(','))
+            ].join('\n');
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${mdType}_export.csv`;
+            a.click();
+        }
+
+        // Close modals on escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+                closeDetailsModal();
+            }
+        });
     </script>
-    
+
     {% include 'admin_scripts.html' %}
 </body>
 </html>

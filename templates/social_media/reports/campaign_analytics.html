@@ -1,0 +1,177 @@
+{% extends "social_media/base_social.html" %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .chart-container { position: relative; height: 300px; width: 100%; }
+    .kpi-highlight { 
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(99, 102, 241, 0.1));
+        border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+</style>
+{% endblock %}
+
+{% block page_actions %}
+<div class="flex items-center gap-3">
+    <form method="get" class="flex items-center gap-2">
+        <input type="date" name="date_from" value="{{ date_from }}" 
+               class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <span class="text-slate-400">to</span>
+        <input type="date" name="date_to" value="{{ date_to }}" 
+               class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <button type="submit" class="btn-social btn-social-secondary text-sm">Apply</button>
+    </form>
+    <a href="{{ url_for('social_media.reports_export', report_type='campaigns', format='excel', date_from=date_from, date_to=date_to) }}" 
+       class="btn-social btn-social-primary text-sm">
+        <i class="fa-solid fa-file-excel"></i> Export
+    </a>
+</div>
+{% endblock %}
+
+{% block page_content %}
+<!-- Summary KPIs -->
+<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+    <div class="sm-kpi-card kpi-highlight">
+        <div class="text-xs text-slate-400 mb-1">Total Budget</div>
+        <div class="sm-kpi-value">AED {{ "%.0f"|format(total_budget) }}</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Total Spent</div>
+        <div class="sm-kpi-value">AED {{ "%.0f"|format(total_spent) }}</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Revenue</div>
+        <div class="sm-kpi-value text-green-400">AED {{ "%.0f"|format(total_revenue) }}</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Total Leads</div>
+        <div class="sm-kpi-value">{{ total_leads|int }}</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Avg ROI</div>
+        <div class="sm-kpi-value {% if avg_roi > 0 %}text-green-400{% elif avg_roi < 0 %}text-red-400{% endif %}">
+            {{ "%.1f"|format(avg_roi) }}%
+        </div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Avg ROAS</div>
+        <div class="sm-kpi-value">{{ "%.2f"|format(avg_roas) }}x</div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Budget vs Actual Chart -->
+    <div class="glass-panel rounded-xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Budget vs Actual Spending</h3>
+        <div class="chart-container">
+            <canvas id="budgetChart"></canvas>
+        </div>
+    </div>
+    
+    <!-- ROI Comparison Chart -->
+    <div class="glass-panel rounded-xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Campaign ROI Comparison</h3>
+        <div class="chart-container">
+            <canvas id="roiChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Campaign Details Table -->
+<div class="glass-panel rounded-xl p-6">
+    <h3 class="text-lg font-bold text-white mb-4">Campaign Details</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Campaign</th>
+                    <th>Type</th>
+                    <th>Platform</th>
+                    <th>Status</th>
+                    <th>Budget</th>
+                    <th>Spent</th>
+                    <th>Revenue</th>
+                    <th>ROI %</th>
+                    <th>ROAS</th>
+                    <th>Leads</th>
+                    <th>CPL</th>
+                    <th>CPC</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in campaigns %}
+                <tr>
+                    <td class="font-semibold text-white">{{ c.campaign_name }}</td>
+                    <td>{{ c.campaign_type or '-' }}</td>
+                    <td>{% if c.platform %}<span class="platform-badge platform-{{ c.platform.lower() }}">{{ c.platform }}</span>{% else %}-{% endif %}</td>
+                    <td><span class="status-badge status-{{ c.campaign_status.lower() if c.campaign_status else 'draft' }}">{{ c.campaign_status or 'Draft' }}</span></td>
+                    <td>AED {{ "%.0f"|format(c.approved_budget or 0) }}</td>
+                    <td>AED {{ "%.0f"|format(c.actual_budget or 0) }}</td>
+                    <td class="text-green-400">AED {{ "%.0f"|format(c.total_sales or 0) }}</td>
+                    <td class="{% if c.roi_percent > 0 %}text-green-400{% elif c.roi_percent < 0 %}text-red-400{% endif %}">
+                        {{ "%.1f"|format(c.roi_percent or 0) }}%
+                    </td>
+                    <td>{{ "%.2f"|format(c.roas or 0) }}x</td>
+                    <td>{{ c.total_leads or 0 }}</td>
+                    <td>AED {{ "%.0f"|format(c.cost_per_lead or 0) }}</td>
+                    <td>AED {{ "%.0f"|format(c.cac or 0) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="12" class="text-center py-8 text-slate-400">No campaigns available</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const campaigns = {{ campaigns|tojson }};
+
+// Budget vs Actual Chart
+new Chart(document.getElementById('budgetChart'), {
+    type: 'bar',
+    data: {
+        labels: campaigns.map(c => c.campaign_name.substring(0, 15)),
+        datasets: [{
+            label: 'Budget',
+            data: campaigns.map(c => c.approved_budget || 0),
+            backgroundColor: 'rgba(100, 116, 139, 0.6)'
+        }, {
+            label: 'Actual Spent',
+            data: campaigns.map(c => c.actual_budget || 0),
+            backgroundColor: 'rgba(251, 191, 36, 0.6)'
+        }, {
+            label: 'Revenue',
+            data: campaigns.map(c => c.total_sales || 0),
+            backgroundColor: 'rgba(34, 197, 94, 0.6)'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true } }
+    }
+});
+
+// ROI Comparison Chart
+new Chart(document.getElementById('roiChart'), {
+    type: 'bar',
+    data: {
+        labels: campaigns.map(c => c.campaign_name.substring(0, 15)),
+        datasets: [{
+            label: 'ROI %',
+            data: campaigns.map(c => c.roi_percent || 0),
+            backgroundColor: campaigns.map(c => (c.roi_percent || 0) > 0 ? 'rgba(34, 197, 94, 0.6)' : 'rgba(239, 68, 68, 0.6)')
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } }
+    }
+});
+</script>
+{% endblock %}

@@ -7,6 +7,18 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .control-chart-container { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px; padding: 1.5rem; }
+        .zone-indicator { position: absolute; width: 100%; height: 100%; pointer-events: none; }
+        .zone { opacity: 0.1; }
+        .out-of-control-point { animation: blink 1s infinite; }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .rule-violation-badge { position: absolute; font-size: 0.6rem; padding: 1px 3px; border-radius: 2px; }
+        .we-rules-panel { background: #F8FAFC; border-radius: 8px; border: 1px solid #E2E8F0; }
+        .we-rule { font-size: 0.75rem; padding: 0.25rem 0.5rem; margin: 2px; border-radius: 4px; display: inline-block; }
+        .we-rule.active { background: #FEE2E2; color: #991B1B; }
+        .we-rule.inactive { background: #D1FAE5; color: #065F46; }
+    </style>
 </head>
 <body>
     {% include 'base.html' %}
@@ -23,11 +35,17 @@
                 </nav>
                 <h1 class="h3 mb-1">
                     <i class="fas fa-chart-line me-2 text-primary"></i>{{ chart.chart_name }}
-                    <span class="badge bg-secondary ms-2">{{ chart.chart_type }}</span>
+                    <span class="badge bg-{{ 'primary' if chart.chart_type == 'I_MR' else 'info' }} ms-2">{{ chart.chart_type }}</span>
                 </h1>
                 <p class="text-muted mb-0">{{ chart.description or chart.chart_code }}</p>
             </div>
             <div class="d-flex gap-2">
+                <a href="{{ url_for('spc.import_measurements', chart_id=chart.id) }}" class="btn btn-outline-info">
+                    <i class="fas fa-file-import me-1"></i> Import CSV
+                </a>
+                <button class="btn btn-outline-primary" onclick="refreshChartData()">
+                    <i class="fas fa-sync-alt me-1"></i> Refresh
+                </button>
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMeasurementModal">
                     <i class="fas fa-plus me-1"></i> Add Measurement
                 </button>
@@ -36,37 +54,37 @@
 
         <!-- Specification Limits -->
         {% if spec_limits %}
-        <div class="row g-4 mb-4">
+        <div class="row g-3 mb-4">
             <div class="col-md-3">
-                <div class="card text-center">
+                <div class="card border-danger border-2 text-center">
                     <div class="card-body py-3">
-                        <div class="text-muted small">USL</div>
-                        <div class="fw-bold text-danger fs-5">{{ spec_limits.usl }}</div>
+                        <div class="text-muted small text-uppercase fw-bold">USL</div>
+                        <div class="fw-bold text-danger fs-4">{{ spec_limits.usl }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-success border-2 text-center">
+                    <div class="card-body py-3">
+                        <div class="text-muted small text-uppercase fw-bold">Target</div>
+                        <div class="fw-bold text-success fs-4">{{ spec_limits.target or '-' }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-warning border-2 text-center">
+                    <div class="card-body py-3">
+                        <div class="text-muted small text-uppercase fw-bold">LSL</div>
+                        <div class="fw-bold text-warning fs-4">{{ spec_limits.lsl }}</div>
                     </div>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card text-center">
                     <div class="card-body py-3">
-                        <div class="text-muted small">Target</div>
-                        <div class="fw-bold text-success fs-5">{{ spec_limits.target or '-' }}</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-center">
-                    <div class="card-body py-3">
-                        <div class="text-muted small">LSL</div>
-                        <div class="fw-bold text-warning fs-5">{{ spec_limits.lsl }}</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card text-center">
-                    <div class="card-body py-3">
-                        <div class="text-muted small">Control Limits</div>
-                        <div class="fw-bold text-primary fs-5">
-                            UCL: {{ limits.i_ucl|round(2) if limits else '-' }} / LCL: {{ limits.i_lcl|round(2) if limits else '-' }}
+                        <div class="text-muted small text-uppercase fw-bold">Control Limits</div>
+                        <div class="fw-bold text-primary fs-6">
+                            UCL: {{ "%.2f"|format(limits.i_ucl) if limits else '-' }} / CL: {{ "%.2f"|format(limits.i_cl) if limits else '-' }} / LCL: {{ "%.2f"|format(limits.i_lcl) if limits else '-' }}
                         </div>
                     </div>
                 </div>
@@ -74,31 +92,68 @@
         </div>
         {% endif %}
 
-        <!-- Control Chart -->
+        <!-- Control Chart with Interactive Features -->
         <div class="card mb-4">
-            <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
                 <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Control Chart</h5>
                 <div class="d-flex gap-2">
-                    <select class="form-select form-select-sm" style="width: auto;">
-                        <option>Last 50 Points</option>
-                        <option>Last 100 Points</option>
-                        <option>Last 30 Days</option>
-                        <option>Last 90 Days</option>
+                    <select class="form-select form-select-sm" style="width: auto;" id="chartRangeSelect" onchange="updateChartRange()">
+                        <option value="25">Last 25 Points</option>
+                        <option value="50" selected>Last 50 Points</option>
+                        <option value="100">Last 100 Points</option>
+                        <option value="200">Last 200 Points</option>
                     </select>
-                    <a href="{{ url_for('spc.export_capability', study_id=0) }}" class="btn btn-sm btn-outline-secondary">
-                        <i class="fas fa-download me-1"></i> Export
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-light" onclick="toggleChartType('line')"><i class="fas fa-line-chart"></i></button>
+                        <button class="btn btn-outline-light" onclick="toggleChartType('bar')"><i class="fas fa-chart-bar"></i></button>
+                    </div>
+                    <a href="{{ url_for('spc.export_chart_data', chart_id=chart.id) }}" class="btn btn-sm btn-success">
+                        <i class="fas fa-download me-1"></i> Export CSV
                     </a>
                 </div>
             </div>
             <div class="card-body">
-                <div class="chart-container" style="height: 350px;">
+                <div class="control-chart-container" style="height: 380px;">
                     <canvas id="controlChartCanvas"></canvas>
+                </div>
+                <div class="mt-3 d-flex justify-content-center gap-4 flex-wrap">
+                    <span class="badge bg-danger"><i class="fas fa-circle me-1"></i> UCL (3σ)</span>
+                    <span class="badge bg-success"><i class="fas fa-circle me-1"></i> CL (Center)</span>
+                    <span class="badge bg-warning"><i class="fas fa-circle me-1"></i> LCL (3σ)</span>
+                    <span class="badge bg-info"><i class="fas fa-circle me-1"></i> Data Points</span>
+                    <span class="badge bg-secondary"><i class="fas fa-circle me-1"></i> Spec Limits</span>
                 </div>
             </div>
         </div>
 
-        <!-- Data Table -->
-        <div class="card">
+        <!-- Western Electric Rules Status -->
+        <div class="card mb-4 we-rules-panel">
+            <div class="card-header bg-dark text-white">
+                <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Western Electric Rules Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 text-center">
+                        <div class="we-rule {% if alerts|length > 0 %}active{% else %}inactive{% endif %}" style="font-size: 1rem; padding: 0.5rem 1rem;">
+                            <i class="fas {% if alerts|length > 0 %}fa-exclamation-triangle{% else %}fa-check-circle{% endif %} me-1"></i>
+                            Rule 1: Outside Limits
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="we-rule {% if alerts|select('in', 'WE2A')|list %}active{% else %}inactive{% endif %}">
+                            <i class="fas fa-exclamation-circle me-1"></i> Rule 2: Zone A Violation
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="we-rule {% if alerts|select('in', 'WE3')|list %}active{% else %}inactive{% endif %}">
+                            <i class="fas fa-arrows-alt-h me-1"></i> Rule 3: One Side Pattern
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Table with Enhanced Styling -->
             <div class="card-header">
                 <h5 class="mb-0"><i class="fas fa-table me-2"></i>Measurement Data</h5>
             </div>

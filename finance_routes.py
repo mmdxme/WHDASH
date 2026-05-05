@@ -71,8 +71,15 @@ def require_finance_permission(resource: str, action: str = 'view'):
 
 
 def get_current_user_id():
-    """Get current user ID from session."""
-    return session.get('user_id', 1)
+    """Get current user ID from session.
+
+    SECURITY: Returns None if no user is logged in.
+    Do NOT default to user_id=1 - that creates a security vulnerability.
+    """
+    user_id = session.get('user_id')
+    if not user_id:
+        return None  # Explicit None instead of defaulting to 1
+    return user_id
 
 
 def get_current_user_name():
@@ -236,6 +243,7 @@ def calculate_kpis(user_id: int = None) -> dict:
     budget_used = (total_budget_spent / total_budget * 100) if total_budget > 0 else 0
     
     return {
+        'currency': 'USD',
         'monthly_income': monthly_income,
         'monthly_expenses': monthly_expenses,
         'net_cash_flow': monthly_income - monthly_expenses,
@@ -360,6 +368,90 @@ def dashboard():
 def overview():
     """Finance Overview - Summary page."""
     return redirect(url_for('finance.dashboard'))
+
+
+@finance_bp.route('/dashboard')
+@require_finance_permission('dashboard', 'view')
+def finance_dashboard():
+    """Finance Dashboard - main corporate dashboard."""
+    user_id = get_current_user_id()
+    user_name = get_current_user_name()
+
+    kpis = calculate_kpis(user_id)
+    health = calculate_financial_health_score(user_id)
+
+    recent_transactions = get_all("""
+        SELECT t.*, c.category_name, c.icon as category_icon, c.color as category_color,
+               a.account_name
+        FROM pf_transactions t
+        LEFT JOIN pf_category_definitions c ON t.category_id = c.id
+        LEFT JOIN pf_accounts a ON t.account_id = a.id
+        WHERE t.owner_user_id = ? AND t.is_active = 1
+        ORDER BY t.transaction_date DESC, t.created_at DESC
+        LIMIT 10
+    """, (user_id,))
+
+    budgets = get_all("""
+        SELECT * FROM pf_budgets
+        WHERE owner_user_id = ? AND is_active = 1 AND status = 'active'
+        ORDER BY created_at DESC
+    """, (user_id,))
+
+    budget_statuses = []
+    for budget in budgets:
+        status = get_budget_status(budget['id'])
+        status['budget_name'] = budget['budget_name']
+        budget_statuses.append(status)
+
+    today = datetime.now().strftime('%Y-%m-%d')
+    upcoming_subs = get_all("""
+        SELECT * FROM pf_subscriptions
+        WHERE owner_user_id = ? AND is_active = 1 AND renewal_date >= ?
+        ORDER BY renewal_date ASC LIMIT 5
+    """, (user_id, today))
+
+    upcoming_debts = get_all("""
+        SELECT * FROM pf_debts
+        WHERE owner_user_id = ? AND is_active = 1 AND status = 'active' AND next_due_date >= ?
+        ORDER BY next_due_date ASC LIMIT 5
+    """, (user_id, today))
+
+    alerts = get_all("""
+        SELECT * FROM pf_alerts
+        WHERE owner_user_id = ? AND is_active = 1 AND is_read = 0
+        ORDER BY created_at DESC LIMIT 5
+    """, (user_id,))
+
+    goals = get_all("""
+        SELECT * FROM pf_financial_goals WHERE owner_user_id = ? AND is_active = 1
+    """, (user_id,))
+    goal_progress = []
+    for goal in goals:
+        progress = get_savings_progress(goal['id'])
+        progress['goal_name'] = goal['goal_name']
+        goal_progress.append(progress)
+
+    category_spending = get_all("""
+        SELECT c.category_name, c.color, c.icon,
+               SUM(t.amount) as total
+        FROM pf_transactions t
+        JOIN pf_category_definitions c ON t.category_id = c.id
+        WHERE t.owner_user_id = ? AND t.transaction_type = 'expense'
+          AND t.transaction_date >= ?
+        GROUP BY c.id
+        ORDER BY total DESC
+    """, (user_id, datetime.now().replace(day=1).strftime('%Y-%m-%d')))
+
+    return render_template('finance/dashboard.html',
+                          kpis=kpis, health=health,
+                          recent_transactions=recent_transactions,
+                          budget_statuses=budget_statuses,
+                          upcoming_subs=upcoming_subs,
+                          upcoming_debts=upcoming_debts,
+                          alerts=alerts,
+                          goal_progress=goal_progress,
+                          category_spending=category_spending,
+                          user_name=user_name)
 
 
 # =============================================================================

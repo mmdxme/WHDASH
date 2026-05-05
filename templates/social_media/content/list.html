@@ -1,18 +1,31 @@
 {% extends "social_media/base_social.html" %}
 
 {% block page_actions %}
-<a href="{{ url_for('social_media.content_new') }}" class="btn-social btn-social-primary">
-    <i class="fa-solid fa-plus"></i> New Content
-</a>
+<div class="flex items-center gap-3">
+    <!-- View Toggle -->
+    <div class="flex bg-white/5 rounded-lg p-1">
+        <button onclick="setView('table')" id="tableViewBtn" class="px-3 py-1 rounded-md text-sm {% if view != 'grid' %}bg-brand-500/30 text-white{% else %}text-slate-400{% endif %}">
+            <i class="fa-solid fa-list"></i>
+        </button>
+        <button onclick="setView('grid')" id="gridViewBtn" class="px-3 py-1 rounded-md text-sm {% if view == 'grid' %}bg-brand-500/30 text-white{% else %}text-slate-400{% endif %}">
+            <i class="fa-solid fa-grid-2"></i>
+        </button>
+    </div>
+    
+    <a href="{{ url_for('social_media.content_new') }}" class="btn-social btn-social-primary">
+        <i class="fa-solid fa-plus"></i> New Content
+    </a>
+</div>
 {% endblock %}
+
 {% block page_content %}
 <!-- Filters -->
 <div class="filter-bar flex flex-wrap gap-4 items-center">
     <div class="flex-1 min-w-[200px]">
-        <input type="text" id="search" placeholder="Search content..." value="{{ search }}" 
-               class="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
+        <input type="text" id="search" placeholder="Search content..." value="{{ search }}"
+               class="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:ring-2 focus:ring-brand-500/50">
     </div>
-    <select name="status" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
+    <select name="status" onchange="applyFilters()" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
         <option value="">All Status</option>
         <option value="Idea" {% if status_filter == 'Idea' %}selected{% endif %}>Idea</option>
         <option value="In Production" {% if status_filter == 'In Production' %}selected{% endif %}>In Production</option>
@@ -20,9 +33,52 @@
         <option value="Approved" {% if status_filter == 'Approved' %}selected{% endif %}>Approved</option>
         <option value="Published" {% if status_filter == 'Published' %}selected{% endif %}>Published</option>
     </select>
+    <select name="platform" onchange="applyFilters()" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
+        <option value="">All Platforms</option>
+        <option value="Instagram" {% if platform_filter == 'Instagram' %}selected{% endif %}>Instagram</option>
+        <option value="Facebook" {% if platform_filter == 'Facebook' %}selected{% endif %}>Facebook</option>
+        <option value="LinkedIn" {% if platform_filter == 'LinkedIn' %}selected{% endif %}>LinkedIn</option>
+        <option value="YouTube" {% if platform_filter == 'YouTube' %}selected{% endif %}>YouTube</option>
+        <option value="WhatsApp" {% if platform_filter == 'WhatsApp' %}selected{% endif %}>WhatsApp</option>
+    </select>
+    <select name="type" onchange="applyFilters()" class="px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-white">
+        <option value="">All Types</option>
+        <option value="Post">Post</option>
+        <option value="Story">Story</option>
+        <option value="Reel">Reel</option>
+        <option value="Carousel">Carousel</option>
+        <option value="Video">Video</option>
+    </select>
     <a href="{{ url_for('social_media.content_calendar') }}" class="btn-social btn-social-secondary">
         <i class="fa-solid fa-calendar"></i> Calendar
     </a>
+    <a href="{{ url_for('social_media.publishing_queue') }}" class="btn-social btn-social-secondary">
+        <i class="fa-solid fa-clock"></i> Queue
+    </a>
+</div>
+
+<!-- Content Stats Summary -->
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+    <div class="sm-kpi-card py-3">
+        <div class="text-xs text-slate-400">Total Content</div>
+        <div class="text-xl font-bold text-white">{{ stats.total }}</div>
+    </div>
+    <div class="sm-kpi-card py-3">
+        <div class="text-xs text-slate-400">Published</div>
+        <div class="text-xl font-bold text-green-400">{{ stats.published }}</div>
+    </div>
+    <div class="sm-kpi-card py-3">
+        <div class="text-xs text-slate-400">In Production</div>
+        <div class="text-xl font-bold text-yellow-400">{{ stats.in_production }}</div>
+    </div>
+    <div class="sm-kpi-card py-3">
+        <div class="text-xs text-slate-400">Ready for Review</div>
+        <div class="text-xl font-bold text-blue-400">{{ stats.ready_for_review }}</div>
+    </div>
+    <div class="sm-kpi-card py-3">
+        <div class="text-xs text-slate-400">Ideas</div>
+        <div class="text-xl font-bold text-purple-400">{{ stats.ideas }}</div>
+    </div>
 </div>
 
 <!-- Content Table -->
@@ -36,16 +92,19 @@
                 <th>Type</th>
                 <th>Status</th>
                 <th>Priority</th>
+                <th>Engagement</th>
                 <th>Created</th>
                 <th>Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for item in content_items %}
-            <tr>
+            <tr class="hover:bg-brand-500/5">
                 <td><code class="text-brand-400 text-xs">{{ item.content_code }}</code></td>
                 <td>
-                    <div class="font-semibold text-white">{{ item.internal_title[:40] }}</div>
+                    <div class="font-semibold text-white cursor-pointer hover:text-brand-400" onclick="showPreview({{ item.id }})">
+                        {{ item.internal_title[:40] }}
+                    </div>
                     {% if item.display_title %}<div class="text-xs text-slate-400">{{ item.display_title[:30] }}</div>{% endif %}
                 </td>
                 <td>
@@ -53,7 +112,11 @@
                         {{ item.target_platform or '-' }}
                     </span>
                 </td>
-                <td>{{ item.content_type or '-' }}</td>
+                <td>
+                    <span class="type-badge type-{{ item.content_type.lower() if item.content_type else 'post' }}">
+                        {{ item.content_type or 'Post' }}
+                    </span>
+                </td>
                 <td>
                     <span class="status-badge status-{{ item.production_status.lower().replace(' ', '-') if item.production_status else 'draft' }}">
                         {{ item.production_status or 'Draft' }}
@@ -64,21 +127,31 @@
                         P{{ item.priority }}
                     </span>
                 </td>
+                <td>
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="text-slate-400"><i class="fa-solid fa-heart"></i> {{ item.likes or 0 }}</span>
+                        <span class="text-slate-400"><i class="fa-solid fa-comment"></i> {{ item.comments or 0 }}</span>
+                        <span class="text-slate-400"><i class="fa-solid fa-share"></i> {{ item.shares or 0 }}</span>
+                    </div>
+                </td>
                 <td>{{ item.created_at.strftime('%Y-%m-%d') if item.created_at else '-' }}</td>
                 <td>
                     <div class="flex items-center gap-2">
-                        <a href="{{ url_for('social_media.content_view', id=item.id) }}" class="p-2 hover:bg-white/10 rounded-lg" title="View">
+                        <button onclick="showPreview({{ item.id }})" class="p-2 hover:bg-white/10 rounded-lg" title="Preview">
                             <i class="fa-solid fa-eye text-brand-400"></i>
-                        </a>
+                        </button>
                         <a href="{{ url_for('social_media.content_edit', id=item.id) }}" class="p-2 hover:bg-white/10 rounded-lg" title="Edit">
                             <i class="fa-solid fa-pen text-slate-400"></i>
                         </a>
+                        <button onclick="duplicateContent({{ item.id }})" class="p-2 hover:bg-white/10 rounded-lg" title="Duplicate">
+                            <i class="fa-solid fa-copy text-slate-400"></i>
+                        </button>
                     </div>
                 </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="8" class="text-center py-8 text-slate-400">
+                <td colspan="9" class="text-center py-8 text-slate-400">
                     <div class="empty-state-icon"><i class="fa-solid fa-file-alt"></i></div>
                     <p>No content items found</p>
                     <a href="{{ url_for('social_media.content_new') }}" class="btn-social btn-social-primary mt-4">Create First Content</a>
@@ -94,13 +167,42 @@
     <div class="text-sm text-slate-400">Showing {{ (page-1)*per_page + 1 }} to {{ [page*per_page, total]|min }} of {{ total }}</div>
     <div class="flex items-center gap-2">
         {% if page > 1 %}
-        <a href="?page={{ page-1 }}&search={{ search }}&status={{ status_filter }}" class="btn-social btn-social-secondary">Previous</a>
+        <a href="?page={{ page-1 }}&search={{ search }}&status={{ status_filter }}&platform={{ platform_filter }}&type={{ type_filter }}" class="btn-social btn-social-secondary">Previous</a>
         {% endif %}
         <span class="text-white px-4">Page {{ page }}</span>
         {% if page * per_page < total %}
-        <a href="?page={{ page+1 }}&search={{ search }}&status={{ status_filter }}" class="btn-social btn-social-secondary">Next</a>
+        <a href="?page={{ page+1 }}&search={{ search }}&status={{ status_filter }}&platform={{ platform_filter }}&type={{ type_filter }}" class="btn-social btn-social-secondary">Next</a>
         {% endif %}
     </div>
 </div>
 {% endif %}
+
+<script>
+function applyFilters() {
+    const search = document.getElementById('search').value;
+    const status = document.querySelector('select[name="status"]').value;
+    const platform = document.querySelector('select[name="platform"]').value;
+    const type = document.querySelector('select[name="type"]').value;
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (status) params.set('status', status);
+    if (platform) params.set('platform', platform);
+    if (type) params.set('type', type);
+    window.location.href = '{{ url_for("social_media.content_list") }}?' + params.toString();
+}
+
+function setView(view) {
+    window.location.href = '{{ url_for("social_media.content_list") }}?view=' + view;
+}
+
+function showPreview(id) {
+    alert('Preview for content ID: ' + id);
+}
+
+function duplicateContent(id) {
+    if (confirm('Duplicate this content?')) {
+        window.location.href = '{{ url_for("social_media.content_new") }}?duplicate=' + id;
+    }
+}
+</script>
 {% endblock %}

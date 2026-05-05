@@ -7,20 +7,138 @@
         {{ t('back_to_reports', lang) }}
     </a>
 
-    <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('sla_compliance_report', lang) }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('last_days', lang) }}: {{ days }}</p>
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('sla_compliance_report', lang) }}</h1>
+            <p class="text-gray-400 mt-1">{{ t('last_days', lang) }}: {{ days }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <select id="daysSelect" onchange="changeDays(this.value)" class="input-field px-3 py-2 rounded-lg text-sm">
+                <option value="7" {{ 'selected' if days == 7 else '' }}>7 {{ t('days', lang) }}</option>
+                <option value="14" {{ 'selected' if days == 14 else '' }}>14 {{ t('days', lang) }}</option>
+                <option value="30" {{ 'selected' if days == 30 else '' }}>30 {{ t('days', lang) }}</option>
+                <option value="90" {{ 'selected' if days == 90 else '' }}>90 {{ t('days', lang) }}</option>
+            </select>
+            <button onclick="exportTable()" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-file-csv"></i>
+                {{ t('export_csv', lang) }}
+            </button>
+            <button onclick="window.print()" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-print"></i>
+                {{ t('print', lang) }}
+            </button>
+        </div>
     </div>
 
+    <!-- KPI Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <i class="fas fa-file-contract text-blue-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('total_records', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ total_records }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                    <i class="fas fa-shield-check text-emerald-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('on_time', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ total_on_time }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                    <i class="fas fa-exclamation-circle text-red-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('breaches', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-red-400">{{ total_breaches }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <i class="fas fa-percentage text-purple-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('compliance_rate', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-{{ 'emerald' if compliance_rate >= 90 else 'amber' if compliance_rate >= 70 else 'red' }}-400">{{ compliance_rate }}%</div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Compliance by Policy -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-bar text-amber-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('compliance_by_policy', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('sla_compliance_by_policy', lang) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5">
+                <canvas id="complianceChart" height="280"></canvas>
+            </div>
+        </div>
+
+        <!-- Breach Distribution -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-pie text-red-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('breach_distribution', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('records_with_breaches', lang) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5">
+                <canvas id="breachChart" height="280"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Critical Policies Alert -->
+    {% if critical_breaches %}
+    <div class="glass-panel rounded-xl overflow-hidden border-l-4 border-red-500">
+        <div class="p-5 flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 rounded-lg bg-red-500/20 flex items-center justify-center">
+                    <i class="fas fa-exclamation-triangle text-red-400 text-xl"></i>
+                </div>
+                <div>
+                    <h3 class="text-white font-semibold">{{ t('critical_sla_breaches', lang) }}</h3>
+                    <p class="text-gray-400 text-sm">{{ t('policies_requiring_immediate_attention', lang) }}</p>
+                </div>
+            </div>
+            <span class="badge badge-danger">{{ critical_breaches|length }} {{ t('policies', lang) }}</span>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Detailed Table -->
     <div class="table-container">
-        <table class="table w-full">
+        <table class="table w-full" id="slaTable">
             <thead>
                 <tr>
                     <th>{{ t('policy', lang) }}</th>
                     <th class="text-center">{{ t('priority', lang) }}</th>
                     <th class="text-center">{{ t('total', lang) }}</th>
+                    <th class="text-center">{{ t('on_time', lang) }}</th>
                     <th class="text-center">{{ t('breaches', lang) }}</th>
                     <th class="text-center">{{ t('compliance', lang) }}</th>
+                    <th class="text-center">{{ t('status', lang) }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -28,14 +146,126 @@
                 {% set compliance = ((s.total_records - s.breaches) / s.total_records * 100) if s.total_records > 0 else 100 %}
                 <tr>
                     <td class="text-white font-medium">{{ s.policy_name }}</td>
-                    <td class="text-center"><span class="badge badge-{{ 'danger' if s.priority == 'critical' else 'warning' }}">{{ s.priority|Title }}</span></td>
+                    <td class="text-center"><span class="badge badge-{{ 'danger' if s.priority == 'critical' else 'warning' if s.priority == 'high' else 'secondary' }}">{{ s.priority|Title }}</span></td>
                     <td class="text-center text-gray-400">{{ s.total_records }}</td>
+                    <td class="text-center text-emerald-400">{{ s.total_records - s.breaches }}</td>
                     <td class="text-center text-red-400">{{ s.breaches }}</td>
-                    <td class="text-center text-{{ 'emerald' if compliance >= 90 else 'amber' if compliance >= 70 else 'red' }}-400">{{ compliance|round(1) }}%</td>
+                    <td class="text-center">
+                        <div class="flex items-center justify-center gap-2">
+                            <div class="w-16 h-2 rounded-full bg-slate-700 overflow-hidden">
+                                <div class="h-full rounded-full bg-{{ 'emerald' if compliance >= 90 else 'amber' if compliance >= 70 else 'red' }}-500" style="width: {{ [compliance, 100]|min }}%"></div>
+                            </div>
+                            <span class="text-{{ 'emerald' if compliance >= 90 else 'amber' if compliance >= 70 else 'red' }}-400">{{ compliance|round|int }}%</span>
+                        </div>
+                    </td>
+                    <td class="text-center">
+                        {% if compliance >= 90 %}
+                        <span class="badge badge-success">{{ t('optimal', lang) }}</span>
+                        {% elif compliance >= 70 %}
+                        <span class="badge badge-warning">{{ t('at_risk', lang) }}</span>
+                        {% else %}
+                        <span class="badge badge-danger">{{ t('critical', lang) }}</span>
+                        {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+function changeDays(days) {
+    window.location.href = '{{ url_for("org_planning.report_sla_compliance") }}?days=' + days;
+}
+
+function exportTable() {
+    const table = document.getElementById('slaTable');
+    const rows = table.querySelectorAll('tr');
+    let csv = [];
+    rows.forEach(row => {
+        const cols = row.querySelectorAll('th, td');
+        const rowData = [];
+        cols.forEach(col => {
+            let text = col.innerText.replace(/"/g, '""');
+            rowData.push('"' + text + '"');
+        });
+        csv.push(rowData.join(','));
+    });
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'sla_compliance_{{ days }}days.csv';
+    link.click();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Compliance Bar Chart
+    const compCtx = document.getElementById('complianceChart');
+    if (compCtx) {
+        const labels = [{% for s in sla_stats %}'{{ s.policy_name|truncate(15, True) }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+        const complianceRates = [{% for s in sla_stats %}{{ ((s.total_records - s.breaches) / s.total_records * 100) if s.total_records > 0 else 100 }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+        new Chart(compCtx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '{{ t('compliance', lang) }}',
+                    data: complianceRates,
+                    backgroundColor: complianceRates.map(v => v >= 90 ? 'rgba(16, 185, 129, 0.7)' : v >= 70 ? 'rgba(245, 158, 11, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: 'rgba(255,255,255,0.5)', callback: v => v + '%' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: 'rgba(255,255,255,0.5)', maxRotation: 45 }
+                    }
+                }
+            }
+        });
+    }
+
+    // Breach Pie Chart
+    const breachCtx = document.getElementById('breachChart');
+    if (breachCtx) {
+        new Chart(breachCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['{{ t('on_time', lang) }}', '{{ t('breached', lang) }}'],
+                datasets: [{
+                    data: [{{ total_on_time }}, {{ total_breaches }}],
+                    backgroundColor: [
+                        'rgba(16, 185, 129, 0.7)',
+                        'rgba(239, 68, 68, 0.7)'
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.7)', padding: 20 } }
+                }
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

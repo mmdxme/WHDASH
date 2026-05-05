@@ -1,123 +1,386 @@
 {% extends "social_media/base_social.html" %}
 
-{% block page_content %}
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-    <!-- Platform Performance -->
-    <div class="glass-panel rounded-xl p-6">
-        <h3 class="text-lg font-bold text-white mb-4">Platform Performance</h3>
-        <div class="space-y-3">
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .chart-container { position: relative; height: 280px; width: 100%; }
+    .export-dropdown { position: relative; }
+    .export-menu { 
+        display: none; 
+        position: absolute; 
+        right: 0; 
+        top: 100%; 
+        background: rgba(30, 41, 59, 0.95); 
+        border: 1px solid rgba(255,255,255,0.1); 
+        border-radius: 0.5rem; 
+        padding: 0.5rem; 
+        z-index: 100;
+        min-width: 150px;
+    }
+    .export-menu.show { display: block; }
+    .export-menu a { 
+        display: block; 
+        padding: 0.5rem 1rem; 
+        color: white; 
+        text-decoration: none; 
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+    }
+    .export-menu a:hover { background: rgba(56, 189, 248, 0.2); }
+</style>
+{% endblock %}
+
+{% block page_actions %}
+<div class="flex items-center gap-3">
+    <!-- Date Range Filters -->
+    <form method="get" class="flex items-center gap-2">
+        <input type="date" name="date_from" value="{{ date_from }}" 
+               class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <span class="text-slate-400">to</span>
+        <input type="date" name="date_to" value="{{ date_to }}" 
+               class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <select name="platform" class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+            <option value="">All Platforms</option>
             {% for p in platform_stats %}
-            <div class="content-card">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="platform-badge platform-{{ p.platform.lower() }}">{{ p.platform }}</span>
-                    <span class="text-white font-bold">{{ p.posts }} posts</span>
-                </div>
-                <div class="grid grid-cols-3 gap-2 mt-2">
-                    <div class="text-center">
-                        <div class="text-xs text-slate-400">Reach</div>
-                        <div class="font-semibold text-brand-400">{{ p.total_reach or 0 }}</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-xs text-slate-400">Engagement</div>
-                        <div class="font-semibold text-brand-400">{{ p.total_engagement or 0 }}</div>
-                    </div>
-                    <div class="text-center">
-                        <div class="text-xs text-slate-400">Leads</div>
-                        <div class="font-semibold text-brand-400">{{ p.total_leads or 0 }}</div>
-                    </div>
-                </div>
-            </div>
-            {% else %}
-            <div class="empty-state py-6"><p>No platform data available</p></div>
+            <option value="{{ p.platform }}" {% if platform_filter == p.platform %}selected{% endif %}>{{ p.platform }}</option>
             {% endfor %}
+        </select>
+        <button type="submit" class="btn-social btn-social-secondary text-sm">
+            <i class="fa-solid fa-filter"></i> Filter
+        </button>
+    </form>
+    
+    <!-- Export Dropdown -->
+    <div class="export-dropdown">
+        <button onclick="toggleExportMenu()" class="btn-social btn-social-primary text-sm">
+            <i class="fa-solid fa-download"></i> Export
+        </button>
+        <div id="exportMenu" class="export-menu">
+            <a href="{{ url_for('social_media.reports_export', report_type='content', format='csv', date_from=date_from, date_to=date_to) }}">
+                <i class="fa-solid fa-file-csv mr-2"></i>CSV
+            </a>
+            <a href="{{ url_for('social_media.reports_export', report_type='content', format='excel', date_from=date_from, date_to=date_to) }}">
+                <i class="fa-solid fa-file-excel mr-2"></i>Excel
+            </a>
+            <a href="{{ url_for('social_media.reports_export', report_type='content', format='pdf', date_from=date_from, date_to=date_to) }}">
+                <i class="fa-solid fa-file-pdf mr-2"></i>PDF
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleExportMenu() {
+    document.getElementById('exportMenu').classList.toggle('show');
+}
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.export-dropdown')) {
+        document.getElementById('exportMenu').classList.remove('show');
+    }
+});
+</script>
+{% endblock %}
+
+{% block page_content %}
+<!-- KPI Summary Cards -->
+<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+    {% set total_reach = namespace(value=0) %}
+    {% set total_engagement = namespace(value=0) %}
+    {% set total_leads = namespace(value=0) %}
+    {% set total_sales = namespace(value=0) %}
+    {% for p in platform_stats %}
+        {% set total_reach.value = total_reach.value + (p.total_reach or 0) %}
+        {% set total_engagement.value = total_engagement.value + (p.total_engagement or 0) %}
+        {% set total_leads.value = total_leads.value + (p.total_leads or 0) %}
+        {% set total_sales.value = total_sales.value + (p.total_sales or 0) %}
+    {% endfor %}
+    
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Total Reach</div>
+        <div class="sm-kpi-value">{{ total_reach.value|default(0)|int }}</div>
+        <div class="text-xs text-slate-500 mt-1">All Platforms</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Engagement</div>
+        <div class="sm-kpi-value">{{ total_engagement.value|default(0)|int }}</div>
+        <div class="text-xs text-slate-500 mt-1">All Platforms</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Leads</div>
+        <div class="sm-kpi-value">{{ total_leads.value|default(0)|int }}</div>
+        <div class="text-xs text-slate-500 mt-1">Generated</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Sales</div>
+        <div class="sm-kpi-value text-green-400">AED {{ "%.0f"|format(total_sales.value|default(0)) }}</div>
+        <div class="text-xs text-slate-500 mt-1">Revenue</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Avg Rate</div>
+        <div class="sm-kpi-value">{% if total_reach.value > 0 %}{{ "%.1f"|format((total_engagement.value / total_reach.value) * 100) }}{% else %}0{% endif %}%</div>
+        <div class="text-xs text-slate-500 mt-1">Engagement</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Campaigns</div>
+        <div class="sm-kpi-value">{{ campaign_stats|length }}</div>
+        <div class="text-xs text-slate-500 mt-1">Active</div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Engagement Trends Chart -->
+    <div class="glass-panel rounded-xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Engagement Trends</h3>
+        <div class="chart-container">
+            <canvas id="engagementChart"></canvas>
         </div>
     </div>
     
-    <!-- Lead Funnel -->
+    <!-- Platform Performance Chart -->
     <div class="glass-panel rounded-xl p-6">
-        <h3 class="text-lg font-bold text-white mb-4">Lead Funnel</h3>
-        <div class="space-y-2">
-            {% for stage in lead_funnel %}
-            <div class="flex items-center gap-4">
-                <div class="w-24 text-sm text-slate-400">{{ stage.funnel_stage }}</div>
-                <div class="flex-1 bg-white/10 rounded-full h-6 overflow-hidden">
-                    <div class="bg-gradient-to-r from-brand-500 to-purple-600 h-full rounded-full flex items-center justify-end px-2" style="width: {% if lead_funnel|sum(attribute='count') > 0 %}{{ (stage.count / lead_funnel|sum(attribute='count') * 100)|int }}%{% else %}0{% endif %}">
-                        <span class="text-xs font-bold text-white">{{ stage.count }}</span>
-                    </div>
-                </div>
-            </div>
-            {% else %}
-            <div class="empty-state py-6"><p>No funnel data available</p></div>
-            {% endfor %}
+        <h3 class="text-lg font-bold text-white mb-4">Platform Performance</h3>
+        <div class="chart-container">
+            <canvas id="platformChart"></canvas>
         </div>
     </div>
 </div>
 
-<!-- Campaign Performance -->
-<div class="glass-panel rounded-xl p-6 mb-6">
-    <h3 class="text-lg font-bold text-white mb-4">Campaign Performance</h3>
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Campaign</th>
-                    <th>Platform</th>
-                    <th>Status</th>
-                    <th>Impressions</th>
-                    <th>Clicks</th>
-                    <th>Spent</th>
-                    <th>Revenue</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for c in campaign_stats %}
-                <tr>
-                    <td class="font-semibold text-white">{{ c.campaign_name }}</td>
-                    <td>{% if c.platform %}<span class="platform-badge platform-{{ c.platform.lower() }}">{{ c.platform }}</span>{% else %}-{% endif %}</td>
-                    <td><span class="status-badge status-{{ c.campaign_status.lower() if c.campaign_status else 'draft' }}">{{ c.campaign_status or 'Draft' }}</span></td>
-                    <td>{{ c.total_impressions or 0 }}</td>
-                    <td>{{ c.total_clicks or 0 }}</td>
-                    <td>AED {{ "%.0f"|format(c.total_spent or 0) }}</td>
-                    <td class="text-green-400">AED {{ "%.0f"|format(c.total_revenue or 0) }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="7" class="text-center py-6 text-slate-400">No campaign data available</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<!-- Lead Funnel & Campaign ROI Row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Lead Funnel -->
+    <div class="glass-panel rounded-xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Lead Conversion Funnel</h3>
+        <div class="chart-container">
+            <canvas id="funnelChart"></canvas>
+        </div>
+    </div>
+    
+    <!-- Campaign ROI Chart -->
+    <div class="glass-panel rounded-xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Campaign ROI</h3>
+        <div class="chart-container">
+            <canvas id="roiChart"></canvas>
+        </div>
     </div>
 </div>
 
-<!-- Content Performance -->
-<div class="glass-panel rounded-xl p-6">
-    <h3 class="text-lg font-bold text-white mb-4">Top Content</h3>
-    <div class="table-container">
-        <table>
-            <thead>
-                <tr>
-                    <th>Platform</th>
-                    <th>Title</th>
-                    <th>Published</th>
-                    <th>Reach</th>
-                    <th>Engagement</th>
-                    <th>Leads</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for c in content_performance %}
-                <tr>
-                    <td><span class="platform-badge platform-{{ c.platform.lower() if c.platform else 'general' }}">{{ c.platform or '-' }}</span></td>
-                    <td class="text-white">{{ c.display_title or c.internal_title or 'N/A' }}</td>
-                    <td>{{ c.published_at.strftime('%Y-%m-%d') if c.published_at else '-' }}</td>
-                    <td>{{ c.reach or 0 }}</td>
-                    <td class="text-brand-400">{{ c.engagement or 0 }}</td>
-                    <td>{{ c.leads_generated or 0 }}</td>
-                </tr>
-                {% else %}
-                <tr><td colspan="6" class="text-center py-6 text-slate-400">No content data available</td></tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<!-- Detailed Reports Section -->
+<div class="grid grid-cols-1 gap-6">
+    <!-- Campaign Performance -->
+    <div class="glass-panel rounded-xl p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-white">Campaign Performance Details</h3>
+            <span class="text-sm text-slate-400">Budget vs Actual vs Revenue</span>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Campaign</th>
+                        <th>Platform</th>
+                        <th>Status</th>
+                        <th>Budget</th>
+                        <th>Actual Spent</th>
+                        <th>Revenue</th>
+                        <th>ROI %</th>
+                        <th>ROAS</th>
+                        <th>Cost per Lead</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in campaign_stats %}
+                    <tr>
+                        <td class="font-semibold text-white">{{ c.campaign_name }}</td>
+                        <td>{% if c.platform %}<span class="platform-badge platform-{{ c.platform.lower() }}">{{ c.platform }}</span>{% else %}-{% endif %}</td>
+                        <td><span class="status-badge status-{{ c.campaign_status.lower() if c.campaign_status else 'draft' }}">{{ c.campaign_status or 'Draft' }}</span></td>
+                        <td>AED {{ "%.0f"|format(c.approved_budget or 0) }}</td>
+                        <td>AED {{ "%.0f"|format(c.total_spent or 0) }}</td>
+                        <td class="text-green-400">AED {{ "%.0f"|format(c.total_revenue or 0) }}</td>
+                        <td class="{% if c.approved_budget > 0 and c.total_revenue > 0 %}{% set roi = ((c.total_revenue - c.total_spent) / c.total_spent * 100) if c.total_spent > 0 else 0 %}{{ 'text-green-400' if roi > 0 else 'text-red-400' }}{% endif %}">
+                            {% if c.approved_budget > 0 and c.total_revenue > 0 %}
+                                {% set roi = ((c.total_revenue - c.total_spent) / c.total_spent * 100) if c.total_spent > 0 else 0 %}
+                                {{ "%.1f"|format(roi) }}%
+                            {% else %}0%{% endif %}
+                        </td>
+                        <td>{{ "%.2f"|format(c.roas or 0) }}x</td>
+                        <td>AED {{ "%.0f"|format((c.total_spent / c.total_leads)|round|default(0)) if c.total_leads > 0 else '0' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="9" class="text-center py-6 text-slate-400">No campaign data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Content Performance -->
+    <div class="glass-panel rounded-xl p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-white">Top Performing Content</h3>
+            <a href="{{ url_for('social_media.reports_content_performance') }}" class="text-sm text-brand-400 hover:text-brand-300">View Details →</a>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Platform</th>
+                        <th>Title</th>
+                        <th>Published</th>
+                        <th>Reach</th>
+                        <th>Impressions</th>
+                        <th>Engagement</th>
+                        <th>CTR</th>
+                        <th>Leads</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in content_performance[:15] %}
+                    <tr>
+                        <td><span class="platform-badge platform-{{ c.platform.lower() if c.platform else 'general' }}">{{ c.platform or '-' }}</span></td>
+                        <td class="text-white">{{ c.display_title or c.internal_title or 'N/A' }}</td>
+                        <td>{{ c.published_at.strftime('%Y-%m-%d') if c.published_at else '-' }}</td>
+                        <td>{{ c.reach or 0|int }}</td>
+                        <td>{{ c.impressions or 0|int }}</td>
+                        <td class="text-brand-400 font-semibold">{{ c.engagement or 0|int }}</td>
+                        <td>{{ "%.1f"|format((c.clicks / c.reach * 100)|default(0)) if c.reach > 0 else '0' }}%</td>
+                        <td>{{ c.leads_generated or 0 }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="8" class="text-center py-6 text-slate-400">No content data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
+
+<script>
+// Chart.js configuration
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.1)';
+Chart.defaults.font.family = "'Inter', system-ui, sans-serif";
+
+// Engagement Trends Line Chart
+const engagementCtx = document.getElementById('engagementChart').getContext('2d');
+const engagementData = {{ engagement_trends|tojson }};
+const labels = [...new Set(engagementData.map(d => d.period))].sort();
+const platforms = [...new Set(engagementData.map(d => d.platform))];
+
+const engagementByPlatform = {};
+platforms.forEach(p => {
+    engagementByPlatform[p] = labels.map(l => {
+        const match = engagementData.find(d => d.period === l && d.platform === p);
+        return match ? match.total_engagement : 0;
+    });
+});
+
+new Chart(engagementCtx, {
+    type: 'line',
+    data: {
+        labels: labels,
+        datasets: platforms.map((p, i) => ({
+            label: p,
+            data: engagementByPlatform[p],
+            borderColor: ['#e1306c', '#1877f2', '#0077b5', '#ff0000', '#25d366'][i % 5],
+            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            tension: 0.4,
+            fill: true
+        }))
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true } }
+    }
+});
+
+// Platform Performance Bar Chart
+const platformCtx = document.getElementById('platformChart').getContext('2d');
+const platformData = {{ platform_stats|tojson }};
+
+new Chart(platformCtx, {
+    type: 'bar',
+    data: {
+        labels: platformData.map(p => p.platform),
+        datasets: [{
+            label: 'Reach',
+            data: platformData.map(p => p.total_reach or 0),
+            backgroundColor: 'rgba(56, 189, 248, 0.8)'
+        }, {
+            label: 'Engagement',
+            data: platformData.map(p => p.total_engagement or 0),
+            backgroundColor: 'rgba(99, 102, 241, 0.8)'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true } }
+    }
+});
+
+// Lead Funnel Horizontal Bar
+const funnelCtx = document.getElementById('funnelChart').getContext('2d');
+const funnelData = {{ lead_funnel|tojson }};
+const funnelLabels = funnelData.map(f => f.funnel_stage);
+const funnelCounts = funnelData.map(f => f.count);
+
+new Chart(funnelCtx, {
+    type: 'bar',
+    data: {
+        labels: funnelLabels,
+        datasets: [{
+            label: 'Leads',
+            data: funnelCounts,
+            backgroundColor: [
+                'rgba(56, 189, 248, 0.8)',
+                'rgba(99, 102, 241, 0.8)',
+                'rgba(168, 85, 247, 0.8)',
+                'rgba(236, 72, 153, 0.8)',
+                'rgba(34, 197, 94, 0.8)',
+                'rgba(251, 191, 36, 0.8)'
+            ]
+        }]
+    },
+    options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } }
+    }
+});
+
+// Campaign ROI Chart
+const roiCtx = document.getElementById('roiChart').getContext('2d');
+const roiData = {{ campaign_roi_summary|tojson }};
+
+new Chart(roiCtx, {
+    type: 'bar',
+    data: {
+        labels: roiData.map(c => c.campaign_name[:20] + (c.campaign_name.length > 20 ? '...' : '')),
+        datasets: [{
+            label: 'Budget',
+            data: roiData.map(c => c.approved_budget or 0),
+            backgroundColor: 'rgba(100, 116, 139, 0.6)'
+        }, {
+            label: 'Actual Spent',
+            data: roiData.map(c => c.actual_budget or 0),
+            backgroundColor: 'rgba(251, 191, 36, 0.6)'
+        }, {
+            label: 'Revenue',
+            data: roiData.map(c => c.total_sales or 0),
+            backgroundColor: 'rgba(34, 197, 94, 0.6)'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true } }
+    }
+});
+</script>
 {% endblock %}

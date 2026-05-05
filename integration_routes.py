@@ -22,6 +22,7 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 
 import database as db_helper
+from permissions import require_permission
 
 
 def get_integration_db():
@@ -46,31 +47,6 @@ def init_integration_module(app: Flask):
     seed_integration_tags()
     
     print("[Integration Module] Initialized successfully")
-
-
-def require_permission(module: str, resource: str, action: str):
-    """
-    Permission decorator for integration routes.
-    """
-    def decorator(f):
-        @functools.wraps(f)
-        def decorated_function(*args, **kwargs):
-            from permissions import user_has_permission
-            user_id = session.get('user_id')
-            if not user_id:
-                if request.is_json:
-                    return jsonify({'error': 'Authentication required'}), 401
-                return redirect(url_for('login'))
-            
-            if not user_has_permission(user_id, module, resource, action):
-                if request.is_json:
-                    return jsonify({'error': 'Permission denied'}), 403
-                flash('You do not have permission to perform this action.', 'error')
-                return redirect(url_for('dashboard'))
-            
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
 
 
 def require_login(f):
@@ -365,10 +341,10 @@ def register_integration_routes(app: Flask):
         connectors = []
         for row in cursor.fetchall():
             connectors.append({
-                'id': row[0], 'code': row[1], 'name': row[2], 'description': row[11],
-                'connector_type': row[12], 'direction': row[14], 'active_status': row[17],
+                'id': row[0], 'code': row[1], 'name': row[2], 'description': row[10],
+                'connector_type': row[13], 'direction': row[15], 'active_status': row[17],
                 'health_status': row[18], 'last_success_at': row[20], 'last_failure_at': row[21],
-                'type_name': row[43], 'type_icon': row[44], 'type_color': row[45]
+                'type_name': row[40], 'type_icon': row[41], 'type_color': row[42]
             })
         
         cursor.execute("SELECT code, name FROM integration_connector_types WHERE is_active = 1 ORDER BY name")
@@ -1304,12 +1280,13 @@ def register_integration_routes(app: Flask):
         
         webhooks = []
         for row in cursor.fetchall():
+            # w.* is 33 columns (0-32), then c.name is at index 33
             webhooks.append({
-                'id': row[0], 'code': row[1], 'name': row[2], 'event_type': row[5],
-                'target_url': row[7], 'active_status': row[13], 'health_status': row[14],
-                'usage_count': row[24], 'success_count': row[25], 'failure_count': row[26],
-                'last_success_at': row[27], 'last_failure_at': row[28],
-                'connector_name': row[47] if len(row) > 47 else None
+                'id': row[0], 'code': row[1], 'name': row[2], 'event_type': row[4],
+                'target_url': row[6], 'active_status': row[13], 'health_status': row[14],
+                'usage_count': row[20], 'success_count': row[21], 'failure_count': row[22],
+                'last_success_at': row[23], 'last_failure_at': row[24],
+                'connector_name': row[33] if len(row) > 33 else None
             })
         
         return render_template('integration/webhooks/list.html',
@@ -2453,14 +2430,19 @@ def register_integration_routes(app: Flask):
         """)
         
         data = []
+        totals = {'healthy': 0, 'unhealthy': 0, 'unknown': 0, 'total': 0}
         for row in cursor.fetchall():
             data.append({
-                'type': row[0], 'color': row[1],
+                'type': row[0], 'color': row[1] or '#6c757d',
                 'healthy': row[2] or 0, 'unhealthy': row[3] or 0,
-                'unknown': row[4] or 0, 'total': row[5]
+                'unknown': row[4] or 0, 'total': row[5] or 0
             })
+            totals['healthy'] += row[2] or 0
+            totals['unhealthy'] += row[3] or 0
+            totals['unknown'] += row[4] or 0
+            totals['total'] += row[5] or 0
         
-        return render_template('integration/reports/connector_health.html', data=data)
+        return render_template('integration/reports/connector_health.html', data=data, totals=totals)
 
     @app.route('/integration/reports/flow-analytics')
     @require_login
@@ -2590,6 +2572,71 @@ def register_integration_routes(app: Flask):
             q['dlq_count'] = dlq_by_queue.get(q['queue'], 0)
         
         return render_template('integration/reports/queue_dlq.html', queues=queues)
+
+    @app.route('/integration/reports/error-analysis')
+    @require_login
+    def integration_report_error_analysis():
+        """Error analysis report."""
+        conn = get_integration_db()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT error_type,
+                   COUNT(*) as error_count,
+                   SUM(CASE WHEN is_resolved = 1 THEN 1 ELSE 0 END) as resolved_count,
+                   COUNT(DISTINCT connector_id) as affected_connectors,
+                   MAX(created_at) as last_occurrence
+            FROM integration_errors
+            WHERE created_at > datetime('now', '-30 days')
+            GROUP BY error_type
+            ORDER BY error_count DESC
+        """)
+        error_by_type = []
+        for row in cursor.fetchall():
+            error_by_type.append({
+                'type': row[0] or 'Unknown',
+                'count': row[1],
+                'resolved': row[2] or 0,
+                'affected': row[3],
+                'last_seen': row[4]
+            })
+
+        cursor.execute("""
+            SELECT e.error_message,
+                   c.name as connector_name,
+                   e.error_type,
+                   e.created_at,
+                   e.is_resolved
+            FROM integration_errors e
+            LEFT JOIN integration_connectors c ON e.connector_id = c.id
+            WHERE e.created_at > datetime('now', '-7 days')
+            ORDER BY e.created_at DESC
+            LIMIT 100
+        """)
+        recent_errors = []
+        for row in cursor.fetchall():
+            recent_errors.append({
+                'message': row[0] or 'N/A',
+                'connector': row[1] or 'N/A',
+                'type': row[2] or 'Unknown',
+                'at': row[3],
+                'resolved': bool(row[4])
+            })
+
+        cursor.execute("""
+            SELECT DATE(created_at) as date,
+                   COUNT(*) as error_count
+            FROM integration_errors
+            WHERE created_at > datetime('now', '-30 days')
+            GROUP BY DATE(created_at)
+            ORDER BY date
+        """)
+        error_trend = [{'date': r[0], 'count': r[1]} for r in cursor.fetchall()]
+
+        return render_template('integration/reports/error_analysis.html',
+                             error_by_type=error_by_type,
+                             recent_errors=recent_errors,
+                             error_trend=error_trend)
 
     @app.route('/integration/reports/executive')
     @require_login

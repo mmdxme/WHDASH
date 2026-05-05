@@ -1,14 +1,188 @@
 {% extends "social_media/base_social.html" %}
 
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .heatmap-grid { display: grid; gap: 2px; }
+    .heatmap-cell { 
+        width: 50px; 
+        height: 50px; 
+        border-radius: 4px; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center;
+        font-size: 0.65rem;
+        font-weight: 600;
+        color: white;
+        transition: transform 0.2s;
+    }
+    .heatmap-cell:hover { transform: scale(1.1); }
+    .heatmap-label { 
+        font-size: 0.65rem; 
+        color: #94a3b8; 
+        text-align: center; 
+        padding: 0.25rem;
+    }
+</style>
+{% endblock %}
+
+{% block page_actions %}
+<div class="flex items-center gap-3">
+    <form method="get" class="flex items-center gap-2">
+        <input type="date" name="date_from" value="{{ date_from }}" 
+               class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <span class="text-slate-400">to</span>
+        <input type="date" name="date_to" value="{{ date_to }}" 
+               class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <button type="submit" class="btn-social btn-social-secondary text-sm">Apply</button>
+    </form>
+    <a href="{{ url_for('social_media.reports') }}" class="btn-social btn-social-secondary text-sm">
+        <i class="fa-solid fa-arrow-left"></i> Back to Reports
+    </a>
+</div>
+{% endblock %}
+
 {% block page_content %}
+<!-- Content Performance KPIs -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    {% set total_reach = namespace(value=0) %}
+    {% set total_engagement = namespace(value=0) %}
+    {% set total_clicks = namespace(value=0) %}
+    {% set total_leads = namespace(value=0) %}
+    {% for c in content %}
+        {% set total_reach.value = total_reach.value + (c.reach or 0) %}
+        {% set total_engagement.value = total_engagement.value + (c.engagement or 0) %}
+        {% set total_clicks.value = total_clicks.value + (c.clicks or 0) %}
+        {% set total_leads.value = total_leads.value + (c.leads_generated or 0) %}
+    {% endfor %}
+    
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Total Reach</div>
+        <div class="sm-kpi-value">{{ total_reach.value|int }}</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Engagement</div>
+        <div class="sm-kpi-value">{{ total_engagement.value|int }}</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Avg CTR</div>
+        <div class="sm-kpi-value">{% if total_reach.value > 0 %}{{ "%.2f"|format((total_clicks.value / total_reach.value) * 100) }}{% else %}0{% endif }}%</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Leads Generated</div>
+        <div class="sm-kpi-value">{{ total_leads.value|int }}</div>
+    </div>
+</div>
+
+<!-- Content Type Analysis & Best Times Row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Content Type Performance -->
+    <div class="glass-panel rounded-xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Content Type Performance</h3>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Count</th>
+                        <th>Reach</th>
+                        <th>Engagement</th>
+                        <th>Rate %</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ct in content_types %}
+                    <tr>
+                        <td class="text-white font-semibold">{{ ct.content_type or 'Unknown' }}</td>
+                        <td>{{ ct.count }}</td>
+                        <td>{{ ct.total_reach|default(0)|int }}</td>
+                        <td class="text-brand-400">{{ ct.total_engagement|default(0)|int }}</td>
+                        <td>{{ "%.1f"|format(ct.engagement_rate|default(0)) }}%</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center py-6 text-slate-400">No data available</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Best Posting Times Heatmap -->
+    <div class="glass-panel rounded-xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Best Posting Times</h3>
+        <div class="overflow-x-auto">
+            <div class="heatmap-grid" style="grid-template-columns: auto repeat(7, 1fr); min-width: 400px;">
+                <div></div>
+                <div class="heatmap-label">Sun</div>
+                <div class="heatmap-label">Mon</div>
+                <div class="heatmap-label">Tue</div>
+                <div class="heatmap-label">Wed</div>
+                <div class="heatmap-label">Thu</div>
+                <div class="heatmap-label">Fri</div>
+                <div class="heatmap-label">Sat</div>
+                
+                {% for slot in ['Morning (6-11)', 'Afternoon (12-17)', 'Evening (18-21)', 'Night (22-5)'] %}
+                <div class="heatmap-label text-left">{{ slot }}</div>
+                {% for day in ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] %}
+                    {% set found = false %}
+                    {% set rate = 0 %}
+                    {% for pt in posting_times %}
+                        {% if pt.time_slot == slot and pt.day_of_week == day %}
+                            {% set found = true %}
+                            {% set rate = pt.avg_engagement_rate|default(0) %}
+                        {% endif %}
+                    {% endfor %}
+                    <div class="heatmap-cell {% if found and rate > 0 %}hover:shadow-lg{% endif %}" 
+                         style="background-color: {% if rate > 10 %}rgba(34, 197, 94, {{ [rate/20, 1]|min }}){% elif rate > 5 %}rgba(251, 191, 36, {{ [rate/20, 1]|min }}){% elif rate > 0 %}rgba(239, 68, 68, {{ [rate/20, 1]|min }}){% else %}rgba(100, 116, 139, 0.3){% endif %};">
+                        {% if found %}{{ "%.0f"|format(rate) }}{% endif %}
+                    </div>
+                {% endfor %}
+                {% endfor %}
+            </div>
+            <div class="flex items-center gap-4 mt-4 text-xs text-slate-400">
+                <span><i class="fa-solid fa-circle text-green-500"></i> High (>10%)</span>
+                <span><i class="fa-solid fa-circle text-yellow-500"></i> Medium (5-10%)</span>
+                <span><i class="fa-solid fa-circle text-red-500"></i> Low (<5%)</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hashtag Performance -->
+{% if hashtags %}
+<div class="glass-panel rounded-xl p-6 mb-6">
+    <h3 class="text-lg font-bold text-white mb-4">Top Hashtags</h3>
+    <div class="flex flex-wrap gap-2">
+        {% for tag in hashtags[:25] %}
+        <span class="px-3 py-1 rounded-full bg-brand-500/20 text-brand-400 text-sm">
+            #{{ tag.hashtag }} <span class="text-xs text-slate-400">({{ tag.usage_count }})</span>
+        </span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Full Content Table -->
 <div class="glass-panel rounded-xl p-6">
-    <h2 class="text-lg font-bold text-white mb-4">Content Performance Report</h2>
+    <h3 class="text-lg font-bold text-white mb-4">All Content Performance</h3>
     <div class="table-container">
         <table>
             <thead>
                 <tr>
-                    <th>Code</th><th>Platform</th><th>Title</th><th>Published</th>
-                    <th>Reach</th><th>Impressions</th><th>Engagement</th><th>Leads</th><th>Sales</th>
+                    <th>Code</th>
+                    <th>Platform</th>
+                    <th>Title</th>
+                    <th>Published</th>
+                    <th>Reach</th>
+                    <th>Impressions</th>
+                    <th>Engagement</th>
+                    <th>Likes</th>
+                    <th>Comments</th>
+                    <th>Shares</th>
+                    <th>Clicks</th>
+                    <th>CTR</th>
+                    <th>Leads</th>
+                    <th>Sales</th>
                 </tr>
             </thead>
             <tbody>
@@ -18,13 +192,19 @@
                     <td><span class="platform-badge platform-{{ c.platform.lower() if c.platform else 'general' }}">{{ c.platform or '-' }}</span></td>
                     <td class="text-white">{{ c.display_title or c.internal_title or 'N/A' }}</td>
                     <td>{{ c.published_at.strftime('%Y-%m-%d') if c.published_at else '-' }}</td>
-                    <td>{{ c.reach or 0 }}</td><td>{{ c.impressions or 0 }}</td>
-                    <td class="text-brand-400">{{ c.engagement or 0 }}</td>
+                    <td>{{ c.reach or 0|int }}</td>
+                    <td>{{ c.impressions or 0|int }}</td>
+                    <td class="text-brand-400 font-semibold">{{ c.engagement or 0|int }}</td>
+                    <td>{{ c.likes or 0|int }}</td>
+                    <td>{{ c.comments or 0|int }}</td>
+                    <td>{{ c.shares or 0|int }}</td>
+                    <td>{{ c.clicks or 0|int }}</td>
+                    <td>{{ "%.1f"|format((c.clicks / c.reach * 100)|default(0)) if c.reach > 0 else '0' }}%</td>
                     <td>{{ c.leads_generated or 0 }}</td>
                     <td class="text-green-400">AED {{ "%.0f"|format(c.sales_generated or 0) }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="9" class="text-center py-8 text-slate-400">No content data available</td></tr>
+                <tr><td colspan="14" class="text-center py-8 text-slate-400">No content data available</td></tr>
                 {% endfor %}
             </tbody>
         </table>

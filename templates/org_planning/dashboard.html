@@ -93,6 +93,25 @@
                 </div>
             </div>
         </div>
+
+        <!-- My Pending -->
+        <div class="glass-panel stat-card p-5 rounded-xl card-hover">
+            <div class="flex items-center justify-between mb-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-cyan-600/20 flex items-center justify-center">
+                    <i class="fas fa-inbox text-cyan-400 text-xl"></i>
+                </div>
+                <span class="badge badge-{{ 'danger' if stats.my_pending_count > 5 else 'warning' if stats.my_pending_count > 0 else 'success' }}">
+                    {{ stats.my_pending_count }}
+                </span>
+            </div>
+            <div class="text-3xl font-bold text-white">{{ stats.my_pending_count }}</div>
+            <div class="text-gray-400 text-sm mt-1">{{ t('pending_approval', lang) }}</div>
+            <div class="mt-4">
+                <a href="{{ url_for('org_planning.processes', view='my_work') }}" class="text-cyan-400 hover:text-cyan-300 text-sm font-medium">
+                    {{ t('view_all', lang) }} <i class="fas fa-arrow-right ml-1"></i>
+                </a>
+            </div>
+        </div>
     </div>
 
     <!-- Main Content Grid -->
@@ -240,63 +259,42 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Process Performance Chart -->
         <div class="glass-panel rounded-xl overflow-hidden">
-            <div class="p-5 border-b border-gray-700/50">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                            <i class="fas fa-chart-line text-cyan-400"></i>
-                        </div>
-                        <div>
-                            <h2 class="text-lg font-semibold text-white">{{ t('process_performance', lang) }}</h2>
-                            <p class="text-sm text-gray-400">{{ t('last_30_days', lang) }}</p>
-                        </div>
+            <div class="p-5 border-b border-gray-700/50 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-line text-cyan-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('process_performance', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('last_30_days', lang) }}</p>
                     </div>
                 </div>
+                <a href="{{ url_for('org_planning.report_process_performance') }}" class="text-cyan-400 hover:text-cyan-300 text-sm">
+                    {{ t('view_report', lang) }} <i class="fas fa-external-link-alt ml-1"></i>
+                </a>
             </div>
             <div class="p-5">
                 <canvas id="processChart" height="200"></canvas>
             </div>
         </div>
 
-        <!-- Bottleneck Analysis -->
+        <!-- Completion Rate Gauge -->
         <div class="glass-panel rounded-xl overflow-hidden">
-            <div class="p-5 border-b border-gray-700/50">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
-                            <i class="fas fa-bolt text-orange-400"></i>
-                        </div>
-                        <div>
-                            <h2 class="text-lg font-semibold text-white">{{ t('bottleneck_analysis', lang) }}</h2>
-                            <p class="text-sm text-gray-400">{{ t('steps_taking_longest', lang) }}</p>
-                        </div>
+            <div class="p-5 border-b border-gray-700/50 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                        <i class="fas fa-tachometer-alt text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('completion_rate', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('overall_30_day', lang) }}</p>
                     </div>
                 </div>
+                <span class="text-2xl font-bold text-{{ 'emerald' if stats.completion_rate >= 80 else 'amber' if stats.completion_rate >= 60 else 'red' }}-400">{{ stats.completion_rate }}%</span>
             </div>
-            
-            {% if bottlenecks %}
-            <div class="divide-y divide-gray-700/50">
-                {% for bottleneck in bottlenecks[:5] %}
-                <div class="p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <div>
-                            <span class="text-white font-medium">{{ bottleneck.step_name }}</span>
-                            <span class="text-gray-500 text-sm ml-2">({{ bottleneck.workflow_name }})</span>
-                        </div>
-                        <span class="badge badge-warning">{{ bottleneck.avg_hours|round(1) }}h</span>
-                    </div>
-                    <div class="flex items-center gap-4 text-xs text-gray-400">
-                        <span><i class="fas fa-play-circle mr-1"></i>{{ bottleneck.executions }} {{ t('executions', lang) }}</span>
-                        <span><i class="fas fa-clock mr-1"></i>{{ bottleneck.pending_count }} {{ t('pending', lang) }}</span>
-                    </div>
-                </div>
-                {% endfor %}
+            <div class="p-5 flex items-center justify-center">
+                <canvas id="completionGauge" height="180"></canvas>
             </div>
-            {% else %}
-            <div class="p-8 text-center">
-                <p class="text-gray-400">{{ t('no_bottlenecks_detected', lang) }}</p>
-            </div>
-            {% endif %}
         </div>
     </div>
 
@@ -345,6 +343,13 @@
                 </div>
                 <span class="text-sm text-gray-300 text-center">{{ t('monitoring', lang) }}</span>
             </a>
+
+            <a href="{{ url_for('org_planning.reports') }}" class="flex flex-col items-center gap-2 p-4 rounded-xl bg-slate-800/50 hover:bg-slate-800 transition-colors">
+                <div class="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center">
+                    <i class="fas fa-file-alt text-indigo-400 text-xl"></i>
+                </div>
+                <span class="text-sm text-gray-300 text-center">{{ t('reports', lang) }}</span>
+            </a>
         </div>
     </div>
 </div>
@@ -355,18 +360,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // Process Performance Chart
     const processCtx = document.getElementById('processChart');
     if (processCtx) {
+        const completed = {{ metrics[0].completed if metrics else 0 }};
+        const rejected = {{ metrics[0].rejected if metrics else 0 }};
+        const cancelled = {{ metrics[0].cancelled if metrics else 0 }};
+        const pending = {{ metrics[0].total_instances if metrics else 0 }} - completed - rejected - cancelled;
+
         new Chart(processCtx, {
             type: 'bar',
             data: {
                 labels: ['{{ t("completed", lang) }}', '{{ t("pending", lang) }}', '{{ t("rejected", lang) }}', '{{ t("cancelled", lang) }}'],
                 datasets: [{
                     label: '{{ t("instances", lang) }}',
-                    data: [
-                        {{ metrics[0].completed if metrics else 0 }},
-                        {{ metrics[0].total_instances - metrics[0].completed - metrics[0].rejected - metrics[0].cancelled if metrics else 0 }},
-                        {{ metrics[0].rejected if metrics else 0 }},
-                        {{ metrics[0].cancelled if metrics else 0 }}
-                    ],
+                    data: [completed, Math.max(0, pending), rejected, cancelled],
                     backgroundColor: [
                         'rgba(16, 185, 129, 0.7)',
                         'rgba(245, 158, 11, 0.7)',
@@ -380,31 +385,63 @@ document.addEventListener('DOMContentLoaded', function() {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: false
-                    }
-                },
+                plugins: { legend: { display: false } },
                 scales: {
                     y: {
                         beginAtZero: true,
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.05)'
-                        },
-                        ticks: {
-                            color: 'rgba(255, 255, 255, 0.5)'
-                        }
+                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                        ticks: { color: 'rgba(255, 255, 255, 0.5)' }
                     },
                     x: {
-                        grid: {
-                            display: false
-                        },
-                        ticks: {
-                            color: 'rgba(255, 255, 255, 0.5)'
-                        }
+                        grid: { display: false },
+                        ticks: { color: 'rgba(255, 255, 255, 0.5)' }
                     }
                 }
             }
+        });
+    }
+
+    // Completion Rate Gauge
+    const gaugeCtx = document.getElementById('completionGauge');
+    if (gaugeCtx) {
+        const completionRate = {{ stats.completion_rate }};
+        const gaugeColor = completionRate >= 80 ? 'rgba(16, 185, 129, 1)' : completionRate >= 60 ? 'rgba(245, 158, 11, 1)' : 'rgba(239, 68, 68, 1)';
+
+        new Chart(gaugeCtx, {
+            type: 'doughnut',
+            data: {
+                datasets: [{
+                    data: [completionRate, 100 - completionRate],
+                    backgroundColor: [gaugeColor, 'rgba(255,255,255,0.1)'],
+                    borderWidth: 0,
+                    circumference: 180,
+                    rotation: 270
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '75%',
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false }
+                }
+            },
+            plugins: [{
+                id: 'centerText',
+                afterDraw: function(chart) {
+                    const ctx = chart.ctx;
+                    const centerX = chart.width / 2;
+                    const centerY = chart.height / 2 + 20;
+                    ctx.save();
+                    ctx.font = 'bold 36px Outfit';
+                    ctx.fillStyle = gaugeColor;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(completionRate + '%', centerX, centerY);
+                    ctx.restore();
+                }
+            }]
         });
     }
 });

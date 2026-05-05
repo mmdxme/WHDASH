@@ -30,7 +30,10 @@ import io
 from social_media_models import (
     get_db, run_social_media_migrations, get_social_setting, update_social_setting,
     log_social_audit, get_social_dashboard_data, get_campaign_summary_stats,
-    get_content_performance, SOCIAL_MEDIA_TABLES
+    get_content_performance, get_engagement_trends, get_audience_growth,
+    get_campaign_roi, get_content_type_analysis, get_best_posting_times,
+    get_lead_conversion_funnel, get_hashtag_performance, get_user_sm_permissions,
+    check_sm_permission
 )
 
 sm_bp = Blueprint('social_media', __name__, url_prefix='/social-media')
@@ -472,6 +475,8 @@ def content_list():
     search = request.args.get('search', '')
     status = request.args.get('status', '')
     platform = request.args.get('platform', '')
+    content_type = request.args.get('type', '')
+    view = request.args.get('view', 'table')
     
     query = "SELECT * FROM social_content_production WHERE 1=1"
     count_query = "SELECT COUNT(*) as cnt FROM social_content_production WHERE 1=1"
@@ -493,11 +498,27 @@ def content_list():
         count_query += " AND target_platform = ?"
         params.append(platform)
     
+    if content_type:
+        query += " AND content_type = ?"
+        count_query += " AND content_type = ?"
+        params.append(content_type)
+    
     total = db.execute(count_query, params).fetchone()['cnt']
     query += " ORDER BY priority ASC, created_at DESC LIMIT ? OFFSET ?"
     params.extend([per_page, offset])
     
     content_items = db.execute(query, params).fetchall()
+    
+    # Get content statistics
+    stats = db.execute("""
+        SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN production_status = 'Published' THEN 1 ELSE 0 END) as published,
+            SUM(CASE WHEN production_status = 'In Production' THEN 1 ELSE 0 END) as in_production,
+            SUM(CASE WHEN production_status = 'Ready for Review' THEN 1 ELSE 0 END) as ready_for_review,
+            SUM(CASE WHEN production_status = 'Idea' THEN 1 ELSE 0 END) as ideas
+        FROM social_content_production
+    """).fetchone()
     
     db.close()
     
@@ -510,6 +531,9 @@ def content_list():
         search=search,
         status_filter=status,
         platform_filter=platform,
+        type_filter=content_type,
+        view=view,
+        stats=dict(stats) if stats else {'total': 0, 'published': 0, 'in_production': 0, 'ready_for_review': 0, 'ideas': 0},
     )
 
 
@@ -736,7 +760,17 @@ def content_calendar():
     
     # Get view type (daily, weekly, monthly)
     view = request.args.get('view', 'monthly')
+    platform_filter = request.args.get('platform', '')
+    campaign_filter = request.args.get('campaign', '')
     current_date = datetime.now()
+    
+    # Handle date navigation from template
+    date_nav = request.args.get('date', '')
+    if date_nav:
+        try:
+            current_date = datetime.strptime(date_nav, '%Y-%m-%d')
+        except:
+            pass
     
     if view == 'daily':
         date_from = current_date.strftime('%Y-%m-%d')
@@ -750,16 +784,29 @@ def content_calendar():
         last_day = (current_date.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
         date_to = last_day.strftime('%Y-%m-%d')
     
-    # Get calendar items
-    calendar_items = db.execute("""
+    # Build query with filters
+    query = """
         SELECT c.*, p.internal_title, p.display_title, p.caption, p.hashtags,
-               a.account_name
+               a.account_name, camp.campaign_name
         FROM social_content_calendar c
         LEFT JOIN social_content_production p ON c.content_id = p.id
         LEFT JOIN social_accounts a ON c.platform = a.platform
+        LEFT JOIN social_campaigns camp ON c.linked_campaign_id = camp.id
         WHERE c.publish_date BETWEEN ? AND ?
-        ORDER BY c.publish_date, c.publish_time
-    """, (date_from, date_to)).fetchall()
+    """
+    params = [date_from, date_to]
+    
+    if platform_filter:
+        query += " AND c.platform = ?"
+        params.append(platform_filter)
+    
+    if campaign_filter:
+        query += " AND c.linked_campaign_id = ?"
+        params.append(int(campaign_filter))
+    
+    query += " ORDER BY c.publish_date, c.publish_time"
+    
+    calendar_items = db.execute(query, params).fetchall()
     
     # Group by date
     calendar_by_date = {}
@@ -768,6 +815,55 @@ def content_calendar():
         if date_key not in calendar_by_date:
             calendar_by_date[date_key] = []
         calendar_by_date[date_key].append(dict(item))
+    
+    # Create calendar events for FullCalendar
+    calendar_events = []
+    for item in calendar_items:
+        # Color code by platform
+        color_map = {
+            'Instagram': '#e1306c',
+            'Facebook': '#1877f2',
+            'LinkedIn': '#0077b5',
+            'YouTube': '#ff0000',
+            'WhatsApp': '#25d366'
+        }
+        calendar_events.append({
+            'id': item['id'],
+            'title': item.get('internal_title', 'Content') or item.get('content_topic', 'Scheduled'),
+            'start': f"{item['publish_date']}T{item['publish_time'] or '09:00'}",
+            'backgroundColor': color_map.get(item['platform'], '#38bdf8'),
+            'borderColor': color_map.get(item['platform'], '#38bdf8'),
+            'extendedProps': {
+                'platform': item['platform'],
+                'content_type': item.get('content_type', 'Post'),
+                'calendar_status': item.get('calendar_status', 'Scheduled'),
+                'campaign_name': item.get('campaign_name', '')
+            }
+        })
+    
+    # Get campaigns for filter dropdown
+    campaigns = db.execute("SELECT id, campaign_name FROM social_campaigns WHERE campaign_status = 'Active' ORDER BY campaign_name").fetchall()
+    
+    # Get upcoming items (next 7 days)
+    upcoming_items = db.execute("""
+        SELECT c.*, p.internal_title, p.content_type
+        FROM social_content_calendar c
+        LEFT JOIN social_content_production p ON c.content_id = p.id
+        WHERE c.publish_date >= CURRENT_DATE AND c.publish_date <= DATE(CURRENT_DATE, '+7 days')
+        ORDER BY c.publish_date, c.publish_time
+        LIMIT 10
+    """).fetchall()
+    
+    # Get calendar statistics
+    calendar_stats = db.execute("""
+        SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN calendar_status = 'Published' THEN 1 ELSE 0 END) as published,
+            SUM(CASE WHEN calendar_status = 'Scheduled' THEN 1 ELSE 0 END) as pending,
+            SUM(CASE WHEN calendar_status = 'Draft' THEN 1 ELSE 0 END) as draft
+        FROM social_content_calendar
+        WHERE strftime('%Y-%m', publish_date) = strftime('%Y-%m', 'now')
+    """).fetchone()
     
     # Get platforms for filter
     platforms = db.execute("SELECT DISTINCT platform FROM social_accounts WHERE inactive_archive = 0").fetchall()
@@ -778,7 +874,11 @@ def content_calendar():
         title='Content Calendar',
         calendar_items=[dict(r) for r in calendar_items],
         calendar_by_date=calendar_by_date,
+        calendar_events=calendar_events,
         platforms=[r['platform'] for r in platforms],
+        campaigns=[dict(r) for r in campaigns],
+        upcoming_items=[dict(r) for r in upcoming_items],
+        calendar_stats=dict(calendar_stats) if calendar_stats else {'total': 0, 'published': 0, 'pending': 0, 'draft': 0},
         view=view,
         date_from=date_from,
         date_to=date_to,
@@ -947,7 +1047,7 @@ def publishing_queue():
     platform = request.args.get('platform', '')
     
     query = """
-        SELECT q.*, c.internal_title, a.account_name
+        SELECT q.*, c.internal_title, c.content_type, a.account_name
         FROM social_publish_queue q
         LEFT JOIN social_content_production c ON q.content_id = c.id
         LEFT JOIN social_accounts a ON q.account_id = a.id
@@ -972,6 +1072,27 @@ def publishing_queue():
     
     queue_items = db.execute(query, params).fetchall()
     
+    # Get queue statistics
+    stats = db.execute("""
+        SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN queue_status = 'Queued' THEN 1 ELSE 0 END) as queued,
+            SUM(CASE WHEN queue_status = 'Published' AND date(published_at) = date('now') THEN 1 ELSE 0 END) as published_today,
+            SUM(CASE WHEN queue_status = 'Failed' THEN 1 ELSE 0 END) as failed
+        FROM social_publish_queue
+    """).fetchone()
+    
+    # Get optimal posting times (mock data based on engagement patterns)
+    optimal_times = db.execute("""
+        SELECT 'Morning (9-11 AM)' as time, platform, 
+               AVG(engagement / NULLIF(reach, 0)) * 100 as score
+        FROM social_content_archive
+        WHERE strftime('%H', published_at) BETWEEN '09' AND '11'
+        GROUP BY platform
+        ORDER BY score DESC
+        LIMIT 5
+    """).fetchall()
+    
     db.close()
     
     return render_template('social_media/publishing/queue.html',
@@ -982,6 +1103,8 @@ def publishing_queue():
         per_page=per_page,
         status_filter=status,
         platform_filter=platform,
+        stats=dict(stats) if stats else {'total': 0, 'queued': 0, 'published_today': 0, 'failed': 0},
+        optimal_times=[dict(r) for r in optimal_times],
     )
 
 
@@ -2252,6 +2375,15 @@ def reports():
         GROUP BY funnel_stage
     """).fetchall()
     
+    # Engagement trends (daily for last 30 days)
+    engagement_trends = get_engagement_trends(db, date_from, date_to, platform, 'daily')
+    
+    # Audience growth by platform
+    audience_growth = get_audience_growth(db, date_from, date_to)
+    
+    # Campaign ROI summary
+    campaign_roi_summary = get_campaign_roi(db)
+    
     db.close()
     
     return render_template('social_media/reports/index.html',
@@ -2260,6 +2392,9 @@ def reports():
         platform_stats=[dict(r) for r in platform_stats],
         campaign_stats=[dict(r) for r in campaign_stats],
         lead_funnel=[dict(r) for r in lead_funnel],
+        engagement_trends=[dict(r) for r in engagement_trends],
+        audience_growth=[dict(r) for r in audience_growth],
+        campaign_roi_summary=campaign_roi_summary,
         date_from=date_from,
         date_to=date_to,
         platform_filter=platform,
@@ -2279,14 +2414,122 @@ def reports_content_performance():
     
     content = get_content_performance(db, date_from, date_to, platform)
     
+    # Content type analysis
+    content_types = get_content_type_analysis(db, date_from, date_to, platform)
+    
+    # Best posting times
+    posting_times = get_best_posting_times(db, platform)
+    
+    # Hashtag performance
+    hashtags = get_hashtag_performance(db)
+    
     db.close()
     
     return render_template('social_media/reports/content_performance.html',
         title='Content Performance Report',
         content=[dict(r) for r in content],
+        content_types=[dict(r) for r in content_types],
+        posting_times=[dict(r) for r in posting_times],
+        hashtags=hashtags,
         date_from=date_from,
         date_to=date_to,
         platform_filter=platform,
+    )
+
+
+@sm_bp.route('/reports/campaign-analytics')
+@sm_login_required
+@sm_permission_required('view_reports')
+def reports_campaign_analytics():
+    """Campaign analytics with ROI."""
+    db = get_db()
+    
+    date_from = request.args.get('date_from', (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d'))
+    date_to = request.args.get('date_to', datetime.now().strftime('%Y-%m-%d'))
+    
+    # Get campaign ROI data
+    campaigns = get_campaign_roi(db)
+    
+    # Calculate summary stats
+    total_budget = sum(c.get('approved_budget', 0) for c in campaigns)
+    total_spent = sum(c.get('actual_budget', 0) for c in campaigns)
+    total_revenue = sum(c.get('total_sales', 0) for c in campaigns)
+    total_leads = sum(c.get('total_leads', 0) for c in campaigns)
+    
+    avg_roi = ((total_revenue - total_spent) / total_spent * 100) if total_spent > 0 else 0
+    avg_roas = (total_revenue / total_spent) if total_spent > 0 else 0
+    avg_cpl = (total_spent / total_leads) if total_leads > 0 else 0
+    
+    db.close()
+    
+    return render_template('social_media/reports/campaign_analytics.html',
+        title='Campaign Analytics',
+        campaigns=campaigns,
+        total_budget=total_budget,
+        total_spent=total_spent,
+        total_revenue=total_revenue,
+        total_leads=total_leads,
+        avg_roi=avg_roi,
+        avg_roas=avg_roas,
+        avg_cpl=avg_cpl,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@sm_bp.route('/reports/audience')
+@sm_login_required
+@sm_permission_required('view_reports')
+def reports_audience():
+    """Audience analytics report."""
+    db = get_db()
+    
+    date_from = request.args.get('date_from', (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
+    date_to = request.args.get('date_to', datetime.now().strftime('%Y-%m-%d'))
+    
+    audience_data = get_audience_growth(db, date_from, date_to)
+    
+    db.close()
+    
+    return render_template('social_media/reports/audience.html',
+        title='Audience Analytics',
+        audience_data=[dict(r) for r in audience_data],
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+
+@sm_bp.route('/reports/leads')
+@sm_login_required
+@sm_permission_required('view_reports')
+def reports_leads():
+    """Leads analytics with funnel and conversion."""
+    db = get_db()
+    
+    date_from = request.args.get('date_from', (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d'))
+    date_to = request.args.get('date_to', datetime.now().strftime('%Y-%m-%d'))
+    
+    lead_funnel = get_lead_conversion_funnel(db, date_from, date_to)
+    
+    # Lead sources breakdown
+    lead_sources = db.execute("""
+        SELECT source_platform, COUNT(*) as count, 
+               SUM(estimated_value) as total_value,
+               SUM(CASE WHEN lead_status = 'Converted' THEN 1 ELSE 0 END) as converted
+        FROM social_leads
+        WHERE date(created_at) BETWEEN ? AND ?
+        GROUP BY source_platform
+        ORDER BY count DESC
+    """, (date_from, date_to)).fetchall()
+    
+    db.close()
+    
+    return render_template('social_media/reports/leads.html',
+        title='Leads Analytics',
+        lead_funnel=[dict(r) for r in lead_funnel],
+        lead_sources=[dict(r) for r in lead_sources],
+        date_from=date_from,
+        date_to=date_to,
     )
 
 
@@ -2294,47 +2537,97 @@ def reports_content_performance():
 @sm_login_required
 @sm_permission_required('export_reports')
 def reports_export(report_type):
-    """Export report as CSV."""
+    """Export report in various formats (CSV, Excel, PDF)."""
+    from export_utils import send_export_response, export_to_csv, export_to_excel_general, export_to_pdf
+    
     db = get_db()
     
     date_from = request.args.get('date_from', (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'))
     date_to = request.args.get('date_to', datetime.now().strftime('%Y-%m-%d'))
+    export_format = request.args.get('format', 'csv').lower()
     
     if report_type == 'content':
         data = get_content_performance(db, date_from, date_to)
-        headers = ['Code', 'Platform', 'Title', 'Published At', 'Reach', 'Impressions', 
-                   'Engagement', 'Leads', 'Sales']
-        rows = [[r['content_code'], r['platform'], r['display_title'], 
-                 r['published_at'], r['reach'], r['impressions'],
-                 r['engagement'], r['leads_generated'], r['sales_generated']] for r in data]
+        data = [dict(r) for r in data]
+        columns = ['Code', 'Platform', 'Title', 'Published At', 'Reach', 'Impressions', 
+                   'Engagement', 'Likes', 'Comments', 'Shares', 'Clicks', 'Leads', 'Sales']
+        col_keys = ['content_code', 'platform', 'display_title', 'published_at', 'reach', 
+                   'impressions', 'engagement', 'likes', 'comments', 'shares', 'clicks', 
+                   'leads_generated', 'sales_generated']
+        title = 'Social Media Content Performance Report'
+        filename = f'social_content_{datetime.now().strftime("%Y%m%d")}'
+        
     elif report_type == 'leads':
-        data = db.execute("SELECT * FROM social_leads ORDER BY created_at DESC").fetchall()
-        headers = ['Name', 'Phone', 'Source', 'Status', 'Stage', 'Value', 'Created']
-        rows = [[r['lead_name'], r['phone'], r['source_platform'], 
-                 r['lead_status'], r['funnel_stage'], r['estimated_value'], r['created_at']] for r in data]
+        data = db.execute("""
+            SELECT l.*, u.username as assigned_to_name
+            FROM social_leads l
+            LEFT JOIN users u ON l.assigned_salesperson_id = u.id
+            ORDER BY l.created_at DESC
+        """).fetchall()
+        data = [dict(r) for r in data]
+        columns = ['Name', 'Phone', 'Email', 'Source', 'Status', 'Stage', 'Value', 'Assigned To', 'Created']
+        col_keys = ['lead_name', 'phone', 'email', 'source_platform', 'lead_status', 
+                   'funnel_stage', 'estimated_value', 'assigned_to_name', 'created_at']
+        title = 'Social Media Leads Report'
+        filename = f'social_leads_{datetime.now().strftime("%Y%m%d")}'
+        
     elif report_type == 'campaigns':
-        data = db.execute("SELECT * FROM social_campaigns ORDER BY created_at DESC").fetchall()
-        headers = ['Name', 'Code', 'Platform', 'Status', 'Budget', 'Leads', 'Sales', 'ROAS']
-        rows = [[r['campaign_name'], r['campaign_code'], r['platform'],
-                 r['campaign_status'], r['approved_budget'], r['total_leads'],
-                 r['total_sales'], r['roas']] for r in data]
+        data = get_campaign_roi(db)
+        columns = ['Campaign', 'Type', 'Platform', 'Status', 'Budget', 'Actual Spent', 
+                   'Reach', 'Leads', 'Sales', 'ROAS', 'ROI %', 'Cost per Lead']
+        col_keys = ['campaign_name', 'campaign_type', 'platform', 'campaign_status',
+                   'approved_budget', 'actual_budget', 'total_reach', 'total_leads',
+                   'total_sales', 'roas', 'roi_percent', 'cost_per_lead']
+        title = 'Social Media Campaign Performance Report'
+        filename = f'social_campaigns_{datetime.now().strftime("%Y%m%d")}'
+        
+    elif report_type == 'engagement':
+        data = get_engagement_trends(db, date_from, date_to)
+        data = [dict(r) for r in data]
+        columns = ['Period', 'Platform', 'Posts', 'Reach', 'Impressions', 'Engagement', 
+                   'Likes', 'Comments', 'Shares', 'Clicks', 'Engagement Rate %']
+        col_keys = ['period', 'platform', 'posts', 'total_reach', 'total_impressions',
+                   'total_engagement', 'total_likes', 'total_comments', 'total_shares',
+                   'total_clicks', 'engagement_rate']
+        title = 'Social Media Engagement Trends Report'
+        filename = f'social_engagement_{datetime.now().strftime("%Y%m%d")}'
+        
+    elif report_type == 'audience':
+        data = get_audience_growth(db, date_from, date_to)
+        data = [dict(r) for r in data]
+        columns = ['Platform', 'Total Posts', 'Total Reach', 'Total Impressions', 
+                   'Total Engagement', 'Avg Engagement Rate %', 'Clicks', 'Leads', 'Sales']
+        col_keys = ['platform', 'total_posts', 'total_reach', 'total_impressions',
+                   'total_engagement', 'avg_engagement_rate', 'total_clicks', 
+                   'total_leads', 'total_sales']
+        title = 'Social Media Audience Growth Report'
+        filename = f'social_audience_{datetime.now().strftime("%Y%m%d")}'
+        
     else:
         flash('Unknown report type.', 'error')
         return redirect(url_for('social_media.reports'))
     
     db.close()
     
-    # Generate CSV
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(headers)
-    writer.writerows(rows)
+    # Apply export format
+    if export_format == 'excel':
+        content = export_to_excel_general(data, filename, col_keys)
+        response = make_response(content)
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}.xlsx'
+    elif export_format == 'pdf':
+        content = export_to_pdf(data, filename, title, col_keys)
+        response = make_response(content)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}.pdf'
+    else:
+        content = export_to_csv(data, filename, col_keys)
+        response = make_response(content)
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8-sig'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}.csv'
     
-    return Response(
-        output.getvalue(),
-        mimetype='text/csv',
-        headers={'Content-Disposition': f'attachment; filename=social_{report_type}_{datetime.now().strftime("%Y%m%d")}.csv'}
-    )
+    response.headers['X-Generated-At'] = datetime.now().isoformat()
+    return response
 
 
 # =============================================================================

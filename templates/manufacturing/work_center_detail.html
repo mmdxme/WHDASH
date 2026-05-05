@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-1 text-gray-800">
+                <i class="fas fa-cogs me-2" style="color: var(--primary-color, #4e73df);"></i>
+                {{ center.code }}: <span class="text-primary">{{ center.name }}</span>
+            </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('manufacturing.dashboard') }}">{{ t('dashboard', 'Dashboard') }}</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('manufacturing.work_centers') }}">{{ t('work_centers', 'Work Centers') }}</a></li>
+                    <li class="breadcrumb-item active">{{ center.code }}</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('manufacturing.edit_work_center', center_id=center.id) }}" class="btn btn-outline-warning btn-sm">
+                <i class="fas fa-edit me-1"></i> {{ t('edit', 'Edit') }}
+            </a>
+            <a href="{{ url_for('manufacturing.work_centers') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back', 'Back') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Status Alert -->
+    {% if center.status != 'ACTIVE' %}
+    <div class="alert alert-secondary d-flex align-items-center mb-4">
+        <i class="fas fa-pause-circle me-2 fs-4"></i>
+        <strong>{{ t('work_center_inactive', 'This work center is currently inactive.') }}</strong>
+    </div>
+    {% endif %}
+
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-primary shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                {{ t('capacity', 'Capacity') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ (center.capacity_hours * 7)|round|int }} {{ t('hrs_week', 'hrs/week') }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-{% if utilization >= 90 %}danger{% elif utilization >= 70 %}warning{% else %}success{% endif %} shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1" style="color: var(--danger-color, #e74c3c);">
+                                {{ t('utilization', 'Utilization') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ utilization }}%</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-pie fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-info shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                {{ t('scheduled', 'Scheduled (7 days)') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_scheduled|round|int }} {{ t('hrs', 'hrs') }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-{% if downtime > 60 %}danger{% else %}secondary{% endif %} shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-secondary text-uppercase mb-1">
+                                {{ t('downtime', 'Downtime (7d)') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ downtime }} {{ t('min', 'min') }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-pause-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="row g-4">
+        <!-- Work Center Info -->
+        <div class="col-lg-4">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-info-circle me-2"></i>{{ t('details', 'Details') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless mb-0">
+                        <tr>
+                            <td class="text-muted">{{ t('code', 'Code') }}:</td>
+                            <td><strong>{{ center.code }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('name', 'Name') }}:</td>
+                            <td>{{ center.name }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('description', 'Description') }}:</td>
+                            <td>{{ center.description or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('location', 'Location') }}:</td>
+                            <td>{{ center.location or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('capacity_day', 'Capacity (hrs/day)') }}:</td>
+                            <td>{{ center.capacity_hours }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('efficiency', 'Efficiency') }}:</td>
+                            <td>
+                                {{ center.efficiency }}%
+                                <div class="progress mt-1" style="height: 4px; width: 80px;">
+                                    <div class="progress-bar bg-success" role="progressbar" style="width: {{ center.efficiency }}%"></div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('status', 'Status') }}:</td>
+                            <td>
+                                {% if center.status == 'ACTIVE' %}
+                                    <span class="badge bg-success">ACTIVE</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">{{ center.status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule (Next 7 Days) -->
+        <div class="col-lg-8">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-calendar-alt me-2"></i>{{ t('schedule_next_7_days', 'Schedule (Next 7 Days)') }}
+                    </h6>
+                    <a href="{{ url_for('manufacturing.capacity_planning') }}" class="btn btn-sm btn-outline-primary">
+                        {{ t('view_all', 'View All') }}
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if schedule %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ t('date', 'Date') }}</th>
+                                    <th>{{ t('order', 'Order') }}</th>
+                                    <th>{{ t('product', 'Product') }}</th>
+                                    <th>{{ t('shift', 'Shift') }}</th>
+                                    <th>{{ t('planned_hrs', 'Planned Hrs') }}</th>
+                                    <th>{{ t('status', 'Status') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in schedule %}
+                                <tr>
+                                    <td>{{ entry.scheduled_date[:10] }}</td>
+                                    <td>{{ entry.order_number }}</td>
+                                    <td>{{ entry.product_name or '-' }}</td>
+                                    <td>{{ entry.shift or '-' }}</td>
+                                    <td>{{ entry.planned_hours }}</td>
+                                    <td>
+                                        <span class="badge bg-{% if entry.status == 'COMPLETED' %}success{% elif entry.status == 'IN_PROGRESS' %}primary{% else %}info{% endif %}">
+                                            {{ entry.status }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-calendar-times fa-3x mb-3"></i>
+                        <p class="mb-0">{{ t('no_scheduled_work', 'No work scheduled for the next 7 days.') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Equipment and OEE Row -->
+    <div class="row g-4 mt-4">
+        <!-- Equipment -->
+        <div class="col-lg-6">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-tools me-2"></i>{{ t('equipment', 'Equipment') }}
+                    </h6>
+                    <a href="{{ url_for('manufacturing.equipment_list') }}" class="btn btn-sm btn-outline-primary">
+                        {{ t('manage', 'Manage') }}
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if equipment %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ t('code', 'Code') }}</th>
+                                    <th>{{ t('name', 'Name') }}</th>
+                                    <th>{{ t('type', 'Type') }}</th>
+                                    <th>{{ t('status', 'Status') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for eq in equipment %}
+                                <tr>
+                                    <td>{{ eq.code }}</td>
+                                    <td>{{ eq.name }}</td>
+                                    <td>{{ eq.equipment_type or '-' }}</td>
+                                    <td>
+                                        {% if eq.status == 'ACTIVE' %}
+                                            <span class="badge bg-success">ACTIVE</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ eq.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-3">
+                        <i class="fas fa-tools fa-2x mb-2"></i>
+                        <p class="mb-0 small">{{ t('no_equipment', 'No equipment assigned to this work center.') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- OEE Records -->
+        <div class="col-lg-6">
+            <div class="card shadow h-100">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-tachometer-alt me-2"></i>{{ t('oee_last_30_days', 'OEE (Last 30 Days)') }}
+                    </h6>
+                    <a href="{{ url_for('manufacturing.record_oee') }}" class="btn btn-sm btn-outline-success">
+                        <i class="fas fa-plus me-1"></i> {{ t('record_oee', 'Record OEE') }}
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if oee_records %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ t('date', 'Date') }}</th>
+                                    <th>{{ t('availability', 'Avail') }}</th>
+                                    <th>{{ t('performance', 'Perf') }}</th>
+                                    <th>{{ t('quality', 'Qual') }}</th>
+                                    <th>{{ t('oee', 'OEE') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for record in oee_records[:10] %}
+                                <tr>
+                                    <td>{{ record.record_date[:10] }}</td>
+                                    <td>{{ record.availability_pct|round|int }}%</td>
+                                    <td>{{ record.performance_pct|round|int }}%</td>
+                                    <td>{{ record.quality_pct|round|int }}%</td>
+                                    <td>
+                                        <span class="badge bg-{% if record.oee_pct >= 85 %}success{% elif record.oee_pct >= 65 %}warning{% else %}danger{% endif %}">
+                                            {{ record.oee_pct|round|int }}%
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-3">
+                        <i class="fas fa-chart-line fa-2x mb-2"></i>
+                        <p class="mb-0 small">{{ t('no_oee_data', 'No OEE data recorded yet.') }}</p>
+                        <a href="{{ url_for('manufacturing.record_oee') }}" class="btn btn-primary btn-sm mt-2">
+                            {{ t('record_first_oee', 'Record First OEE') }}
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-body">
+                    <h6 class="mb-3">{{ t('quick_actions', 'Quick Actions') }}</h6>
+                    <div class="row g-2">
+                        <div class="col-md-2">
+                            <a href="{{ url_for('manufacturing.record_downtime') }}?work_center_id={{ center.id }}"
+                               class="btn btn-outline-warning w-100 py-2">
+                                <i class="fas fa-pause-circle me-1"></i> {{ t('record_downtime', 'Downtime') }}
+                            </a>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="{{ url_for('manufacturing.record_oee') }}?work_center_id={{ center.id }}"
+                               class="btn btn-outline-info w-100 py-2">
+                                <i class="fas fa-tachometer-alt me-1"></i> {{ t('record_oee', 'OEE') }}
+                            </a>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="{{ url_for('manufacturing.quality_inspections') }}"
+                               class="btn btn-outline-success w-100 py-2">
+                                <i class="fas fa-shield-alt me-1"></i> {{ t('inspection', 'Inspection') }}
+                            </a>
+                        </div>
+                        <div class="col-md-2">
+                            <a href="{{ url_for('manufacturing.capacity_planning') }}"
+                               class="btn btn-outline-primary w-100 py-2">
+                                <i class="fas fa-calendar me-1"></i> {{ t('capacity_plan', 'Capacity') }}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

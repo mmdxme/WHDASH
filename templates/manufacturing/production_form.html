@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-clipboard-check me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('record_production', 'Record Production') }}
+        </h1>
+        <a href="{{ url_for('manufacturing.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i> {{ t('back', 'Back') }}
+        </a>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-box me-2"></i>{{ t('production_entry', 'Production Entry') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="productionForm">
+                        <div class="row g-3">
+                            <!-- Order Selection -->
+                            <div class="col-md-12">
+                                <label for="order_id" class="form-label">{{ t('production_order', 'Production Order') }} <span class="text-danger">*</span></label>
+                                <select class="form-select" id="order_id" name="order_id" required>
+                                    <option value="">{{ t('select_order', 'Select Order') }}</option>
+                                    {% for order in orders %}
+                                    <option value="{{ order.id }}">
+                                        {{ order.order_number }} - {{ order.product_name or order.product_id }} ({{ order.quantity - order.completed_quantity }} remaining)
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+
+                            <!-- Quantities -->
+                            <div class="col-md-4">
+                                <label for="quantity" class="form-label">{{ t('qty_produced', 'Qty Produced') }} <span class="text-danger">*</span></label>
+                                <input type="number" class="form-control" id="quantity" name="quantity"
+                                       step="1" min="1" required value="0">
+                            </div>
+
+                            <div class="col-md-4">
+                                <label for="scrapped" class="form-label">{{ t('qty_scrapped', 'Qty Scrapped') }}</label>
+                                <input type="number" class="form-control" id="scrapped" name="scrapped"
+                                       step="1" min="0" value="0">
+                            </div>
+
+                            <div class="col-md-4">
+                                <label for="reworked" class="form-label">{{ t('qty_reworked', 'Qty Reworked') }}</label>
+                                <input type="number" class="form-control" id="reworked" name="reworked"
+                                       step="1" min="0" value="0">
+                            </div>
+
+                            <!-- Notes -->
+                            <div class="col-12">
+                                <label for="notes" class="form-label">{{ t('notes', 'Notes') }}</label>
+                                <textarea class="form-control" id="notes" name="notes" rows="2"
+                                          placeholder="{{ t('production_notes', 'Enter any observations...') }}"></textarea>
+                            </div>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('manufacturing.dashboard') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times me-1"></i> {{ t('cancel', 'Cancel') }}
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i> {{ t('record', 'Record Production') }}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-info-circle me-2"></i>{{ t('help', 'Help') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-primary">{{ t('recording_tips', 'Recording Tips') }}</h6>
+                    <ul class="small">
+                        <li>{{ t('tip_qty', 'Enter the quantity actually produced') }}</li>
+                        <li>{{ t('tip_scrapped', 'Record any scrapped units separately') }}</li>
+                        <li>{{ t('tip_rework', 'Units that were reworked should be marked') }}</li>
+                        <li>{{ t('tip_auto_complete', 'Order auto-completes when qty reached') }}</li>
+                    </ul>
+
+                    <h6 class="text-primary mt-3">{{ t('tracking_benefits', 'Tracking Benefits') }}</h6>
+                    <ul class="small">
+                        <li>{{ t('benefit1', 'Monitor production progress') }}</li>
+                        <li>{{ t('benefit2', 'Identify bottlenecks early') }}</li>
+                        <li>{{ t('benefit3', 'Calculate yield and efficiency') }}</li>
+                        <li>{{ t('benefit4', 'Generate accurate reports') }}</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.getElementById('productionForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const data = Object.fromEntries(formData.entries());
+
+    fetch('/manufacturing/api/production', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Production recorded successfully! Completed quantity: ' + data.completed_qty);
+            window.location.href = '/manufacturing/orders/' + data.order_id;
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while recording production.');
+    });
+});
+</script>
+{% endblock %}

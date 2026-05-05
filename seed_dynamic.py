@@ -190,9 +190,30 @@ def seed_md_leave_type(cols):
 
 
 def seed_md_priority_level(cols):
-    levels = ['Low', 'Medium', 'High', 'Urgent']
+    """
+    SAP ERP-style Priority Levels
+    Comprehensive priority classification with SLA response and resolution times
+    """
+    levels = [
+        # code, name, description, level (1=highest), response_hours, resolution_hours, color, escalation_level
+        ('CRITICAL', 'Critical', 'System down, business-critical issue requiring immediate intervention. Loss of major revenue or complete system unavailability.Requires instant response and war-room escalation.', 1, 1, 4, '#dc2626', 'Executive'),
+        ('URGENT', 'Urgent', 'Significant business impact with potential for major revenue loss if not resolved within hours. Feature completely inaccessible or data integrity at risk.', 2, 2, 8, '#f97316', 'Director'),
+        ('HIGH', 'High', 'Moderate-to-high business impact. Workaround may be available but not practical. Significant degradation of core business process.', 3, 4, 16, '#eab308', 'Manager'),
+        ('MEDIUM', 'Medium', 'Limited business impact. Minor feature unavailable or non-critical process affected. Workaround exists and is practical to use.', 4, 8, 32, '#22c55e', 'Team Lead'),
+        ('LOW', 'Low', 'Minimal business impact. Cosmetic issues, minor inconveniences, or enhancement requests. Does not affect daily operations.', 5, 24, 72, '#6b7280', 'Agent'),
+        ('MINIMAL', 'Minimal', 'Trivial issue or informational request. No functional impact. Can be addressed in normal queue during next business cycle.', 6, 48, 120, '#9ca3af', 'Agent'),
+    ]
     for l in levels:
-        yield {'name': l, 'description': f'{l} priority'}
+        yield {
+            'code': l[0],
+            'name': l[1],
+            'description': l[2],
+            'level': l[3],
+            'response_hours': l[4],
+            'resolution_hours': l[5],
+            'color': l[6],
+            'escalation_level': l[7],
+        }
 
 
 def seed_md_order_status(cols):

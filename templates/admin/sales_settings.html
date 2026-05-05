@@ -7,175 +7,982 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>{% include 'theme_variables.html' %}</style>
+    <style>
+        .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .settings-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        input[type="radio"]:checked + label, input[type="checkbox"]:checked + label { background-color: #eff6ff; border-color: #3b82f6; }
+    </style>
 </head>
 <body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
 {% include 'admin_sidebar.html' %}
 <div class="ml-64 min-h-screen">
     {% include 'admin_header.html' %}
     <main class="p-6">
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold text-slate-800 dark:text-white">{{ page_title }}</h1>
-            <p class="text-slate-600 dark:text-slate-400 mt-1">Configure sales module business rules, pricing, discounts, and workflow settings</p>
+        <!-- Page Header -->
+        <div class="mb-6 flex items-center justify-between">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
+                    <i class="fas fa-chart-line text-blue-600"></i>
+                    {{ page_title }}
+                </h1>
+                <p class="text-slate-600 dark:text-slate-400 mt-1">Enterprise Sales Configuration — Complete module settings with business rules</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-sm font-medium rounded-full">
+                    <i class="fas fa-check-circle mr-1"></i> Active
+                </span>
+                <button onclick="exportSettings()" class="px-4 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-sm transition-colors">
+                    <i class="fas fa-download mr-2"></i>Export
+                </button>
+            </div>
+        </div>
+
+        <!-- Statistics Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-slate-500">Max Discount</p>
+                        <p class="text-2xl font-bold text-slate-800 dark:text-white">{{ settings.max_discount_percent or '20' }}%</p>
+                    </div>
+                    <div class="w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-percent text-green-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-slate-500">Min Margin</p>
+                        <p class="text-2xl font-bold text-slate-800 dark:text-white">{{ settings.min_margin_percent or '5' }}%</p>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-level-up-alt text-blue-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-slate-500">Tax Rate</p>
+                        <p class="text-2xl font-bold text-slate-800 dark:text-white">{{ settings.sales_tax_rate or '5' }}%</p>
+                    </div>
+                    <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-receipt text-purple-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-sm text-slate-500">Quotation Validity</p>
+                        <p class="text-2xl font-bold text-slate-800 dark:text-white">{{ settings.quotation_validity_days or '30' }} days</p>
+                    </div>
+                    <div class="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-calendar-check text-orange-600 text-xl"></i>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <form method="post" action="{{ url_for('admin_settings_category', category='SALES') }}">
             <input type="hidden" name="category" value="SALES">
 
-            <!-- Pricing & Discounts -->
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
-                <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                    <i class="fas fa-tag text-green-600"></i> Pricing & Discounts
-                </h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Currency</label>
-                        <select name="sales_default_currency" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
-                            <option value="AED" {% if settings.sales_default_currency == 'AED' %}selected{% endif %}>AED</option>
-                            <option value="USD" {% if settings.sales_default_currency == 'USD' %}selected{% endif %}>USD</option>
-                            <option value="EUR" {% if settings.sales_default_currency == 'EUR' %}selected{% endif %}>EUR</option>
-                            <option value="GBP" {% if settings.sales_default_currency == 'GBP' %}selected{% endif %}>GBP</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Tax Rate (%)</label>
-                        <input type="number" name="sales_tax_rate" value="{{ settings.sales_tax_rate or '5' }}" step="0.01" min="0" max="100"
-                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Maximum Discount (%)</label>
-                        <input type="number" name="max_discount_percent" value="{{ settings.max_discount_percent or '20' }}" step="0.01" min="0" max="100"
-                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Discount Approval Threshold (%)</label>
-                        <input type="number" name="discount_approval_threshold" value="{{ settings.discount_approval_threshold or '10' }}" step="0.01" min="0" max="100"
-                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
-                        <p class="text-xs text-slate-500 mt-1">Discounts above this need approval</p>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Minimum Margin (%)</label>
-                        <input type="number" name="min_margin_percent" value="{{ settings.min_margin_percent or '5' }}" step="0.01" min="0" max="100"
-                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
-                    </div>
+            <!-- Tabs Navigation -->
+            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 mb-6">
+                <div class="border-b border-slate-200 dark:border-slate-700">
+                    <nav class="flex overflow-x-auto" aria-label="Tabs">
+                        <button type="button" onclick="switchTab('currency')" class="tab-btn px-6 py-4 text-sm font-medium border-b-2 border-blue-500 text-blue-600 whitespace-nowrap tab-active">
+                            <i class="fas fa-coins mr-2"></i>Currency & Tax
+                        </button>
+                        <button type="button" onclick="switchTab('pricing')" class="tab-btn px-6 py-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 whitespace-nowrap">
+                            <i class="fas fa-tag mr-2"></i>Pricing & Discount
+                        </button>
+                        <button type="button" onclick="switchTab('quotation')" class="tab-btn px-6 py-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 whitespace-nowrap">
+                            <i class="fas fa-file-invoice mr-2"></i>Quotation
+                        </button>
+                        <button type="button" onclick="switchTab('inquiry')" class="tab-btn px-6 py-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 whitespace-nowrap">
+                            <i class="fas fa-question-circle mr-2"></i>Inquiry & Lead
+                        </button>
+                        <button type="button" onclick="switchTab('order')" class="tab-btn px-6 py-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 whitespace-nowrap">
+                            <i class="fas fa-shopping-cart mr-2"></i>Sales Order
+                        </button>
+                        <button type="button" onclick="switchTab('payment')" class="tab-btn px-6 py-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 whitespace-nowrap">
+                            <i class="fas fa-credit-card mr-2"></i>Payment & Credit
+                        </button>
+                        <button type="button" onclick="switchTab('delivery')" class="tab-btn px-6 py-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 whitespace-nowrap">
+                            <i class="fas fa-truck mr-2"></i>Delivery
+                        </button>
+                        <button type="button" onclick="switchTab('return')" class="tab-btn px-6 py-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 whitespace-nowrap">
+                            <i class="fas fa-undo mr-2"></i>Returns
+                        </button>
+                        <button type="button" onclick="switchTab('partner')" class="tab-btn px-6 py-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 whitespace-nowrap">
+                            <i class="fas fa-users mr-2"></i>Partner & Commission
+                        </button>
+                        <button type="button" onclick="switchTab('opportunity')" class="tab-btn px-6 py-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 whitespace-nowrap">
+                            <i class="fas fa-bullseye mr-2"></i>Opportunity
+                        </button>
+                        <button type="button" onclick="switchTab('integration')" class="tab-btn px-6 py-4 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 whitespace-nowrap">
+                            <i class="fas fa-plug mr-2"></i>Integration
+                        </button>
+                    </nav>
                 </div>
-            </div>
 
-            <!-- Quotation Settings -->
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
-                <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                    <i class="fas fa-file-invoice text-blue-600"></i> Quotation Settings
-                </h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Quotation Validity (days)</label>
-                        <input type="number" name="quotation_validity_days" value="{{ settings.quotation_validity_days or '30' }}" min="1"
-                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Inquiry Response SLA (hours)</label>
-                        <input type="number" name="inquiry_response_sla_hours" value="{{ settings.inquiry_response_sla_hours or '24' }}" min="1"
-                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Quotation Turnaround (hours)</label>
-                        <input type="number" name="quotation_turnaround_hours" value="{{ settings.quotation_turnaround_hours or '48' }}" min="1"
-                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Require Quotation Approval</label>
-                        <div class="flex items-center gap-4 mt-2">
-                            <label class="flex items-center gap-2">
-                                <input type="radio" name="require_quotation_approval" value="1" {% if settings.require_quotation_approval == '1' %}checked{% endif %} class="w-4 h-4 text-blue-600">Yes
-                            </label>
-                            <label class="flex items-center gap-2">
-                                <input type="radio" name="require_quotation_approval" value="0" {% if settings.require_quotation_approval != '1' %}checked{% endif %} class="w-4 h-4 text-blue-600">No
-                            </label>
+                <div class="p-6">
+                    <!-- TAB: Currency & Tax -->
+                    <div id="tab-currency" class="tab-content active">
+                        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <!-- Currency Settings -->
+                            <div class="lg:col-span-2">
+                                <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                    <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                        <i class="fas fa-coins text-yellow-600"></i>
+                                        Currency Configuration
+                                    </h3>
+                                    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Sales Currency</label>
+                                            <select name="sales_default_currency" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                                                <option value="AED" {% if settings.sales_default_currency == 'AED' %}selected{% endif %}>AED - UAE Dirham</option>
+                                                <option value="USD" {% if settings.sales_default_currency == 'USD' %}selected{% endif %}>USD - US Dollar</option>
+                                                <option value="EUR" {% if settings.sales_default_currency == 'EUR' %}selected{% endif %}>EUR - Euro</option>
+                                                <option value="GBP" {% if settings.sales_default_currency == 'GBP' %}selected{% endif %}>GBP - British Pound</option>
+                                                <option value="SAR" {% if settings.sales_default_currency == 'SAR' %}selected{% endif %}>SAR - Saudi Riyal</option>
+                                                <option value="KWD" {% if settings.sales_default_currency == 'KWD' %}selected{% endif %}>KWD - Kuwaiti Dinar</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Number Format</label>
+                                            <select name="sales_number_format" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                                <option value="1,234.56" {% if settings.sales_number_format == '1,234.56' %}selected{% endif %}>1,234.56</option>
+                                                <option value="1.234,56" {% if settings.sales_number_format == '1.234,56' %}selected{% endif %}>1.234,56</option>
+                                                <option value="1 234.56" {% if settings.sales_number_format == '1 234.56' %}selected{% endif %}>1 234.56</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tax Settings -->
+                            <div class="lg:col-span-2">
+                                <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                    <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                        <i class="fas fa-percentage text-purple-600"></i>
+                                        Tax Configuration
+                                    </h3>
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Tax Rate (%)</label>
+                                            <input type="number" name="sales_tax_rate" value="{{ settings.sales_tax_rate or '5' }}" step="0.01" min="0" max="100"
+                                                   class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Tax Calculation Method</label>
+                                            <select name="sales_tax_calculation_method" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                                <option value="LINE" {% if settings.sales_tax_calculation_method == 'LINE' %}selected{% endif %}>Per Line Item</option>
+                                                <option value="GROUP" {% if settings.sales_tax_calculation_method == 'GROUP' %}selected{% endif %}>Grouped Total</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Rounding Tolerance</label>
+                                            <input type="number" name="sales_round_off_tolerance" value="{{ settings.sales_round_off_tolerance or '0.01' }}" step="0.01" min="0"
+                                                   class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                        </div>
+                                    </div>
+                                    <div class="mt-4">
+                                        <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                            <input type="checkbox" name="sales_enable_multi_tax" value="1" {% if settings.sales_enable_multi_tax == '1' %}checked{% endif %}
+                                                   class="w-5 h-5 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+                                            <div>
+                                                <p class="font-medium text-slate-800 dark:text-white">Enable Multiple Tax Rates</p>
+                                                <p class="text-sm text-slate-500">Allow different tax rates per line item</p>
+                                            </div>
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Payment Terms</label>
-                        <select name="default_payment_terms" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
-                            <option value="NET30" {% if settings.default_payment_terms == 'NET30' %}selected{% endif %}>NET 30</option>
-                            <option value="NET15" {% if settings.default_payment_terms == 'NET15' %}selected{% endif %}>NET 15</option>
-                            <option value="NET60" {% if settings.default_payment_terms == 'NET60' %}selected{% endif %}>NET 60</option>
-                            <option value="immediate" {% if settings.default_payment_terms == 'immediate' %}selected{% endif %}>Immediate</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Order Workflow -->
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
-                <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                    <i class="fas fa-shopping-cart text-purple-600"></i> Order Workflow
-                </h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                            <input type="checkbox" name="auto_confirm_orders" value="1" {% if settings.auto_confirm_orders == '1' %}checked{% endif %}
-                                   class="w-5 h-5 text-blue-600 rounded border-slate-300">
-                            <div>
-                                <p class="font-medium text-slate-800 dark:text-white">Auto-Confirm Orders</p>
-                                <p class="text-sm text-slate-500">Automatically confirm orders after submission</p>
+                    <!-- TAB: Pricing & Discount -->
+                    <div id="tab-pricing" class="tab-content">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Discount Rules -->
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-tag text-red-600"></i>
+                                    Discount Rules
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Maximum Line Discount (%)</label>
+                                        <input type="number" name="sales_max_line_discount" value="{{ settings.sales_max_line_discount or '30' }}" step="0.01" min="0" max="100"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Maximum Header Discount (%)</label>
+                                        <input type="number" name="sales_max_header_discount" value="{{ settings.sales_max_header_discount or '25' }}" step="0.01" min="0" max="100"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Global Max Discount (%)</label>
+                                        <input type="number" name="max_discount_percent" value="{{ settings.max_discount_percent or '20' }}" step="0.01" min="0" max="100"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Discount Approval Threshold (%)</label>
+                                        <input type="number" name="discount_approval_threshold" value="{{ settings.discount_approval_threshold or '10' }}" step="0.01" min="0" max="100"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                </div>
+                                <div class="mt-4 space-y-3">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="sales_discount_accumulation" value="1" {% if settings.sales_discount_accumulation == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Accumulate Line & Header Discounts</p>
+                                            <p class="text-sm text-slate-500">Allow line discounts to stack with header discount</p>
+                                        </div>
+                                    </label>
+                                </div>
                             </div>
-                        </label>
-                    </div>
-                    <div>
-                        <label class="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                            <input type="checkbox" name="lost_reason_mandatory" value="1" {% if settings.lost_reason_mandatory == '1' %}checked{% endif %}
-                                   class="w-5 h-5 text-blue-600 rounded border-slate-300">
-                            <div>
-                                <p class="font-medium text-slate-800 dark:text-white">Lost Reason Mandatory</p>
-                                <p class="text-sm text-slate-500">Require reason when marking opportunities as lost</p>
-                            </div>
-                        </label>
-                    </div>
-                    <div>
-                        <label class="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
-                            <input type="checkbox" name="source_tracking_mandatory" value="1" {% if settings.source_tracking_mandatory == '1' %}checked{% endif %}
-                                   class="w-5 h-5 text-blue-600 rounded border-slate-300">
-                            <div>
-                                <p class="font-medium text-slate-800 dark:text-white">Source Tracking Required</p>
-                                <p class="text-sm text-slate-500">Require lead/source on all inquiries</p>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-            </div>
 
-            <!-- Credit Control -->
-            <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-6 mb-6">
-                <h2 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-                    <i class="fas fa-credit-card text-red-600"></i> Credit Control
-                </h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Credit Limit</label>
-                        <input type="number" name="crm_credit_limit_default" value="{{ settings.crm_credit_limit_default or '10000' }}" min="0"
-                               class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                            <!-- Margin Rules -->
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-level-up-alt text-green-600"></i>
+                                    Margin & Cost Control
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Minimum Margin (%)</label>
+                                        <input type="number" name="min_margin_percent" value="{{ settings.min_margin_percent or '5' }}" step="0.01" min="0" max="100"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Minimum Absolute Margin</label>
+                                        <input type="number" name="min_margin_absolute" value="{{ settings.min_margin_absolute or '0.50' }}" step="0.01" min="0"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                </div>
+                                <div class="mt-4 space-y-3">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="sales_block_below_cost" value="1" {% if settings.sales_block_below_cost == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Block Sales Below Cost</p>
+                                            <p class="text-sm text-slate-500">Prevent selling at prices lower than cost</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="sales_allow_negative_price" value="1" {% if settings.sales_allow_negative_price == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Allow Negative Unit Prices</p>
+                                            <p class="text-sm text-slate-500">For credit memos and adjustments</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Credit Limit Override Approval</label>
-                        <div class="flex items-center gap-4 mt-2">
-                            <label class="flex items-center gap-2">
-                                <input type="radio" name="require_credit_override_approval" value="1" {% if settings.require_credit_override_approval == '1' %}checked{% endif %} class="w-4 h-4 text-blue-600">Required
-                            </label>
-                            <label class="flex items-center gap-2">
-                                <input type="radio" name="require_credit_override_approval" value="0" {% if settings.require_credit_override_approval != '1' %}checked{% endif %} class="w-4 h-4 text-blue-600">Not Required
-                            </label>
+
+                    <!-- TAB: Quotation -->
+                    <div id="tab-quotation" class="tab-content">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Quotation Basic -->
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-file-invoice text-blue-600"></i>
+                                    Quotation Settings
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Validity Period (days)</label>
+                                        <input type="number" name="quotation_validity_days" value="{{ settings.quotation_validity_days or '30' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Turnaround Time (hours)</label>
+                                        <input type="number" name="quotation_turnaround_hours" value="{{ settings.quotation_turnaround_hours or '48' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Number Format</label>
+                                        <input type="text" name="quotation_number_format" value="{{ settings.quotation_number_format or 'QUO-{YYYY}-{NNNNN}' }}"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Max Versions</label>
+                                        <input type="number" name="quotation_max_versions" value="{{ settings.quotation_max_versions or '10' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                </div>
+                                <div class="mt-4 space-y-3">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="quotation_auto_numbering" value="1" {% if settings.quotation_auto_numbering == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Auto Numbering</p>
+                                            <p class="text-sm text-slate-500">Automatically generate quotation numbers</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="quotation_min_margin_enforce" value="1" {% if settings.quotation_min_margin_enforce == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Enforce Minimum Margin</p>
+                                            <p class="text-sm text-slate-500">Block quotations below minimum margin</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="quotation_enable_versioning" value="1" {% if settings.quotation_enable_versioning == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Enable Versioning</p>
+                                            <p class="text-sm text-slate-500">Track quotation revision history</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="quotation_require_source" value="1" {% if settings.quotation_require_source == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Require Lead Source</p>
+                                            <p class="text-sm text-slate-500">Mandatory lead source on quotations</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Quotation Workflow -->
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-project-diagram text-purple-600"></i>
+                                    Quotation Workflow
+                                </h3>
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">Approval Required</label>
+                                        <div class="flex gap-4">
+                                            <label class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 flex-1 text-center border border-slate-200 dark:border-slate-600 {% if settings.require_quotation_approval == '1' %}border-blue-500 bg-blue-50{% endif %}">
+                                                <input type="radio" name="require_quotation_approval" value="1" {% if settings.require_quotation_approval == '1' %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                                <span class="text-slate-800 dark:text-white">Required</span>
+                                            </label>
+                                            <label class="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 flex-1 text-center border border-slate-200 dark:border-slate-600 {% if settings.require_quotation_approval != '1' %}border-blue-500 bg-blue-50{% endif %}">
+                                                <input type="radio" name="require_quotation_approval" value="0" {% if settings.require_quotation_approval != '1' %}checked{% endif %} class="w-4 h-4 text-blue-600">
+                                                <span class="text-slate-800 dark:text-white">Not Required</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Email Template</label>
+                                        <select name="quotation_email_template" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                            <option value="default_quotation" {% if settings.quotation_email_template == 'default_quotation' %}selected{% endif %}>Default Quotation</option>
+                                            <option value="formal_quotation" {% if settings.quotation_email_template == 'formal_quotation' %}selected{% endif %}>Formal Quotation</option>
+                                            <option value="simple_quotation" {% if settings.quotation_email_template == 'simple_quotation' %}selected{% endif %}>Simple Quotation</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: Inquiry & Lead -->
+                    <div id="tab-inquiry" class="tab-content">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Inquiry Settings -->
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-question-circle text-teal-600"></i>
+                                    Inquiry Management
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Response SLA (hours)</label>
+                                        <input type="number" name="inquiry_response_sla_hours" value="{{ settings.inquiry_response_sla_hours or '24' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Days Until Stale</label>
+                                        <input type="number" name="inquiry_days_until_stale" value="{{ settings.inquiry_days_until_stale or '14' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Auto-Close After (days)</label>
+                                        <input type="number" name="inquiry_auto_close_days" value="{{ settings.inquiry_auto_close_days or '90' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                </div>
+                                <div class="mt-4 space-y-3">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="inquiry_auto_assignment" value="1" {% if settings.inquiry_auto_assignment == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Auto-Assignment</p>
+                                            <p class="text-sm text-slate-500">Automatically assign to sales representatives</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="inquiry_require_contact" value="1" {% if settings.inquiry_require_contact == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Require Contact Info</p>
+                                            <p class="text-sm text-slate-500">Mandatory customer contact details</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="inquiry_require_product" value="1" {% if settings.inquiry_require_product == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Require Product</p>
+                                            <p class="text-sm text-slate-500">At least one product must be added</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="inquiry_lost_reason_mandatory" value="1" {% if settings.inquiry_lost_reason_mandatory == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Lost Reason Required</p>
+                                            <p class="text-sm text-slate-500">Must specify reason when marking as lost</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Source Tracking -->
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-bullseye text-orange-600"></i>
+                                    Lead Source Tracking
+                                </h3>
+                                <div class="mt-4">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="source_tracking_mandatory" value="1" {% if settings.source_tracking_mandatory == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Mandatory Source Tracking</p>
+                                            <p class="text-sm text-slate-500">Require lead source on all inquiries</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: Sales Order -->
+                    <div id="tab-order" class="tab-content">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Order Basic -->
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-shopping-cart text-indigo-600"></i>
+                                    Sales Order Configuration
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Minimum Order Value</label>
+                                        <input type="number" name="order_min_order_value" value="{{ settings.order_min_order_value or '0' }}" step="0.01" min="0"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Max Line Items</label>
+                                        <input type="number" name="order_max_line_items" value="{{ settings.order_max_line_items or '100' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Delivery Window (days)</label>
+                                        <input type="number" name="order_default_delivery_window_days" value="{{ settings.order_default_delivery_window_days or '7' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Order Number Format</label>
+                                        <input type="text" name="sales_order_number_format" value="{{ settings.sales_order_number_format or 'SO-{YYYY}-{NNNNN}' }}"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                </div>
+                                <div class="mt-4 space-y-3">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="auto_confirm_orders" value="1" {% if settings.auto_confirm_orders == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Auto-Confirm Orders</p>
+                                            <p class="text-sm text-slate-500">Automatically confirm orders after submission</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="order_require_delivery_date" value="1" {% if settings.order_require_delivery_date == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Require Delivery Date</p>
+                                            <p class="text-sm text-slate-500">Mandatory delivery date on orders</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="order_allow_past_dates" value="1" {% if settings.order_allow_past_dates == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Allow Past Dates</p>
+                                            <p class="text-sm text-slate-500">Permit delivery dates in the past</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Partial Shipment -->
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-boxes text-yellow-600"></i>
+                                    Shipment Rules
+                                </h3>
+                                <div class="grid grid-cols-1 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Max Partial Shipments</label>
+                                        <input type="number" name="order_max_partial_shipments" value="{{ settings.order_max_partial_shipments or '5' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                </div>
+                                <div class="mt-4 space-y-3">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="order_partial_shipment" value="1" {% if settings.order_partial_shipment == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Allow Partial Shipments</p>
+                                            <p class="text-sm text-slate-500">Enable splitting orders into multiple shipments</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: Payment & Credit -->
+                    <div id="tab-payment" class="tab-content">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Payment Terms -->
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-calendar-alt text-blue-600"></i>
+                                    Payment Terms
+                                </h3>
+                                <div class="grid grid-cols-1 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Payment Terms</label>
+                                        <select name="default_payment_terms" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                            <option value="NET30" {% if settings.default_payment_terms == 'NET30' %}selected{% endif %}>NET 30</option>
+                                            <option value="NET15" {% if settings.default_payment_terms == 'NET15' %}selected{% endif %}>NET 15</option>
+                                            <option value="NET60" {% if settings.default_payment_terms == 'NET60' %}selected{% endif %}>NET 60</option>
+                                            <option value="NET90" {% if settings.default_payment_terms == 'NET90' %}selected{% endif %}>NET 90</option>
+                                            <option value="immediate" {% if settings.default_payment_terms == 'immediate' %}selected{% endif %}>Immediate</option>
+                                            <option value="COD" {% if settings.default_payment_terms == 'COD' %}selected{% endif %}>Cash on Delivery</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Minimum Advance Payment (%)</label>
+                                        <input type="number" name="payment_advance_percent_min" value="{{ settings.payment_advance_percent_min or '0' }}" step="0.01" min="0" max="100"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                </div>
+                                <div class="mt-4">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="payment_terms_editable" value="1" {% if settings.payment_terms_editable == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Editable Payment Terms</p>
+                                            <p class="text-sm text-slate-500">Allow users to modify on individual orders</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="payment_auto_invoice_on_delivery" value="1" {% if settings.payment_auto_invoice_on_delivery == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Auto-Invoice on Delivery</p>
+                                            <p class="text-sm text-slate-500">Generate invoice when delivery is confirmed</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Credit Control -->
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-credit-card text-red-600"></i>
+                                    Credit Control
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Credit Limit</label>
+                                        <input type="number" name="crm_credit_limit_default" value="{{ settings.crm_credit_limit_default or '10000' }}" step="0.01" min="0"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Warning Threshold (%)</label>
+                                        <input type="number" name="credit_limit_warning_percent" value="{{ settings.credit_limit_warning_percent or '80' }}" step="0.01" min="0" max="100"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                </div>
+                                <div class="mt-4 space-y-3">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="credit_limit_overdue_check" value="1" {% if settings.credit_limit_overdue_check == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Check Overdue Amounts</p>
+                                            <p class="text-sm text-slate-500">Factor overdue invoices into credit calculation</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="credit_limit_hold_on_exceed" value="1" {% if settings.credit_limit_hold_on_exceed == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Hold on Credit Exceeded</p>
+                                            <p class="text-sm text-slate-500">Block orders when credit limit is exceeded</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: Delivery -->
+                    <div id="tab-delivery" class="tab-content">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-truck text-green-600"></i>
+                                    Delivery Configuration
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Lead Time (days)</label>
+                                        <input type="number" name="delivery_lead_time_days" value="{{ settings.delivery_lead_time_days or '3' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Delivery Charge Method</label>
+                                        <select name="delivery_charge_calculation" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                            <option value="AUTO" {% if settings.delivery_charge_calculation == 'AUTO' %}selected{% endif %}>Auto Calculate</option>
+                                            <option value="MANUAL" {% if settings.delivery_charge_calculation == 'MANUAL' %}selected{% endif %}>Manual Entry</option>
+                                            <option value="FREE" {% if settings.delivery_charge_calculation == 'FREE' %}selected{% endif %}>Free Delivery</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Zone</label>
+                                        <select name="delivery_default_zone" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                            <option value="STANDARD" {% if settings.delivery_default_zone == 'STANDARD' %}selected{% endif %}>Standard</option>
+                                            <option value="EXPRESS" {% if settings.delivery_default_zone == 'EXPRESS' %}selected{% endif %}>Express</option>
+                                            <option value="ECONOMY" {% if settings.delivery_default_zone == 'ECONOMY' %}selected{% endif %}>Economy</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Auto-Close After (days)</label>
+                                        <input type="number" name="delivery_auto_close_days" value="{{ settings.delivery_auto_close_days or '7' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                </div>
+                                <div class="mt-4 space-y-3">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="delivery_allow_pickup" value="1" {% if settings.delivery_allow_pickup == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Allow Customer Pickup</p>
+                                            <p class="text-sm text-slate-500">Offer pickup option at warehouse</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="delivery_require_pod" value="1" {% if settings.delivery_require_pod == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Require Proof of Delivery</p>
+                                            <p class="text-sm text-slate-500">Mandatory POD for delivery confirmation</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: Returns -->
+                    <div id="tab-return" class="tab-content">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-undo text-orange-600"></i>
+                                    Return & Claim Settings
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Return Window (days)</label>
+                                        <input type="number" name="return_window_days" value="{{ settings.return_window_days or '14' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Restock Fee (%)</label>
+                                        <input type="number" name="return_restock_fee_percent" value="{{ settings.return_restock_fee_percent or '10' }}" step="0.01" min="0" max="100"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Credit Note Validity (days)</label>
+                                        <input type="number" name="return_credit_note_validity_days" value="{{ settings.return_credit_note_validity_days or '180' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                </div>
+                                <div class="mt-4 space-y-3">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="return_requirerma_number" value="1" {% if settings.return_requirerma_number == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Require RMA Number</p>
+                                            <p class="text-sm text-slate-500">Must have Return Authorization number</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="return_allow_partial" value="1" {% if settings.return_allow_partial == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Allow Partial Returns</p>
+                                            <p class="text-sm text-slate-500">Permit returning part of an order</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: Partner & Commission -->
+                    <div id="tab-partner" class="tab-content">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-users text-purple-600"></i>
+                                    Sales Partner & Commission
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Commission Calculation</label>
+                                        <select name="commission_calculation_method" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                            <option value="ON_ORDER" {% if settings.commission_calculation_method == 'ON_ORDER' %}selected{% endif %}>On Order Creation</option>
+                                            <option value="ON_PAYMENT" {% if settings.commission_calculation_method == 'ON_PAYMENT' %}selected{% endif %}>On Payment Received</option>
+                                            <option value="ON_DELIVERY" {% if settings.commission_calculation_method == 'ON_DELIVERY' %}selected{% endif %}>On Delivery Confirmation</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Default Commission Rate (%)</label>
+                                        <input type="number" name="commission_default_rate" value="{{ settings.commission_default_rate or '5' }}" step="0.01" min="0" max="100"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Payout Frequency</label>
+                                        <select name="commission_payout_frequency" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                            <option value="MONTHLY" {% if settings.commission_payout_frequency == 'MONTHLY' %}selected{% endif %}>Monthly</option>
+                                            <option value="QUARTERLY" {% if settings.commission_payout_frequency == 'QUARTERLY' %}selected{% endif %}>Quarterly</option>
+                                            <option value="ON_ORDER" {% if settings.commission_payout_frequency == 'ON_ORDER' %}selected{% endif %}>Per Order</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mt-4">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="sales_enable_partners" value="1" {% if settings.sales_enable_partners == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Enable Sales Partner Module</p>
+                                            <p class="text-sm text-slate-500">Activate partner management functionality</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="partner_credit_limit_enabled" value="1" {% if settings.partner_credit_limit_enabled == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Partner Credit Limit</p>
+                                            <p class="text-sm text-slate-500">Track partner credit limits</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: Opportunity -->
+                    <div id="tab-opportunity" class="tab-content">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-bullseye text-pink-600"></i>
+                                    Opportunity & Pipeline
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Days Until Stale</label>
+                                        <input type="number" name="opportunity_days_until_stale" value="{{ settings.opportunity_days_until_stale or '30' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Auto-Close Lost After (days)</label>
+                                        <input type="number" name="opportunity_auto_close_lost_days" value="{{ settings.opportunity_auto_close_lost_days or '60' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Min Confidence Score</label>
+                                        <input type="number" name="opportunity_min_confidence_score" value="{{ settings.opportunity_min_confidence_score or '50' }}" min="0" max="100"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Probability Calculation</label>
+                                        <select name="opportunity_probability_calculation" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                            <option value="MANUAL" {% if settings.opportunity_probability_calculation == 'MANUAL' %}selected{% endif %}>Manual Entry</option>
+                                            <option value="STAGE_BASED" {% if settings.opportunity_probability_calculation == 'STAGE_BASED' %}selected{% endif %}>Stage-Based</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mt-4 space-y-3">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="opportunity_auto_stage" value="1" {% if settings.opportunity_auto_stage == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Auto-Advance Stages</p>
+                                            <p class="text-sm text-slate-500">Automatically move opportunities through stages</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB: Integration -->
+                    <div id="tab-integration" class="tab-content">
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-5 settings-card transition-all border border-slate-200 dark:border-slate-700">
+                                <h3 class="text-lg font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                                    <i class="fas fa-plug text-teal-600"></i>
+                                    Integration & Reporting
+                                </h3>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Document Format</label>
+                                        <select name="sales_document_format" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                            <option value="STANDARD" {% if settings.sales_document_format == 'STANDARD' %}selected{% endif %}>Standard</option>
+                                            <option value="DETAILED" {% if settings.sales_document_format == 'DETAILED' %}selected{% endif %}>Detailed</option>
+                                            <option value="SIMPLIFIED" {% if settings.sales_document_format == 'SIMPLIFIED' %}selected{% endif %}>Simplified</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">PDF Layout</label>
+                                        <select name="sales_pdf_layout" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                            <option value="PORTRAIT" {% if settings.sales_pdf_layout == 'PORTRAIT' %}selected{% endif %}>Portrait</option>
+                                            <option value="LANDSCAPE" {% if settings.sales_pdf_layout == 'LANDSCAPE' %}selected{% endif %}>Landscape</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Auto Archive (years)</label>
+                                        <input type="number" name="sales_auto_archive_years" value="{{ settings.sales_auto_archive_years or '7' }}" min="1"
+                                               class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1">Sales Target Period</label>
+                                        <select name="sales_target_period" class="w-full px-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-800 dark:text-white">
+                                            <option value="MONTHLY" {% if settings.sales_target_period == 'MONTHLY' %}selected{% endif %}>Monthly</option>
+                                            <option value="QUARTERLY" {% if settings.sales_target_period == 'QUARTERLY' %}selected{% endif %}>Quarterly</option>
+                                            <option value="YEARLY" {% if settings.sales_target_period == 'YEARLY' %}selected{% endif %}>Yearly</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="mt-4 space-y-3">
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="sales_sync_to_accounting" value="1" {% if settings.sales_sync_to_accounting == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Sync to Accounting</p>
+                                            <p class="text-sm text-slate-500">Automatically sync documents to accounting module</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="sales_enable_einvoice" value="1" {% if settings.sales_enable_einvoice == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Enable E-Invoice</p>
+                                            <p class="text-sm text-slate-500">Generate compliant electronic invoices</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="sales_use_lead_time_analysis" value="1" {% if settings.sales_use_lead_time_analysis == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Lead Time Analysis</p>
+                                            <p class="text-sm text-slate-500">Track and analyze delivery performance</p>
+                                        </div>
+                                    </label>
+                                    <label class="flex items-center gap-3 p-3 bg-white dark:bg-slate-700 rounded-lg cursor-pointer hover:bg-blue-50 dark:hover:bg-slate-600 transition-colors">
+                                        <input type="checkbox" name="sales_enable_profitability_report" value="1" {% if settings.sales_enable_profitability_report == '1' %}checked{% endif %}
+                                               class="w-5 h-5 text-blue-600 rounded border-slate-300">
+                                        <div>
+                                            <p class="font-medium text-slate-800 dark:text-white">Profitability Report</p>
+                                            <p class="text-sm text-slate-500">Enable margin and profit analysis</p>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="flex justify-end gap-3">
-                <button type="submit" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors">
-                    <i class="fas fa-save mr-2"></i>Save Settings
-                </button>
+            <!-- Action Buttons -->
+            <div class="flex items-center justify-between mt-6">
+                <div class="text-sm text-slate-500">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Last updated: {{ settings.updated_at or 'Never' }}
+                </div>
+                <div class="flex gap-3">
+                    <button type="button" onclick="resetToDefaults()" class="px-5 py-2.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 rounded-lg text-slate-700 dark:text-slate-300 font-medium transition-colors">
+                        <i class="fas fa-undo mr-2"></i>Reset to Defaults
+                    </button>
+                    <button type="submit" class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors shadow-lg shadow-blue-600/20">
+                        <i class="fas fa-save mr-2"></i>Save All Settings
+                    </button>
+                </div>
             </div>
         </form>
     </main>
 </div>
 {% include 'admin_scripts.html' %}
+<script>
+function switchTab(tabId) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => {
+        el.classList.remove('border-blue-500', 'text-blue-600', 'tab-active');
+        el.classList.add('border-transparent', 'text-slate-500');
+    });
+
+    // Show selected tab
+    document.getElementById('tab-' + tabId).classList.add('active');
+    document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.add('border-blue-500', 'text-blue-600', 'tab-active');
+    document.querySelector(`[onclick="switchTab('${tabId}')"]`).classList.remove('border-transparent', 'text-slate-500');
+}
+
+function exportSettings() {
+    // Create JSON export of current settings
+    const formData = new FormData(document.querySelector('form'));
+    const settings = {};
+    for (let [key, value] of formData.entries()) {
+        settings[key] = value;
+    }
+    const blob = new Blob([JSON.stringify(settings, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sales_settings_export.json';
+    a.click();
+}
+
+function resetToDefaults() {
+    if (confirm('Are you sure you want to reset all SALES settings to defaults?')) {
+        fetch('{{ url_for("admin_api_settings", category="SALES") }}', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        }).then(() => location.reload());
+    }
+}
+</script>
 </body>
 </html>

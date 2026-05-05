@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-project-diagram fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('flow_analytics', 'Flow Analytics') }}
+        </h1>
+        <div class="d-flex gap-2">
+            <button onclick="exportReport()" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-download me-1"></i> {{ t('export', 'Export') }}
+            </button>
+            <a href="{{ url_for('integration_reports') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back_to_reports', 'Back to Reports') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary KPIs -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ flows|length }}</div>
+                    <div class="small">{{ t('active_flows', 'Active Flows') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ flows|sum(attribute='run_count') }}</div>
+                    <div class="small">{{ t('total_runs', 'Total Runs') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-info text-white shadow">
+                <div class="card-body text-center">
+                    {% set total_runs = flows|sum(attribute='run_count') %}
+                    {% set total_success = flows|sum(attribute='success_count') %}
+                    <div class="h2 mb-0">{{ "%.1f"|format(total_success / total_runs * 100) if total_runs > 0 else 0 }}%</div>
+                    <div class="small">{{ t('avg_success_rate', 'Avg Success Rate') }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-xl-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('runs_by_flow', 'Runs by Flow') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="runsByFlowChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('success_rate_overview', 'Success Rate Overview') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="successRateChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Flows Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('flow_details', 'Flow Details') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="flowTable" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('flow_name', 'Flow Name') }}</th>
+                                    <th>{{ t('source', 'Source') }}</th>
+                                    <th>{{ t('destination', 'Destination') }}</th>
+                                    <th class="text-center">{{ t('runs', 'Runs') }}</th>
+                                    <th class="text-center text-success">{{ t('success', 'Success') }}</th>
+                                    <th class="text-center text-danger">{{ t('failures', 'Failures') }}</th>
+                                    <th class="text-center">{{ t('avg_duration_ms', 'Avg Duration (ms)') }}</th>
+                                    <th class="text-center">{{ t('success_rate', 'Success Rate') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for flow in flows %}
+                                <tr>
+                                    <td><strong>{{ flow.name }}</strong></td>
+                                    <td><small class="text-muted">{{ flow.source or '-' }}</small></td>
+                                    <td><small class="text-muted">{{ flow.destination or '-' }}</small></td>
+                                    <td class="text-center">{{ flow.run_count }}</td>
+                                    <td class="text-center text-success">{{ flow.success_count }}</td>
+                                    <td class="text-center text-danger">{{ flow.failure_count }}</td>
+                                    <td class="text-center">{{ flow.avg_duration|int }}</td>
+                                    <td class="text-center">
+                                        {% set rate = flow.success_rate %}
+                                        {% if rate >= 90 %}
+                                            <span class="badge bg-success">{{ rate }}%</span>
+                                        {% elif rate >= 70 %}
+                                            <span class="badge bg-warning text-dark">{{ rate }}%</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ rate }}%</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted">
+                                        {{ t('no_flow_data', 'No flow data available') }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const flows = {{ flows|tojson }};
+    
+    // Bar chart - runs by flow
+    const runsCtx = document.getElementById('runsByFlowChart').getContext('2d');
+    new Chart(runsCtx, {
+        type: 'bar',
+        data: {
+            labels: flows.map(f => f.name.length > 20 ? f.name.substring(0, 20) + '...' : f.name),
+            datasets: [
+                {
+                    label: '{{ t("success", "Success") }}',
+                    data: flows.map(f => f.success_count),
+                    backgroundColor: '#28a745'
+                },
+                {
+                    label: '{{ t("failures", "Failures") }}',
+                    data: flows.map(f => f.failure_count),
+                    backgroundColor: '#dc3545'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } }
+            },
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+
+    // Doughnut - success rate distribution
+    const successCtx = document.getElementById('successRateChart').getContext('2d');
+    const highRate = flows.filter(f => f.success_rate >= 90).length;
+    const medRate = flows.filter(f => f.success_rate >= 70 && f.success_rate < 90).length;
+    const lowRate = flows.filter(f => f.success_rate < 70).length;
+    new Chart(successCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['90%+ {{ t("success", "Success") }}', '70-90% {{ t("success", "Success") }}', '<70% {{ t("success", "Success") }}'],
+            datasets: [{
+                data: [highRate, medRate, lowRate],
+                backgroundColor: ['#28a745', '#ffc107', '#dc3545'],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 15 } }
+            }
+        }
+    });
+});
+
+function exportReport() {
+    const flows = {{ flows|tojson }};
+    if (typeof XLSX !== 'undefined') {
+        const ws = XLSX.utils.json_to_sheet(flows.map(f => ({
+            'Flow Name': f.name,
+            'Source': f.source,
+            'Destination': f.destination,
+            'Runs': f.run_count,
+            'Success': f.success_count,
+            'Failures': f.failure_count,
+            'Avg Duration (ms)': f.avg_duration,
+            'Success Rate (%)': f.success_rate
+        })));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Flow Analytics');
+        XLSX.writeFile(wb, 'flow_analytics.xlsx');
+    } else {
+        // CSV fallback
+        const headers = ['Flow Name,Source,Destination,Runs,Success,Failures,Avg Duration,Success Rate'];
+        const rows = flows.map(f => `"${f.name}","${f.source||''}","${f.destination||''}",${f.run_count},${f.success_count},${f.failure_count},${f.avg_duration},${f.success_rate}`);
+        const csv = headers.concat(rows).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'flow_analytics.csv';
+        link.click();
+    }
+}
+</script>
+{% endblock %}

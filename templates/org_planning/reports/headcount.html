@@ -7,13 +7,110 @@
         {{ t('back_to_reports', lang) }}
     </a>
 
-    <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('headcount_report', lang) }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('year', lang) }}: {{ selected_year }}</p>
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('headcount_report', lang) }}</h1>
+            <p class="text-gray-400 mt-1">{{ t('year', lang) }}: {{ selected_year }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <select id="yearSelect" onchange="changeYear(this.value)" class="input-field px-3 py-2 rounded-lg text-sm">
+                {% for y in range(2020, 2031) %}
+                <option value="{{ y }}" {{ 'selected' if y == selected_year else '' }}>{{ y }}</option>
+                {% endfor %}
+            </select>
+            <button onclick="exportTable()" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-file-csv"></i>
+                {{ t('export_csv', lang) }}
+            </button>
+            <button onclick="window.print()" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-print"></i>
+                {{ t('print', lang) }}
+            </button>
+        </div>
     </div>
 
+    <!-- KPI Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <i class="fas fa-building text-blue-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('total_units', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ metrics|length }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                    <i class="fas fa-user-check text-emerald-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('total_approved', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ total_approved }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <i class="fas fa-users text-purple-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('total_current', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ total_current }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                    <i class="fas fa-user-times text-amber-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('total_vacant', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ total_vacant }}</div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Utilization by Unit -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-bar text-emerald-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('utilization_by_unit', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('headcount_utilization', lang) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5">
+                <canvas id="utilizationChart" height="280"></canvas>
+            </div>
+        </div>
+
+        <!-- Headcount Distribution -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-pie text-purple-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('headcount_distribution', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('approved_vs_current', lang) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5">
+                <canvas id="headcountChart" height="280"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Table -->
     <div class="table-container">
-        <table class="table w-full">
+        <table class="table w-full" id="headcountTable">
             <thead>
                 <tr>
                     <th>{{ t('org_unit', lang) }}</th>
@@ -21,6 +118,7 @@
                     <th class="text-center">{{ t('current', lang) }}</th>
                     <th class="text-center">{{ t('vacant', lang) }}</th>
                     <th class="text-center">{{ t('utilization', lang) }}</th>
+                    <th class="text-center">{{ t('status', lang) }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -32,7 +130,21 @@
                     <td class="text-center text-emerald-400">{{ m.total_current }}</td>
                     <td class="text-center text-amber-400">{{ m.total_vacant }}</td>
                     <td class="text-center">
-                        <span class="text-{{ 'emerald' if utilization >= 80 else 'amber' if utilization >= 60 else 'red' }}-400">{{ utilization|round|int }}%</span>
+                        <div class="flex items-center justify-center gap-2">
+                            <div class="w-16 h-2 rounded-full bg-slate-700 overflow-hidden">
+                                <div class="h-full rounded-full bg-{{ 'emerald' if utilization >= 80 else 'amber' if utilization >= 60 else 'red' }}-500" style="width: {{ [utilization, 100]|min }}%"></div>
+                            </div>
+                            <span class="text-{{ 'emerald' if utilization >= 80 else 'amber' if utilization >= 60 else 'red' }}-400">{{ utilization|round|int }}%</span>
+                        </div>
+                    </td>
+                    <td class="text-center">
+                        {% if utilization >= 80 %}
+                        <span class="badge badge-success">{{ t('optimal', lang) }}</span>
+                        {% elif utilization >= 60 %}
+                        <span class="badge badge-warning">{{ t('adequate', lang) }}</span>
+                        {% else %}
+                        <span class="badge badge-danger">{{ t('understaffed', lang) }}</span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -40,4 +152,103 @@
         </table>
     </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+function changeYear(year) {
+    window.location.href = '{{ url_for("org_planning.report_headcount") }}?year=' + year;
+}
+
+function exportTable() {
+    const table = document.getElementById('headcountTable');
+    const rows = table.querySelectorAll('tr');
+    let csv = [];
+    rows.forEach(row => {
+        const cols = row.querySelectorAll('th, td');
+        const rowData = [];
+        cols.forEach(col => {
+            let text = col.innerText.replace(/"/g, '""');
+            rowData.push('"' + text + '"');
+        });
+        csv.push(rowData.join(','));
+    });
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'headcount_report_{{ selected_year }}.csv';
+    link.click();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Utilization Bar Chart
+    const utilCtx = document.getElementById('utilizationChart');
+    if (utilCtx) {
+        const labels = [{% for m in metrics %}'{{ m.org_unit_name|truncate(15, True) }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+        const data = [{% for m in metrics %}{{ ((m.total_current / m.total_approved * 100) if m.total_approved > 0 else 0)|round|int }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+        new Chart(utilCtx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '{{ t('utilization', lang) }}',
+                    data: data,
+                    backgroundColor: data.map(v => v >= 80 ? 'rgba(16, 185, 129, 0.7)' : v >= 60 ? 'rgba(245, 158, 11, 0.7)' : 'rgba(239, 68, 68, 0.7)'),
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: 'rgba(255,255,255,0.5)', callback: v => v + '%' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: 'rgba(255,255,255,0.5)', maxRotation: 45 }
+                    }
+                }
+            }
+        });
+    }
+
+    // Headcount Pie Chart
+    const hcCtx = document.getElementById('headcountChart');
+    if (hcCtx) {
+        new Chart(hcCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['{{ t('approved', lang) }}', '{{ t('current', lang) }}', '{{ t('vacant', lang) }}'],
+                datasets: [{
+                    data: [{{ total_approved }}, {{ total_current }}, {{ total_vacant }}],
+                    backgroundColor: [
+                        'rgba(14, 165, 233, 0.7)',
+                        'rgba(16, 185, 129, 0.7)',
+                        'rgba(245, 158, 11, 0.7)'
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { color: 'rgba(255,255,255,0.7)', padding: 20 }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

@@ -80,6 +80,9 @@ from bi_models import (
 # Import database utilities
 from database import get_db_context, get_one, get_all
 
+# Import unified permission decorator
+from permissions import require_permission
+
 
 # =============================================================================
 # BLUEPRINT AND AUTH HELPERS
@@ -95,39 +98,6 @@ def require_login(f):
             return {'error': 'Authentication required'}, 401
         return f(*args, **kwargs)
     return decorated_function
-
-
-def require_permission(permission_string):
-    """Decorator to require specific permission."""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            if 'user_id' not in session:
-                if request.is_json:
-                    return jsonify({'error': 'Authentication required'}), 401
-                return {'error': 'Authentication required'}, 401
-            
-            # For now, check if user has reports.executive permission
-            from permissions import user_has_permission
-            user_id = session.get('user_id')
-            
-            # Extract module and action from permission string
-            parts = permission_string.split('.')
-            if len(parts) >= 2:
-                module = parts[0]
-                action = parts[-1]
-            else:
-                module = 'reports'
-                action = permission_string
-            
-            if not user_has_permission(user_id, 'reports', 'executive', action):
-                if request.is_json:
-                    return jsonify({'error': 'Permission denied'}), 403
-                return {'error': 'Permission denied'}, 403
-            
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
 
 
 def get_user_company_access():

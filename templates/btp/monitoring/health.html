@@ -6,32 +6,304 @@
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
         <h1 class="h3 mb-0 text-gray-800">
             <i class="fas fa-heartbeat fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
-            {{ t('btp_service_health', 'Service Health') }}
+            {{ t('btp_service_health', 'Service Health Dashboard') }}
         </h1>
+        <div class="btn-group">
+            <button class="btn btn-outline-primary btn-sm" onclick="refreshHealth()">
+                <i class="fas fa-sync me-1"></i> {{ t('refresh', 'Refresh') }}
+            </button>
+            <a href="{{ url_for('btp_monitoring_logs') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-list me-1"></i> {{ t('view_logs', 'View Logs') }}
+            </a>
+        </div>
     </div>
 
-    <!-- Health Cards -->
+    <!-- Health Score Overview -->
+    <div class="row mb-4">
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body text-center">
+                    <div class="text-xs font-weight-bold text-success text-uppercase mb-2">{{ t('btp_overall_health', 'Overall Health') }}</div>
+                    <div class="display-4 fw-bold text-success" id="healthScore">{{ health_data[0].healthy if health_data else 0 }}%</div>
+                    <div class="progress mt-3 mx-auto" style="height: 12px; max-width: 200px;">
+                        <div class="progress-bar bg-success" id="healthBar" style="width: {{ health_data[0].healthy if health_data else 0 }}%"></div>
+                    </div>
+                    <small class="text-muted mt-2">{{ t('btp_services_operational', 'services operational') }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body text-center">
+                    <div class="text-xs font-weight-bold text-danger text-uppercase mb-2">{{ t('btp_critical_issues', 'Critical Issues') }}</div>
+                    <div class="display-4 fw-bold text-danger">{{ health_data|sum(attribute='unhealthy') if health_data else 0 }}</div>
+                    <small class="text-muted mt-2">{{ t('btp_requires_immediate', 'requires immediate attention') }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-4 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body text-center">
+                    <div class="text-xs font-weight-bold text-info text-uppercase mb-2">{{ t('btp_total_services', 'Total Services') }}</div>
+                    <div class="display-4 fw-bold text-info">{{ health_data|sum(attribute='total') if health_data else 0 }}</div>
+                    <small class="text-muted mt-2">{{ t('btp_monitored_services', 'monitored services') }}</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Availability Gauge -->
+    <div class="row mb-4">
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_availability_gauge', 'System Availability') }}</h6>
+                </div>
+                <div class="card-body text-center" style="height: 280px;">
+                    <div style="position: relative; width: 200px; height: 200px; margin: 0 auto;">
+                        <canvas id="availabilityGauge"></canvas>
+                    </div>
+                    <div class="mt-3">
+                        <span class="badge bg-{{ 'success' if availability|default(99) >= 99 else 'warning' if availability|default(99) >= 95 else 'danger' }} fs-6">
+                            {{ "%.2f"|format(availability|default(99)) }}%
+                        </span>
+                        <small class="text-muted d-block mt-1">Last 7 days uptime</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-8 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_incident_timeline', 'Incident Timeline (7 Days)') }}</h6>
+                </div>
+                <div class="card-body" style="height: 280px;">
+                    <canvas id="incidentTimelineChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Health Status Chart -->
+    <div class="row mb-4">
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_health_distribution', 'Health Distribution') }}</h6>
+                </div>
+                <div class="card-body" style="height: 280px;">
+                    <canvas id="healthDistChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_service_status', 'Service Status Breakdown') }}</h6>
+                </div>
+                <div class="card-body" style="height: 280px;">
+                    <canvas id="statusBreakdownChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Health Cards -->
     <div class="row">
         {% for health in health_data %}
         <div class="col-lg-3 col-md-6 mb-4">
-            <div class="card border-left-{{ 'success' if health.unhealthy == 0 else 'danger' }} shadow h-100 py-2">
-                <div class="card-body">
+            <div class="card border-left-{{ 'success' if health.unhealthy == 0 else 'warning' if health.unhealthy < 3 else 'danger' }} shadow h-100">
+                <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                    <span class="font-weight-bold text-primary">{{ health.service }}</span>
+                    <span class="badge bg-{{ 'success' if health.unhealthy == 0 else 'warning' if health.unhealthy < 3 else 'danger' }}">
+                        {{ 'Healthy' if health.unhealthy == 0 else 'Issues' }}
+                    </span>
+                </div>
+                <div class="card-body py-3">
                     <div class="row no-gutters align-items-center">
                         <div class="col me-2">
-                            <div class="text-xs font-weight-bold text-uppercase mb-1">{{ health.service }}</div>
-                            <div class="h5 mb-0 font-weight-bold">
-                                {{ health.total - health.unhealthy }}/{{ health.total }}
-                            </div>
-                            <div class="small text-muted">Healthy</div>
+                            <div class="text-xs text-muted mb-1">{{ t('btp_healthy_count', 'Healthy') }}: <strong class="text-success">{{ health.total - health.unhealthy }}</strong></div>
+                            <div class="text-xs text-muted mb-1">{{ t('btp_unhealthy_count', 'Unhealthy') }}: <strong class="text-danger">{{ health.unhealthy }}</strong></div>
+                            <div class="text-xs text-muted">{{ t('btp_total_count', 'Total') }}: <strong>{{ health.total }}</strong></div>
                         </div>
                         <div class="col-auto">
-                            <i class="fas fa-{{ 'check-circle text-success' if health.unhealthy == 0 else 'exclamation-triangle text-danger' }} fa-2x"></i>
+                            <i class="fas fa-{{ 'check-circle text-success' if health.unhealthy == 0 else 'exclamation-triangle text-warning' if health.unhealthy < 3 else 'exclamation-circle text-danger' }} fa-2x"></i>
                         </div>
+                    </div>
+                    <div class="progress mt-3" style="height: 8px;">
+                        <div class="progress-bar bg-{{ 'success' if health.unhealthy == 0 else 'warning' if health.unhealthy < 3 else 'danger' }}"
+                             style="width: {{ ((health.total - health.unhealthy) / health.total * 100) if health.total > 0 else 100 }}%"></div>
                     </div>
                 </div>
             </div>
         </div>
         {% endfor %}
     </div>
+
+    <!-- Quick Actions -->
+    <div class="card shadow">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_quick_actions', 'Quick Actions') }}</h6>
+        </div>
+        <div class="card-body">
+            <div class="row text-center">
+                <div class="col-md-3 mb-2">
+                    <a href="{{ url_for('btp_connectors') }}" class="btn btn-outline-primary btn-block">
+                        <i class="fas fa-plug me-2"></i>{{ t('btp_view_connectors', 'View Connectors') }}
+                    </a>
+                </div>
+                <div class="col-md-3 mb-2">
+                    <a href="{{ url_for('btp_incident_create') }}" class="btn btn-outline-danger btn-block">
+                        <i class="fas fa-exclamation me-2"></i>{{ t('btp_create_incident', 'Create Incident') }}
+                    </a>
+                </div>
+                <div class="col-md-3 mb-2">
+                    <a href="{{ url_for('btp_dlq') }}" class="btn btn-outline-warning btn-block">
+                        <i class="fas fa-inbox me-2"></i>{{ t('btp_view_dlq', 'View DLQ') }}
+                    </a>
+                </div>
+                <div class="col-md-3 mb-2">
+                    <a href="{{ url_for('btp_monitoring_incidents') }}" class="btn btn-outline-info btn-block">
+                        <i class="fas fa-list me-2"></i>{{ t('btp_view_incidents', 'View Incidents') }}
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    Chart.defaults.font.family = "'Inter', 'Segoe UI', sans-serif";
+    Chart.defaults.color = '#6c757d';
+
+    // Calculate totals
+    const healthyTotal = {{ health_data|sum(attribute='healthy') if health_data else 0 }};
+    const unhealthyTotal = {{ health_data|sum(attribute='unhealthy') if health_data else 0 }};
+    const totalServices = {{ health_data|sum(attribute='total') if health_data else 0 }};
+
+    // Health Distribution (Doughnut)
+    const distCtx = document.getElementById('healthDistChart').getContext('2d');
+    new Chart(distCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Healthy', 'Unhealthy', 'Unknown'],
+            datasets: [{
+                data: [healthyTotal, unhealthyTotal, Math.max(0, totalServices - healthyTotal - unhealthyTotal)],
+                backgroundColor: ['#28a745', '#dc3545', '#6c757d'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { padding: 15, usePointStyle: true, pointStyle: 'circle' }
+                }
+            }
+        }
+    });
+
+    // Status Breakdown (Bar)
+    const statusCtx = document.getElementById('statusBreakdownChart').getContext('2d');
+    const serviceLabels = [{% for h in health_data %}'{{ h.service }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+    const healthyCounts = [{% for h in health_data %}{{ h.healthy }}{% if not loop.last %}, {% endif %}{% endfor %}];
+    const unhealthyCounts = [{% for h in health_data %}{{ h.unhealthy }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+    new Chart(statusCtx, {
+        type: 'bar',
+        data: {
+            labels: serviceLabels.length ? serviceLabels : ['No Data'],
+            datasets: [
+                {
+                    label: 'Healthy',
+                    data: healthyCounts.length ? healthyCounts : [0],
+                    backgroundColor: '#28a745',
+                    borderRadius: 4
+                },
+                {
+                    label: 'Unhealthy',
+                    data: unhealthyCounts.length ? unhealthyCounts : [0],
+                    backgroundColor: '#dc3545',
+                    borderRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { padding: 15, usePointStyle: true, pointStyle: 'circle' }
+                }
+            },
+            scales: {
+                x: { stacked: true },
+                y: { stacked: true, beginAtZero: true }
+            }
+        }
+    });
+
+    // Availability Gauge (Doughnut as gauge)
+    const gaugeCtx = document.getElementById('availabilityGauge').getContext('2d');
+    const availValue = {{ availability|default(99) }};
+
+    new Chart(gaugeCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Available', 'Downtime'],
+            datasets: [{
+                data: [availValue, 100 - availValue],
+                backgroundColor: [availValue >= 99 ? '#28a745' : availValue >= 95 ? '#ffc107' : '#dc3545', '#e9ecef'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '75%',
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false }
+            }
+        }
+    });
+
+    // Incident Timeline (Line)
+    const timelineCtx = document.getElementById('incidentTimelineChart').getContext('2d');
+    const timelineLabels = [{% for item in incident_timeline %}'{{ item.date }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+    const timelineValues = [{% for item in incident_timeline %}{{ item.count }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+    new Chart(timelineCtx, {
+        type: 'line',
+        data: {
+            labels: timelineLabels.length ? timelineLabels : ['No Data'],
+            datasets: [{
+                label: 'Incidents',
+                data: timelineValues.length ? timelineValues : [0],
+                borderColor: '#dc3545',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+});
+
+function refreshHealth() {
+    location.reload();
+}
+</script>
 {% endblock %}

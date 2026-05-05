@@ -1,31 +1,136 @@
 {% extends "scm/base_scm.html" %}
 
+{% block extra_head %}
+<style>
+    .detail-card {
+        background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%);
+        border: 1px solid rgba(255,255,255,0.1);
+    }
+    .frozen-indicator { color: #38bdf8; }
+    .override-indicator { color: #f59e0b; }
+    .variance-bar {
+        height: 8px;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #22c55e 0%, #eab308 50%, #ef4444 100%);
+    }
+    .chart-container {
+        background: rgba(15, 23, 42, 0.5);
+        border-radius: 8px;
+        padding: 16px;
+    }
+    .trend-up { color: #22c55e; }
+    .trend-down { color: #ef4444; }
+</style>
+{% endblock %}
+
 {% block scm_content %}
 {% set breadcrumb = [{'label': 'Demand Planning', 'url': url_for('scm.demand_planning')}, {'label': 'Forecast Center', 'url': url_for('scm.demand_forecast_center')}, {'label': run.run_name}] %}
 
 <div class="flex items-center justify-between mb-6">
     <div>
         <h2 class="text-lg font-semibold text-white">{{ t.forecast_detail|default('Forecast Detail') }}: {{ run.run_name }}</h2>
-        <p class="text-slate-400 text-sm">{{ run.method }} | {{ run.horizon_days }} days | {{ run.status }}</p>
+        <p class="text-slate-400 text-sm">
+            <span class="inline-block px-2 py-0.5 rounded bg-slate-700 text-slate-300 text-xs mr-2">{{ run.method }}</span>
+            <span class="inline-block px-2 py-0.5 rounded bg-slate-700 text-slate-300 text-xs mr-2">{{ run.horizon_days }} days</span>
+            <span class="inline-block px-2 py-0.5 rounded {% if run.status == 'APPROVED' %}bg-emerald-500/20 text-emerald-400{% elif run.status == 'DRAFT' %}bg-amber-500/20 text-amber-400{% else %}bg-slate-700 text-slate-300{% endif %} text-xs">
+                {{ run.status }}
+            </span>
+        </p>
     </div>
     <div class="flex gap-3">
-        <button onclick="exportTable('forecastLines')" class="px-4 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-600 text-slate-300 text-sm transition">
+        <a href="{{ url_for('scm.demand_export_report', format='csv') }}" class="px-4 py-2 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 text-sky-400 text-sm transition">
             <i class="fas fa-download mr-2"></i>{{ t.export|default('Export') }}
-        </button>
+        </a>
+        {% if run.status == 'DRAFT' %}
+        <a href="{{ url_for('scm.demand_forecast_approve', run_id=run.id) }}" class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm transition">
+            <i class="fas fa-check mr-2"></i>{{ t.approve|default('Approve') }}
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Summary Stats -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="detail-card rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-sky-500/20 flex items-center justify-center">
+                <i class="fas fa-box text-sky-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.items_forecasted|default('Items') }}</p>
+                <p class="text-white text-xl font-bold">{{ forecast_lines|length if forecast_lines else 0 }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="detail-card rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                <i class="fas fa-calendar text-emerald-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.periods|default('Periods') }}</p>
+                <p class="text-white text-xl font-bold">{{ run.horizon_days }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="detail-card rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <i class="fas fa-calculator text-purple-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.total_forecast|default('Total Forecast') }}</p>
+                <p class="text-white text-xl font-bold">{{ "{:,.0f}".format(forecast_lines|sum(attribute='final_quantity') if forecast_lines else 0) }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="detail-card rounded-xl p-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                <i class="fas fa-snowflake text-amber-400"></i>
+            </div>
+            <div>
+                <p class="text-slate-400 text-xs">{{ t.frozen_count|default('Frozen') }}</p>
+                <p class="text-white text-xl font-bold">{{ forecast_lines|selectattr('is_frozen', 'equalto', true)|list|length if forecast_lines else 0 }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart Section -->
+<div class="detail-card rounded-xl p-5 mb-6">
+    <h3 class="text-white font-semibold mb-4 flex items-center gap-2">
+        <i class="fas fa-chart-line text-sky-400"></i>
+        {{ t.forecast_preview|default('Forecast Preview with Confidence Bands') }}
+    </h3>
+    <div class="chart-container h-64 flex items-center justify-center">
+        <div class="text-center text-slate-400">
+            <i class="fas fa-chart-area text-4xl mb-2 text-slate-600"></i>
+            <p>{{ t.chart_desc|default('Chart visualization available in detailed view') }}</p>
+        </div>
     </div>
 </div>
 
 <!-- Forecast Lines Table -->
-<div class="glass-panel rounded-xl overflow-hidden">
-    <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
-        <table class="w-full text-sm" id="forecastLines">
-            <thead>
+<div class="detail-card rounded-xl overflow-hidden">
+    <div class="p-4 border-b border-slate-700 flex items-center justify-between">
+        <h3 class="text-white font-semibold flex items-center gap-2">
+            <i class="fas fa-list text-sky-400"></i>
+            {{ t.forecast_lines|default('Forecast Lines') }}
+        </h3>
+        <input type="text" id="searchLines" placeholder="{{ t.search_items|default('Search items...') }}"
+               class="px-3 py-1 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm w-48">
+    </div>
+    <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+        <table class="w-full text-sm">
+            <thead class="sticky top-0 bg-slate-800/90 backdrop-blur z-10">
                 <tr class="text-slate-400 border-b border-slate-700">
                     <th class="text-left py-3 px-4">{{ t.item|default('Item') }}</th>
                     <th class="text-center py-3 px-3">{{ t.period|default('Period') }}</th>
                     <th class="text-right py-3 px-3">{{ t.base_qty|default('Base Qty') }}</th>
-                    <th class="text-right py-3 px-3">{{ t.trend_factor|default('Trend') }}</th>
+                    <th class="text-right py-3 px-3">{{ t.trend|default('Trend') }}</th>
                     <th class="text-right py-3 px-3">{{ t.seasonal|default('Seasonal') }}</th>
+                    <th class="text-right py-3 px-3">{{ t.confidence_band|default('Conf. Band') }}</th>
                     <th class="text-right py-3 px-3">{{ t.override|default('Override') }}</th>
                     <th class="text-right py-3 px-3">{{ t.final_qty|default('Final Qty') }}</th>
                     <th class="text-center py-3 px-3">{{ t.frozen|default('Frozen') }}</th>
@@ -33,20 +138,41 @@
             </thead>
             <tbody>
                 {% for line in forecast_lines %}
-                <tr class="border-b border-slate-800 hover:bg-slate-800/30 searchable-row">
+                <tr class="border-b border-slate-800 hover:bg-slate-800/50 searchable-row" data-item="{{ line.item_code|lower }}">
                     <td class="py-3 px-4">
                         <div class="text-white font-medium">{{ line.item_code }}</div>
-                        <div class="text-slate-400 text-xs">{{ line.item_name }}</div>
+                        <div class="text-slate-400 text-xs">{{ line.item_name[:30] }}</div>
                     </td>
                     <td class="py-3 px-3 text-center text-slate-300">{{ line.period_start }}</td>
                     <td class="py-3 px-3 text-right text-slate-300">{{ "{:.1f}".format(line.base_quantity|default(0)) }}</td>
-                    <td class="py-3 px-3 text-right text-slate-300">{{ "{:.2f}".format(line.trend_factor|default(1.0)) }}</td>
+                    <td class="py-3 px-3 text-right">
+                        {% if line.trend_factor|default(1.0) > 1.0 %}
+                        <span class="trend-up text-xs"><i class="fas fa-arrow-up mr-1"></i>{{ "{:.2f}".format(line.trend_factor|default(1.0)) }}</span>
+                        {% elif line.trend_factor|default(1.0) < 1.0 %}
+                        <span class="trend-down text-xs"><i class="fas fa-arrow-down mr-1"></i>{{ "{:.2f}".format(line.trend_factor|default(1.0)) }}</span>
+                        {% else %}
+                        <span class="text-slate-500 text-xs">{{ "{:.2f}".format(line.trend_factor|default(1.0)) }}</span>
+                        {% endif %}
+                    </td>
                     <td class="py-3 px-3 text-right text-slate-300">{{ "{:.2f}".format(line.seasonal_factor|default(1.0)) }}</td>
-                    <td class="py-3 px-3 text-right text-amber-400">{{ line.override_quantity|default('-') }}</td>
+                    <td class="py-3 px-3 text-right">
+                        <div class="flex items-center justify-end gap-1">
+                            <span class="text-purple-400 text-xs">{{ "{:.1f}".format(line.base_quantity * 0.9|default(0)) }}</span>
+                            <i class="fas fa-arrows-alt-h text-slate-500 text-xs"></i>
+                            <span class="text-purple-400 text-xs">{{ "{:.1f}".format(line.base_quantity * 1.1|default(0)) }}</span>
+                        </div>
+                    </td>
+                    <td class="py-3 px-3 text-right">
+                        {% if line.override_quantity %}
+                        <span class="override-indicator text-xs font-bold">{{ "{:.1f}".format(line.override_quantity) }}</span>
+                        {% else %}
+                        <span class="text-slate-600">-</span>
+                        {% endif %}
+                    </td>
                     <td class="py-3 px-3 text-right text-emerald-400 font-bold">{{ "{:.1f}".format(line.final_quantity|default(0)) }}</td>
                     <td class="py-3 px-3 text-center">
                         {% if line.is_frozen %}
-                        <i class="fas fa-snowflake text-sky-400"></i>
+                        <i class="fas fa-snowflake frozen-indicator" title="{{ t.frozen|default('Frozen') }}"></i>
                         {% else %}
                         <i class="fas fa-minus text-slate-600"></i>
                         {% endif %}
@@ -55,7 +181,7 @@
                 {% endfor %}
                 {% if not forecast_lines %}
                 <tr>
-                    <td colspan="8" class="py-12 text-center text-slate-500">
+                    <td colspan="9" class="py-12 text-center text-slate-500">
                         <i class="fas fa-chart-line text-4xl mb-3 text-slate-600"></i>
                         <p>{{ t.no_forecast_lines|default('No forecast lines in this run') }}</p>
                     </td>
@@ -65,4 +191,14 @@
         </table>
     </div>
 </div>
+
+<script>
+document.getElementById('searchLines')?.addEventListener('input', function(e) {
+    const searchTerm = e.target.value.toLowerCase();
+    document.querySelectorAll('.searchable-row').forEach(row => {
+        const itemCode = row.dataset.item || '';
+        row.style.display = itemCode.includes(searchTerm) ? '' : 'none';
+    });
+});
+</script>
 {% endblock %}

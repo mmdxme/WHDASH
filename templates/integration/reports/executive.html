@@ -64,12 +64,29 @@
         </div>
     </div>
 
-    <!-- Trend Chart Placeholder -->
+    <!-- Trend Chart -->
     <div class="row">
         <div class="col-12">
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
                     <h6 class="m-0 font-weight-bold text-primary">{{ t('trend_data_30d', 'Trend Data (30 days)') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trend Table (below chart) -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('daily_breakdown', 'Daily Breakdown') }}</h6>
+                    <button onclick="exportTrend()" class="btn btn-outline-secondary btn-sm">
+                        <i class="fas fa-download me-1"></i> {{ t('export_csv', 'Export CSV') }}
+                    </button>
                 </div>
                 <div class="card-body">
                     {% if trend_data %}
@@ -93,7 +110,11 @@
                                         {% set total = d.succeeded + d.failed %}
                                         {% if total > 0 %}
                                             {% set rate = (d.succeeded / total * 100)|round|1 %}
-                                            {{ rate }}%
+                                            <div class="progress" style="height: 18px; min-width: 80px;">
+                                                <div class="progress-bar bg-success" role="progressbar" style="width: {{ rate }}%">
+                                                    {{ rate }}%
+                                                </div>
+                                            </div>
                                         {% else %}
                                             -
                                         {% endif %}
@@ -111,4 +132,66 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const trendData = {{ trend_data|tojson }};
+
+    const trendCtx = document.getElementById('trendChart').getContext('2d');
+    new Chart(trendCtx, {
+        type: 'line',
+        data: {
+            labels: trendData.map(d => d.date),
+            datasets: [
+                {
+                    label: '{{ t('succeeded', 'Succeeded') }}',
+                    data: trendData.map(d => d.succeeded),
+                    borderColor: '#28a745',
+                    backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#28a745'
+                },
+                {
+                    label: '{{ t('failed', 'Failed') }}',
+                    data: trendData.map(d => d.failed),
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#dc3545'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true }
+            },
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+});
+
+function exportTrend() {
+    const trendData = {{ trend_data|tojson }};
+    const headers = ['Date,Succeeded,Failed,Success Rate'];
+    const rows = trendData.map(d => {
+        const total = d.succeeded + d.failed;
+        const rate = total > 0 ? (d.succeeded / total * 100).toFixed(1) : 0;
+        return `${d.date},${d.succeeded},${d.failed},${rate}%`;
+    });
+    const csv = [headers[0], ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'executive_trend.csv';
+    link.click();
+}
+</script>
 {% endblock %}

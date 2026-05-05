@@ -9,6 +9,12 @@
             <p class="text-gray-400 mt-1">{{ t('org_structure_desc', lang) }}</p>
         </div>
         <div class="flex items-center gap-3">
+            <!-- Search -->
+            <div class="relative">
+                <input type="text" id="treeSearch" placeholder="{{ t('search_units', lang) }}..." class="input-field pl-10 pr-4 py-2 rounded-lg text-sm w-64">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+            </div>
+            <!-- View Toggle -->
             <div class="flex items-center gap-2 bg-slate-800 rounded-lg p-1">
                 <a href="{{ url_for('org_planning.structure', view='tree') }}" class="px-4 py-2 rounded-md text-sm font-medium transition-colors {{ 'bg-blue-600 text-white' if view_mode == 'tree' else 'text-gray-400 hover:text-white' }}">
                     <i class="fas fa-sitemap mr-2"></i>{{ t('tree', lang) }}
@@ -19,6 +25,23 @@
                 <a href="{{ url_for('org_planning.structure', view='table') }}" class="px-4 py-2 rounded-md text-sm font-medium transition-colors {{ 'bg-blue-600 text-white' if view_mode == 'table' else 'text-gray-400 hover:text-white' }}">
                     <i class="fas fa-table mr-2"></i>{{ t('table', lang) }}
                 </a>
+            </div>
+            <!-- Actions -->
+            <div class="relative group">
+                <button class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                    <i class="fas fa-ellipsis-h"></i>
+                </button>
+                <div class="absolute right-0 top-full mt-2 w-48 bg-slate-800 rounded-lg border border-gray-700 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                    <a href="javascript:expandAll()" class="block px-4 py-2 text-sm text-gray-300 hover:bg-slate-700 hover:text-white rounded-t-lg">
+                        <i class="fas fa-expand-arrows-alt mr-2"></i>{{ t('expand_all', lang) }}
+                    </a>
+                    <a href="javascript:collapseAll()" class="block px-4 py-2 text-sm text-gray-300 hover:bg-slate-700 hover:text-white">
+                        <i class="fas fa-compress-arrows-alt mr-2"></i>{{ t('collapse_all', lang) }}
+                    </a>
+                    <a href="javascript:printTree()" class="block px-4 py-2 text-sm text-gray-300 hover:bg-slate-700 hover:text-white rounded-b-lg">
+                        <i class="fas fa-print mr-2"></i>{{ t('print_view', lang) }}
+                    </a>
+                </div>
             </div>
             <a href="{{ url_for('org_planning.structure_create_unit') }}" class="btn-primary px-4 py-2 rounded-lg flex items-center gap-2">
                 <i class="fas fa-plus"></i>
@@ -68,10 +91,10 @@
             {% if org_tree %}
             <div class="space-y-2">
                 {% for unit in org_tree recursive %}
-                <div class="tree-item" data-unit-id="{{ unit.id }}">
-                    <div class="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-800/50 transition-colors cursor-pointer group" 
+                <div class="tree-item" data-unit-id="{{ unit.id }}" data-unit-name="{{ unit.name|lower }}">
+                    <div class="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-800/50 transition-colors cursor-pointer group tree-row"
                          onclick="toggleChildren(this)" style="margin-left: {{ unit.level * 24 }}px">
-                        <button class="w-5 h-5 flex items-center justify-center text-gray-500 hover:text-white transition-colors">
+                        <button class="toggle-btn w-5 h-5 flex items-center justify-center text-gray-500 hover:text-white transition-colors">
                             <i class="fas {{ 'fa-chevron-down' if unit.children else 'fa-plus' }} text-xs"></i>
                         </button>
                         <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500/20 to-blue-600/20 flex items-center justify-center">
@@ -79,7 +102,7 @@
                         </div>
                         <div class="flex-1">
                             <div class="flex items-center gap-2">
-                                <span class="text-white font-medium">{{ unit.name }}</span>
+                                <span class="text-white font-medium unit-name">{{ unit.name }}</span>
                                 {% if unit.is_active != 1 %}
                                 <span class="badge badge-secondary">{{ t('inactive', lang) }}</span>
                                 {% endif %}
@@ -133,11 +156,12 @@
 {% endblock %}
 {% block scripts %}
 <script>
-function toggleChildren(element) {
+function toggleChildren(element, event) {
+    if (event) event.stopPropagation();
     const item = element.closest('.tree-item');
     const children = item.querySelector('.children');
     const icon = element.querySelector('i.fas');
-    
+
     if (children) {
         children.classList.toggle('hidden');
         if (children.classList.contains('hidden')) {
@@ -149,5 +173,52 @@ function toggleChildren(element) {
         }
     }
 }
+
+function expandAll() {
+    document.querySelectorAll('.tree-item .children').forEach(el => el.classList.remove('hidden'));
+    document.querySelectorAll('.tree-item .toggle-btn i').forEach(icon => {
+        icon.classList.remove('fa-plus');
+        icon.classList.add('fa-chevron-down');
+    });
+}
+
+function collapseAll() {
+    document.querySelectorAll('.tree-item .children').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.tree-item .toggle-btn i').forEach(icon => {
+        icon.classList.remove('fa-chevron-down');
+        icon.classList.add('fa-plus');
+    });
+}
+
+function printTree() {
+    window.print();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('treeSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', function(e) {
+            const query = e.target.value.toLowerCase();
+            document.querySelectorAll('.tree-item').forEach(item => {
+                const name = item.querySelector('.unit-name');
+                if (name) {
+                    const text = name.textContent.toLowerCase();
+                    const row = item.querySelector('.tree-row');
+                    if (text.includes(query) || query === '') {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+            });
+        });
+    }
+
+    document.querySelectorAll('.tree-item .toggle-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            toggleChildren(this, e);
+        });
+    });
+});
 </script>
 {% endblock %}

@@ -1,0 +1,179 @@
+{% extends "social_media/base_social.html" %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .funnel-bar {
+        height: 40px;
+        background: linear-gradient(90deg, rgba(56, 189, 248, 0.8), rgba(99, 102, 241, 0.8));
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        padding-right: 1rem;
+        font-weight: 600;
+        color: white;
+        transition: width 0.5s ease;
+    }
+</style>
+{% endblock %}
+
+{% block page_actions %}
+<div class="flex items-center gap-3">
+    <form method="get" class="flex items-center gap-2">
+        <input type="date" name="date_from" value="{{ date_from }}" 
+               class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <input type="date" name="date_to" value="{{ date_to }}" 
+               class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <button type="submit" class="btn-social btn-social-secondary text-sm">Apply</button>
+    </form>
+    <a href="{{ url_for('social_media.reports_export', report_type='leads', format='excel', date_from=date_from, date_to=date_to) }}" 
+       class="btn-social btn-social-primary text-sm">
+        <i class="fa-solid fa-file-excel"></i> Export
+    </a>
+</div>
+{% endblock %}
+
+{% block page_content %}
+{% set total_leads = lead_funnel|sum(attribute='count') %}
+{% set total_converted = lead_funnel|sum(attribute='converted') %}
+{% set total_value = lead_funnel|sum(attribute='total_value') %}
+
+<!-- Lead Summary KPIs -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Total Leads</div>
+        <div class="sm-kpi-value">{{ total_leads|int }}</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Converted</div>
+        <div class="sm-kpi-value text-green-400">{{ total_converted|int }}</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Conversion Rate</div>
+        <div class="sm-kpi-value">{{ "%.1f"|format((total_converted / total_leads * 100)|default(0)) if total_leads > 0 else '0' }}%</div>
+    </div>
+    <div class="sm-kpi-card">
+        <div class="text-xs text-slate-400 mb-1">Total Value</div>
+        <div class="sm-kpi-value text-brand-400">AED {{ "%.0f"|format(total_value|default(0)) }}</div>
+    </div>
+</div>
+
+<!-- Conversion Funnel Chart -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="glass-panel rounded-xl p-6">
+        <h3 class="text-lg font-bold text-white mb-6">Lead Conversion Funnel</h3>
+        <div class="space-y-4">
+            {% for stage in lead_funnel %}
+            {% set pct = ((stage.count / total_leads * 100)|int) if total_leads > 0 else 0 %}
+            <div>
+                <div class="flex justify-between mb-1">
+                    <span class="text-sm text-white">{{ stage.funnel_stage }}</span>
+                    <span class="text-sm text-brand-400">{{ stage.count }} 
+                        <span class="text-slate-500">({{ "%.0f"|format((stage.count / total_leads * 100)) if total_leads > 0 else '0' }}%)</span>
+                    </span>
+                </div>
+                <div class="w-full bg-white/10 rounded-full h-6 overflow-hidden">
+                    <div class="funnel-bar" style="width: {{ pct }}%;"></div>
+                </div>
+            </div>
+            {% else %}
+            <p class="text-slate-400">No funnel data available</p>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <div class="glass-panel rounded-xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Lead Sources</h3>
+        <div style="height: 280px;">
+            <canvas id="sourcesChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Lead Sources Table -->
+<div class="glass-panel rounded-xl p-6 mb-6">
+    <h3 class="text-lg font-bold text-white mb-4">Lead Source Breakdown</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Count</th>
+                    <th>% of Total</th>
+                    <th>Total Value</th>
+                    <th>Avg Value</th>
+                    <th>Converted</th>
+                    <th>Conv Rate</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for src in lead_sources %}
+                <tr>
+                    <td><span class="platform-badge platform-{{ src.source_platform.lower() if src.source_platform else 'general' }}">{{ src.source_platform or 'Direct' }}</span></td>
+                    <td class="font-semibold text-white">{{ src.count }}</td>
+                    <td>{{ "%.1f"|format((src.count / total_leads * 100)) if total_leads > 0 else '0' }}%</td>
+                    <td>AED {{ "%.0f"|format(src.total_value|default(0)) }}</td>
+                    <td>AED {{ "%.0f"|format((src.total_value / src.count)|round|default(0)) if src.count > 0 else '0' }}</td>
+                    <td class="text-green-400">{{ src.converted }}</td>
+                    <td>{{ "%.1f"|format((src.converted / src.count * 100)) if src.count > 0 else '0' }}%</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="text-center py-6 text-slate-400">No source data available</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Funnel Data Table -->
+<div class="glass-panel rounded-xl p-6">
+    <h3 class="text-lg font-bold text-white mb-4">Lead Funnel Details</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Funnel Stage</th>
+                    <th>Count</th>
+                    <th>Total Value</th>
+                    <th>Avg Value</th>
+                    <th>Converted</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in lead_funnel %}
+                <tr>
+                    <td class="text-white font-semibold">{{ f.funnel_stage }}</td>
+                    <td>{{ f.count }}</td>
+                    <td>AED {{ "%.0f"|format(f.total_value|default(0)) }}</td>
+                    <td>AED {{ "%.0f"|format(f.avg_value|default(0)) }}</td>
+                    <td class="text-green-400">{{ f.converted }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="text-center py-6 text-slate-400">No funnel data available</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const leadSources = {{ lead_sources|tojson }};
+
+new Chart(document.getElementById('sourcesChart'), {
+    type: 'pie',
+    data: {
+        labels: leadSources.map(s => s.source_platform || 'Direct'),
+        datasets: [{
+            data: leadSources.map(s => s.count),
+            backgroundColor: ['#e1306c', '#1877f2', '#0077b5', '#ff0000', '#25d366', '#a855f7']
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'right' } }
+    }
+});
+</script>
+{% endblock %}

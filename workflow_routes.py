@@ -71,36 +71,6 @@ workflow_bp = Blueprint('workflow', __name__, url_prefix='/workflow')
 
 
 # =============================================================================
-# HELPER DECORATORS
-# =============================================================================
-
-def workflow_require_login(f):
-    """Decorator requiring authentication."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-
-def workflow_require_permission(resource, action):
-    """Decorator requiring specific permission."""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            user_id = session.get('user_id')
-            if not user_id:
-                return redirect(url_for('login'))
-            if not user_has_permission(user_id, 'workflow', resource, action):
-                flash(f"Access denied. You need '{action}' permission on '{resource}'.", "error")
-                return redirect(url_for('index'))
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
-
-
-# =============================================================================
 # EXPORT TYPES AND COLUMNS
 # =============================================================================
 

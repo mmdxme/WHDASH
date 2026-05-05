@@ -262,9 +262,11 @@ def register_document_routes(app):
         search_documents_advanced, get_file_management_stats, generate_folder_code
     )
 
-    # Create blueprint
-    documents_bp = app.route
-    
+    # NOTE: Document routes are registered directly on app using @app.route
+    # within this function, not via a blueprint. The line below was incorrectly
+    # trying to assign app.route to a variable which would fail.
+    # documents_bp = app.route  # REMOVED - was bug
+
     # =========================================================================
     # DOCUMENT DASHBOARD
     # =========================================================================
@@ -2384,9 +2386,10 @@ def get_filtered_documents(user_id, search='', category='', status='', doc_type=
     params.extend([user_id, user_id, user_id])
     
     if search:
-        conditions.append("(d.title LIKE ? OR d.document_code LIKE ? OR d.description LIKE ?)")
-        search_param = f"%{search}%"
-        params.extend([search_param, search_param, search_param])
+        # Escape special LIKE characters to prevent LIKE injection
+        escaped_search = search.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        conditions.append("(d.title LIKE ? ESCAPE '\\' OR d.document_code LIKE ? ESCAPE '\\' OR d.description LIKE ? ESCAPE '\\')")
+        params.extend([f"%{escaped_search}%", f"%{escaped_search}%", f"%{escaped_search}%"])
     
     if category:
         conditions.append("d.category_id = ?")
@@ -2442,7 +2445,7 @@ def get_shared_documents(user_id):
     """Get documents shared with user."""
     return get_all("""
         SELECT DISTINCT d.*, c.name as category_name,
-               s.permission_level, s.access_level, s.shared_at
+               s.permission_level, s.access_level, s.created_at
         FROM document_shares s
         JOIN documents d ON s.document_id = d.id
         LEFT JOIN document_categories c ON d.category_id = c.id
@@ -2509,8 +2512,10 @@ def search_documents(user_id, search='', category='', doc_type='', status='',
     params.extend([user_id, user_id, user_id])
     
     if search:
-        conditions.append("(d.title LIKE ? OR d.document_code LIKE ? OR d.description LIKE ?)")
-        params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+        # Escape special LIKE characters to prevent LIKE injection
+        escaped_search = search.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        conditions.append("(d.title LIKE ? ESCAPE '\\' OR d.document_code LIKE ? ESCAPE '\\' OR d.description LIKE ? ESCAPE '\\')")
+        params.extend([f"%{escaped_search}%", f"%{escaped_search}%", f"%{escaped_search}%"])
     
     if category:
         conditions.append("d.category_id = ?")
@@ -2610,13 +2615,23 @@ def handle_document_create(user_id):
         checksum = request.form.get('checksum')
         file_size = request.form.get('file_size')
         mime_type = request.form.get('mime_type')
-        
+
         if not title:
             return jsonify({'success': False, 'message': 'Title is required'})
-        
+
+        # Security: Validate storage_path is within allowed upload directory
         if not storage_path or not os.path.exists(storage_path):
             return jsonify({'success': False, 'message': 'File upload failed'})
-        
+
+        # Path traversal protection: ensure storage_path is under DOCUMENT_UPLOAD_FOLDER
+        upload_folder = os.path.abspath(DOCUMENT_UPLOAD_FOLDER)
+        try:
+            storage_path_abs = os.path.abspath(storage_path)
+            if not storage_path_abs.startswith(upload_folder):
+                return jsonify({'success': False, 'message': 'Invalid file path'}), 400
+        except Exception:
+            return jsonify({'success': False, 'message': 'Invalid file path'}), 400
+
         # Generate document code
         db = get_db()
         try:
@@ -2715,13 +2730,23 @@ def handle_new_version(document_id, user_id):
         checksum = request.form.get('checksum')
         file_size = request.form.get('file_size')
         mime_type = request.form.get('mime_type')
-        
+
         if not version_number:
             return jsonify({'success': False, 'message': 'Version number is required'})
-        
+
+        # Security: Validate storage_path is within allowed upload directory
         if not storage_path or not os.path.exists(storage_path):
             return jsonify({'success': False, 'message': 'File upload failed'})
-        
+
+        # Path traversal protection: ensure storage_path is under DOCUMENT_UPLOAD_FOLDER
+        upload_folder = os.path.abspath(DOCUMENT_UPLOAD_FOLDER)
+        try:
+            storage_path_abs = os.path.abspath(storage_path)
+            if not storage_path_abs.startswith(upload_folder):
+                return jsonify({'success': False, 'message': 'Invalid file path'}), 400
+        except Exception:
+            return jsonify({'success': False, 'message': 'Invalid file path'}), 400
+
         with get_db_context() as db:
             # Mark current version as not current
             db.execute("""
@@ -4749,3 +4774,15 @@ def handle_signature_request_create(document_id, user_id):
             return jsonify({'success': True, 'message': result[1]})
         else:
             return jsonify({'success': False, 'message': result[1]})
+
+    # =========================================================================
+    # ENDPOINT ALIASES - backward compatibility for template references
+    # =========================================================================
+    # Templates reference 'documents_create_folder' but the actual endpoint
+    # is 'documents_folder_create'. This alias ensures url_for() resolves.
+    app.add_url_rule(
+        None,
+        endpoint='documents_create_folder',
+        view_func=documents_folder_create,
+        methods=['POST']
+    )

@@ -1,53 +1,220 @@
 {% extends "social_media/base_social.html" %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.css" />
+<style>
+    .fc-event { cursor: pointer; border-radius: 6px; padding: 2px 6px; font-size: 0.75rem; }
+    .fc-event-dragging { opacity: 0.8; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .fc-toolbar-title { font-size: 1.25rem !important; font-weight: 600 !important; color: white !important; }
+    .fc-button { background: rgba(56, 189, 248, 0.2) !important; border: 1px solid rgba(56, 189, 248, 0.3) !important; color: white !important; }
+    .fc-button:hover { background: rgba(56, 189, 248, 0.3) !important; }
+    .fc-button-active { background: rgba(56, 189, 248, 0.5) !important; }
+    .fc-daygrid-day-number, .fc-col-header-cell-cushion { color: #e2e8f0; }
+    .fc-daygrid-day.fc-day-today { background: rgba(56, 189, 248, 0.1); }
+    .fc-scrollgrid { border-color: rgba(255,255,255,0.1); }
+    .fc-scrollgrid td, .fc-scrollgrid th { border-color: rgba(255,255,255,0.05); }
+    .calendar-legend { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+    .legend-item { display: flex; align-items: center; gap: 0.375rem; font-size: 0.75rem; }
+    .legend-color { width: 12px; height: 12px; border-radius: 3px; }
+    .calendar-modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
+    .calendar-modal.show { display: flex; }
+    .modal-content { background: rgba(30, 41, 59, 0.95); border: 1px solid rgba(255,255,255,0.1); border-radius: 1rem; padding: 1.5rem; max-width: 500px; width: 90%; }
+    .type-badge { display: inline-flex; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.65rem; font-weight: 600; }
+    .type-post { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+    .type-story { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+    .type-reel { background: rgba(236, 72, 153, 0.2); color: #ec4899; }
+    .type-carousel { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .type-video { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+</style>
+{% endblock %}
+
 {% block page_actions %}
 <div class="flex items-center gap-2">
-    <a href="?view=daily&date={{ date_from }}" class="btn-social btn-social-secondary {% if view == 'daily' %}bg-brand-500/30{% endif %}">Day</a>
-    <a href="?view=weekly&date={{ date_from }}" class="btn-social btn-social-secondary {% if view == 'weekly' %}bg-brand-500/30{% endif %}">Week</a>
-    <a href="?view=monthly&date={{ date_from }}" class="btn-social btn-social-secondary {% if view == 'monthly' %}bg-brand-500/30{% endif %}">Month</a>
+    <!-- View Toggle -->
+    <div class="flex bg-white/5 rounded-lg p-1">
+        <a href="?view=daily&date={{ date_from }}" class="px-3 py-1 rounded-md text-sm {% if view == 'daily' %}bg-brand-500/30 text-white{% else %}text-slate-400 hover:text-white{% endif %}">Day</a>
+        <a href="?view=weekly&date={{ date_from }}" class="px-3 py-1 rounded-md text-sm {% if view == 'weekly' %}bg-brand-500/30 text-white{% else %}text-slate-400 hover:text-white{% endif %}">Week</a>
+        <a href="?view=monthly&date={{ date_from }}" class="px-3 py-1 rounded-md text-sm {% if view == 'monthly' %}bg-brand-500/30 text-white{% else %}text-slate-400 hover:text-white{% endif %}">Month</a>
+    </div>
+    
+    <!-- Platform Filter -->
+    <select onchange="filterByPlatform(this.value)" class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <option value="">All Platforms</option>
+        <option value="Instagram">Instagram</option>
+        <option value="Facebook">Facebook</option>
+        <option value="LinkedIn">LinkedIn</option>
+        <option value="YouTube">YouTube</option>
+        <option value="WhatsApp">WhatsApp</option>
+    </select>
+    
+    <!-- Campaign Filter -->
+    <select onchange="filterByCampaign(this.value)" class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <option value="">All Campaigns</option>
+        {% for campaign in campaigns %}
+        <option value="{{ campaign.id }}">{{ campaign.campaign_name }}</option>
+        {% endfor %}
+    </select>
+    
     <a href="{{ url_for('social_media.calendar_new') }}" class="btn-social btn-social-primary">
-        <i class="fa-solid fa-plus"></i> Add to Calendar
+        <i class="fa-solid fa-plus"></i> Add Content
     </a>
 </div>
 {% endblock %}
+
 {% block page_content %}
-<!-- Date Range Header -->
+<!-- Date Navigation -->
 <div class="glass-panel rounded-xl p-4 mb-6 flex items-center justify-between">
     <div class="flex items-center gap-4">
-        <a href="?view={{ view }}&date={{ date_from }}" class="p-2 hover:bg-white/10 rounded-lg">
+        <button onclick="navigatePrev()" class="p-2 hover:bg-white/10 rounded-lg transition-colors">
             <i class="fa-solid fa-chevron-left text-white"></i>
-        </a>
+        </button>
         <h2 class="text-lg font-bold text-white">{{ date_from }} to {{ date_to }}</h2>
-        <a href="?view={{ view }}&date={{ date_to }}" class="p-2 hover:bg-white/10 rounded-lg">
+        <button onclick="navigateNext()" class="p-2 hover:bg-white/10 rounded-lg transition-colors">
             <i class="fa-solid fa-chevron-right text-white"></i>
-        </a>
+        </button>
+    </div>
+    <div class="flex items-center gap-4">
+        <button onclick="goToToday()" class="btn-social btn-social-secondary text-sm">Today</button>
+        <input type="date" id="jumpToDate" class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <button onclick="jumpToDate()" class="btn-social btn-social-secondary text-sm">Go</button>
     </div>
 </div>
 
 <!-- Calendar Grid -->
-<div class="grid grid-cols-1 md:grid-cols-7 gap-2">
-    {% for date_key, items in calendar_by_date.items() %}
-    <div class="calendar-day has-content">
-        <div class="text-xs font-semibold text-brand-400 mb-2">{{ date_key }}</div>
-        {% for item in items %}
-        <div class="bg-white/10 rounded p-2 mb-1 text-xs">
-            <div class="font-semibold text-white">{{ item.publish_time or '' }}</div>
-            <div class="text-slate-400 truncate">{{ item.content_topic or item.internal_title or 'Content' }}</div>
-            <span class="platform-badge platform-{{ item.platform.lower() if item.platform else 'general' }}">{{ item.platform }}</span>
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <!-- Calendar -->
+    <div class="lg:col-span-3">
+        <div class="glass-panel rounded-xl p-6">
+            <div id="calendar"></div>
         </div>
-        {% endfor %}
     </div>
-    {% else %}
-    <div class="col-span-7 empty-state py-12">
-        <div class="empty-state-icon"><i class="fa-solid fa-calendar"></i></div>
-        <p>No content scheduled for this period</p>
-        <a href="{{ url_for('social_media.calendar_new') }}" class="btn-social btn-social-primary mt-4">Schedule Content</a>
+    
+    <!-- Sidebar -->
+    <div class="space-y-6">
+        <!-- Upcoming -->
+        <div class="glass-panel rounded-xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">Upcoming This Week</h3>
+            <div class="space-y-3">
+                {% for item in upcoming_items %}
+                <div class="content-card py-3 cursor-pointer hover:border-brand-500/30" onclick="showContentPreview({{ item.id }})">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="platform-badge platform-{{ item.platform.lower() if item.platform else 'general' }}">{{ item.platform }}</span>
+                        <span class="text-xs text-slate-400">{{ item.publish_date }} {{ item.publish_time }}</span>
+                    </div>
+                    <div class="text-sm text-white font-medium truncate">{{ item.content_topic or item.internal_title or 'Content' }}</div>
+                    <div class="flex items-center gap-2 mt-2">
+                        <span class="type-badge type-{{ item.content_type.lower() if item.content_type else 'post' }}">{{ item.content_type or 'Post' }}</span>
+                        <span class="status-badge status-{{ item.calendar_status.lower() if item.calendar_status else 'scheduled' }}">{{ item.calendar_status or 'Scheduled' }}</span>
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm">No upcoming content</p>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Legend -->
+        <div class="glass-panel rounded-xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">Content Types</h3>
+            <div class="calendar-legend">
+                <div class="legend-item"><div class="legend-color" style="background:#38bdf8"></div>Post</div>
+                <div class="legend-item"><div class="legend-color" style="background:#a855f7"></div>Story</div>
+                <div class="legend-item"><div class="legend-color" style="background:#ec4899"></div>Reel</div>
+                <div class="legend-item"><div class="legend-color" style="background:#22c55e"></div>Carousel</div>
+                <div class="legend-item"><div class="legend-color" style="background:#ef4444"></div>Video</div>
+            </div>
+            
+            <h3 class="text-lg font-bold text-white mt-4 mb-4">Platforms</h3>
+            <div class="calendar-legend">
+                <div class="legend-item"><div class="legend-color platform-instagram"></div>Instagram</div>
+                <div class="legend-item"><div class="legend-color platform-facebook"></div>Facebook</div>
+                <div class="legend-item"><div class="legend-color platform-linkedin"></div>LinkedIn</div>
+                <div class="legend-item"><div class="legend-color platform-youtube"></div>YouTube</div>
+                <div class="legend-item"><div class="legend-color platform-whatsapp"></div>WhatsApp</div>
+            </div>
+        </div>
+        
+        <!-- Stats -->
+        <div class="glass-panel rounded-xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">This Month</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-brand-400">{{ calendar_stats.total }}</div>
+                    <div class="text-xs text-slate-400">Total Scheduled</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-green-400">{{ calendar_stats.published }}</div>
+                    <div class="text-xs text-slate-400">Published</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-yellow-400">{{ calendar_stats.pending }}</div>
+                    <div class="text-xs text-slate-400">Pending</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-2xl font-bold text-purple-400">{{ calendar_stats.draft }}</div>
+                    <div class="text-xs text-slate-400">Draft</div>
+                </div>
+            </div>
+        </div>
     </div>
-    {% endfor %}
 </div>
 
-<!-- Legend -->
-<div class="mt-6 flex items-center gap-4 text-xs text-slate-400">
-    <span><i class="fa-solid fa-circle text-brand-400"></i> Platform badges indicate scheduled platform</span>
+<!-- Content Preview Modal -->
+<div id="contentModal" class="calendar-modal">
+    <div class="modal-content">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-white">Content Preview</h3>
+            <button onclick="closeModal()" class="p-2 hover:bg-white/10 rounded-lg">
+                <i class="fa-solid fa-times text-slate-400"></i>
+            </button>
+        </div>
+        <div id="modalContent"></div>
+    </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const calendarEl = document.getElementById('calendar');
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: '{{ view }}' === 'daily' ? 'timeGridDay' : '{{ view }}' === 'weekly' ? 'timeGridWeek' : 'dayGridMonth',
+        headerToolbar: false,
+        height: 600,
+        events: {{ calendar_events|tojson }},
+        eventClick: function(info) {
+            showContentPreview(info.event.id);
+        },
+        eventDrop: function(info) {
+            updateContentSchedule(info.event.id, info.event.start);
+        },
+        dateClick: function(info) {
+            window.location.href = '{{ url_for("social_media.calendar_new") }}?date=' + info.dateStr;
+        }
+    });
+    calendar.render();
+});
+
+function filterByPlatform(platform) {
+    window.location.href = '{{ request.url.split("?")[0] }}?platform=' + platform;
+}
+
+function filterByCampaign(campaignId) {
+    window.location.href = '{{ request.url.split("?")[0] }}?campaign=' + campaignId;
+}
+
+function showContentPreview(id) {
+    document.getElementById('contentModal').classList.add('show');
+}
+
+function closeModal() {
+    document.getElementById('contentModal').classList.remove('show');
+}
+
+function updateContentSchedule(id, newDate) {
+    fetch('/social-media/calendar/update-date', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({id: id, date: newDate})
+    });
+}
+</script>
 {% endblock %}

@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-exclamation-triangle fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('error_analysis', 'Error Analysis Report') }}
+        </h1>
+        <div class="d-flex gap-2">
+            <button onclick="exportReport()" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-download me-1"></i> {{ t('export', 'Export') }}
+            </button>
+            <a href="{{ url_for('integration_reports') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back_to_reports', 'Back to Reports') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary KPIs -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-danger text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ error_by_type|sum(attribute='count') }}</div>
+                    <div class="small">{{ t('errors_last_30d', 'Errors (30d)') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-secondary text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ error_by_type|length }}</div>
+                    <div class="small">{{ t('unique_error_types', 'Unique Types') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ error_by_type|sum(attribute='resolved') }}</div>
+                    <div class="small">{{ t('resolved', 'Resolved') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white shadow">
+                <div class="card-body text-center">
+                    {% set total = error_by_type|sum(attribute='count') %}
+                    {% set resolved = error_by_type|sum(attribute='resolved') %}
+                    <div class="h2 mb-0">{{ "%.1f"|format(resolved / total * 100) if total > 0 else 0 }}%</div>
+                    <div class="small">{{ t('resolution_rate', 'Resolution Rate') }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Trend Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-danger">{{ t('error_trend_30d', 'Error Trend (30 Days)') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 250px;">
+                    <canvas id="errorTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-xl-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('errors_by_type', 'Errors by Type') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="errorTypeChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('resolution_status', 'Resolution Status') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="resolutionChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Errors Table -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('top_errors_by_type', 'Top Errors by Type') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('error_type', 'Error Type') }}</th>
+                                    <th class="text-center text-danger">{{ t('count', 'Count') }}</th>
+                                    <th class="text-center text-success">{{ t('resolved', 'Resolved') }}</th>
+                                    <th class="text-center">{{ t('affected_connectors', 'Affected Connectors') }}</th>
+                                    <th class="text-center">{{ t('last_occurrence', 'Last Occurrence') }}</th>
+                                    <th class="text-center">{{ t('resolution_rate', 'Resolution Rate') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for err in error_by_type %}
+                                <tr>
+                                    <td><code>{{ err.type }}</code></td>
+                                    <td class="text-center text-danger"><strong>{{ err.count }}</strong></td>
+                                    <td class="text-center text-success">{{ err.resolved }}</td>
+                                    <td class="text-center">{{ err.affected }}</td>
+                                    <td class="text-center"><small>{{ err.last_seen }}</small></td>
+                                    <td class="text-center">
+                                        {% set rate = (err.resolved / err.count * 100)|round|1 if err.count > 0 else 0 %}
+                                        {% if rate >= 80 %}
+                                            <span class="badge bg-success">{{ rate }}%</span>
+                                        {% elif rate >= 50 %}
+                                            <span class="badge bg-warning text-dark">{{ rate }}%</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ rate }}%</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted">
+                                        {{ t('no_error_data', 'No error data available for the last 30 days') }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Errors -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('recent_errors_7d', 'Recent Errors (7 Days)') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('error_message', 'Error Message') }}</th>
+                                    <th>{{ t('connector', 'Connector') }}</th>
+                                    <th>{{ t('type', 'Type') }}</th>
+                                    <th>{{ t('occurred_at', 'Occurred At') }}</th>
+                                    <th class="text-center">{{ t('status', 'Status') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for err in recent_errors %}
+                                <tr class="{{ 'table-success' if err.resolved else 'table-danger' }}">
+                                    <td><small>{{ err.message[:100] }}{% if err.message|length > 100 %}...{% endif %}</small></td>
+                                    <td><small>{{ err.connector }}</small></td>
+                                    <td><span class="badge bg-secondary">{{ err.type }}</span></td>
+                                    <td><small>{{ err.at }}</small></td>
+                                    <td class="text-center">
+                                        {% if err.resolved %}
+                                            <span class="badge bg-success">{{ t('resolved', 'Resolved') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">{{ t('unresolved', 'Unresolved') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">
+                                        {{ t('no_recent_errors', 'No recent errors') }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const errorByType = {{ error_by_type|tojson }};
+    const errorTrend = {{ error_trend|tojson }};
+
+    // Line chart - error trend
+    const trendCtx = document.getElementById('errorTrendChart').getContext('2d');
+    new Chart(trendCtx, {
+        type: 'line',
+        data: {
+            labels: errorTrend.map(e => e.date),
+            datasets: [{
+                label: '{{ t("errors", "Errors") }}',
+                data: errorTrend.map(e => e.count),
+                borderColor: '#dc3545',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 4,
+                pointBackgroundColor: '#dc3545'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+
+    // Doughnut - errors by type
+    const typeCtx = document.getElementById('errorTypeChart').getContext('2d');
+    const colors = ['#dc3545', '#fd7e14', '#ffc107', '#28a745', '#20c997', '#17a2b8', '#6610f2', '#6f42c1'];
+    new Chart(typeCtx, {
+        type: 'doughnut',
+        data: {
+            labels: errorByType.map(e => e.type),
+            datasets: [{
+                data: errorByType.map(e => e.count),
+                backgroundColor: errorByType.map((_, i) => colors[i % colors.length]),
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 10, font: { size: 10 } } }
+            }
+        }
+    });
+
+    // Doughnut - resolution status
+    const resolutionCtx = document.getElementById('resolutionChart').getContext('2d');
+    const resolved = errorByType.reduce((s, e) => s + (e.resolved || 0), 0);
+    const unresolved = errorByType.reduce((s, e) => s + (e.count - (e.resolved || 0)), 0);
+    new Chart(resolutionCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['{{ t("resolved", "Resolved") }}', '{{ t("unresolved", "Unresolved") }}'],
+            datasets: [{
+                data: [resolved, unresolved],
+                backgroundColor: ['#28a745', '#dc3545'],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+});
+
+function exportReport() {
+    const errorByType = {{ error_by_type|tojson }};
+    if (typeof XLSX !== 'undefined') {
+        const ws = XLSX.utils.json_to_sheet(errorByType.map(e => ({
+            'Error Type': e.type,
+            'Count': e.count,
+            'Resolved': e.resolved,
+            'Affected Connectors': e.affected,
+            'Last Occurrence': e.last_seen
+        })));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Error Analysis');
+        XLSX.writeFile(wb, 'error_analysis.xlsx');
+    }
+}
+</script>
+{% endblock %}

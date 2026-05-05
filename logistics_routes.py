@@ -100,9 +100,8 @@ def logistics_permission_required(permission: str):
                 flash('Please log in first.', 'error')
                 return redirect(url_for('login'))
 
-            # Super admin bypass
-            if session.get('role_name') == 'Global Admin':
-                return f(*args, **kwargs)
+            # SECURITY: Global Admin bypass is handled internally via wildcard permissions
+            # in user_has_permission(). Do NOT add custom role checks here.
 
             # Check specific logistics permissions
             logistics_permissions = session.get('logistics_permissions', [])

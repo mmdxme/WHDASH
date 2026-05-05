@@ -986,4 +986,16 @@ def register_sales_suite_routes(app: Flask, require_login, require_permission, g
 
         return jsonify(dict(summary) if summary else {})
 
+    # =========================================================================
+    # ENDPOINT ALIASES - backward compatibility for template references
+    # =========================================================================
+    # Template 'sales_suite_dashboard.html' uses url_for('sales_suite_dashboard')
+    # but the actual route is 'sales_dashboard_suite'. This alias fixes the mismatch.
+    app.add_url_rule(
+        '/sales/dashboard/suite/',
+        endpoint='sales_suite_dashboard',
+        view_func=sales_dashboard_suite,
+        methods=['GET']
+    )
+
     return app

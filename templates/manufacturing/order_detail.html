@@ -1,164 +1,398 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h1 class="mt-4 mb-4">
-                <i class="fas fa-clipboard"></i> Production Order: {{ order.order_number }}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-1 text-gray-800">
+                <i class="fas fa-clipboard me-2" style="color: var(--primary-color, #4e73df);"></i>
+                {{ t('production_order', 'Production Order') }}: <span class="text-primary">{{ order.order_number }}</span>
             </h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-0">
+                    <li class="breadcrumb-item"><a href="{{ url_for('manufacturing.dashboard') }}">{{ t('dashboard', 'Dashboard') }}</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('manufacturing.orders') }}">{{ t('orders', 'Orders') }}</a></li>
+                    <li class="breadcrumb-item active">{{ order.order_number }}</li>
+                </ol>
+            </nav>
         </div>
-    </div>
-
-    <div class="row mb-3">
-        <div class="col-12">
-            <a href="{{ url_for('manufacturing.orders') }}" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Back to Orders
+        <div class="d-flex gap-2">
+            {% if order.status != 'COMPLETED' and order.status != 'CANCELLED' %}
+            <div class="btn-group">
+                {% if order.status == 'DRAFT' %}
+                <a href="#" onclick="updateStatus({{ order.id }}, 'SCHEDULED')" class="btn btn-outline-info btn-sm">
+                    <i class="fas fa-calendar me-1"></i> {{ t('schedule', 'Schedule') }}
+                </a>
+                {% endif %}
+                {% if order.status in ['DRAFT', 'SCHEDULED'] %}
+                <a href="#" onclick="updateStatus({{ order.id }}, 'IN_PROGRESS')" class="btn btn-success btn-sm">
+                    <i class="fas fa-play me-1"></i> {{ t('start_production', 'Start') }}
+                </a>
+                {% endif %}
+                {% if order.status == 'IN_PROGRESS' %}
+                <a href="#" onclick="updateStatus({{ order.id }}, 'COMPLETED')" class="btn btn-success btn-sm">
+                    <i class="fas fa-check me-1"></i> {{ t('complete', 'Complete') }}
+                </a>
+                {% endif %}
+            </div>
+            {% endif %}
+            <a href="{{ url_for('manufacturing.edit_order', order_id=order.id) }}" class="btn btn-outline-warning btn-sm">
+                <i class="fas fa-edit me-1"></i> {{ t('edit', 'Edit') }}
+            </a>
+            <a href="{{ url_for('manufacturing.orders') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back', 'Back') }}
             </a>
         </div>
     </div>
 
-    <!-- Order Info -->
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Order Information</h5>
-                </div>
-                <div class="card-body">
-                    <table class="table table-borderless">
-                        <tr>
-                            <td><strong>Order Number:</strong></td>
-                            <td>{{ order.order_number }}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Product ID:</strong></td>
-                            <td>{{ order.product_id }}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Quantity:</strong></td>
-                            <td>{{ order.quantity }}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Completed Quantity:</strong></td>
-                            <td>{{ order.completed_quantity }}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Status:</strong></td>
-                            <td>
-                                {% if order.status == 'COMPLETED' %}
-                                <span class="badge badge-success">COMPLETED</span>
-                                {% elif order.status == 'IN_PROGRESS' %}
-                                <span class="badge badge-primary">IN PROGRESS</span>
-                                {% else %}
-                                <span class="badge badge-secondary">{{ order.status }}</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        <tr>
-                            <td><strong>Priority:</strong></td>
-                            <td>
-                                {% if order.priority == 'URGENT' %}
-                                <span class="badge badge-danger">URGENT</span>
-                                {% elif order.priority == 'HIGH' %}
-                                <span class="badge badge-warning">HIGH</span>
-                                {% else %}
-                                <span class="badge badge-secondary">NORMAL</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                    </table>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Schedule Information</h5>
-                </div>
-                <div class="card-body">
-                    <table class="table table-borderless">
-                        <tr>
-                            <td><strong>Work Center:</strong></td>
-                            <td>{{ order.work_center_id }}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Scheduled Start:</strong></td>
-                            <td>{{ order.scheduled_start }}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Scheduled End:</strong></td>
-                            <td>{{ order.scheduled_end }}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Actual Start:</strong></td>
-                            <td>{{ order.actual_start or 'Not started' }}</td>
-                        </tr>
-                        <tr>
-                            <td><strong>Actual End:</strong></td>
-                            <td>{{ order.actual_end or 'Not completed' }}</td>
-                        </tr>
-                    </table>
-                </div>
-            </div>
-        </div>
+    <!-- Status Alert -->
+    {% if order.status == 'COMPLETED' %}
+    <div class="alert alert-success d-flex align-items-center mb-4">
+        <i class="fas fa-check-circle me-2 fs-4"></i>
+        <strong>{{ t('order_completed', 'This order has been completed!') }}</strong>
     </div>
-
-    <!-- Components -->
-    {% if components %}
-    <div class="row mt-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Bill of Materials Components</h5>
-                </div>
-                <div class="card-body">
-                    <table class="table table-striped">
-                        <thead>
-                            <tr>
-                                <th>Item</th>
-                                <th>Quantity</th>
-                                <th>Unit</th>
-                                <th>Critical</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for comp in components %}
-                            <tr>
-                                <td>{{ comp.item_name or comp.item_id }}</td>
-                                <td>{{ comp.quantity }}</td>
-                                <td>{{ comp.unit }}</td>
-                                <td>
-                                    {% if comp.is_critical %}
-                                    <span class="badge badge-danger">Yes</span>
-                                    {% else %}
-                                    <span class="badge badge-secondary">No</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+    {% elif order.status == 'CANCELLED' %}
+    <div class="alert alert-secondary d-flex align-items-center mb-4">
+        <i class="fas fa-ban me-2 fs-4"></i>
+        <strong>{{ t('order_cancelled', 'This order has been cancelled.') }}</strong>
+    </div>
+    {% elif order.status == 'IN_PROGRESS' %}
+    <div class="alert alert-primary d-flex align-items-center mb-4">
+        <i class="fas fa-spinner me-2 fs-4"></i>
+        <strong>{{ t('order_in_progress', 'This order is currently in production.') }}</strong>
     </div>
     {% endif %}
 
-    <!-- Notes -->
+    <!-- Order Info Cards -->
+    <div class="row g-4 mb-4">
+        <!-- Order Information -->
+        <div class="col-lg-6">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-info-circle me-2"></i>{{ t('order_info', 'Order Information') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless mb-0">
+                        <tr>
+                            <td class="text-muted" style="width: 40%;">{{ t('order_number', 'Order Number') }}:</td>
+                            <td><strong>{{ order.order_number }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('product', 'Product') }}:</td>
+                            <td>{{ order.product_name or order.product_id or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('quantity', 'Quantity') }}:</td>
+                            <td><strong>{{ order.quantity }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('completed_qty', 'Completed Qty') }}:</td>
+                            <td>
+                                {{ order.completed_quantity }}
+                                <div class="progress mt-1" style="height: 6px; width: 150px;">
+                                    {% set pct = (order.completed_quantity / order.quantity * 100)|round if order.quantity > 0 else 0 %}
+                                    <div class="progress-bar bg-{% if pct >= 100 %}success{% elif pct >= 50 %}warning{% else %}danger{% endif %}"
+                                         role="progressbar" style="width: {{ pct }}%"></div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('status', 'Status') }}:</td>
+                            <td>
+                                {% if order.status == 'COMPLETED' %}
+                                    <span class="badge bg-success">{{ order.status }}</span>
+                                {% elif order.status == 'IN_PROGRESS' %}
+                                    <span class="badge bg-primary">{{ order.status }}</span>
+                                {% elif order.status == 'SCHEDULED' %}
+                                    <span class="badge bg-info">{{ order.status }}</span>
+                                {% elif order.status == 'DRAFT' %}
+                                    <span class="badge bg-secondary">{{ order.status }}</span>
+                                {% elif order.status == 'CANCELLED' %}
+                                    <span class="badge bg-danger">{{ order.status }}</span>
+                                {% else %}
+                                    <span class="badge bg-warning">{{ order.status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('priority', 'Priority') }}:</td>
+                            <td>
+                                {% if order.priority == 'URGENT' %}
+                                    <span class="badge bg-danger">URGENT</span>
+                                {% elif order.priority == 'HIGH' %}
+                                    <span class="badge bg-warning">HIGH</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">NORMAL</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule Information -->
+        <div class="col-lg-6">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-calendar-alt me-2"></i>{{ t('schedule_info', 'Schedule Information') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-borderless mb-0">
+                        <tr>
+                            <td class="text-muted" style="width: 40%;">{{ t('work_center', 'Work Center') }}:</td>
+                            <td>{{ order.work_center_name or order.work_center_id or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('scheduled_start', 'Scheduled Start') }}:</td>
+                            <td>{{ order.scheduled_start or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('scheduled_end', 'Scheduled End') }}:</td>
+                            <td>{{ order.scheduled_end or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('actual_start', 'Actual Start') }}:</td>
+                            <td>{{ order.actual_start or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('actual_end', 'Actual End') }}:</td>
+                            <td>{{ order.actual_end or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">{{ t('created', 'Created') }}:</td>
+                            <td>{{ order.created_at }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <ul class="nav nav-pills card-header-pills" id="orderTabs" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active" id="materials-tab" data-bs-toggle="tab" href="#materials" role="tab">
+                                <i class="fas fa-box me-1"></i> {{ t('materials', 'Materials') }}
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="operations-tab" data-bs-toggle="tab" href="#operations" role="tab">
+                                <i class="fas fa-tasks me-1"></i> {{ t('operations', 'Operations') }}
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="tracking-tab" data-bs-toggle="tab" href="#tracking" role="tab">
+                                <i class="fas fa-chart-line me-1"></i> {{ t('production_tracking', 'Tracking') }}
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="quality-tab" data-bs-toggle="tab" href="#quality" role="tab">
+                                <i class="fas fa-shield-alt me-1"></i> {{ t('quality', 'Quality') }}
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" id="history-tab" data-bs-toggle="tab" href="#history" role="tab">
+                                <i class="fas fa-history me-1"></i> {{ t('history', 'History') }}
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="card-body">
+                    <div class="tab-content" id="orderTabsContent">
+                        <!-- Materials Tab -->
+                        <div class="tab-pane fade show active" id="materials" role="tabpanel">
+                            {% if components %}
+                            <div class="table-responsive">
+                                <table class="table table-hover mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>{{ t('item', 'Item') }}</th>
+                                            <th>{{ t('quantity', 'Quantity') }}</th>
+                                            <th>{{ t('unit', 'Unit') }}</th>
+                                            <th>{{ t('critical', 'Critical') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for comp in components %}
+                                        <tr>
+                                            <td>{{ comp.item_name or comp.item_id }}</td>
+                                            <td>{{ comp.quantity }}</td>
+                                            <td>{{ comp.unit or '-' }}</td>
+                                            <td>
+                                                {% if comp.is_critical %}
+                                                <span class="badge bg-danger">YES</span>
+                                                {% else %}
+                                                <span class="badge bg-secondary">NO</span>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-box-open fa-3x mb-3"></i>
+                                <p class="mb-0">{{ t('no_materials', 'No bill of materials attached to this order.') }}</p>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Operations Tab -->
+                        <div class="tab-pane fade" id="operations" role="tabpanel">
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-tasks fa-3x mb-3"></i>
+                                <p class="mb-0">{{ t('no_operations', 'No operations defined for this order.') }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Production Tracking Tab -->
+                        <div class="tab-pane fade" id="tracking" role="tabpanel">
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-chart-line fa-3x mb-3"></i>
+                                <p class="mb-0">{{ t('no_tracking', 'No production tracking records yet.') }}</p>
+                                {% if order.status == 'IN_PROGRESS' %}
+                                <a href="#" class="btn btn-primary btn-sm mt-2">
+                                    <i class="fas fa-plus me-1"></i> {{ t('record_production', 'Record Production') }}
+                                </a>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Quality Tab -->
+                        <div class="tab-pane fade" id="quality" role="tabpanel">
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-shield-alt fa-3x mb-3"></i>
+                                <p class="mb-0">{{ t('no_quality_records', 'No quality inspection records yet.') }}</p>
+                                <a href="{{ url_for('manufacturing.quality_inspections') }}" class="btn btn-outline-primary btn-sm mt-2">
+                                    <i class="fas fa-plus me-1"></i> {{ t('new_inspection', 'New Inspection') }}
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- History Tab -->
+                        <div class="tab-pane fade" id="history" role="tabpanel">
+                            <div class="timeline">
+                                <div class="card">
+                                    <div class="card-body">
+                                        <div class="d-flex align-items-start mb-3">
+                                            <div class="me-3">
+                                                <span class="badge bg-primary rounded-circle p-2">
+                                                    <i class="fas fa-file"></i>
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <strong>{{ t('order_created', 'Order Created') }}</strong>
+                                                <p class="text-muted mb-0 small">{{ order.created_at }}</p>
+                                            </div>
+                                        </div>
+                                        {% if order.actual_start %}
+                                        <div class="d-flex align-items-start mb-3">
+                                            <div class="me-3">
+                                                <span class="badge bg-success rounded-circle p-2">
+                                                    <i class="fas fa-play"></i>
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <strong>{{ t('production_started', 'Production Started') }}</strong>
+                                                <p class="text-muted mb-0 small">{{ order.actual_start }}</p>
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                        {% if order.actual_end %}
+                                        <div class="d-flex align-items-start mb-3">
+                                            <div class="me-3">
+                                                <span class="badge bg-success rounded-circle p-2">
+                                                    <i class="fas fa-check"></i>
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <strong>{{ t('order_completed', 'Order Completed') }}</strong>
+                                                <p class="text-muted mb-0 small">{{ order.actual_end }}</p>
+                                            </div>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notes Section -->
     {% if order.notes %}
     <div class="row mt-4">
         <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5>Notes</h5>
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-comment me-2"></i>{{ t('notes', 'Notes') }}
+                    </h6>
                 </div>
                 <div class="card-body">
-                    <p>{{ order.notes }}</p>
+                    <p class="mb-0">{{ order.notes }}</p>
                 </div>
             </div>
         </div>
     </div>
     {% endif %}
 </div>
+
+<!-- Status Update Modal -->
+<div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ t('update_status', 'Update Status') }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" id="statusForm">
+                <div class="modal-body">
+                    <input type="hidden" name="status" id="newStatus">
+                    <p id="statusMessage"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ t('cancel', 'Cancel') }}</button>
+                    <button type="submit" class="btn btn-primary">{{ t('confirm', 'Confirm') }}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function updateStatus(orderId, newStatus) {
+    document.getElementById('newStatus').value = newStatus;
+    document.getElementById('statusForm').action = '/manufacturing/orders/' + orderId + '/status';
+
+    const statusNames = {
+        'SCHEDULED': 'Scheduled',
+        'IN_PROGRESS': 'In Progress',
+        'COMPLETED': 'Completed',
+        'CANCELLED': 'Cancelled'
+    };
+    document.getElementById('statusMessage').textContent =
+        'Are you sure you want to change status to "' + statusNames[newStatus] + '"?';
+
+    var modal = new bootstrap.Modal(document.getElementById('statusModal'));
+    modal.show();
+}
+</script>
 {% endblock %}

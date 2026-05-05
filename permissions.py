@@ -37,16 +37,34 @@ USAGE:
 
 from functools import wraps
 from typing import List, Optional, Set, Dict, Any
+import logging
+
+# Configure audit logger
+audit_logger = logging.getLogger('permission_audit')
+audit_handler = logging.StreamHandler()
+audit_handler.setLevel(logging.INFO)
+audit_logger.addHandler(audit_handler)
+audit_logger.setLevel(logging.INFO)
 
 # Import database functions - use lazy import to avoid circular imports
 def _get_db():
     from database import get_db_context
     return get_db_context()
 
-# Expose lazy import for use by other functions
+
 def get_db_context():
     from database import get_db_context as _gdb
     return _gdb()
+
+
+def get_all(sql: str, params=None):
+    from database import get_all as _get_all
+    return _get_all(sql, params)
+
+
+def get_one(sql: str, params=None):
+    from database import get_one as _get_one
+    return _get_one(sql, params)
 
 # ============================================================================
 # PERMISSION HIERARCHY
@@ -711,6 +729,9 @@ MODULE_PERMISSIONS = {
         'label': 'Marketing',
         'resources': {
             'dashboard': ['view'],
+            'brands': ['view', 'create', 'edit', 'delete'],
+            'market_intel': ['view', 'create', 'edit', 'delete'],
+            'segments': ['view', 'create', 'edit', 'delete'],
             'campaigns': ['view', 'create', 'edit', 'delete', 'approve', 'launch'],
             'leads': ['view', 'create', 'edit', 'delete', 'convert', 'assign'],
             'channels': ['view', 'create', 'edit', 'delete'],
@@ -1358,12 +1379,14 @@ MODULE_PERMISSIONS = {
 }
 
 # All possible action types
-ALL_ACTIONS = ['view', 'create', 'edit', 'delete', 'approve', 'execute',
-                'upload', 'download', 'import', 'export', 'assign',
-                'reset_password', 'merge', 'send', 'publish', 'launch',
-                'receive', 'pick', 'pack', 'ship', 'transfer', 'adjust',
-                'resolve', 'start', 'complete', 'optimize', 'override',
-                'convert', 'win', 'lose', 'manage', 'set_password']
+ALL_ACTIONS = (
+    'view', 'create', 'edit', 'delete', 'approve', 'execute',
+    'upload', 'download', 'import', 'export', 'assign',
+    'reset_password', 'merge', 'send', 'publish', 'launch',
+    'receive', 'pick', 'pack', 'ship', 'transfer', 'adjust',
+    'resolve', 'start', 'complete', 'optimize', 'override',
+    'convert', 'win', 'lose', 'manage', 'set_password'
+)
 
 
 # ============================================================================
@@ -1374,7 +1397,7 @@ def get_all_roles():
     """Get all roles with their permissions."""
     roles = get_all("SELECT * FROM roles ORDER BY role_name")
     for role in roles:
-        role['permissions'] = get_role_permissions(role['id'])
+        role['permissions'] = sorted(get_role_permissions(role['id']))
     return roles
 
 
@@ -1382,7 +1405,7 @@ def get_role_by_id(role_id):
     """Get a single role by ID."""
     role = get_one("SELECT * FROM roles WHERE id = ?", (role_id,))
     if role:
-        role['permissions'] = get_role_permissions(role_id)
+        role['permissions'] = sorted(get_role_permissions(role_id))
     return role
 
 
@@ -1444,37 +1467,54 @@ def get_user_permissions(user_id: int) -> Set[str]:
 def user_has_permission(user_id: int, module: str, resource: str, action: str) -> bool:
     """
     Check if a user has a specific permission.
-    
+
+    SECURITY: This function handles Global Admin role internally via permission
+    wildcard matching. Route handlers should NOT implement their own
+    'if role_name == Global Admin' bypass checks.
+
     Args:
         user_id: User ID
         module: Module name (e.g., 'hr', 'wms')
         resource: Resource name (e.g., 'employees', 'inventory')
         action: Action name (e.g., 'view', 'edit')
-    
+
     Returns:
         True if user has the permission, False otherwise
     """
+    if not user_id:
+        audit_logger.warning(f"Permission check for anonymous user: {module}.{resource}.{action}")
+        return False
+
     permissions = get_user_permissions(user_id)
     perm_string = f"{module}.{resource}.{action}"
-    
+
     # Direct match
     if perm_string in permissions:
         return True
-    
-    # Check for resource-level wildcard (e.g., 'hr.employees.*')
-    resource_wildcard = f"{module}.{resource}.*"
-    if resource_wildcard in permissions:
+
+    # Check for action-level wildcard (e.g., 'hr.employees.*')
+    action_wildcard = f"{module}.{resource}.*"
+    if action_wildcard in permissions:
         return True
-    
-    # Check for module-level wildcard (e.g., 'hr.*')
-    module_wildcard = f"{module}.*"
-    if module_wildcard in permissions:
-        # Need to verify the action exists in that module's resources
-        if module in MODULE_PERMISSIONS:
-            if resource in MODULE_PERMISSIONS[module]['resources']:
-                if action in MODULE_PERMISSIONS[module]['resources'][resource]:
+
+    # Check for resource-level wildcard (e.g., 'hr.*.*')
+    # But we need to verify the action exists in that module's resources
+    if module in MODULE_PERMISSIONS:
+        if resource in MODULE_PERMISSIONS[module]['resources']:
+            if action in MODULE_PERMISSIONS[module]['resources'][resource]:
+                # Check for module-level full access (e.g., 'hr.*')
+                module_any = f"{module}.*"
+                if module_any in permissions:
                     return True
-    
+
+    # Check for global wildcard (from Global Admin role): '*.*.*'
+    global_wildcard = "*.*.*"
+    if global_wildcard in permissions:
+        return True
+
+    # Log denied access for audit trail
+    audit_logger.info(f"Permission denied: user={user_id} {perm_string}")
+
     return False
 
 
@@ -1570,10 +1610,39 @@ def assign_role_to_user(user_id: int, role_id: int):
 # DECORATORS FOR ROUTE PROTECTION
 # ============================================================================
 
+def require_login(f):
+    """
+    Decorator to require authentication for a route.
+
+    Usage:
+        @app.route('/protected')
+        @require_login
+        def protected_route():
+            ...
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        from flask import session, flash, redirect, url_for, request
+
+        user_id = session.get('user_id')
+        if not user_id:
+            if request.is_json:
+                from flask import jsonify
+                return jsonify({'error': 'Authentication required'}), 401
+            flash("Please login to access this page.", "error")
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
 def require_permission(module: str, resource: str, action: str):
     """
     Decorator to require a specific permission for a route.
-    
+
+    SECURITY: This decorator uses the centralized permission system.
+    Global Admin bypass is handled internally via wildcard permissions.
+    Do NOT add custom 'if role_name == Global Admin' checks in route handlers.
+
     Usage:
         @app.route('/hr/employees')
         @require_login
@@ -1584,17 +1653,24 @@ def require_permission(module: str, resource: str, action: str):
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
-            from flask import session, flash, redirect, url_for
-            
+            from flask import session, flash, redirect, url_for, request
+
             user_id = session.get('user_id')
             if not user_id:
+                if request.is_json:
+                    from flask import jsonify
+                    return jsonify({'error': 'Authentication required'}), 401
                 flash("Please login to access this page.", "error")
                 return redirect(url_for('login'))
-            
+
             if not user_has_permission(user_id, module, resource, action):
+                audit_logger.info(f"Permission denied: user={user_id} {module}.{resource}.{action}")
+                if request.is_json:
+                    from flask import jsonify
+                    return jsonify({'error': 'Permission denied'}), 403
                 flash(f"Access Denied. You don't have permission to {action} {resource}.", "error")
                 return redirect(url_for('index'))
-            
+
             return f(*args, **kwargs)
         return decorated_function
     return decorator
@@ -2063,6 +2139,26 @@ def initialize_permissions():
             # Ensure roles table has is_system field
             try:
                 db.execute("ALTER TABLE roles ADD COLUMN is_system INTEGER DEFAULT 0")
+            except:
+                pass
+            
+            try:
+                db.execute("ALTER TABLE roles ADD COLUMN role_group TEXT DEFAULT 'GENERAL'")
+            except:
+                pass
+            
+            try:
+                db.execute("ALTER TABLE roles ADD COLUMN role_class TEXT DEFAULT 'General'")
+            except:
+                pass
+            
+            try:
+                db.execute("ALTER TABLE roles ADD COLUMN valid_from TEXT DEFAULT '2020-01-01'")
+            except:
+                pass
+            
+            try:
+                db.execute("ALTER TABLE roles ADD COLUMN valid_to TEXT DEFAULT '9999-12-31'")
             except:
                 pass
             

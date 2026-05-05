@@ -43,6 +43,9 @@ from bi_reporting_models import (
 # Import database utilities
 from database import get_db_context, get_one, get_all
 
+# Import unified permission decorator
+from permissions import require_permission
+
 
 # =============================================================================
 # AUTH AND PERMISSION HELPERS
@@ -58,29 +61,6 @@ def require_login(f):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
-
-
-def require_permission(module: str, resource: str, action: str):
-    """Decorator to require specific BI permission."""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            if 'user_id' not in session:
-                if request.is_json:
-                    return jsonify({'error': 'Authentication required'}), 401
-                return redirect(url_for('login'))
-            
-            from permissions import user_has_permission
-            user_id = session.get('user_id')
-            
-            if not user_has_permission(user_id, module, resource, action):
-                if request.is_json:
-                    return jsonify({'error': 'Permission denied'}), 403
-                return redirect(url_for('index'))
-            
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
 
 
 def get_current_user_id() -> Optional[int]:

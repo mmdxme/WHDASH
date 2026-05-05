@@ -1,38 +1,198 @@
 {% extends "social_media/base_social.html" %}
 
-{% block page_actions %}
-<a href="{{ url_for('social_media.publishing_new') }}" class="btn-social btn-social-primary"><i class="fa-solid fa-plus"></i> Schedule Publish</a>
+{% block extra_head %}
+<style>
+    .queue-card {
+        background: rgba(30, 41, 59, 0.6);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        transition: all 0.2s;
+    }
+    .queue-card:hover {
+        border-color: rgba(56, 189, 248, 0.3);
+        transform: translateY(-2px);
+    }
+    .queue-card.queued { border-left: 3px solid #38bdf8; }
+    .queue-card.published { border-left: 3px solid #22c55e; }
+    .queue-card.failed { border-left: 3px solid #ef4444; }
+    .queue-card.paused { border-left: 3px solid #fbbf24; }
+    .time-slot { 
+        background: rgba(56, 189, 248, 0.1); 
+        border: 1px solid rgba(56, 189, 248, 0.2);
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        font-size: 0.75rem;
+    }
+    .optimal-badge {
+        background: rgba(34, 197, 94, 0.2);
+        color: #22c55e;
+        padding: 0.125rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.65rem;
+        font-weight: 600;
+    }
+</style>
 {% endblock %}
-{% block page_content %}
-<div class="table-container">
-    <table>
-        <thead>
-            <tr><th>Content</th><th>Platform</th><th>Scheduled Date</th><th>Status</th><th>Actions</th></tr>
-        </thead>
-        <tbody>
-            {% for q in queue_items %}
-            <tr>
-                <td class="text-white">{{ q.internal_title or 'Direct Post' }}</td>
-                <td><span class="platform-badge platform-{{ q.platform.lower() }}">{{ q.platform }}</span></td>
-                <td>{{ q.publish_date }} {{ q.publish_time or '' }}</td>
-                <td><span class="status-badge status-{{ q.queue_status.lower() if q.queue_status else 'queued' }}">{{ q.queue_status or 'Queued' }}</span></td>
-                <td>
-                    <div class="flex gap-2">
-                        {% if q.queue_status == 'Queued' %}
-                        <form action="{{ url_for('social_media.publishing_publish', id=q.id) }}" method="POST">
-                            <button type="submit" class="btn-social btn-social-primary text-sm py-1 px-3"><i class="fa-solid fa-paper-plane"></i></button>
-                        </form>
-                        <form action="{{ url_for('social_media.publishing_cancel', id=q.id) }}" method="POST">
-                            <button type="submit" class="btn-social btn-social-secondary text-sm py-1 px-3"><i class="fa-solid fa-times"></i></button>
-                        </form>
-                        {% endif %}
-                    </div>
-                </td>
-            </tr>
-            {% else %}
-            <tr><td colspan="5" class="text-center py-8 text-slate-400">No scheduled publishing items</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+
+{% block page_actions %}
+<div class="flex items-center gap-3">
+    <select onchange="filterStatus(this.value)" class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <option value="">All Status</option>
+        <option value="Queued">Queued</option>
+        <option value="Published">Published</option>
+        <option value="Failed">Failed</option>
+        <option value="Paused">Paused</option>
+    </select>
+    <a href="{{ url_for('social_media.publishing_new') }}" class="btn-social btn-social-primary">
+        <i class="fa-solid fa-plus"></i> Schedule Publish
+    </a>
 </div>
+{% endblock %}
+
+{% block page_content %}
+<!-- Queue Summary -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="sm-kpi-card py-3">
+        <div class="text-xs text-slate-400">Total Scheduled</div>
+        <div class="text-xl font-bold text-white">{{ stats.total }}</div>
+    </div>
+    <div class="sm-kpi-card py-3">
+        <div class="text-xs text-slate-400">Queued</div>
+        <div class="text-xl font-bold text-brand-400">{{ stats.queued }}</div>
+    </div>
+    <div class="sm-kpi-card py-3">
+        <div class="text-xs text-slate-400">Published Today</div>
+        <div class="text-xl font-bold text-green-400">{{ stats.published_today }}</div>
+    </div>
+    <div class="sm-kpi-card py-3">
+        <div class="text-xs text-slate-400">Failed</div>
+        <div class="text-xl font-bold text-red-400">{{ stats.failed }}</div>
+    </div>
+</div>
+
+<!-- Main Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+    <!-- Queue List -->
+    <div class="lg:col-span-3 space-y-4">
+        {% for q in queue_items %}
+        <div class="queue-card {{ q.queue_status.lower() if q.queue_status else 'queued' }}">
+            <div class="flex items-start justify-between mb-3">
+                <div class="flex items-center gap-3">
+                    <span class="platform-badge platform-{{ q.platform.lower() }}">{{ q.platform }}</span>
+                    <div>
+                        <div class="font-semibold text-white">{{ q.internal_title or 'Direct Post' }}</div>
+                        <div class="text-xs text-slate-400">{{ q.content_type or 'Post' }}</div>
+                    </div>
+                </div>
+                <span class="status-badge status-{{ q.queue_status.lower() if q.queue_status else 'queued' }}">
+                    {{ q.queue_status or 'Queued' }}
+                </span>
+            </div>
+            
+            <div class="flex items-center gap-4 mb-3">
+                <div class="time-slot">
+                    <i class="fa-solid fa-calendar text-brand-400 mr-1"></i>
+                    {{ q.publish_date }} {{ q.publish_time or '' }}
+                </div>
+                {% if q.is_group_publish %}
+                <div class="time-slot">
+                    <i class="fa-solid fa-users text-purple-400 mr-1"></i> Group Publish
+                </div>
+                {% endif %}
+            </div>
+            
+            {% if q.error_message %}
+            <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-2 mb-3">
+                <div class="text-xs text-red-400">
+                    <i class="fa-solid fa-exclamation-triangle mr-1"></i>
+                    {{ q.error_message }}
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="flex items-center gap-2">
+                {% if q.queue_status == 'Queued' %}
+                <form action="{{ url_for('social_media.publishing_publish', id=q.id) }}" method="POST" class="flex-1">
+                    <button type="submit" class="w-full btn-social btn-social-primary text-sm py-2">
+                        <i class="fa-solid fa-paper-plane"></i> Publish Now
+                    </button>
+                </form>
+                <form action="{{ url_for('social_media.publishing_pause', id=q.id) }}" method="POST">
+                    <button type="submit" class="btn-social btn-social-secondary text-sm py-2 px-3" title="Pause">
+                        <i class="fa-solid fa-pause"></i>
+                    </button>
+                </form>
+                <form action="{{ url_for('social_media.publishing_cancel', id=q.id) }}" method="POST" onsubmit="return confirm('Cancel this scheduled post?')">
+                    <button type="submit" class="btn-social btn-social-secondary text-sm py-2 px-3 text-red-400" title="Cancel">
+                        <i class="fa-solid fa-times"></i>
+                    </button>
+                </form>
+                {% elif q.queue_status == 'Failed' %}
+                <form action="{{ url_for('social_media.publishing_retry', id=q.id) }}" method="POST" class="flex-1">
+                    <button type="submit" class="w-full btn-social btn-social-primary text-sm py-2">
+                        <i class="fa-solid fa-repeat"></i> Retry
+                    </button>
+                </form>
+                {% endif %}
+                <a href="{{ url_for('social_media.content_view', id=q.content_id) }}" class="btn-social btn-social-secondary text-sm py-2 px-3" title="View Content">
+                    <i class="fa-solid fa-eye"></i>
+                </a>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state py-12">
+            <div class="empty-state-icon"><i class="fa-solid fa-clock"></i></div>
+            <p>No scheduled publishing items</p>
+            <a href="{{ url_for('social_media.publishing_new') }}" class="btn-social btn-social-primary mt-4">Schedule Your First Post</a>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="space-y-6">
+        <!-- Optimal Posting Times -->
+        <div class="glass-panel rounded-xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">Optimal Posting Times</h3>
+            <div class="space-y-2">
+                {% for slot in optimal_times %}
+                <div class="flex items-center justify-between p-2 rounded-lg hover:bg-white/5">
+                    <div>
+                        <div class="text-sm text-white">{{ slot.time }}</div>
+                        <div class="text-xs text-slate-400">{{ slot.platform }}</div>
+                    </div>
+                    <span class="optimal-badge">Optimal</span>
+                </div>
+                {% else %}
+                <p class="text-slate-400 text-sm">No data available</p>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Quick Actions -->
+        <div class="glass-panel rounded-xl p-6">
+            <h3 class="text-lg font-bold text-white mb-4">Quick Actions</h3>
+            <div class="space-y-2">
+                <a href="{{ url_for('social_media.content_list') }}" class="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 text-slate-300">
+                    <i class="fa-solid fa-pen-to-square text-brand-400"></i>
+                    Create New Content
+                </a>
+                <a href="{{ url_for('social_media.content_calendar') }}" class="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 text-slate-300">
+                    <i class="fa-solid fa-calendar text-brand-400"></i>
+                    View Calendar
+                </a>
+                <a href="{{ url_for('social_media.reports_content_performance') }}" class="flex items-center gap-2 p-2 rounded-lg hover:bg-white/5 text-slate-300">
+                    <i class="fa-solid fa-chart-line text-brand-400"></i>
+                    View Analytics
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function filterStatus(status) {
+    window.location.href = '{{ url_for("social_media.publishing_queue") }}?status=' + status;
+}
+</script>
 {% endblock %}

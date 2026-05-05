@@ -43,32 +43,7 @@ from finance_models import (
 )
 
 # Import permissions helper
-def check_permission(user_id, module, resource, action):
-    """Check if user has a specific permission."""
-    from permissions import user_has_permission
-    return user_has_permission(user_id, module, resource, action)
-
-def require_permission(module, resource, action):
-    """Decorator to require a specific permission."""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            user_id = session.get('user_id')
-            if not user_id:
-                if request.is_json:
-                    return jsonify({'error': 'Authentication required'}), 401
-                flash("Please login to access this page.", "error")
-                return redirect(url_for('login'))
-            
-            if not check_permission(user_id, module, resource, action):
-                if request.is_json:
-                    return jsonify({'error': 'Access denied'}), 403
-                flash(f"You don't have permission to {action} {resource}.", "error")
-                return redirect(url_for('index'))
-            
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
+from permissions import require_permission
 
 def get_current_user_id():
     """Get current user ID from session."""
@@ -1318,6 +1293,111 @@ def finance_posting_policies():
     """Finance posting policies."""
     return render_template('finance/settings/posting_policies.html',
         title='Posting Policies'
+    )
+
+
+# ============================================================================
+# FINANCE DASHBOARD ROUTES
+# ============================================================================
+
+@finance_bp.route('/dashboard/cfo')
+@require_permission('finance', 'dashboard', 'view')
+def finance_dashboard_cfo():
+    """CFO Executive Dashboard."""
+    kpis = {
+        'total_revenue': 0,
+        'revenue_growth': 0,
+        'total_expenses': 0,
+        'expense_growth': 0,
+        'net_income': 0,
+        'net_margin': 0,
+        'roe': 0,
+        'current_ratio': 0,
+        'quick_ratio': 0,
+        'cash_ratio': 0
+    }
+
+    return render_template('finance/dashboards/cfo.html',
+        title='CFO Executive Dashboard',
+        kpis=kpis
+    )
+
+
+@finance_bp.route('/dashboard/ar')
+@require_permission('finance', 'ar', 'view')
+def finance_dashboard_ar():
+    """AR Collections Dashboard."""
+    ar_summary = {}
+    aging = []
+
+    return render_template('finance/dashboards/ar.html',
+        title='Accounts Receivable Dashboard',
+        ar_summary=ar_summary,
+        aging=aging
+    )
+
+
+@finance_bp.route('/dashboard/ap')
+@require_permission('finance', 'ap', 'view')
+def finance_dashboard_ap():
+    """AP Payments Dashboard."""
+    ap_summary = {}
+    aging = []
+
+    return render_template('finance/dashboards/ap.html',
+        title='Accounts Payable Dashboard',
+        ap_summary=ap_summary,
+        aging=aging
+    )
+
+
+@finance_bp.route('/dashboard/budget')
+@require_permission('finance', 'budgets', 'view')
+def finance_dashboard_budget():
+    """Budget Monitoring Dashboard."""
+    budget_summary = {}
+
+    return render_template('finance/dashboards/budget.html',
+        title='Budget Dashboard',
+        budget_summary=budget_summary
+    )
+
+
+@finance_bp.route('/dashboard/tax')
+@require_permission('finance', 'tax', 'view')
+def finance_dashboard_tax():
+    """Tax Management Dashboard."""
+    tax_summary = {}
+
+    return render_template('finance/dashboards/tax.html',
+        title='Tax Dashboard',
+        tax_summary=tax_summary
+    )
+
+
+@finance_bp.route('/dashboard/audit')
+@require_permission('finance', 'audit', 'view')
+def finance_dashboard_audit():
+    """Audit Oversight Dashboard."""
+    audit_summary = {}
+
+    return render_template('finance/dashboards/audit.html',
+        title='Audit Dashboard',
+        audit_summary=audit_summary
+    )
+
+
+@finance_bp.route('/dashboard/treasury')
+@require_permission('finance', 'treasury', 'view')
+def finance_dashboard_treasury():
+    """Treasury Dashboard."""
+    cash_position = {}
+    liquidity = {}
+
+    return render_template('finance/dashboards/treasury.html',
+        title='Treasury Dashboard',
+        cash_position=cash_position,
+        liquidity=liquidity
     )
 
 

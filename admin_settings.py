@@ -150,13 +150,22 @@ ADMIN_CATEGORIES = {
         'order': 11,
         'subcategories': ['customer_types', 'segments', 'follow_up', 'credit']
     },
+    'INVENTORY': {
+        'label': 'Inventory Settings',
+        'label_ar': 'إعدادات المخزون',
+        'label_fa': 'تنظیمات موجودی',
+        'icon': 'fa-boxes',
+        'description': 'Item master, stock management, valuation, and warehouse zones',
+        'order': 12,
+        'subcategories': ['item_master', 'stock_status', 'valuation', 'lot_serial', 'zones']
+    },
     'WAREHOUSE': {
         'label': 'Warehouse & Inventory',
         'label_ar': 'المستودع والمخزون',
         'label_fa': 'انبار و موجودی',
         'icon': 'fa-warehouse',
         'description': 'WMS, inventory policies, and stock rules',
-        'order': 12,
+        'order': 13,
         'subcategories': ['inventory_policy', 'stock_rules', 'locations', 'transfers']
     },
     'LOGISTICS': {
@@ -165,7 +174,7 @@ ADMIN_CATEGORIES = {
         'label_fa': 'تنظیمات لجستیک',
         'icon': 'fa-truck',
         'description': 'Delivery, transport, and route configuration',
-        'order': 13,
+        'order': 14,
         'subcategories': ['delivery_types', 'routes', 'vehicles', 'drivers', 'sla']
     },
     'PURCHASING': {
@@ -174,7 +183,7 @@ ADMIN_CATEGORIES = {
         'label_fa': 'خرید و تدارکات',
         'icon': 'fa-shopping-cart',
         'description': 'Supplier management and purchasing rules',
-        'order': 14,
+        'order': 15,
         'subcategories': ['suppliers', 'po_rules', 'approval_thresholds']
     },
     'PLANNING': {
@@ -183,7 +192,7 @@ ADMIN_CATEGORIES = {
         'label_fa': 'برنامه‌ریزی و پیش‌بینی',
         'icon': 'fa-chart-area',
         'description': 'Demand planning, forecasting, and replenishment',
-        'order': 15,
+        'order': 16,
         'subcategories': ['forecast_methods', 'replenishment', 'safety_stock']
     },
     'HR': {
@@ -192,8 +201,17 @@ ADMIN_CATEGORIES = {
         'label_fa': 'منابع انسانی و حقوق',
         'icon': 'fa-user-tie',
         'description': 'Human resources, attendance, leave, and payroll',
-        'order': 16,
+        'order': 17,
         'subcategories': ['leave_types', 'attendance', 'payroll_rules', 'overtime']
+    },
+    'SALES': {
+        'label': 'Sales Settings',
+        'label_ar': 'إعدادات المبيعات',
+        'label_fa': 'تنظیمات فروش',
+        'icon': 'fa-chart-line',
+        'description': 'Pricing, sales orders, tax codes, and shipping methods',
+        'order': 10,
+        'subcategories': ['pricing', 'orders', 'taxes', 'shipping', 'reporting']
     },
     'MARKETING': {
         'label': 'Marketing',
@@ -201,7 +219,7 @@ ADMIN_CATEGORIES = {
         'label_fa': 'بازاریابی',
         'icon': 'fa-bullhorn',
         'description': 'Campaigns, leads, budgets, and marketing KPIs',
-        'order': 17,
+        'order': 18,
         'subcategories': ['campaign_types', 'lead_sources', 'budgets', 'attribution']
     },
     'SOCIAL_MEDIA': {
@@ -320,7 +338,7 @@ MASTER_DATA_TYPES = {
         'label': 'Lead Source',
         'label_plural': 'Lead Sources',
         'icon': 'fa-bullseye',
-        'fields': ['code', 'name', 'channel', 'is_active']
+        'fields': ['code', 'name', 'name_ar', 'description', 'category', 'channel', 'is_active']
     },
     'sales_channel': {
         'label': 'Sales Channel',
@@ -723,19 +741,135 @@ DEFAULT_UI_SETTINGS = {
 }
 
 DEFAULT_SALES_SETTINGS = {
+    # =========================================
+    # CURRENCY & TAXATION
+    # =========================================
     'sales_default_currency': {'value': 'AED', 'type': 'string', 'description': 'Default sales currency'},
     'sales_tax_rate': {'value': '5', 'type': 'float', 'description': 'Default tax rate %'},
-    'quotation_validity_days': {'value': '30', 'type': 'integer', 'description': 'Quotation validity in days'},
+    'sales_tax_calculation_method': {'value': 'LINE', 'type': 'string', 'description': 'Tax calculation: LINE (per line) or GROUP (grouped)'},
+    'sales_enable_multi_tax': {'value': '0', 'type': 'boolean', 'description': 'Enable multiple tax rates per line'},
+    'sales_round_off_tolerance': {'value': '0.01', 'type': 'float', 'description': 'Rounding tolerance for tax calculations'},
+
+    # =========================================
+    # PRICING & DISCOUNT RULES
+    # =========================================
     'max_discount_percent': {'value': '20', 'type': 'float', 'description': 'Max allowed discount %'},
     'discount_approval_threshold': {'value': '10', 'type': 'float', 'description': 'Discount needing approval %'},
     'min_margin_percent': {'value': '5', 'type': 'float', 'description': 'Minimum profit margin %'},
-    'inquiry_response_sla_hours': {'value': '24', 'type': 'integer', 'description': 'Inquiry response SLA (hours)'},
+    'min_margin_absolute': {'value': '0.50', 'type': 'float', 'description': 'Minimum absolute margin per unit'},
+    'sales_block_below_cost': {'value': '1', 'type': 'boolean', 'description': 'Block sales below cost price'},
+    'sales_allow_negative_price': {'value': '0', 'type': 'boolean', 'description': 'Allow negative unit prices'},
+    'sales_max_line_discount': {'value': '30', 'type': 'float', 'description': 'Maximum line-level discount %'},
+    'sales_max_header_discount': {'value': '25', 'type': 'float', 'description': 'Maximum header/document-level discount %'},
+    'sales_discount_accumulation': {'value': '1', 'type': 'boolean', 'description': 'Accumulate line and header discounts'},
+
+    # =========================================
+    # QUOTATION MANAGEMENT
+    # =========================================
+    'quotation_validity_days': {'value': '30', 'type': 'integer', 'description': 'Quotation validity in days'},
+    'quotation_number_format': {'value': 'QUO-{YYYY}-{NNNNN}', 'type': 'string', 'description': 'Quotation number format pattern'},
+    'quotation_auto_numbering': {'value': '1', 'type': 'boolean', 'description': 'Enable automatic quotation numbering'},
     'quotation_turnaround_hours': {'value': '48', 'type': 'integer', 'description': 'Quotation turnaround SLA (hours)'},
-    'lost_reason_mandatory': {'value': '1', 'type': 'boolean', 'description': 'Require lost reason'},
-    'source_tracking_mandatory': {'value': '1', 'type': 'boolean', 'description': 'Require source tracking'},
+    'quotation_min_margin_enforce': {'value': '1', 'type': 'boolean', 'description': 'Enforce minimum margin on quotations'},
+    'quotation_copy_items_from_inquiry': {'value': '1', 'type': 'boolean', 'description': 'Auto-copy items from inquiry'},
+    'quotation_require_source': {'value': '1', 'type': 'boolean', 'description': 'Require lead source on quotations'},
+    'quotation_enable_versioning': {'value': '1', 'type': 'boolean', 'description': 'Enable quotation version tracking'},
+    'quotation_max_versions': {'value': '10', 'type': 'integer', 'description': 'Maximum quotation versions'},
+    'quotation_email_template': {'value': 'default_quotation', 'type': 'string', 'description': 'Email template for quotations'},
+
+    # =========================================
+    # INQUIRY & LEAD MANAGEMENT
+    # =========================================
+    'inquiry_response_sla_hours': {'value': '24', 'type': 'integer', 'description': 'Inquiry response SLA (hours)'},
+    'inquiry_auto_assignment': {'value': '0', 'type': 'boolean', 'description': 'Auto-assign inquiries to sales reps'},
+    'inquiry_require_contact': {'value': '1', 'type': 'boolean', 'description': 'Require contact info on inquiry'},
+    'inquiry_require_product': {'value': '1', 'type': 'boolean', 'description': 'Require at least one product on inquiry'},
+    'inquiry_lost_reason_mandatory': {'value': '1', 'type': 'boolean', 'description': 'Require lost reason when marking lost'},
+    'inquiry_days_until_stale': {'value': '14', 'type': 'integer', 'description': 'Days until inquiry is considered stale'},
+    'inquiry_auto_close_days': {'value': '90', 'type': 'integer', 'description': 'Auto-close inactive inquiries after days'},
+
+    # =========================================
+    # SALES ORDER WORKFLOW
+    # =========================================
     'require_quotation_approval': {'value': '0', 'type': 'boolean', 'description': 'Require quotation approval'},
+    'auto_confirm_orders': {'value': '0', 'type': 'boolean', 'description': 'Auto-confirm orders after submission'},
+    'order_min_order_value': {'value': '0', 'type': 'float', 'description': 'Minimum order value (0 = no minimum)'},
+    'order_max_line_items': {'value': '100', 'type': 'integer', 'description': 'Maximum line items per order'},
+    'order_require_delivery_date': {'value': '1', 'type': 'boolean', 'description': 'Require delivery date on orders'},
+    'order_default_delivery_window_days': {'value': '7', 'type': 'integer', 'description': 'Default delivery window in days'},
+    'order_allow_past_dates': {'value': '0', 'type': 'boolean', 'description': 'Allow delivery dates in the past'},
+    'order_partial_shipment': {'value': '1', 'type': 'boolean', 'description': 'Allow partial shipments'},
+    'order_max_partial_shipments': {'value': '5', 'type': 'integer', 'description': 'Maximum partial shipments per order'},
+    'sales_order_number_format': {'value': 'SO-{YYYY}-{NNNNN}', 'type': 'string', 'description': 'Sales order number format'},
+
+    # =========================================
+    # PAYMENT & CREDIT CONTROL
+    # =========================================
     'default_payment_terms': {'value': 'NET30', 'type': 'string', 'description': 'Default payment terms'},
-    'auto_confirm_orders': {'value': '0', 'type': 'boolean', 'description': 'Auto-confirm orders'},
+    'payment_terms_editable': {'value': '1', 'type': 'boolean', 'description': 'Allow editing payment terms on orders'},
+    'crm_credit_limit_default': {'value': '10000', 'type': 'float', 'description': 'Default credit limit'},
+    'credit_limit_overdue_check': {'value': '1', 'type': 'boolean', 'description': 'Check credit limit based on overdue amounts'},
+    'credit_limit_hold_on_exceed': {'value': '1', 'type': 'boolean', 'description': 'Hold orders when credit limit exceeded'},
+    'credit_limit_warning_percent': {'value': '80', 'type': 'float', 'description': 'Credit limit warning threshold %'},
+    'payment_advance_percent_min': {'value': '0', 'type': 'float', 'description': 'Minimum advance payment %'},
+    'payment_auto_invoice_on_delivery': {'value': '1', 'type': 'boolean', 'description': 'Auto-generate invoice on delivery confirmation'},
+
+    # =========================================
+    # DELIVERY & SHIPPING RULES
+    # =========================================
+    'delivery_lead_time_days': {'value': '3', 'type': 'integer', 'description': 'Default delivery lead time in days'},
+    'delivery_charge_calculation': {'value': 'AUTO', 'type': 'string', 'description': 'Delivery charge: AUTO, MANUAL, FREE'},
+    'delivery_default_zone': {'value': 'STANDARD', 'type': 'string', 'description': 'Default delivery zone'},
+    'delivery_allow_pickup': {'value': '1', 'type': 'boolean', 'description': 'Allow customer pickup option'},
+    'delivery_require_pod': {'value': '1', 'type': 'boolean', 'description': 'Require proof of delivery'},
+    'delivery_auto_close_days': {'value': '7', 'type': 'integer', 'description': 'Auto-close delivery after days'},
+    'delivery_number_format': {'value': 'DN-{YYYY}-{NNNNN}', 'type': 'string', 'description': 'Delivery note number format'},
+
+    # =========================================
+    # RETURNS & CLAIMS
+    # =========================================
+    'return_window_days': {'value': '14', 'type': 'integer', 'description': 'Return window in days'},
+    'return_requirerma_number': {'value': '1', 'type': 'boolean', 'description': 'Require RMA number for returns'},
+    'return_auto_approve_conditions': {'value': 'DEFECTIVE', 'type': 'string', 'description': 'Auto-approve returns for conditions (comma-separated)'},
+    'return_restock_fee_percent': {'value': '10', 'type': 'float', 'description': 'Restocking fee % for opened returns'},
+    'return_allow_partial': {'value': '1', 'type': 'boolean', 'description': 'Allow partial returns'},
+    'return_credit_note_validity_days': {'value': '180', 'type': 'integer', 'description': 'Credit note validity in days'},
+
+    # =========================================
+    # SALES PARTNER & COMMISSION
+    # =========================================
+    'sales_enable_partners': {'value': '0', 'type': 'boolean', 'description': 'Enable sales partner module'},
+    'commission_calculation_method': {'value': 'ON_PAYMENT', 'type': 'string', 'description': 'Commission calc: ON_ORDER, ON_PAYMENT, ON_DELIVERY'},
+    'commission_default_rate': {'value': '5', 'type': 'float', 'description': 'Default commission rate %'},
+    'commission_payout_frequency': {'value': 'MONTHLY', 'type': 'string', 'description': 'Commission payout: MONTHLY, QUARTERLY, ON_ORDER'},
+    'partner_credit_limit_enabled': {'value': '1', 'type': 'boolean', 'description': 'Enable partner credit limit tracking'},
+
+    # =========================================
+    # OPPORTUNITY & PIPELINE
+    # =========================================
+    'opportunity_auto_stage': {'value': '1', 'type': 'boolean', 'description': 'Auto-advance opportunity stages'},
+    'opportunity_probability_calculation': {'value': 'MANUAL', 'type': 'string', 'description': 'Probability: MANUAL or STAGE_BASED'},
+    'opportunity_days_until_stale': {'value': '30', 'type': 'integer', 'description': 'Days until opportunity is stale'},
+    'opportunity_auto_close_lost_days': {'value': '60', 'type': 'integer', 'description': 'Auto-close lost opportunities after days'},
+    'opportunity_min_confidence_score': {'value': '50', 'type': 'integer', 'description': 'Minimum confidence score forcast (0-100)'},
+    'source_tracking_mandatory': {'value': '1', 'type': 'boolean', 'description': 'Require source tracking'},
+
+    # =========================================
+    # REPORTING & ANALYTICS
+    # =========================================
+    'sales_use_lead_time_analysis': {'value': '1', 'type': 'boolean', 'description': 'Enable lead time analysis'},
+    'sales_enable_profitability_report': {'value': '1', 'type': 'boolean', 'description': 'Enable profitability reporting'},
+    'sales_forecast_periods': {'value': '3,6,12', 'type': 'string', 'description': 'Forecast periods in months (comma-separated)'},
+    'sales_target_period': {'value': 'YEARLY', 'type': 'string', 'description': 'Sales target period: MONTHLY, QUARTERLY, YEARLY'},
+
+    # =========================================
+    # INTEGRATION & DATA
+    # =========================================
+    'sales_sync_to_accounting': {'value': '0', 'type': 'boolean', 'description': 'Sync sales documents to accounting'},
+    'sales_document_format': {'value': 'STANDARD', 'type': 'string', 'description': 'Document format: STANDARD, DETAILED, SIMPLIFIED'},
+    'sales_enable_einvoice': {'value': '0', 'type': 'boolean', 'description': 'Enable e-invoice generation'},
+    'sales_pdf_layout': {'value': 'PORTRAIT', 'type': 'string', 'description': 'PDF layout: PORTRAIT, LANDSCAPE'},
+    'sales_auto_archive_years': {'value': '7', 'type': 'integer', 'description': 'Years before auto-archiving closed orders'},
 }
 
 DEFAULT_CRM_SETTINGS = {
@@ -825,12 +959,175 @@ DEFAULT_MARKETING_SETTINGS = {
 }
 
 DEFAULT_PLANNING_SETTINGS = {
-    'planning_default_forecast_method': {'value': 'MOVING_AVERAGE', 'type': 'string', 'description': 'Default forecast method'},
-    'planning_forecast_horizon_days': {'value': '30', 'type': 'integer', 'description': 'Forecast horizon (days)'},
-    'planning_demand_history_months': {'value': '12', 'type': 'integer', 'description': 'Demand history (months)'},
-    'planning_enable_auto_replenishment': {'value': '0', 'type': 'boolean', 'description': 'Enable auto replenishment'},
-    'planning_service_level_target': {'value': '95', 'type': 'integer', 'description': 'Service level target %'},
-    'planning_safety_stock_factor': {'value': '1.5', 'type': 'float', 'description': 'Safety stock multiplier'},
+    # =========================================
+    # DEMAND PLANNING & FORECASTING
+    # =========================================
+    'planning_default_forecast_method': {'value': 'MOVING_AVERAGE', 'type': 'string', 'description': 'Default forecast method: MOVING_AVERAGE, EXPONENTIAL, LINEAR, SEASONAL, MULTIVARIATE'},
+    'planning_forecast_horizon_days': {'value': '90', 'type': 'integer', 'description': 'Default forecast horizon (days)'},
+    'planning_demand_history_months': {'value': '24', 'type': 'integer', 'description': 'Demand history period for forecasting (months)'},
+    'planning_forecast_periodicity': {'value': 'WEEKLY', 'type': 'string', 'description': 'Forecast granularity: DAILY, WEEKLY, MONTHLY, QUARTERLY'},
+    'planning_forecast_confidence_level': {'value': '95', 'type': 'integer', 'description': 'Confidence interval for forecasts (%)'},
+    'planning_enable_seasonality': {'value': '1', 'type': 'boolean', 'description': 'Enable seasonal adjustments in forecasting'},
+    'planning_seasonality_period': {'value': '12', 'type': 'integer', 'description': 'Seasonality cycle length (months)'},
+    'planning_use_promotions': {'value': '1', 'type': 'boolean', 'description': 'Include promotion effects in forecasting'},
+    'planning_max_forecast_override_pct': {'value': '30', 'type': 'float', 'description': 'Max allowed manual forecast override (%)'},
+    'planning_forecast_consensus_weight': {'value': '0.5', 'type': 'float', 'description': 'Weight of statistical forecast vs. expert judgment (0-1)'},
+    'planning_enable_collaborative_forecasting': {'value': '0', 'type': 'boolean', 'description': 'Enable CPFR collaborative forecasting'},
+    'planning_forecast_model_selection': {'value': 'AUTO', 'type': 'string', 'description': 'Model selection: AUTO, MANUAL, HYBRID'},
+    'planning_outlier_detection': {'value': '1', 'type': 'boolean', 'description': 'Enable automatic outlier detection in historical data'},
+    'planning_outlier_threshold': {'value': '3', 'type': 'float', 'description': 'Standard deviations for outlier detection'},
+
+    # =========================================
+    # REPLENISHMENT & INVENTORY OPTIMIZATION
+    # =========================================
+    'planning_enable_auto_replenishment': {'value': '1', 'type': 'boolean', 'description': 'Enable automatic replenishment suggestions'},
+    'planning_replenishment_method': {'value': 'MIN_MAX', 'type': 'string', 'description': 'Replenishment method: MIN_MAX, EOQ, ROP, VMI, JIS, JIT'},
+    'planning_reorder_point_method': {'value': 'STATISTICAL', 'type': 'string', 'description': 'ROP calculation: STATISTICAL, FIXED, VARIABLE'},
+    'planning_service_level_target': {'value': '95', 'type': 'integer', 'description': 'Target service level (%)'},
+    'planning_fill_rate_target': {'value': '98', 'type': 'integer', 'description': 'Target fill rate (%)'},
+    'planning_eadq_days': {'value': '30', 'type': 'integer', 'description': 'Expected Average Daily Quantity (days)'},
+    'planning_safety_stock_method': {'value': 'STATISTICAL', 'type': 'string', 'description': 'Safety stock calculation: STATISTICAL, FIXED, FORMULA'},
+    'planning_safety_stock_factor': {'value': '1.65', 'type': 'float', 'description': 'Safety stock z-factor (1.65=95%, 1.96=97.5%, 2.33=99%)'},
+    'planning_safety_stock_days': {'value': '7', 'type': 'integer', 'description': 'Safety stock cover (days of demand)'},
+    'planning_min_safety_stock_days': {'value': '3', 'type': 'integer', 'description': 'Minimum safety stock cover (days)'},
+    'planning_max_safety_stock_days': {'value': '30', 'type': 'integer', 'description': 'Maximum safety stock cover (days)'},
+    'planning_lead_time_variability': {'value': '0.2', 'type': 'float', 'description': 'Lead time variability coefficient (CV)'},
+    'planning_demand_variability': {'value': '0.3', 'type': 'float', 'description': 'Demand variability coefficient (CV)'},
+    'planning_rop_includes_safety_stock': {'value': '1', 'type': 'boolean', 'description': 'Include safety stock in ROP calculation'},
+    'planning_use_abc_analysis': {'value': '1', 'type': 'boolean', 'description': 'Apply ABC analysis for inventory policies'},
+    'planning_abc_class_a_threshold': {'value': '80', 'type': 'integer', 'description': 'ABC A class revenue threshold (%)'},
+    'planning_abc_class_c_threshold': {'value': '90', 'type': 'integer', 'description': 'ABC C class revenue threshold (%)'},
+
+    # =========================================
+    # PRODUCTION PLANNING (MANUFACTURING)
+    # =========================================
+    'planning_enable_mrp': {'value': '1', 'type': 'boolean', 'description': 'Enable Material Requirements Planning'},
+    'planning_mrp_horizon_days': {'value': '180', 'type': 'integer', 'description': 'MRP planning horizon (days)'},
+    'planning_firm_period_days': {'value': '14', 'type': 'integer', 'description': 'Firm period for frozen zone (days)'},
+    'planning_planning_horizon_months': {'value': '6', 'type': 'integer', 'description': 'S&OP/aggregate planning horizon (months)'},
+    'planning_bom_explosion_method': {'value': 'ONE_LEVEL', 'type': 'string', 'description': 'BOM explosion: ONE_LEVEL, MULTI_LEVEL, PHANTOM'},
+    'planning_lot_sizing_method': {'value': 'LOT_FOR_LOT', 'type': 'string', 'description': 'Lot sizing: LOT_FOR_LOT, EOQ, POQ, PERIOD_ORDER, LUC, PART_PERIOD'},
+    'planning_fixed_order_quantity': {'value': '0', 'type': 'integer', 'description': 'Fixed order quantity (0=dynamic)'},
+    'planning_max_lot_size': {'value': '0', 'type': 'integer', 'description': 'Maximum lot size (0=no limit)'},
+    'planning_min_lot_size': {'value': '1', 'type': 'integer', 'description': 'Minimum lot size'},
+    'planning_multi_sourcing': {'value': '0', 'type': 'boolean', 'description': 'Enable multi-sourcing for materials'},
+    'planning_preferred_vendor_ratio': {'value': '80', 'type': 'integer', 'description': 'Preferred vendor order percentage (%)'},
+    'planning_enable_subassembly_planning': {'value': '1', 'type': 'boolean', 'description': 'Plan subassemblies independently'},
+    'planning_critical_path_lead_days': {'value': '7', 'type': 'integer', 'description': 'Critical path lead time buffer (days)'},
+    'planning_use_finalassembly_ scheduling': {'value': '1', 'type': 'boolean', 'description': 'Enable final assembly scheduling'},
+
+    # =========================================
+    # SUPPLY PLANNING & CAPACITY
+    # =========================================
+    'planning_supply_planning_method': {'value': 'FORWARD', 'type': 'string', 'description': 'Supply planning direction: FORWARD, BACKWARD, OPTIMIZED'},
+    'planning_enable_constrained_planning': {'value': '1', 'type': 'boolean', 'description': 'Enable constrained planning (finite resources)'},
+    'planning_capacity_planning_horizon': {'value': '90', 'type': 'integer', 'description': 'Capacity planning horizon (days)'},
+    'planning_max_resource_utilization': {'value': '100', 'type': 'integer', 'description': 'Maximum resource utilization (%)'},
+    'planning_preferred_resource_group': {'value': '', 'type': 'string', 'description': 'Preferred work center group for scheduling'},
+    'planning_split_operations_allowed': {'value': '1', 'type': 'boolean', 'description': 'Allow operation splitting'},
+    'planning_peak_blocking_horizon': {'value': '30', 'type': 'integer', 'description': 'Peak capacity blocking horizon (days)'},
+    'planning_use_infinite_capacity': {'value': '0', 'type': 'boolean', 'description': 'Use infinite capacity scheduling'},
+    'planning_automatic_load_adjustment': {'value': '1', 'type': 'boolean', 'description': 'Auto-adjust load on work centers'},
+    'planning_allow_overtime': {'value': '1', 'type': 'boolean', 'description': 'Allow overtime in capacity planning'},
+    'planning_overtime_limit_hours': {'value': '40', 'type': 'integer', 'description': 'Maximum overtime hours per period'},
+    'planning_subcontracting_threshold_qty': {'value': '1000', 'type': 'integer', 'description': 'Qty threshold for subcontracting suggestion'},
+    'planning_subcontracting_lead_days': {'value': '10', 'type': 'integer', 'description': 'Subcontracting default lead time (days)'},
+
+    # =========================================
+    # INVENTORY OPTIMIZATION & COSTS
+    # =========================================
+    'planning_inventory_valuation': {'value': 'FIFO', 'type': 'string', 'description': 'Inventory valuation: FIFO, LIFO, AVERAGE, STANDARD'},
+    'planning_carrying_cost_rate': {'value': '15', 'type': 'float', 'description': 'Annual inventory carrying cost rate (%)'},
+    'planning_ordering_cost': {'value': '50', 'type': 'float', 'description': 'Fixed ordering cost per order'},
+    'planning_stockout_cost_rate': {'value': '50', 'type': 'float', 'description': 'Stockout cost as % of item value'},
+    'planning_obsolescence_rate': {'value': '5', 'type': 'float', 'description': 'Annual obsolescence rate (%)'},
+    'planning_inventory_target_turns': {'value': '8', 'type': 'float', 'description': 'Target inventory turns per year'},
+    'planning_min_inventory_value': {'value': '10000', 'type': 'float', 'description': 'Minimum inventory value to maintain'},
+    'planning_max_inventory_value': {'value': '0', 'type': 'float', 'description': 'Maximum inventory value (0=no limit)'},
+    'planning_dead_stock_threshold_days': {'value': '180', 'type': 'integer', 'description': 'Days to classify as dead stock'},
+    'planning_slow_moving_threshold_days': {'value': '90', 'type': 'integer', 'description': 'Days to classify as slow moving'},
+
+    # =========================================
+    # S&OP & DEMAND PLANNING COLLABORATION
+    # =========================================
+    'planning_enable_sop': {'value': '1', 'type': 'boolean', 'description': 'Enable Sales & Operations Planning'},
+    'planning_sop_horizon_months': {'value': '18', 'type': 'integer', 'description': 'S&OP planning horizon (months)'},
+    'planning_sop_aggregation_level': {'value': 'PRODUCT_GROUP', 'type': 'string', 'description': 'S&OP aggregation: SKU, PRODUCT_GROUP, CATEGORY, FAMILY'},
+    'planning_sop_meeting_frequency': {'value': 'WEEKLY', 'type': 'string', 'description': 'S&OP meeting frequency'},
+    'planning_demand_planning_horizon': {'value': '12', 'type': 'integer', 'description': 'Demand planning horizon (months)'},
+    'planning_supply_review_horizon': {'value': '6', 'type': 'integer', 'description': 'Supply review horizon (months)'},
+    'planning_consensus_planning_enabled': {'value': '1', 'type': 'boolean', 'description': 'Enable consensus demand planning'},
+    'planning_bottom_up_planning': {'value': '1', 'type': 'boolean', 'description': 'Enable bottom-up (SKU level) planning'},
+    'planning_top_down_allocation': {'value': '0', 'type': 'boolean', 'description': 'Enable top-down forecast allocation'},
+    'planning_what_if_scenarios': {'value': '5', 'type': 'integer', 'description': 'Number of what-if scenarios to maintain'},
+    'planning_simulation_enabled': {'value': '0', 'type': 'boolean', 'description': 'Enable Monte Carlo simulation'},
+
+    # =========================================
+    # PLANNING WORKFLOW & APPROVALS
+    # =========================================
+    'planning_forecast_approval_required': {'value': '1', 'type': 'boolean', 'description': 'Require forecast approval before use'},
+    'planning_forecast_approval_threshold': {'value': '15', 'type': 'float', 'description': 'Forecast change % requiring approval'},
+    'planning_mrp_approval_required': {'value': '0', 'type': 'boolean', 'description': 'Require MRP suggestions approval'},
+    'planning_purchase_proposal_approval': {'value': '1', 'type': 'boolean', 'description': 'Require purchase proposal approval'},
+    'planning_production_order_approval': {'value': '1', 'type': 'boolean', 'description': 'Require production order approval'},
+    'planning_transfer_proposal_approval': {'value': '1', 'type': 'boolean', 'description': 'Require transfer proposal approval'},
+    'planning_auto_release_threshold': {'value': '1000', 'type': 'float', 'description': 'Auto-release orders below this value'},
+    'planning_firm_order_frozen_days': {'value': '7', 'type': 'integer', 'description': 'Days to firm up orders before execution'},
+    'planning_planning_calendar_enabled': {'value': '1', 'type': 'boolean', 'description': 'Enable planning calendar blackout dates'},
+
+    # =========================================
+    # SUPPLIER PLANNING & VMI
+    # =========================================
+    'planning_enable_vmi': {'value': '0', 'type': 'boolean', 'description': 'Enable Vendor Managed Inventory'},
+    'planning_vmi_review_period': {'value': '7', 'type': 'integer', 'description': 'VMI review cycle (days)'},
+    'planning_vmi_min_stock_level': {'value': '50', 'type': 'integer', 'description': 'VMI minimum stock percentage'},
+    'planning_vmi_max_stock_level': {'value': '100', 'type': 'integer', 'description': 'VMI maximum stock percentage'},
+    'planning_consignment_enabled': {'value': '0', 'type': 'boolean', 'description': 'Enable consignment inventory planning'},
+    'planning_vendor_lead_time_override': {'value': '0', 'type': 'boolean', 'description': 'Allow vendor lead time override'},
+    'planning_supplier_capacity_visibility': {'value': '0', 'type': 'boolean', 'description': 'Enable supplier capacity visibility'},
+
+    # =========================================
+    # DISTRIBUTION PLANNING (LOGISTICS)
+    # =========================================
+    'planning_enable_drp': {'value': '0', 'type': 'boolean', 'description': 'Enable Distribution Requirements Planning'},
+    'planning_drp_horizon_days': {'value': '90', 'type': 'integer', 'description': 'DRP planning horizon (days)'},
+    'planning_network_optimization': {'value': '0', 'type': 'boolean', 'description': 'Enable distribution network optimization'},
+    'planning_transit_lead_time_days': {'value': '5', 'type': 'integer', 'description': 'Default transit lead time (days)'},
+    'planning_cross_dock_enabled': {'value': '0', 'type': 'boolean', 'description': 'Enable cross-docking planning'},
+    'planning_vehicle_utilization_target': {'value': '85', 'type': 'integer', 'description': 'Target vehicle utilization (%)'},
+    'planning_route_optimization_enabled': {'value': '0', 'type': 'boolean', 'description': 'Enable automatic route optimization'},
+    'planning_fleet_size_optimization': {'value': '0', 'type': 'boolean', 'description': 'Enable fleet size optimization'},
+
+    # =========================================
+    # INTEGRATION & DATA MANAGEMENT
+    # =========================================
+    'planning_erp_integration': {'value': '1', 'type': 'boolean', 'description': 'Enable ERP system integration'},
+    'planning_wms_integration': {'value': '1', 'type': 'boolean', 'description': 'Enable WMS integration for inventory'},
+    'planning_crm_integration': {'value': '1', 'type': 'boolean', 'description': 'Enable CRM integration for demand signals'},
+    'planning_finance_integration': {'value': '1', 'type': 'boolean', 'description': 'Enable Finance integration for costs'},
+    'planning_data_refresh_interval': {'value': '60', 'type': 'integer', 'description': 'Data refresh interval (minutes)'},
+    'planning_forecast_sync_interval': {'value': '360', 'type': 'integer', 'description': 'Forecast synchronization interval (minutes)'},
+    'planning_ml_model_enabled': {'value': '0', 'type': 'boolean', 'description': 'Enable ML-based forecasting models'},
+    'planning_extrapolation_enabled': {'value': '1', 'type': 'boolean', 'description': 'Enable data extrapolation for missing periods'},
+    'planning_historical_data_retention_months': {'value': '60', 'type': 'integer', 'description': 'Historical data retention period (months)'},
+    'planning_audit_trail_enabled': {'value': '1', 'type': 'boolean', 'description': 'Enable planning audit trail'},
+
+    # =========================================
+    # ALERTS & MONITORING
+    # =========================================
+    'planning_alert_low_forecast_accuracy': {'value': '1', 'type': 'boolean', 'description': 'Alert on low forecast accuracy'},
+    'planning_forecast_accuracy_threshold': {'value': '75', 'type': 'integer', 'description': 'Forecast accuracy alert threshold (%)'},
+    'planning_alert_stockout_risk': {'value': '1', 'type': 'boolean', 'description': 'Alert on stockout risk'},
+    'planning_stockout_risk_days': {'value': '7', 'type': 'integer', 'description': 'Stockout risk alert threshold (days ahead)'},
+    'planning_alert_excess_inventory': {'value': '1', 'type': 'boolean', 'description': 'Alert on excess inventory'},
+    'planning_excess_threshold_days': {'value': '90', 'type': 'integer', 'description': 'Excess inventory threshold (days of supply)'},
+    'planning_alert_capacity_overload': {'value': '1', 'type': 'boolean', 'description': 'Alert on capacity overload'},
+    'planning_capacity_utilization_alert': {'value': '100', 'type': 'integer', 'description': 'Capacity utilization alert threshold (%)'},
+    'planning_alert_supply_delay': {'value': '1', 'type': 'boolean', 'description': 'Alert on potential supply delays'},
+    'planning_supply_delay_days_alert': {'value': '5', 'type': 'integer', 'description': 'Supply delay alert threshold (days)'},
+    'planning_daily_digest_enabled': {'value': '1', 'type': 'boolean', 'description': 'Send daily planning digest'},
+    'planning_weekly_summary_enabled': {'value': '1', 'type': 'boolean', 'description': 'Send weekly planning summary'},
+    'planning_kpi_dashboard_enabled': {'value': '1', 'type': 'boolean', 'description': 'Enable planning KPI dashboard'},
 }
 
 # ============================================================================
@@ -1017,30 +1314,50 @@ def reset_setting_to_default(setting_key, scope_type='GLOBAL', scope_id=None):
 def get_master_data(master_type, is_active=None, limit=100, offset=0):
     """Get master data records of a specific type."""
     table_name = f"md_{master_type}"
-    
+
     if not table_exists(table_name):
         return []
-    
+
     sql = f"SELECT * FROM {table_name}"
     params = []
-    
+
     if is_active is not None:
         sql += " WHERE is_active = ?"
         params.append(1 if is_active else 0)
-    
+
     sql += f" ORDER BY name LIMIT {limit} OFFSET {offset}"
-    
-    return get_all(sql, params)
+
+    records = get_all(sql, params)
+
+    # Parse extra_data JSON for lead_source
+    import json
+    for record in records:
+        if record.get('extra_data') and isinstance(record['extra_data'], str):
+            try:
+                record['extra_data'] = json.loads(record['extra_data'])
+            except:
+                record['extra_data'] = {}
+
+    return records
 
 
 def get_master_data_record(master_type, record_id):
     """Get a single master data record."""
     table_name = f"md_{master_type}"
-    
+
     if not table_exists(table_name):
         return None
-    
-    return get_one(f"SELECT * FROM {table_name} WHERE id = ?", (record_id,))
+
+    record = get_one(f"SELECT * FROM {table_name} WHERE id = ?", (record_id,))
+
+    if record and record.get('extra_data') and isinstance(record['extra_data'], str):
+        import json
+        try:
+            record['extra_data'] = json.loads(record['extra_data'])
+        except:
+            record['extra_data'] = {}
+
+    return record
 
 
 def create_master_data(master_type, data, user_id=None):
@@ -1539,6 +1856,8 @@ def _seed_default_settings():
                 category = 'GENERAL'
             elif key.startswith(('default_')):
                 category = 'GENERAL'
+            elif key.startswith(('sales_', 'quotation_', 'inquiry_', 'order_', 'return_', 'commission_', 'opportunity_', 'delivery_', 'credit_limit_', 'payment_', 'partner_', 'min_margin_', 'lost_reason', 'source_tracking', 'max_discount', 'discount_approval', 'default_payment')):
+                category = 'SALES'
             elif key.startswith(('session', 'max_', 'password', 'require_', 'enable_', 'allowed_', 'ip_', 'wms_', 'logistics_', 'hr_', 'planning_', 'crm_', 'marketing_')):
                 category = key.split('_')[0].upper()
                 if category == 'CRM':

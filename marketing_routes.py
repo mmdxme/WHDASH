@@ -73,25 +73,42 @@ def mkt_login_required(f):
 
 
 def mkt_permission_required(permission: str):
-    """Decorator to check marketing-specific permissions."""
+    """Decorator to check marketing-specific permissions.
+
+    Maps route permission names to module.resource.action format.
+
+    SECURITY: Uses centralized permission system via user_has_permission().
+    Do NOT use session-based permission lists - they can be manipulated.
+    """
+    # Map route permissions to (resource, action)
+    # e.g., 'dashboard' -> ('dashboard', 'view'), 'view_brands' -> ('brands', 'view')
+    def _parse_permission(perm):
+        parts = perm.split('_', 1)
+        if len(parts) == 1:
+            return (perm, 'view')  # Default to 'view' action
+        else:
+            # e.g., 'view_brands' -> action='view', resource='brands'
+            action = parts[0]  # 'view', 'manage', etc.
+            resource = parts[1]  # 'brands', 'campaigns', etc.
+            return (resource, action)
+
     def decorator(f):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if 'user_id' not in session:
                 flash('Please log in first.', 'error')
                 return redirect(url_for('login'))
-            
-            # Super admin bypass
-            if session.get('role_name') == 'Global Admin':
-                return f(*args, **kwargs)
-            
-            # Check specific marketing permissions from session or role
-            mkt_permissions = session.get('marketing_permissions', [])
-            if 'all_marketing' in mkt_permissions or permission in mkt_permissions:
-                return f(*args, **kwargs)
-            
-            flash('You do not have permission to access this Marketing module.', 'error')
-            return redirect(url_for('index'))
+
+            user_id = session['user_id']
+            resource, action = _parse_permission(permission)
+
+            # SECURITY: Global Admin bypass is handled internally via wildcard permissions
+            # in user_has_permission(). Do NOT use session-based permission lists.
+            # Use the centralized permission system for proper audit logging.
+            if not user_has_permission(user_id, 'marketing', resource, action):
+                flash('You do not have permission to access this Marketing module.', 'error')
+                return redirect(url_for('index'))
+            return f(*args, **kwargs)
         return decorated_function
     return decorator
 
@@ -998,7 +1015,6 @@ def channels_edit(id):
 def campaigns_list():
     """List marketing campaigns."""
     db = get_db()
-    company_id = session.get('company_id', 0)
 
     page = int(request.args.get('page', 1))
     per_page = 20
@@ -1016,11 +1032,12 @@ def campaigns_list():
         LEFT JOIN users u ON c.owner_user_id = u.id
         LEFT JOIN marketing_brands b ON c.target_brand_id = b.id
         LEFT JOIN marketing_customer_segments s ON c.target_segment_id = s.id
-        WHERE c.company_id = ?
+        WHERE 1=1
     """
-    count_query = "SELECT COUNT(*) as cnt FROM marketing_campaigns WHERE company_id = ?"
-    params = [company_id]
-    count_params = [company_id]
+    params = []
+
+    count_query = "SELECT COUNT(*) as cnt FROM marketing_campaigns WHERE 1=1"
+    count_params = []
 
     if search:
         query += " AND (c.name LIKE ? OR c.code LIKE ?)"
@@ -6160,10 +6177,9 @@ def api_marketing_export(export_type, data_type=None):
         db = get_db()
         data = db.execute("""
             SELECT * FROM marketing_campaigns
-            WHERE company_id = ?
             ORDER BY created_at DESC
             LIMIT 5000
-        """, (company_id,)).fetchall()
+        """).fetchall()
         data = [dict(row) for row in data]
         columns = MARKETING_EXPORT_COLUMNS['campaigns']
         title = 'Marketing Campaigns'
@@ -6171,10 +6187,9 @@ def api_marketing_export(export_type, data_type=None):
         db = get_db()
         data = db.execute("""
             SELECT * FROM marketing_leads
-            WHERE company_id = ?
             ORDER BY created_at DESC
             LIMIT 5000
-        """, (company_id,)).fetchall()
+        """).fetchall()
         data = [dict(row) for row in data]
         columns = MARKETING_EXPORT_COLUMNS['leads']
         title = 'Marketing Leads'
@@ -6182,10 +6197,9 @@ def api_marketing_export(export_type, data_type=None):
         db = get_db()
         data = db.execute("""
             SELECT * FROM marketing_channels
-            WHERE company_id = ?
             ORDER BY channel_name
             LIMIT 5000
-        """, (company_id,)).fetchall()
+        """).fetchall()
         data = [dict(row) for row in data]
         columns = MARKETING_EXPORT_COLUMNS['channels']
         title = 'Marketing Channels'
@@ -6193,10 +6207,9 @@ def api_marketing_export(export_type, data_type=None):
         db = get_db()
         data = db.execute("""
             SELECT * FROM marketing_content
-            WHERE company_id = ?
             ORDER BY created_at DESC
             LIMIT 5000
-        """, (company_id,)).fetchall()
+        """).fetchall()
         data = [dict(row) for row in data]
         columns = MARKETING_EXPORT_COLUMNS['content']
         title = 'Marketing Content'
@@ -6204,10 +6217,9 @@ def api_marketing_export(export_type, data_type=None):
         db = get_db()
         data = db.execute("""
             SELECT * FROM marketing_offers
-            WHERE company_id = ?
             ORDER BY created_at DESC
             LIMIT 5000
-        """, (company_id,)).fetchall()
+        """).fetchall()
         data = [dict(row) for row in data]
         columns = MARKETING_EXPORT_COLUMNS['offers']
         title = 'Marketing Offers'
@@ -6215,21 +6227,19 @@ def api_marketing_export(export_type, data_type=None):
         db = get_db()
         data = db.execute("""
             SELECT * FROM marketing_budgets
-            WHERE company_id = ?
             ORDER BY period DESC
             LIMIT 5000
-        """, (company_id,)).fetchall()
+        """).fetchall()
         data = [dict(row) for row in data]
         columns = MARKETING_EXPORT_COLUMNS['budgets']
         title = 'Marketing Budgets'
     elif data_type == 'segments':
         db = get_db()
         data = db.execute("""
-            SELECT * FROM marketing_segments
-            WHERE company_id = ?
+            SELECT * FROM marketing_customer_segments
             ORDER BY created_at DESC
             LIMIT 5000
-        """, (company_id,)).fetchall()
+        """).fetchall()
         data = [dict(row) for row in data]
         columns = MARKETING_EXPORT_COLUMNS['segments']
         title = 'Customer Segments'

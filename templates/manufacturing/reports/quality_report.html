@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-1 text-gray-800">
+                <i class="fas fa-shield-alt me-2" style="color: var(--primary-color, #4e73df);"></i>
+                {{ t('quality_report', 'Quality Report') }}
+            </h1>
+            <p class="text-muted mb-0">{{ t('report_period', 'Report Period') }}: {{ t('last_30_days', 'Last 30 Days') }}</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('manufacturing.reports') }}" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back_to_reports', 'Back to Reports') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-primary shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                {{ t('total_inspections', 'Total Inspections') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ stats.total_inspections if stats else 0 }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-search fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-success shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                {{ t('pass_rate', 'Pass Rate') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% if stats and stats.total_inspected > 0 %}
+                                    {{ ((stats.total_passed / stats.total_inspected * 100)|round(1)) }}%
+                                {% else %}0%{% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-danger shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                {{ t('total_failed', 'Total Failed') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ stats.total_failed if stats else 0 }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-times-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-info shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                {{ t('units_inspected', 'Units Inspected') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ stats.total_inspected if stats else 0 }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-box fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inspections by Type -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-chart-pie me-2"></i>{{ t('inspections_by_type', 'Inspections by Type') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if by_type %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ t('type', 'Type') }}</th>
+                                    <th class="text-center">{{ t('count', 'Count') }}</th>
+                                    <th>{{ t('distribution', 'Distribution') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in by_type %}
+                                <tr>
+                                    <td>
+                                        {% if row.inspection_type == 'FIRST_PIECE' %}
+                                            <span class="badge bg-primary">FIRST PIECE</span>
+                                        {% elif row.inspection_type == 'IN_PROCESS' %}
+                                            <span class="badge bg-info">IN-PROCESS</span>
+                                        {% elif row.inspection_type == 'FINAL' %}
+                                            <span class="badge bg-success">FINAL</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ row.inspection_type }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">{{ row.count }}</td>
+                                    <td>
+                                        <div class="progress mb-0" style="height: 8px;">
+                                            {% set max_count = by_type|max(attribute='count').count %}
+                                            <div class="progress-bar bg-info" role="progressbar"
+                                                 style="width: {% if max_count > 0 %}{{ (row.count / max_count * 100)|round }}{% else %}0{% endif %}%">
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-muted mb-0">{{ t('no_data', 'No inspection data available') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Inspections -->
+        <div class="col-lg-6">
+            <div class="card shadow h-100">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-list me-2"></i>{{ t('recent_inspections', 'Recent Inspections') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if recent_inspections %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ t('number', 'Number') }}</th>
+                                    <th>{{ t('order', 'Order') }}</th>
+                                    <th>{{ t('result', 'Result') }}</th>
+                                    <th>{{ t('passed', 'Passed') }}</th>
+                                    <th>{{ t('failed', 'Failed') }}</th>
+                                    <th>{{ t('date', 'Date') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for insp in recent_inspections[:10] %}
+                                <tr>
+                                    <td><strong>{{ insp.inspection_number }}</strong></td>
+                                    <td>{{ insp.order_number or '-' }}</td>
+                                    <td>
+                                        {% if insp.result == 'PASS' %}
+                                            <span class="badge bg-success">PASS</span>
+                                        {% elif insp.result == 'FAIL' %}
+                                            <span class="badge bg-danger">FAIL</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ insp.result or 'PENDING' }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center text-success">{{ insp.quantity_passed or 0 }}</td>
+                                    <td class="text-center text-danger">{{ insp.quantity_failed or 0 }}</td>
+                                    <td>{{ insp.inspected_at[:10] if insp.inspected_at else '-' }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-center text-muted mb-0">{{ t('no_inspections', 'No inspections found') }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

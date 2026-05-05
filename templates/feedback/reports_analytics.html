@@ -2,10 +2,16 @@
 
 {% block header_actions %}
 {% if can_manage %}
-<a href="{{ url_for('feedback.export_reports') }}" class="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors flex items-center gap-2">
-    <i class="fas fa-download"></i>
-    <span>Export</span>
-</a>
+<div class="flex items-center gap-3">
+    <button onclick="printReport()" class="px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors flex items-center gap-2">
+        <i class="fas fa-print"></i>
+        <span>Print</span>
+    </button>
+    <a href="{{ url_for('feedback.export_reports') }}" class="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors flex items-center gap-2">
+        <i class="fas fa-download"></i>
+        <span>Export CSV</span>
+    </a>
+</div>
 {% endif %}
 {% endblock %}
 {% block feedback_content %}
@@ -15,172 +21,383 @@
 </div>
 
 <!-- Summary Stats -->
-<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6">
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 feedback-kpi-card">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-sm text-slate-400 mb-1">Total Reports</p>
                 <p class="text-3xl font-bold text-white">{{ stats.total }}</p>
             </div>
-            <div class="w-14 h-14 bg-blue-500/20 rounded-2xl flex items-center justify-center">
-                <i class="fas fa-inbox text-2xl text-blue-400"></i>
+            <div class="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-inbox text-xl text-blue-400"></i>
             </div>
         </div>
     </div>
 
-    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6">
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 feedback-kpi-card">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-sm text-slate-400 mb-1">Open</p>
                 <p class="text-3xl font-bold text-amber-400">{{ stats.open }}</p>
             </div>
-            <div class="w-14 h-14 bg-amber-500/20 rounded-2xl flex items-center justify-center">
-                <i class="fas fa-folder-open text-2xl text-amber-400"></i>
+            <div class="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-folder-open text-xl text-amber-400"></i>
             </div>
         </div>
     </div>
 
-    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6">
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 feedback-kpi-card">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-sm text-slate-400 mb-1">Resolved</p>
                 <p class="text-3xl font-bold text-emerald-400">{{ stats.resolved }}</p>
             </div>
-            <div class="w-14 h-14 bg-emerald-500/20 rounded-2xl flex items-center justify-center">
-                <i class="fas fa-check-circle text-2xl text-emerald-400"></i>
+            <div class="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-check-circle text-xl text-emerald-400"></i>
             </div>
         </div>
     </div>
 
-    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6">
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 feedback-kpi-card">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-sm text-slate-400 mb-1">Avg Resolution</p>
-                <p class="text-3xl font-bold text-white">{{ stats.avg_resolution_hours }}h</p>
+                <p class="text-3xl font-bold text-white">{% if stats.avg_resolution_hours >= 24 %}{{ (stats.avg_resolution_hours / 24) | round(1) }}d{% else %}{{ stats.avg_resolution_hours }}h{% endif %}</p>
             </div>
-            <div class="w-14 h-14 bg-violet-500/20 rounded-2xl flex items-center justify-center">
-                <i class="fas fa-clock text-2xl text-violet-400"></i>
+            <div class="w-12 h-12 bg-violet-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-clock text-xl text-violet-400"></i>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 feedback-kpi-card">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-slate-400 mb-1">SLA Breached</p>
+                <p class="text-3xl font-bold text-rose-400">{{ stats.overdue }}</p>
+            </div>
+            <div class="w-12 h-12 bg-rose-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-exclamation-triangle text-xl text-rose-400"></i>
             </div>
         </div>
     </div>
 </div>
 
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <!-- By Status -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Reports by Status -->
     <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
         <div class="px-6 py-4 border-b border-slate-700/50">
             <h2 class="text-lg font-semibold text-white">Reports by Status</h2>
         </div>
         <div class="p-6">
-            <div class="space-y-4">
-                {% for status, count in stats.by_status.items() %}
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <span class="w-3 h-3 rounded-full {% if status == 'Open' %}bg-sky-400{% elif status == 'In Progress' %}bg-amber-400{% elif status == 'Resolved' %}bg-emerald-400{% elif status == 'Closed' %}bg-slate-400{% else %}bg-slate-600{% endif %}"></span>
-                        <span class="text-sm text-slate-300">{{ status }}</span>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <div class="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
-                            <div class="h-full bg-blue-500 rounded-full" style="width: {{ (count / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
-                        </div>
-                        <span class="text-sm font-medium text-white w-12 text-right">{{ count }}</span>
-                    </div>
-                </div>
-                {% endfor %}
+            <div class="chart-container" style="height: 250px;">
+                <canvas id="statusPieChart"></canvas>
             </div>
         </div>
     </div>
 
-    <!-- By Type -->
-    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
-        <div class="px-6 py-4 border-b border-slate-700/50">
-            <h2 class="text-lg font-semibold text-white">Reports by Type</h2>
-        </div>
-        <div class="p-6">
-            <div class="space-y-4">
-                {% for type, count in stats.by_type.items() %}
-                <div class="flex items-center justify-between">
-                    <span class="text-sm text-slate-300 capitalize">{{ type.replace('_', ' ') }}</span>
-                    <div class="flex items-center gap-3">
-                        <div class="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
-                            <div class="h-full bg-purple-500 rounded-full" style="width: {{ (count / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
-                        </div>
-                        <span class="text-sm font-medium text-white w-12 text-right">{{ count }}</span>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-
-    <!-- By Priority -->
+    <!-- Reports by Priority -->
     <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
         <div class="px-6 py-4 border-b border-slate-700/50">
             <h2 class="text-lg font-semibold text-white">Reports by Priority</h2>
         </div>
         <div class="p-6">
-            <div class="space-y-4">
-                {% for priority, count in stats.by_priority.items() %}
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-3">
-                        <span class="w-3 h-3 rounded-full {% if priority == 'Critical' %}bg-rose-500{% elif priority == 'High' %}bg-orange-500{% elif priority == 'Medium' %}bg-amber-500{% else %}bg-emerald-500{% endif %}"></span>
-                        <span class="text-sm text-slate-300">{{ priority }}</span>
-                    </div>
-                    <div class="flex items-center gap-3">
-                        <div class="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
-                            <div class="h-full {% if priority == 'Critical' %}bg-rose-500{% elif priority == 'High' %}bg-orange-500{% elif priority == 'Medium' %}bg-amber-500{% else %}bg-emerald-500{% endif %} rounded-full" style="width: {{ (count / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
-                        </div>
-                        <span class="text-sm font-medium text-white w-12 text-right">{{ count }}</span>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
-
-    <!-- By Category -->
-    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
-        <div class="px-6 py-4 border-b border-slate-700/50">
-            <h2 class="text-lg font-semibold text-white">Reports by Category</h2>
-        </div>
-        <div class="p-6">
-            <div class="space-y-4">
-                {% for category, count in stats.by_category.items() %}
-                <div class="flex items-center justify-between">
-                    <span class="text-sm text-slate-300">{{ category }}</span>
-                    <div class="flex items-center gap-3">
-                        <div class="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
-                            <div class="h-full bg-cyan-500 rounded-full" style="width: {{ (count / stats.total * 100) if stats.total > 0 else 0 }}%"></div>
-                        </div>
-                        <span class="text-sm font-medium text-white w-12 text-right">{{ count }}</span>
-                    </div>
-                </div>
-                {% endfor %}
+            <div class="chart-container" style="height: 250px;">
+                <canvas id="priorityChart"></canvas>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Trend Chart (Last 30 Days) -->
-<div class="mt-6">
-    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
-        <div class="px-6 py-4 border-b border-slate-700/50">
-            <h2 class="text-lg font-semibold text-white">Trend (Last 30 Days)</h2>
+<!-- Trend Chart -->
+<div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden mb-6">
+    <div class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-white">Trend Analysis (Last 30 Days)</h2>
+        <div class="flex items-center gap-4 text-xs">
+            <span class="flex items-center gap-1"><span class="w-3 h-3 bg-blue-500 rounded"></span> Total</span>
+            <span class="flex items-center gap-1"><span class="w-3 h-3 bg-emerald-500 rounded"></span> Resolved</span>
         </div>
-        <div class="p-6">
-            <div class="flex items-end gap-1 h-48">
-                {% for day in trend_data %}
-                <div class="flex-1 flex flex-col items-center gap-1">
-                    <div class="w-full flex flex-col gap-0.5">
-                        {% if day.total > 0 %}
-                        <div class="bg-blue-500/60 rounded-t" style="height: {{ (day.total / trend_data | map(attribute='total') | max * 40) if trend_data | map(attribute='total') | max > 0 else 1 }}px; min-height: 2px;"></div>
-                        {% endif %}
-                    </div>
-                    <span class="text-xs text-slate-600 transform -rotate-45 origin-top-left mt-2">{{ day.date[5:] }}</span>
-                </div>
-                {% endfor %}
-            </div>
+    </div>
+    <div class="p-6">
+        <div class="chart-container" style="height: 250px;">
+            <canvas id="trendChart"></canvas>
         </div>
     </div>
 </div>
+
+<!-- Team Performance & SLA -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <!-- Team Performance -->
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-700/50">
+            <h2 class="text-lg font-semibold text-white">Team Performance</h2>
+        </div>
+        <div class="p-6">
+            <div class="chart-container" style="height: 250px;">
+                <canvas id="teamChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- SLA Compliance -->
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-700/50">
+            <h2 class="text-lg font-semibold text-white">SLA Compliance</h2>
+        </div>
+        <div class="p-6">
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="text-center p-4 bg-slate-700/30 rounded-xl">
+                    <p class="text-3xl font-bold text-white">{{ sla_data.total_with_sla }}</p>
+                    <p class="text-xs text-slate-400 mt-1">Reports with SLA</p>
+                </div>
+                <div class="text-center p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                    <p class="text-3xl font-bold text-emerald-400">{{ sla_data.total_with_sla - sla_data.breached_count }}</p>
+                    <p class="text-xs text-emerald-400 mt-1">Within SLA</p>
+                </div>
+                <div class="text-center p-4 bg-rose-500/10 border border-rose-500/20 rounded-xl">
+                    <p class="text-3xl font-bold text-rose-400">{{ sla_data.breached_count }}</p>
+                    <p class="text-xs text-rose-400 mt-1">Breached</p>
+                </div>
+            </div>
+            <div class="chart-container" style="height: 150px;">
+                <canvas id="slaChart"></canvas>
+            </div>
+            {% if sla_data.total_with_sla > 0 %}
+            <div class="mt-4 text-center">
+                <p class="text-2xl font-bold text-emerald-400">{{ (((sla_data.total_with_sla - sla_data.breached_count) / sla_data.total_with_sla) * 100) | round(1) }}%</p>
+                <p class="text-xs text-slate-400">SLA Compliance Rate</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Category Performance -->
+<div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-700/50">
+        <h2 class="text-lg font-semibold text-white">Performance by Category</h2>
+    </div>
+    <div class="p-6">
+        <div class="overflow-x-auto">
+            <table class="w-full">
+                <thead>
+                    <tr class="border-b border-slate-700/50">
+                        <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Category</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-slate-400 uppercase">Total Reports</th>
+                        <th class="px-4 py-3 text-center text-xs font-medium text-slate-400 uppercase">Avg Resolution</th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Distribution</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-700/30">
+                    {% for cat in category_stats %}
+                    <tr class="hover:bg-slate-700/20 transition-colors">
+                        <td class="px-4 py-3 text-sm text-white">{{ cat.category_name }}</td>
+                        <td class="px-4 py-3 text-center text-sm text-white font-medium">{{ cat.total_count }}</td>
+                        <td class="px-4 py-3 text-center text-sm text-slate-400">
+                            {% if cat.avg_resolution_hours %}
+                                {% if cat.avg_resolution_hours >= 24 %}
+                                    {{ (cat.avg_resolution_hours / 24) | round(1) }}d
+                                {% else %}
+                                    {{ cat.avg_resolution_hours | round(1) }}h
+                                {% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="px-4 py-3">
+                            <div class="flex items-center gap-2">
+                                <div class="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+                                    <div class="h-full bg-cyan-500 rounded-full" style="width: {% if stats.total > 0 %}{{ (cat.total_count / stats.total * 100) | round }}{% else %}0{% endif %}%"></div>
+                                </div>
+                                <span class="text-xs text-slate-500 w-10">{% if stats.total > 0 %}{{ (cat.total_count / stats.total * 100) | round }}%{% else %}0%{% endif %}</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Status Pie Chart
+    const statusPieCtx = document.getElementById('statusPieChart');
+    if (statusPieCtx) {
+        const statusData = {{ stats.by_status | tojson | safe }};
+        new Chart(statusPieCtx, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(statusData),
+                datasets: [{
+                    data: Object.values(statusData),
+                    backgroundColor: [
+                        'rgba(56, 189, 248, 0.85)',
+                        'rgba(59, 130, 246, 0.85)',
+                        'rgba(99, 102, 241, 0.85)',
+                        'rgba(245, 158, 11, 0.85)',
+                        'rgba(168, 85, 247, 0.85)',
+                        'rgba(20, 184, 166, 0.85)',
+                        'rgba(107, 114, 128, 0.85)',
+                        'rgba(239, 68, 68, 0.85)',
+                        'rgba(236, 72, 153, 0.85)',
+                    ],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { boxWidth: 12, padding: 6, font: { size: 11 } } }
+                },
+                cutout: '55%',
+            }
+        });
+    }
+
+    // Priority Chart
+    const priorityCtx = document.getElementById('priorityChart');
+    if (priorityCtx) {
+        const priorityData = {{ stats.by_priority | tojson | safe }};
+        new Chart(priorityCtx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(priorityData),
+                datasets: [{
+                    data: Object.values(priorityData),
+                    backgroundColor: [
+                        'rgba(34, 197, 94, 0.8)',
+                        'rgba(245, 158, 11, 0.8)',
+                        'rgba(249, 115, 22, 0.8)',
+                        'rgba(239, 68, 68, 0.8)',
+                    ],
+                    borderRadius: 4,
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(71, 85, 105, 0.3)' }, ticks: { font: { size: 11 }, stepSize: 1 } },
+                    y: { grid: { display: false }, ticks: { font: { size: 12 } } }
+                }
+            }
+        });
+    }
+
+    // Trend Line Chart
+    const trendCtx = document.getElementById('trendChart');
+    if (trendCtx) {
+        const trendLabels = {{ trend_data | map(attribute='date') | list | tojson | safe }}.map(d => d.slice(5));
+        const trendTotals = {{ trend_data | map(attribute='total') | list | tojson | safe }};
+        const trendResolved = {{ trend_data | map(attribute='resolved') | list | tojson | safe }};
+        new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: trendLabels,
+                datasets: [
+                    {
+                        label: 'Total Reports',
+                        data: trendTotals,
+                        borderColor: 'rgba(59, 130, 246, 0.9)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 2,
+                    },
+                    {
+                        label: 'Resolved',
+                        data: trendResolved,
+                        borderColor: 'rgba(34, 197, 94, 0.9)',
+                        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 2,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 45 } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(71, 85, 105, 0.3)' }, ticks: { font: { size: 10 }, stepSize: 1 } }
+                }
+            }
+        });
+    }
+
+    // Team Performance Chart
+    const teamCtx = document.getElementById('teamChart');
+    if (teamCtx) {
+        const teamNames = {{ team_stats | map(attribute='assignee_name') | list | tojson | safe }};
+        const teamAssigned = {{ team_stats | map(attribute='total_assigned') | list | tojson | safe }};
+        const teamResolved = {{ team_stats | map(attribute='resolved_count') | list | tojson | safe }};
+        new Chart(teamCtx, {
+            type: 'bar',
+            data: {
+                labels: teamNames.map(n => n.length > 12 ? n.slice(0, 12) + '...' : n),
+                datasets: [
+                    {
+                        label: 'Assigned',
+                        data: teamAssigned,
+                        backgroundColor: 'rgba(99, 102, 241, 0.8)',
+                        borderRadius: 4,
+                    },
+                    {
+                        label: 'Resolved',
+                        data: teamResolved,
+                        backgroundColor: 'rgba(34, 197, 94, 0.8)',
+                        borderRadius: 4,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(71, 85, 105, 0.3)' }, ticks: { font: { size: 10 }, stepSize: 1 } }
+                }
+            }
+        });
+    }
+
+    // SLA Donut Chart
+    const slaCtx = document.getElementById('slaChart');
+    if (slaCtx) {
+        const withinSla = {{ sla_data.total_with_sla }} - {{ sla_data.breached_count }};
+        const breached = {{ sla_data.breached_count }};
+        if (withinSla > 0 || breached > 0) {
+            new Chart(slaCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Within SLA', 'Breached'],
+                    datasets: [{
+                        data: [withinSla, breached],
+                        backgroundColor: ['rgba(34, 197, 94, 0.85)', 'rgba(239, 68, 68, 0.85)'],
+                        borderWidth: 0,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    cutout: '70%',
+                }
+            });
+        }
+    }
+});
+</script>
 {% endblock %}

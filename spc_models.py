@@ -159,6 +159,25 @@ def initialize_spc_tables():
             )
         """)
 
+        # AQL Inspection Records
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS spc_aql_inspections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                plan_id INTEGER NOT NULL,
+                lot_size INTEGER NOT NULL,
+                sample_size INTEGER NOT NULL,
+                defects_found INTEGER NOT NULL,
+                acceptance_number INTEGER,
+                rejection_number INTEGER,
+                result TEXT NOT NULL,
+                inspection_date TEXT NOT NULL,
+                inspector_name TEXT,
+                notes TEXT,
+                created_at TEXT DEFAULT (datetime('now')),
+                FOREIGN KEY (plan_id) REFERENCES spc_sampling_plans(id)
+            )
+        """)
+
         # SPC Anomaly Alerts
         db.execute("""
             CREATE TABLE IF NOT EXISTS spc_anomaly_alerts (
@@ -611,6 +630,129 @@ class SPCCalculator:
         }
 
     @staticmethod
+    def calculate_np_chart_limits(
+        defectives_total: int,
+        sample_size_total: int,
+        k: int
+    ) -> Dict[str, float]:
+        """Calculate NP chart limits (number of defective)."""
+        n = sample_size_total / k if k > 0 else 1
+        p_bar = defectives_total / sample_size_total if sample_size_total > 0 else 0
+        np_bar = n * p_bar
+
+        ucl = np_bar + 3 * math.sqrt(n * p_bar * (1 - p_bar))
+        lcl = max(0, np_bar - 3 * math.sqrt(n * p_bar * (1 - p_bar)))
+
+        return {
+            'np_ucl': ucl,
+            'np_lcl': lcl,
+            'np_bar': np_bar,
+            'n': n
+        }
+
+    @staticmethod
+    def calculate_u_chart_limits(
+        defect_count_total: int,
+        sample_size_total: int,
+        k: int
+    ) -> Dict[str, float]:
+        """Calculate U chart limits (defects per unit)."""
+        u_bar = defect_count_total / sample_size_total if sample_size_total > 0 else 0
+
+        ucl = u_bar + 3 * math.sqrt(u_bar / sample_size_total)
+        lcl = max(0, u_bar - 3 * math.sqrt(u_bar / sample_size_total))
+
+        return {
+            'u_ucl': ucl,
+            'u_lcl': lcl,
+            'u_bar': u_bar
+        }
+
+    @staticmethod
+    def calculate_r_chart_limits(
+        r_bar: float,
+        subgroup_size: int
+    ) -> Dict[str, float]:
+        """Calculate R chart limits."""
+        factors = {
+            2: {'D3': 0, 'D4': 3.267},
+            3: {'D3': 0, 'D4': 2.574},
+            4: {'D3': 0, 'D4': 2.282},
+            5: {'D3': 0, 'D4': 2.114},
+            6: {'D3': 0, 'D4': 2.004},
+            7: {'D3': 0.076, 'D4': 1.924},
+            8: {'D3': 0.136, 'D4': 1.864},
+            9: {'D3': 0.184, 'D4': 1.816},
+            10: {'D3': 0.223, 'D4': 1.777},
+        }
+        f = factors.get(subgroup_size, {'D3': 0, 'D4': 2.5})
+
+        ucl_r = f['D4'] * r_bar
+        lcl_r = max(0, f['D3'] * r_bar)
+
+        return {
+            'r_ucl': ucl_r,
+            'r_lcl': lcl_r,
+            'r_bar': r_bar
+        }
+
+    @staticmethod
+    def calculate_s_chart_limits(
+        s_bar: float,
+        subgroup_size: int
+    ) -> Dict[str, float]:
+        """Calculate S chart limits."""
+        b3_factors = {
+            2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0.076, 8: 0.136,
+            9: 0.184, 10: 0.223, 11: 0.256, 12: 0.283,
+            15: 0.348, 20: 0.387, 25: 0.404, 30: 0.414
+        }
+        b4_factors = {
+            2: 3.267, 3: 2.568, 4: 2.266, 5: 2.089, 6: 1.970,
+            7: 1.882, 8: 1.815, 9: 1.761, 10: 1.717,
+            11: 1.680, 12: 1.646, 15: 1.564, 20: 1.485,
+            25: 1.435, 30: 1.395
+        }
+        b3 = b3_factors.get(subgroup_size, 0)
+        b4 = b4_factors.get(subgroup_size, 1.5)
+
+        ucl_s = b4 * s_bar
+        lcl_s = max(0, b3 * s_bar)
+
+        return {
+            's_ucl': ucl_s,
+            's_lcl': lcl_s,
+            's_bar': s_bar
+        }
+
+    @staticmethod
+    def calculate_cpk_from_data(values: List[float], usl: float, lsl: float, target: float = None) -> Dict[str, float]:
+        """Calculate Cp and Cpk from raw data values."""
+        if not values or len(values) < 2:
+            return {'cp': 0, 'cpk': 0, 'cpu': 0, 'cpl': 0, 'mean': 0, 'std_dev': 0}
+
+        mean = sum(values) / len(values)
+        std_dev = math.sqrt(sum((x - mean) ** 2 for x in values) / (len(values) - 1))
+
+        if std_dev > 0:
+            cpu = (usl - mean) / (3 * std_dev)
+            cpl = (mean - lsl) / (3 * std_dev)
+            cp = (usl - lsl) / (6 * std_dev)
+            cpk = min(cpu, cpl)
+        else:
+            cpu = cpl = cp = cpk = float('inf')
+
+        return {
+            'mean': mean,
+            'std_dev': std_dev,
+            'cp': cp,
+            'cpk': cpk,
+            'cpu': cpu,
+            'cpl': cpl,
+            'target': target
+        }
+
+    @staticmethod
     def check_western_electric_rules(
         values: List[float],
         mean: float,
@@ -620,10 +762,12 @@ class SPCCalculator:
         """Check Western Electric rules for out-of-control signals."""
         violations = []
 
-        if len(values) < 6:
+        if len(values) < 5:
             return violations
 
-        # Zone boundaries (1σ, 2σ, 3σ from mean)
+        if std_dev <= 0:
+            return violations
+
         zone_a_upper = mean + 3 * std_dev
         zone_a_lower = mean - 3 * std_dev
         zone_b_upper = mean + 2 * std_dev
@@ -631,118 +775,135 @@ class SPCCalculator:
         zone_c_upper = mean + 1 * std_dev
         zone_c_lower = mean - 1 * std_dev
 
-        # Rule 1: Any point outside 3σ limits
-        for i, val in enumerate(values[-1:], start=len(values)-1):
-            if val > zone_a_upper or val < zone_a_lower:
+        def in_zone_a(val):
+            return val > zone_a_upper or val < zone_a_lower
+
+        def in_zone_b(val):
+            return (val > zone_b_upper and val <= zone_a_upper) or (val >= zone_a_lower and val < zone_b_lower)
+
+        def in_zone_c(val):
+            return (val > zone_c_upper and val <= zone_b_upper) or (val >= zone_b_lower and val < zone_c_lower)
+
+        # Rule 1: Any single point outside 3σ limits (Zone A)
+        for i, val in enumerate(values):
+            if in_zone_a(val):
                 violations.append({
                     'rule': 'WE1',
                     'description': 'Point outside 3σ control limits',
                     'index': i,
                     'value': val,
-                    'severity': 'CRITICAL'
+                    'severity': 'CRITICAL',
+                    'zone': 'A'
                 })
 
-        # Rule 2a: 2 of 3 consecutive points in Zone A
+        # Rule 2a: 2 of 3 consecutive points in Zone A (beyond 2σ on same side)
         for i in range(len(values) - 2):
-            zone_a_count = sum(
-                1 for v in values[i:i+3]
-                if v > zone_a_upper or v < zone_a_lower
-            )
-            if zone_a_count >= 2:
+            window = values[i:i+3]
+            if sum(1 for v in window if in_zone_a(v)) >= 2:
                 violations.append({
                     'rule': 'WE2A',
                     'description': '2 of 3 consecutive points in Zone A',
                     'index': i + 2,
-                    'values': values[i:i+3],
-                    'severity': 'MAJOR'
+                    'values': window,
+                    'severity': 'MAJOR',
+                    'zone': 'A'
                 })
 
-        # Rule 2b: 4 of 5 consecutive points in Zone B
+        # Rule 2b: 4 of 5 consecutive points in Zone B (beyond 1σ on same side)
         for i in range(len(values) - 4):
-            zone_b_count = sum(
-                1 for v in values[i:i+5]
-                if (zone_b_upper >= v > zone_c_upper) or (zone_b_lower <= v < zone_c_lower)
-            )
-            if zone_b_count >= 4:
+            window = values[i:i+5]
+            if sum(1 for v in window if in_zone_b(v)) >= 4:
                 violations.append({
                     'rule': 'WE2B',
                     'description': '4 of 5 consecutive points in Zone B',
                     'index': i + 4,
-                    'values': values[i:i+5],
-                    'severity': 'MAJOR'
+                    'values': window,
+                    'severity': 'MAJOR',
+                    'zone': 'B'
                 })
 
-        # Rule 3: 8 consecutive points on one side of center
+        # Rule 3: 8 consecutive points on one side of center line
         for i in range(len(values) - 7):
-            consecutive = all(v > mean for v in values[i:i+8]) or \
-                         all(v < mean for v in values[i:i+8])
-            if consecutive:
+            window = values[i:i+8]
+            if all(v > mean for v in window) or all(v < mean for v in window):
                 violations.append({
                     'rule': 'WE3',
                     'description': '8 consecutive points on one side of center',
                     'index': i + 7,
-                    'values': values[i:i+8],
-                    'severity': 'MINOR'
+                    'values': window,
+                    'severity': 'MINOR',
+                    'zone': 'CENTER'
                 })
 
         # Rule 4: 6 consecutive points steadily increasing or decreasing
         for i in range(len(values) - 5):
-            diffs = [values[i+j+1] - values[i+j] for j in range(5)]
-            increasing = all(d > 0 for d in diffs)
-            decreasing = all(d < 0 for d in diffs)
-            if increasing or decreasing:
+            window = values[i:i+6]
+            diffs = [window[j+1] - window[j] for j in range(5)]
+            if all(d > 0 for d in diffs) or all(d < 0 for d in diffs):
                 violations.append({
                     'rule': 'WE4',
                     'description': '6 consecutive points with sustained trend',
                     'index': i + 5,
-                    'values': values[i:i+6],
-                    'severity': 'MINOR'
+                    'values': window,
+                    'severity': 'MINOR',
+                    'zone': 'TREND'
                 })
 
-        # Rule 5: 15 consecutive points in Zone C
+        # Rule 5: 15 consecutive points in Zone C (center third)
         for i in range(len(values) - 14):
-            zone_c_count = sum(
-                1 for v in values[i:i+15]
-                if zone_c_upper >= v >= zone_c_lower
-            )
-            if zone_c_count >= 15:
+            window = values[i:i+15]
+            if sum(1 for v in window if in_zone_c(v)) >= 15:
                 violations.append({
                     'rule': 'WE5',
                     'description': '15 consecutive points in Zone C (stratification)',
                     'index': i + 14,
-                    'values': values[i:i+15],
-                    'severity': 'WARNING'
+                    'values': window,
+                    'severity': 'WARNING',
+                    'zone': 'C'
                 })
 
-        # Rule 6: 8 consecutive points with none in Zone C
+        # Rule 6: 8 consecutive points with none in Zone C (mixture pattern)
         for i in range(len(values) - 7):
-            zone_c_count = sum(
-                1 for v in values[i:i+8]
-                if zone_c_upper >= v >= zone_c_lower
-            )
-            if zone_c_count == 0:
+            window = values[i:i+8]
+            if sum(1 for v in window if in_zone_c(v)) == 0:
                 violations.append({
                     'rule': 'WE6',
                     'description': '8 consecutive points with none in Zone C (mixture)',
                     'index': i + 7,
-                    'values': values[i:i+8],
-                    'severity': 'WARNING'
+                    'values': window,
+                    'severity': 'WARNING',
+                    'zone': 'OUTER'
                 })
 
-        # Rule 7: 14 alternating up and down
+        # Rule 7: 14 alternating up and down (systematic pattern)
         for i in range(len(values) - 13):
-            segment = values[i:i+14]
-            alternating = all(
-                (segment[j+1] - segment[j]) * (segment[j+2] - segment[j+1]) < 0
-                for j in range(12)
-            )
+            window = values[i:i+14]
+            alternating = True
+            for j in range(12):
+                if (window[j+1] - window[j]) * (window[j+2] - window[j+1]) >= 0:
+                    alternating = False
+                    break
             if alternating:
                 violations.append({
                     'rule': 'WE7',
                     'description': '14 alternating points (systematic pattern)',
                     'index': i + 13,
-                    'values': segment,
-                    'severity': 'WARNING'
+                    'values': window,
+                    'severity': 'WARNING',
+                    'zone': 'ALTERNATING'
+                })
+
+        # Rule 8: 8 points in a row beyond 1σ (same side)
+        for i in range(len(values) - 7):
+            window = values[i:i+8]
+            if all(v > zone_c_upper for v in window) or all(v < zone_c_lower for v in window):
+                violations.append({
+                    'rule': 'WE8',
+                    'description': '8 points in a row beyond 1σ',
+                    'index': i + 7,
+                    'values': window,
+                    'severity': 'WARNING',
+                    'zone': 'OUTSIDE_C'
                 })
 
         return violations
@@ -798,9 +959,7 @@ class CapabilityCalculator:
             pp = ppk = ppu = ppl = float('inf')
 
         # PPM (Parts Per Million) defective
-        # Using normal distribution approximation
-        from scipy import stats  # Will need to handle if not available
-
+        # Using normal distribution approximation - enhanced with error function approximation
         try:
             from scipy.stats import norm
             z_upper = (usl - mean) / sigma if sigma > 0 else 0
@@ -809,8 +968,25 @@ class CapabilityCalculator:
             ppm_lower = norm.cdf(z_lower) * 1000000
             total_ppm = ppm_upper + ppm_lower
         except ImportError:
-            # Fallback without scipy
-            total_ppm = 0
+            # Enhanced fallback using error function approximation (Abramowitz and Stegun)
+            def erf_approx(x):
+                # Approximation of error function
+                if x < 0:
+                    return -erf_approx(-x)
+                a1, a2, a3, a4, a5 = 0.254829592, -0.284496736, 1.421413741, -1.453152027, 1.061405429
+                p = 0.3275911
+                t = 1.0 / (1.0 + p * x)
+                y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * math.exp(-x * x)
+                return y
+
+            def norm_cdf_approx(z):
+                return 0.5 * (1 + erf_approx(z / math.sqrt(2)))
+
+            z_upper = (usl - mean) / sigma if sigma > 0 else 0
+            z_lower = (lsl - mean) / sigma if sigma > 0 else 0
+            ppm_upper = (1 - norm_cdf_approx(z_upper)) * 1000000
+            ppm_lower = norm_cdf_approx(z_lower) * 1000000
+            total_ppm = ppm_upper + ppm_lower
 
         # Sigma level (defects per million opportunities / 3.4)
         sigma_level = 0
@@ -1425,8 +1601,11 @@ def perform_gage_rr_study(
     created_by: int = None
 ) -> Tuple[int, Dict[str, float]]:
     """
-    Perform Gage R&R study.
-    measurements: List of lists [[part1_op1, part1_op2], [part2_op1, part2_op2], ...]
+    Perform Gage R&R study with ANOVA calculation.
+    measurements: List of lists [[part1_op1_repl1, part1_op1_repl2], [part1_op2_repl1, part1_op2_repl2], ...]
+    Format: measurements[part_index][operator_index * replicates + replicate_index]
+    For crossed design with 2 operators and 2 replicates:
+    [[op1_rep1, op1_rep2], [op2_rep1, op2_rep2], ...] per part
     """
     conn = get_db()
     cursor = conn.cursor()
@@ -1436,78 +1615,111 @@ def perform_gage_rr_study(
     parts_str = ','.join(part_numbers)
     operators_str = ','.join(operator_numbers)
 
-    # Calculate GRR metrics
+    # Study design
     n_parts = len(part_numbers)
     n_operators = len(operator_numbers)
-    n_replicates = len(measurements[0]) if measurements else 2
+    n_replicates = len(measurements[0]) // (n_parts * n_operators) if measurements else 2
 
-    # Calculate means
-    grand_mean = 0
+    # Reorganize data for ANOVA: measurements[part][operator][replicate]
+    data = []
+    idx = 0
+    for p in range(n_parts):
+        part_data = []
+        for o in range(n_operators):
+            op_replicates = []
+            for r in range(n_replicates):
+                op_replicates.append(measurements[0][idx] if idx < len(measurements[0]) else 0)
+                idx += 1
+            part_data.append(op_replicates)
+        data.append(part_data)
+
+    # Calculate Grand Mean
+    total_sum = 0
     total_count = 0
-    for part_vals in measurements:
-        for val in part_vals:
-            grand_mean += val
-            total_count += 1
-    grand_mean = grand_mean / total_count if total_count > 0 else 0
+    for p in range(n_parts):
+        for o in range(n_operators):
+            for r in range(n_replicates):
+                total_sum += data[p][o][r]
+                total_count += 1
+    grand_mean = total_sum / total_count if total_count > 0 else 0
 
-    # Calculate part variation (PV)
-    part_means = [sum(m) / len(m) for m in measurements]
-    part_range = max(part_means) - min(part_means) if part_means else 0
-    d2 = 1.41  # for n=2
-    R_part = part_range / (n_operators * n_replicates)
-    part_variation = R_part * 1.41  # Simplified
+    # Calculate factor sums for ANOVA
+    part_sum = [0.0] * n_parts
+    op_sum = [0.0] * n_operators
+    cell_sum = [[0.0] * n_operators for _ in range(n_parts)]
+    cell_count = [[0] * n_operators for _ in range(n_parts)]
 
-    # Calculate repeatability (EV - Equipment Variation)
-    ranges_by_operator = []
-    for i in range(n_operators):
-        op_ranges = []
-        for j in range(n_parts):
-            vals = [measurements[j][k] for k in range(n_replicates)]
-            op_ranges.append(max(vals) - min(vals))
-        ranges_by_operator.append(sum(op_ranges) / len(op_ranges) if op_ranges else 0)
+    for p in range(n_parts):
+        for o in range(n_operators):
+            for r in range(n_replicates):
+                val = data[p][o][r]
+                part_sum[p] += val
+                op_sum[o] += val
+                cell_sum[p][o] += val
+                cell_count[p][o] += 1
 
-    avg_range_repeatability = sum(ranges_by_operator) / len(ranges_by_operator)
-    repeatability_ev = avg_range_repeatability * 0.886  # d2* factor for 2 replicates
+    # Part means
+    part_means = [part_sum[p] / (n_operators * n_replicates) for p in range(n_parts)]
+    op_means = [op_sum[o] / (n_parts * n_replicates) for o in range(n_operators)]
+    cell_means = [[cell_sum[p][o] / cell_count[p][o] if cell_count[p][o] > 0 else 0
+                   for o in range(n_operators)] for p in range(n_parts)]
 
-    # Calculate reproducibility (AV - Appraiser Variation)
-    operator_means = []
-    for i in range(n_operators):
-        op_vals = []
-        for j in range(n_parts):
-            op_vals.extend([measurements[j][k] for k in range(n_replicates)])
-        operator_means.append(sum(op_vals) / len(op_vals) if op_vals else 0)
+    # Sum of Squares
+    SS_total = sum((data[p][o][r] - grand_mean) ** 2
+                  for p in range(n_parts) for o in range(n_operators) for r in range(n_replicates))
 
-    range_between_operators = max(operator_means) - min(operator_means) if operator_means else 0
-    reproducibility_av = range_between_operators * 0.523  # d2* factor
+    SS_parts = sum((part_means[p] - grand_mean) ** 2 * n_operators * n_replicates
+                   for p in range(n_parts))
 
-    # Calculate GRR
-    grr = math.sqrt(repeatability_ev ** 2 + reproducibility_av ** 2)
+    SS_operators = sum((op_means[o] - grand_mean) ** 2 * n_parts * n_replicates
+                       for o in range(n_operators))
 
-    # Total variation
-    total_range = 0
-    all_vals = []
-    for part_vals in measurements:
-        all_vals.extend(part_vals)
-    if len(all_vals) > 1:
-        overall_std = math.sqrt(sum((x - grand_mean) ** 2 for x in all_vals) / (len(all_vals) - 1))
-    else:
-        overall_std = 0.001
+    SS_reproducibility = sum((cell_means[p][o] - part_means[p] - op_means[o] + grand_mean) ** 2
+                             * n_replicates for p in range(n_parts) for o in range(n_operators))
 
-    total_variation = 6 * overall_std
-    part_variation_pv = part_variation * 6
+    SS_repeatability = SS_total - SS_parts - SS_operators - SS_reproducibility
+
+    # Degrees of freedom
+    df_total = total_count - 1
+    df_parts = n_parts - 1
+    df_operators = n_operators - 1
+    df_reproducibility = df_parts * df_operators
+    df_repeatability = df_total - df_parts - df_operators - df_reproducibility
+
+    # Mean Squares
+    MS_parts = SS_parts / df_parts if df_parts > 0 else 0
+    MS_operators = SS_operators / df_operators if df_operators > 0 else 0
+    MS_reproducibility = SS_reproducibility / df_reproducibility if df_reproducibility > 0 else 0
+    MS_repeatability = SS_repeatability / df_repeatability if df_repeatability > 0 else 0
+
+    # F-statistics and variance components
+    F_parts = MS_parts / MS_repeatability if MS_repeatability > 0 else 0
+    F_operators = MS_operators / MS_repeatability if MS_repeatability > 0 else 0
+
+    # Variance components
+    var_repeatability = MS_repeatability
+    var_reproducibility = max(0, (MS_reproducibility - MS_repeatability) / n_replicates)
+    var_parts = max(0, (MS_parts - MS_repeatability) / (n_operators * n_replicates))
+    var_total = var_repeatability + var_reproducibility + var_parts
+
+    # Calculate GRR using variance components
+    grr = math.sqrt(var_repeatability + var_reproducibility) * 6 if var_total > 0 else 0
+    part_variation = math.sqrt(var_parts) * 6 if var_total > 0 else 0
+    total_variation = math.sqrt(var_total) * 6 if var_total > 0 else 0
+
+    # %GRR and %Tolerance
+    tolerance = 10  # Default tolerance
+    percent_grr = (grr / tolerance * 100) if tolerance > 0 else 0
+    percent_pv = (part_variation / tolerance * 100) if tolerance > 0 else 0
 
     # Number of distinct categories
-    ndch = 1.41 * (part_variation / grr) if grr > 0 else 0
-
-    # Percentage calculations (using tolerance as TV)
-    tolerance = 10  # Default tolerance, would need to be passed in
-    percent_sv = (grr / (tolerance / 6)) * 100 if tolerance > 0 else 0
-    percent_pv = (part_variation / (tolerance / 6)) * 100 if tolerance > 0 else 0
+    ndch = 1.41 * (math.sqrt(var_parts) / math.sqrt(var_repeatability + var_reproducibility)) \
+           if (var_repeatability + var_reproducibility) > 0 else 0
 
     # Assessment
-    if ndch >= 5:
+    if percent_grr <= 10:
         assessment = 'ACCEPTABLE'
-    elif ndch >= 4:
+    elif percent_grr <= 30:
         assessment = 'MARGINAL'
     else:
         assessment = 'UNACCEPTABLE'
@@ -1527,9 +1739,9 @@ def perform_gage_rr_study(
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, (
         study_number, gage_id, study_type, n_parts, n_operators,
-        n_replicates, parts_str, operators_str, ','.join(flat_measurements),
-        part_variation, repeatability_ev, reproducibility_av, grr,
-        part_variation_pv, tolerance, ndch, percent_sv,
+        n_replicates, parts_str, operators_str, ','.join(str(m) for m in flat_measurements),
+        math.sqrt(var_parts), math.sqrt(var_repeatability), math.sqrt(var_reproducibility),
+        grr / 6, part_variation / 6, tolerance, ndch, percent_grr,
         percent_pv, assessment, study_date, created_by
     ))
 
@@ -1538,15 +1750,38 @@ def perform_gage_rr_study(
     conn.close()
 
     metrics = {
-        'part_variation': part_variation,
-        'repeatability_ev': repeatability_ev,
-        'reproducibility_av': reproducibility_av,
-        'grr': grr,
-        'part_variation_pv': part_variation_pv,
+        'study_number': study_number,
+        'part_variation': math.sqrt(var_parts),
+        'repeatability_ev': math.sqrt(var_repeatability),
+        'reproducibility_av': math.sqrt(var_reproducibility),
+        'grr': grr / 6,
+        'part_variation_pv': part_variation / 6,
+        'tolerance_tv': tolerance,
         'ndch': ndch,
-        'percent_study_variation': percent_sv,
+        'percent_study_variation': percent_grr,
         'percent_tolerance': percent_pv,
-        'assessment': assessment
+        'assessment': assessment,
+        'anova': {
+            'SS_parts': SS_parts,
+            'SS_operators': SS_operators,
+            'SS_reproducibility': SS_reproducibility,
+            'SS_repeatability': SS_repeatability,
+            'SS_total': SS_total,
+            'df_parts': df_parts,
+            'df_operators': df_operators,
+            'df_reproducibility': df_reproducibility,
+            'df_repeatability': df_repeatability,
+            'MS_parts': MS_parts,
+            'MS_operators': MS_operators,
+            'MS_reproducibility': MS_reproducibility,
+            'MS_repeatability': MS_repeatability,
+            'F_parts': F_parts,
+            'F_operators': F_operators,
+            'var_parts': var_parts,
+            'var_reproducibility': var_reproducibility,
+            'var_repeatability': var_repeatability,
+            'var_total': var_total
+        }
     }
 
     return study_id, metrics

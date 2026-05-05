@@ -1,73 +1,200 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h1 class="mt-4 mb-4">
-                <i class="fas fa-cogs"></i> Work Centers
-            </h1>
-        </div>
-    </div>
-
-    <div class="row mb-3">
-        <div class="col-12">
-            <a href="{{ url_for('manufacturing.create_work_center') }}" class="btn btn-success">
-                <i class="fas fa-plus"></i> Create Work Center
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-cogs me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('work_centers', 'Work Centers') }}
+        </h1>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('manufacturing.export_data', export_type='work_centers', format='csv', report='work_centers') }}"
+               class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-download me-1"></i> {{ t('export', 'Export') }}
             </a>
-            <a href="{{ url_for('manufacturing.dashboard') }}" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            <a href="{{ url_for('manufacturing.create_work_center') }}" class="btn btn-primary btn-sm">
+                <i class="fas fa-plus me-1"></i> {{ t('create_center', 'Create Work Center') }}
             </a>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="fas fa-list"></i> All Work Centers</h5>
-                </div>
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-primary shadow py-2">
                 <div class="card-body">
-                    <table class="table table-striped table-hover">
-                        <thead>
-                            <tr>
-                                <th>Code</th>
-                                <th>Name</th>
-                                <th>Location</th>
-                                <th>Capacity (hrs)</th>
-                                <th>Efficiency (%)</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% if work_centers %}
-                                {% for center in work_centers %}
-                                <tr>
-                                    <td><strong>{{ center.code }}</strong></td>
-                                    <td>{{ center.name }}</td>
-                                    <td>{{ center.location or '-' }}</td>
-                                    <td>{{ center.capacity_hours }}</td>
-                                    <td>{{ center.efficiency }}</td>
-                                    <td>
-                                        {% if center.status == 'ACTIVE' %}
-                                        <span class="badge badge-success">ACTIVE</span>
-                                        {% else %}
-                                        <span class="badge badge-secondary">{{ center.status }}</span>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            {% else %}
-                                <tr>
-                                    <td colspan="6" class="text-center text-muted">
-                                        No work centers found. Create your first work center to get started.
-                                    </td>
-                                </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                {{ t('total_centers', 'Total Centers') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ work_centers|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-building fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-success shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                {{ t('active_centers', 'Active') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ work_centers|selectattr('status', 'equalto', 'ACTIVE')|list|length }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-info shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                {{ t('total_capacity', 'Total Capacity') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ work_centers|sum(attribute='capacity_hours')|round|int }} {{ t('hrs_day', 'hrs/day') }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-warning shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                {{ t('avg_efficiency', 'Avg Efficiency') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ ((work_centers|sum(attribute='efficiency') / work_centers|length) if work_centers else 0)|round|int }}%
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-tachometer-alt fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Work Centers Grid -->
+    <div class="row g-4">
+        {% if work_centers %}
+            {% for center in work_centers %}
+            <div class="col-lg-4 col-md-6">
+                <div class="card shadow h-100 {% if center.status != 'ACTIVE' %}opacity-75{% endif %}">
+                    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="h5 mb-0">{{ center.code }}</span>
+                            {% if center.status != 'ACTIVE' %}
+                                <span class="badge bg-secondary ms-2">{{ center.status }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button"
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('manufacturing.work_center_detail', center_id=center.id) }}">
+                                        <i class="fas fa-eye me-2"></i> {{ t('view_details', 'View Details') }}
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" href="{{ url_for('manufacturing.edit_work_center', center_id=center.id) }}">
+                                        <i class="fas fa-edit me-2"></i> {{ t('edit', 'Edit') }}
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <h6 class="text-primary">{{ center.name }}</h6>
+                        {% if center.description %}
+                            <p class="text-muted small mb-3">{{ center.description[:100] }}{% if center.description|length > 100 %}...{% endif %}</p>
+                        {% endif %}
+
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <div class="p-2 bg-light rounded">
+                                    <small class="text-muted d-block">{{ t('location', 'Location') }}</small>
+                                    <strong>{{ center.location or '-' }}</strong>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="p-2 bg-light rounded">
+                                    <small class="text-muted d-block">{{ t('capacity', 'Capacity') }}</small>
+                                    <strong>{{ center.capacity_hours }} {{ t('hrs', 'hrs') }}</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="text-muted">{{ t('efficiency', 'Efficiency') }}</small>
+                                <strong>{{ center.efficiency }}%</strong>
+                            </div>
+                            <div class="progress" style="height: 6px;">
+                                <div class="progress-bar bg-{% if center.efficiency >= 90 %}success{% elif center.efficiency >= 70 %}warning{% else %}danger{% endif %}"
+                                     role="progressbar" style="width: {{ center.efficiency }}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer bg-transparent">
+                        <a href="{{ url_for('manufacturing.work_center_detail', center_id=center.id) }}"
+                           class="btn btn-outline-primary btn-sm w-100">
+                            <i class="fas fa-chart-line me-1"></i> {{ t('view_capacity', 'View Capacity') }}
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="card shadow">
+                    <div class="card-body text-center text-muted py-5">
+                        <i class="fas fa-cogs fa-4x mb-4"></i>
+                        <h5>{{ t('no_work_centers', 'No Work Centers Found') }}</h5>
+                        <p class="mb-3">{{ t('create_first_center', 'Create your first work center to get started.') }}</p>
+                        <a href="{{ url_for('manufacturing.create_work_center') }}" class="btn btn-primary">
+                            <i class="fas fa-plus me-1"></i> {{ t('create_first_center', 'Create First Center') }}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Back Link -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <a href="{{ url_for('manufacturing.dashboard') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back_to_dashboard', 'Back to Dashboard') }}
+            </a>
         </div>
     </div>
 </div>

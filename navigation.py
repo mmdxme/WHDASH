@@ -9855,8 +9855,114 @@ MENU_STRUCTURE = {
                 'label_hi': 'रिपोर्ट और विश्लेषण',
                 'label_de': 'Berichte und Analysen',
                 'icon': 'fa-chart-bar',
-                'route': '/integration/reports/',
+                'route': None,
                 'permission': ('integration', 'report', 'view'),
+                'items': {
+                    'integration_reports_menu': {
+                        'label': 'Reports Overview',
+                        'label_ar': 'نظرة عامة على التقارير',
+                        'label_fa': 'دید کلی گزارشات',
+                        'label_ru': 'Обзор отчетов',
+                        'label_zh': '报告概览',
+                        'label_es': 'Resumen de Informes',
+                        'label_hi': 'रिपोर्ट अवलोकन',
+                        'label_de': 'Berichte Übersicht',
+                        'icon': 'fa-list',
+                        'route': '/integration/reports/',
+                        'permission': ('integration', 'report', 'view'),
+                    },
+                    'integration_report_executive': {
+                        'label': 'Executive Summary',
+                        'label_ar': 'الملخص التنفيذي',
+                        'label_fa': 'خلاصه اجرایی',
+                        'label_ru': 'Краткое резюме',
+                        'label_zh': '行政摘要',
+                        'label_es': 'Resumen Ejecutivo',
+                        'label_hi': 'कार्यकारी सारांश',
+                        'label_de': 'Zusammenfassung',
+                        'icon': 'fa-chart-pie',
+                        'route': '/integration/reports/executive',
+                        'permission': ('integration', 'report', 'view'),
+                    },
+                    'integration_report_connector_health': {
+                        'label': 'Connector Health',
+                        'label_ar': 'صحة الموصلات',
+                        'label_fa': 'سلامت کانکتورها',
+                        'label_ru': 'Работоспособность коннекторов',
+                        'label_zh': '连接器健康',
+                        'label_es': 'Salud del Conector',
+                        'label_hi': 'कनेक्टर स्वास्थ्य',
+                        'label_de': 'Konnektor Gesundheit',
+                        'icon': 'fa-heartbeat',
+                        'route': '/integration/reports/connector-health',
+                        'permission': ('integration', 'report', 'view'),
+                    },
+                    'integration_report_flow_analytics': {
+                        'label': 'Flow Analytics',
+                        'label_ar': 'تحليلات التدفق',
+                        'label_fa': 'تحلیل جریان‌ها',
+                        'label_ru': 'Аналитика потоков',
+                        'label_zh': '流程分析',
+                        'label_es': 'Análisis de Flujo',
+                        'label_hi': 'प्रवाह विश्लेषण',
+                        'label_de': 'Fluss Analyse',
+                        'icon': 'fa-project-diagram',
+                        'route': '/integration/reports/flow-analytics',
+                        'permission': ('integration', 'report', 'view'),
+                    },
+                    'integration_report_api_usage': {
+                        'label': 'API Usage',
+                        'label_ar': 'استخدام واجهة برمجة التطبيقات',
+                        'label_fa': 'استفاده از API',
+                        'label_ru': 'Использование API',
+                        'label_zh': 'API使用情况',
+                        'label_es': 'Uso de API',
+                        'label_hi': 'API उपयोग',
+                        'label_de': 'API Nutzung',
+                        'icon': 'fa-chart-area',
+                        'route': '/integration/reports/api-usage',
+                        'permission': ('integration', 'report', 'view'),
+                    },
+                    'integration_report_webhook_delivery': {
+                        'label': 'Webhook Delivery',
+                        'label_ar': 'تسليم الويبهوک',
+                        'label_fa': 'تحویل وب‌هوک',
+                        'label_ru': 'Доставка веб-хуков',
+                        'label_zh': 'Webhook投递',
+                        'label_es': 'Entrega de Webhook',
+                        'label_hi': 'वेबहुक डिलीवरी',
+                        'label_de': 'Webhook Lieferung',
+                        'icon': 'fa-bolt',
+                        'route': '/integration/reports/webhook-delivery',
+                        'permission': ('integration', 'report', 'view'),
+                    },
+                    'integration_report_queue_dlq': {
+                        'label': 'Queue & DLQ',
+                        'label_ar': 'قائمة الانتظار و DLQ',
+                        'label_fa': 'صف و DLQ',
+                        'label_ru': 'Очередь и DLQ',
+                        'label_zh': '队列和DLQ',
+                        'label_es': 'Cola y DLQ',
+                        'label_hi': 'कतार और DLQ',
+                        'label_de': 'Warteschlange und DLQ',
+                        'icon': 'fa-database',
+                        'route': '/integration/reports/queue-dlq',
+                        'permission': ('integration', 'report', 'view'),
+                    },
+                    'integration_report_error_analysis': {
+                        'label': 'Error Analysis',
+                        'label_ar': 'تحليل الأخطاء',
+                        'label_fa': 'تحلیل خطاها',
+                        'label_ru': 'Анализ ошибок',
+                        'label_zh': '错误分析',
+                        'label_es': 'Análisis de Errores',
+                        'label_hi': 'त्रुटि विश्लेषण',
+                        'label_de': 'Fehleranalyse',
+                        'icon': 'fa-exclamation-triangle',
+                        'route': '/integration/reports/error-analysis',
+                        'permission': ('integration', 'report', 'view'),
+                    },
+                }
             },
             'integration_export': {
                 'label': 'Export Center',
@@ -14509,12 +14615,13 @@ def _build_main_menu(user_id: int, language: str) -> List[Dict]:
             'icon': module_data.get('icon', 'fa-circle'),
             'icon_type': module_data.get('icon_type', 'fas'),
             'route': module_data.get('route'),
-            'items': []
+            'items': []  # Always start with a list
         }
 
-        # Add sub-items if present
-        if module_data.get('items'):
-            for item_key, item_data in module_data['items'].items():
+        # Add sub-items if present and is a dict (not already a method)
+        items_data = module_data.get('items')
+        if items_data and isinstance(items_data, dict):
+            for item_key, item_data in items_data.items():
                 if filter_menu_by_permission(item_data, permissions):
                     module_entry['items'].append({
                         'key': item_key,
@@ -14750,13 +14857,14 @@ def get_active_module(current_path: str) -> Optional[str]:
         # Check sub-items
         if not result:
             items = module_data.get('items', {})
-            for item_key, item_data in items.items():
-                item_route = item_data.get('route')
-                if item_route and current_path.startswith(item_route):
-                    result = module_key
-                    break
-        if result:
-            break
+            if isinstance(items, dict):
+                for item_key, item_data in items.items():
+                    item_route = item_data.get('route')
+                    if item_route and current_path.startswith(item_route):
+                        result = module_key
+                        break
+            if result:
+                break
 
     # Check dashboard specially
     if current_path == '/':
@@ -14777,12 +14885,12 @@ def get_active_module(current_path: str) -> Optional[str]:
 
 def get_notification_badge(user_id: int) -> int:
     """Get count of unread notifications for badge display with caching."""
-    from database import cached_query
-    return cached_query(
-        f'notification_badge:{user_id}',
-        60,  # 60 seconds TTL from config
-        lambda: _fetch_notification_badge(user_id)
-    )
+    if not user_id:
+        return 0
+    try:
+        return _fetch_notification_badge(user_id)
+    except Exception:
+        return 0
 
 
 def _fetch_notification_badge(user_id: int) -> int:
@@ -14790,19 +14898,20 @@ def _fetch_notification_badge(user_id: int) -> int:
     from database import get_db_context
     with get_db_context() as db:
         result = db.execute(
-            "SELECT COUNT(*) as cnt FROM platform_notifications WHERE user_id = ? AND is_read = 0"
+            "SELECT COUNT(*) as cnt FROM platform_notifications WHERE user_id = ? AND is_read = 0",
+            (user_id,)
         ).fetchone()
         return result['cnt'] if result else 0
 
 
 def get_task_badge(user_id: int) -> int:
     """Get count of open tasks assigned to user with caching."""
-    from database import cached_query
-    return cached_query(
-        f'task_badge:{user_id}',
-        60,  # 60 seconds TTL from config
-        lambda: _fetch_task_badge(user_id)
-    )
+    if not user_id:
+        return 0
+    try:
+        return _fetch_task_badge(user_id)
+    except Exception:
+        return 0
 
 
 def _fetch_task_badge(user_id: int) -> int:

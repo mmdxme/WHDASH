@@ -22,7 +22,7 @@ Usage:
     subscribe_webhook(
         url='https://example.com/webhook',
         events=['domain.invoice.created', 'domain.order.*'],
-        secret='webhook_secret_123'
+        secret=os.environ.get('WEBHOOK_SECRET')  # Set via environment variable
     )
 
     # Manually trigger a delivery

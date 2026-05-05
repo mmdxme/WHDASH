@@ -162,41 +162,57 @@ def get_scm_settings(db, category=None):
 def scm_dashboard():
     """Main SCM Dashboard - Supply Chain Control Tower."""
     db = get_db()
-    
+
     # Get key metrics
     total_items = db.execute("SELECT COUNT(*) as cnt FROM wms_items WHERE is_active = 1").fetchone()['cnt']
     active_alerts = db.execute("SELECT COUNT(*) as cnt FROM planning_alerts WHERE is_acknowledged = 0").fetchone()['cnt']
-    
-    # Stock health metrics
+
+    # Stock health metrics - optimized with CTEs to avoid N+1 correlated subqueries
     zero_stock = db.execute("""
         SELECT COUNT(*) as cnt FROM wms_inventory_balances ib
         JOIN wms_items i ON ib.item_id = i.id
         WHERE i.is_active = 1 AND ib.quantity <= 0
     """).fetchone()['cnt']
-    
+
+    # Optimized: Use CTE to pre-compute avg demand per item, avoiding correlated subquery per row
     below_safety = db.execute("""
-        SELECT COUNT(*) as cnt FROM wms_inventory_balances ib
+        WITH item_demand AS (
+            SELECT item_id,
+                   COALESCE(AVG(sales_quantity + consumption_quantity) / 30, 10) as avg_daily
+            FROM planning_demand_history
+            GROUP BY item_id
+        )
+        SELECT COUNT(*) as cnt
+        FROM wms_inventory_balances ib
         JOIN wms_items i ON ib.item_id = i.id
         LEFT JOIN planning_item_profiles ip ON i.id = ip.item_id
-        WHERE i.is_active = 1 AND ib.quantity > 0 
-        AND ib.quantity < COALESCE(ip.safety_stock_days * (SELECT AVG(sales_quantity + consumption_quantity) / 30 
-            FROM planning_demand_history WHERE item_id = i.id), 10)
+        LEFT JOIN item_demand id ON i.id = id.item_id
+        WHERE i.is_active = 1 AND ib.quantity > 0
+        AND ib.quantity < COALESCE(ip.safety_stock_days * id.avg_daily, 10)
     """).fetchone()['cnt']
-    
+
+    # Optimized: Use CTE to pre-compute avg demand per item
     below_rop = db.execute("""
-        SELECT COUNT(*) as cnt FROM wms_inventory_balances ib
+        WITH item_demand AS (
+            SELECT item_id,
+                   COALESCE(AVG(sales_quantity + consumption_quantity) / 30, 5) as avg_daily
+            FROM planning_demand_history
+            GROUP BY item_id
+        )
+        SELECT COUNT(*) as cnt
+        FROM wms_inventory_balances ib
         JOIN wms_items i ON ib.item_id = i.id
         LEFT JOIN planning_item_profiles ip ON i.id = ip.item_id
-        WHERE i.is_active = 1 AND ib.quantity > 0 
-        AND ib.quantity < COALESCE(ip.reorder_point_days * (SELECT AVG(sales_quantity + consumption_quantity) / 30 
-            FROM planning_demand_history WHERE item_id = i.id), 5)
+        LEFT JOIN item_demand id ON i.id = id.item_id
+        WHERE i.is_active = 1 AND ib.quantity > 0
+        AND ib.quantity < COALESCE(ip.reorder_point_days * id.avg_daily, 5)
     """).fetchone()['cnt']
-    
+
     excess_stock = db.execute("""
         SELECT COUNT(*) as cnt FROM wms_inventory_balances ib
         JOIN wms_items i ON ib.item_id = i.id
         LEFT JOIN planning_item_profiles ip ON i.id = ip.item_id
-        WHERE i.is_active = 1 
+        WHERE i.is_active = 1
         AND ib.quantity > COALESCE(ip.max_order_quantity, 1000)
     """).fetchone()['cnt']
     
@@ -647,6 +663,30 @@ def demand_forecast_detail(run_id):
     )
 
 
+@scm_bp.route('/demand/forecast/<int:run_id>/approve')
+@scm_permission_required('scm', 'demand')
+def demand_forecast_approve(run_id):
+    """Approve a forecast run."""
+    db = get_db()
+
+    run = db.execute("SELECT * FROM planning_forecast_runs WHERE id = ?", (run_id,)).fetchone()
+    if not run:
+        flash('Forecast run not found.', 'error')
+        return redirect(url_for('scm.demand_forecast_center'))
+
+    # Update status to APPROVED
+    db.execute("""
+        UPDATE planning_forecast_runs
+        SET status = 'APPROVED',
+            approved_by = ?,
+            approved_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+    """, (session.get('user_id'), run_id))
+
+    flash(f'Forecast "{run["run_name"]}" has been approved.', 'success')
+    return redirect(url_for('scm.demand_forecast_detail', run_id=run_id))
+
+
 @scm_bp.route('/demand/by-item/<int:item_id>')
 @scm_permission_required('scm', 'demand')
 def demand_by_item(item_id):
@@ -778,14 +818,12 @@ def demand_overrides():
 @scm_bp.route('/demand/accuracy')
 @scm_permission_required('scm', 'demand')
 def demand_accuracy():
-    """Forecast accuracy analysis."""
+    """Forecast accuracy analysis with comprehensive metrics."""
     db = get_db()
-    
-    # Calculate forecast accuracy metrics
-    # This would compare actual demand vs forecasted demand
-    
+
+    # Overall accuracy metrics
     accuracy_metrics = db.execute("""
-        SELECT 
+        SELECT
             r.id as run_id,
             r.run_name,
             r.status,
@@ -797,14 +835,100 @@ def demand_accuracy():
         ORDER BY r.approved_at DESC
         LIMIT 10
     """).fetchall()
-    
-    # Bias analysis
-    bias_analysis = []
-    
+
+    # Calculate comprehensive accuracy metrics
+    accuracy_summary = db.execute("""
+        SELECT
+            COUNT(DISTINCT item_id) as items_measured,
+            AVG(mape) as avg_mape,
+            AVG(bias) as avg_bias,
+            AVG(mad) as avg_mad,
+            AVG(coverage_ratio) as avg_coverage,
+            SUM(CASE WHEN bias > 0 THEN 1 ELSE 0 END) as over_forecast_count,
+            SUM(CASE WHEN bias < 0 THEN 1 ELSE 0 END) as under_forecast_count,
+            SUM(CASE WHEN mape <= 15 THEN 1 ELSE 0 END) as good_accuracy_count,
+            SUM(CASE WHEN mape > 15 AND mape <= 30 THEN 1 ELSE 0 END) as acceptable_count,
+            SUM(CASE WHEN mape > 30 THEN 1 ELSE 0 END) as poor_accuracy_count
+        FROM planning_forecast_accuracy
+        WHERE mape IS NOT NULL
+    """).fetchone()
+
+    # Variance analysis - forecast vs actual comparison
+    variance_analysis = db.execute("""
+        SELECT
+            DATE(fl.period_start) as period_date,
+            COALESCE(SUM(fl.final_quantity), 0) as total_forecast,
+            COALESCE(SUM(dh.sales_quantity + dh.consumption_quantity), 0) as total_actual,
+            CASE WHEN SUM(fl.final_quantity) > 0
+                 THEN ((SUM(dh.sales_quantity + dh.consumption_quantity) - SUM(fl.final_quantity)) / SUM(fl.final_quantity) * 100)
+                 ELSE 0 END as variance_percent,
+            CASE WHEN SUM(fl.final_quantity) > 0
+                 THEN (SUM(dh.sales_quantity + dh.consumption_quantity) - SUM(fl.final_quantity))
+                 ELSE 0 END as absolute_variance
+        FROM planning_forecast_lines fl
+        LEFT JOIN planning_demand_history dh
+            ON fl.item_id = dh.item_id AND DATE(fl.period_start) = DATE(dh.period_start)
+        WHERE fl.period_start >= DATE('now', '-30 days')
+        GROUP BY DATE(fl.period_start)
+        ORDER BY period_date DESC
+        LIMIT 30
+    """).fetchall()
+
+    # MAPE by category
+    mape_by_category = db.execute("""
+        SELECT
+            c.name as category,
+            AVG(fa.mape) as avg_mape,
+            COUNT(*) as item_count
+        FROM planning_forecast_accuracy fa
+        JOIN wms_items i ON fa.item_id = i.id
+        LEFT JOIN wms_categories c ON i.category_id = c.id
+        WHERE fa.mape IS NOT NULL
+        GROUP BY c.name
+        ORDER BY avg_mape DESC
+    """).fetchall()
+
+    # Bias analysis - track forecast bias over time
+    bias_trend = db.execute("""
+        SELECT
+            DATE(calculated_at) as date,
+            AVG(bias) as daily_bias,
+            COUNT(*) as measurement_count
+        FROM planning_forecast_accuracy
+        WHERE calculated_at >= DATE('now', '-30 days')
+        GROUP BY DATE(calculated_at)
+        ORDER BY date
+    """).fetchall()
+
+    # Variance summary statistics
+    variance_summary = db.execute("""
+        SELECT
+            COUNT(*) as total_periods,
+            AVG(variance_percent) as avg_variance_pct,
+            MAX(ABS(variance_percent)) as max_variance_pct,
+            SUM(CASE WHEN variance_percent > 0 THEN 1 ELSE 0 END) as over_forecast_periods,
+            SUM(CASE WHEN variance_percent < 0 THEN 1 ELSE 0 END) as under_forecast_periods
+        FROM (
+            SELECT
+                CASE WHEN SUM(fl.final_quantity) > 0
+                     THEN ((SUM(dh.sales_quantity + dh.consumption_quantity) - SUM(fl.final_quantity)) / SUM(fl.final_quantity) * 100)
+                     ELSE 0 END as variance_percent
+            FROM planning_forecast_lines fl
+            LEFT JOIN planning_demand_history dh
+                ON fl.item_id = dh.item_id AND DATE(fl.period_start) = DATE(dh.period_start)
+            WHERE fl.period_start >= DATE('now', '-30 days')
+            GROUP BY DATE(fl.period_start)
+        )
+    """).fetchone()
+
     return render_template('scm/demand/forecast_accuracy.html',
         title='Forecast Accuracy',
         accuracy_metrics=accuracy_metrics,
-        bias_analysis=bias_analysis
+        accuracy_summary=accuracy_summary,
+        variance_analysis=variance_analysis,
+        mape_by_category=mape_by_category,
+        bias_trend=bias_trend,
+        variance_summary=variance_summary
     )
 
 
@@ -812,9 +936,267 @@ def demand_accuracy():
 @scm_permission_required('scm', 'reports')
 def demand_reports():
     """Demand planning reports."""
+    db = get_db()
+
+    recent_runs = db.execute("""
+        SELECT r.*,
+               (SELECT COUNT(*) FROM planning_forecast_lines WHERE run_id = r.id) as line_count,
+               u.username as created_by_name
+        FROM planning_forecast_runs r
+        LEFT JOIN users u ON r.created_by = u.id
+        ORDER BY r.created_at DESC
+        LIMIT 5
+    """).fetchall()
+
     return render_template('scm/demand/reports.html',
-        title='Demand Reports'
+        title='Demand Reports',
+        recent_runs=recent_runs
     )
+
+
+@scm_bp.route('/demand/report/<report_type>')
+@scm_permission_required('scm', 'reports')
+def demand_report(report_type):
+    """Generate specific demand reports by type."""
+    db = get_db()
+
+    if report_type == 'variance':
+        data = db.execute("""
+            SELECT
+                DATE(fl.period_start) as period_date,
+                i.item_code,
+                i.name as item_name,
+                COALESCE(SUM(fl.final_quantity), 0) as total_forecast,
+                COALESCE(SUM(dh.sales_quantity + dh.consumption_quantity), 0) as total_actual,
+                CASE WHEN SUM(fl.final_quantity) > 0
+                     THEN ((SUM(dh.sales_quantity + dh.consumption_quantity) - SUM(fl.final_quantity)) / SUM(fl.final_quantity) * 100)
+                     ELSE 0 END as variance_percent
+            FROM planning_forecast_lines fl
+            LEFT JOIN planning_demand_history dh
+                ON fl.item_id = dh.item_id AND DATE(fl.period_start) = DATE(dh.period_start)
+            JOIN wms_items i ON fl.item_id = i.id
+            WHERE fl.period_start >= DATE('now', '-30 days')
+            GROUP BY DATE(fl.period_start), i.item_code, i.name
+            ORDER BY period_date DESC
+        """).fetchall()
+        title = 'Variance Analysis Report'
+    elif report_type == 'coverage':
+        data = db.execute("""
+            SELECT
+                i.item_code,
+                i.name as item_name,
+                COALESCE(SUM(fl.final_quantity), 0) as forecast_total,
+                COALESCE(SUM(ib.quantity), 0) as inventory_total,
+                CASE WHEN SUM(fl.final_quantity) > 0
+                     THEN (SUM(ib.quantity) / SUM(fl.final_quantity) * 100)
+                     ELSE 0 END as coverage_ratio
+            FROM planning_forecast_lines fl
+            JOIN wms_items i ON fl.item_id = i.id
+            LEFT JOIN wms_inventory_balances ib ON i.id = ib.item_id
+            WHERE fl.period_start >= DATE('now', '-30 days')
+            GROUP BY i.item_code, i.name
+            ORDER BY coverage_ratio ASC
+        """).fetchall()
+        title = 'Coverage Ratio Report'
+    elif report_type == 'bias':
+        data = db.execute("""
+            SELECT
+                i.item_code,
+                i.name as item_name,
+                fa.period_start,
+                fa.bias,
+                fa.mape,
+                fa.mad,
+                CASE WHEN fa.bias > 0 THEN 'Over Forecast' ELSE 'Under Forecast' END as bias_direction
+            FROM planning_forecast_accuracy fa
+            JOIN wms_items i ON fa.item_id = i.id
+            WHERE fa.bias IS NOT NULL
+            ORDER BY ABS(fa.bias) DESC
+            LIMIT 100
+        """).fetchall()
+        title = 'Forecast Bias Report'
+    elif report_type == 'seasonal':
+        data = db.execute("""
+            SELECT
+                i.item_code,
+                i.name as item_name,
+                strftime('%W', fl.period_start) as week_num,
+                AVG(fl.final_quantity) as avg_weekly_forecast,
+                AVG(dh.sales_quantity + dh.consumption_quantity) as avg_weekly_actual,
+                CASE WHEN AVG(fl.final_quantity) > 0
+                     THEN ((AVG(dh.sales_quantity + dh.consumption_quantity) - AVG(fl.final_quantity)) / AVG(fl.final_quantity) * 100)
+                     ELSE 0 END as seasonal_index
+            FROM planning_forecast_lines fl
+            JOIN wms_items i ON fl.item_id = i.id
+            LEFT JOIN planning_demand_history dh ON fl.item_id = dh.item_id AND DATE(fl.period_start) = DATE(dh.period_start)
+            WHERE fl.period_start >= DATE('now', '-12 months')
+            GROUP BY i.item_code, i.name, week_num
+            ORDER BY week_num, i.item_code
+        """).fetchall()
+        title = 'Seasonal Indices Report'
+    elif report_type == 'confidence':
+        data = db.execute("""
+            SELECT
+                i.item_code,
+                i.name as item_name,
+                fl.period_start,
+                fl.final_quantity as forecast_value,
+                fl.final_quantity * 1.1 as upper_bound,
+                fl.final_quantity * 0.9 as lower_bound,
+                (fl.final_quantity * 1.1 - fl.final_quantity * 0.9) / 2 as confidence_interval
+            FROM planning_forecast_lines fl
+            JOIN wms_items i ON fl.item_id = i.id
+            WHERE fl.period_start >= DATE('now', '-30 days')
+            ORDER BY fl.period_start, i.item_code
+        """).fetchall()
+        title = 'Confidence Intervals Report'
+    else:
+        data = []
+        title = 'Demand Report'
+
+    return render_template('scm/demand/report_generic.html',
+        title=title,
+        report_type=report_type,
+        report_data=data
+    )
+
+
+@scm_bp.route('/demand/export/<format>')
+@scm_permission_required('scm', 'reports')
+def demand_export_report(format):
+    """Export demand report in various formats."""
+    from flask import Response
+    db = get_db()
+
+    report_data = db.execute("""
+        SELECT
+            i.item_code,
+            i.name as item_name,
+            COALESCE(SUM(dh.sales_quantity + dh.consumption_quantity), 0) as total_demand,
+            COALESCE(AVG(dh.sales_quantity + dh.consumption_quantity), 0) as avg_demand,
+            MAX(dh.period_start) as last_demand_date
+        FROM planning_demand_history dh
+        JOIN wms_items i ON dh.item_id = i.id
+        WHERE dh.period_start >= DATE('now', '-30 days')
+        GROUP BY i.item_code, i.name
+        ORDER BY total_demand DESC
+    """).fetchall()
+
+    if format == 'csv':
+        import csv
+        import io
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Item Code', 'Item Name', 'Total Demand', 'Avg Demand', 'Last Demand Date'])
+        for row in report_data:
+            writer.writerow([row['item_code'], row['item_name'], row['total_demand'], row['avg_demand'], row['last_demand_date']])
+
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=demand_report.csv'}
+        )
+    elif format == 'excel':
+        try:
+            import openpyxl
+            from io import BytesIO
+            wb = openpyxl.Workbook()
+            ws = wb.active
+            ws.title = 'Demand Report'
+
+            ws.append(['Item Code', 'Item Name', 'Total Demand', 'Avg Demand', 'Last Demand Date'])
+            for row in report_data:
+                ws.append([row['item_code'], row['item_name'], row['total_demand'], row['avg_demand'], row['last_demand_date']])
+
+            output = BytesIO()
+            wb.save(output)
+            output.seek(0)
+
+            return Response(
+                output.getvalue(),
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                headers={'Content-Disposition': 'attachment; filename=demand_report.xlsx'}
+            )
+        except ImportError:
+            flash('Excel export requires openpyxl library.', 'error')
+            return redirect(url_for('scm.demand_reports'))
+    elif format == 'pdf':
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from io import BytesIO
+
+            output = BytesIO()
+            doc = SimpleDocTemplate(output, pagesize=landscape(A4))
+            elements = []
+            styles = getSampleStyleSheet()
+
+            # Title
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=18,
+                spaceAfter=20
+            )
+            elements.append(Paragraph('Demand Planning Report', title_style))
+            elements.append(Spacer(1, 0.25 * inch))
+
+            # Data table
+            data = [['Item Code', 'Item Name', 'Total Demand', 'Avg Demand', 'Last Demand Date']]
+            for row in report_data:
+                data.append([
+                    row['item_code'],
+                    row['item_name'][:40] if row['item_name'] else '',
+                    f"{row['total_demand']:,.0f}",
+                    f"{row['avg_demand']:,.2f}",
+                    str(row['last_demand_date']) if row['last_demand_date'] else ''
+                ])
+
+            table = Table(data, colWidths=[1.5*inch, 3*inch, 1.5*inch, 1.5*inch, 1.5*inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#38bdf8')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.HexColor('#1e293b')),
+                ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor('#cbd5e1')),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#334155')),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.HexColor('#1e293b'), colors.HexColor('#0f172a')]),
+            ]))
+            elements.append(table)
+            elements.append(Spacer(1, 0.5 * inch))
+
+            # Summary
+            summary_style = ParagraphStyle(
+                'Summary',
+                parent=styles['Normal'],
+                fontSize=10,
+                textColor=colors.HexColor('#94a3b8')
+            )
+            total = sum(r['total_demand'] for r in report_data)
+            elements.append(Paragraph(f'Total Records: {len(report_data)-1}', summary_style))
+            elements.append(Paragraph(f'Grand Total Demand: {total:,.0f}', summary_style))
+
+            doc.build(elements)
+            output.seek(0)
+
+            return Response(
+                output.getvalue(),
+                mimetype='application/pdf',
+                headers={'Content-Disposition': 'attachment; filename=demand_report.pdf'}
+            )
+        except ImportError:
+            flash('PDF export requires reportlab library.', 'error')
+            return redirect(url_for('scm.demand_reports'))
+
+    return redirect(url_for('scm.demand_reports'))
 
 
 # ============================================================

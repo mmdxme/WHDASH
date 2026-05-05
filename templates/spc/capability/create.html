@@ -92,8 +92,33 @@
                                 <label class="form-label">Sample Measurements <span class="text-danger">*</span></label>
                                 <textarea name="sample_data" class="form-control" rows="6"
                                           placeholder="10.2, 10.1, 9.9, 10.3, 10.0, 9.8, 10.2, 10.1, 9.9, 10.0, 10.2, 9.8, 10.1, 10.3, 10.0, 9.9, 10.2, 10.1, 9.8, 10.0, 10.2, 9.9, 10.1, 10.3, 10.0"
-                                          required></textarea>
+                                          required id="sampleDataInput" oninput="previewCapability()"></textarea>
                                 <small class="text-muted">Enter at least 3 measurements for a valid capability study</small>
+                            </div>
+
+                            <!-- Live Preview -->
+                            <div class="card bg-light mt-3" id="previewCard" style="display: none;">
+                                <div class="card-body">
+                                    <h6 class="mb-3"><i class="fas fa-eye me-1"></i>Quick Preview</h6>
+                                    <div class="row text-center">
+                                        <div class="col-3">
+                                            <div class="small text-muted">Mean</div>
+                                            <div class="fw-bold" id="previewMean">-</div>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="small text-muted">Std Dev</div>
+                                            <div class="fw-bold" id="previewStdDev">-</div>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="small text-muted">Cp</div>
+                                            <div class="fw-bold" id="previewCp">-</div>
+                                        </div>
+                                        <div class="col-3">
+                                            <div class="small text-muted">Cpk</div>
+                                            <div class="fw-bold" id="previewCpk">-</div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="mb-3">
@@ -114,40 +139,115 @@
             </div>
 
             <div class="col-lg-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Assessment Guide</h5>
+                <div class="card sticky-top" style="top: 20px;">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0"><i class="fas fa-bullseye me-2"></i>Assessment Guide</h5>
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <span class="badge badge-WORLD_CLASS w-100 mb-1">World Class (Cpk ≥ 2.0)</span>
-                            <small class="text-muted">Six Sigma level performance</small>
+                            <div class="d-flex align-items-center">
+                                <span class="badge badge-WORLD_CLASS me-2">≥2.0</span>
+                                <small class="text-muted">World Class</small>
+                            </div>
                         </div>
                         <div class="mb-3">
-                            <span class="badge badge-EXCELLENT w-100 mb-1">Excellent (Cpk ≥ 1.67)</span>
-                            <small class="text-muted">World-class for critical characteristics</small>
+                            <div class="d-flex align-items-center">
+                                <span class="badge badge-EXCELLENT me-2">≥1.67</span>
+                                <small class="text-muted">Excellent</small>
+                            </div>
                         </div>
                         <div class="mb-3">
-                            <span class="badge badge-GOOD w-100 mb-1">Good (Cpk ≥ 1.33)</span>
-                            <small class="text-muted">Typical manufacturing target</small>
+                            <div class="d-flex align-items-center">
+                                <span class="badge badge-GOOD me-2">≥1.33</span>
+                                <small class="text-muted">Good</small>
+                            </div>
                         </div>
                         <div class="mb-3">
-                            <span class="badge badge-ACCEPTABLE w-100 mb-1">Acceptable (Cpk ≥ 1.0)</span>
-                            <small class="text-muted">Minimum process capability</small>
+                            <div class="d-flex align-items-center">
+                                <span class="badge badge-ACCEPTABLE me-2">≥1.0</span>
+                                <small class="text-muted">Acceptable</small>
+                            </div>
                         </div>
                         <div class="mb-3">
-                            <span class="badge badge-MARGINAL w-100 mb-1">Marginal (Cpk ≥ 0.67)</span>
-                            <small class="text-muted">Requires improvement</small>
+                            <div class="d-flex align-items-center">
+                                <span class="badge badge-MARGINAL me-2">≥0.67</span>
+                                <small class="text-muted">Marginal</small>
+                            </div>
                         </div>
                         <div>
-                            <span class="badge badge-NOT_CAPABLE w-100 mb-1">Not Capable (Cpk < 0.67)</span>
-                            <small class="text-muted">Process needs significant improvement</small>
+                            <div class="d-flex align-items-center">
+                                <span class="badge badge-NOT_CAPABLE me-2">&lt;0.67</span>
+                                <small class="text-muted">Not Capable</small>
+                            </div>
                         </div>
+                        <hr>
+                        <small class="text-muted">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Assessment based on Cpk value. Cp measures potential capability while Cpk measures actual capability considering centering.
+                        </small>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <script>
+        // Simple capability calculation for preview
+        function calculateCapability() {
+            const sampleInput = document.getElementById('sampleDataInput');
+            const uslInput = document.querySelector('input[name="usl"]');
+            const lslInput = document.querySelector('input[name="lsl"]');
+            const targetInput = document.querySelector('input[name="target"]');
+
+            if (!sampleInput || !uslInput || !lslInput) return;
+
+            const values = sampleInput.value.split(',')
+                .map(v => parseFloat(v.trim()))
+                .filter(v => !isNaN(v));
+
+            const usl = parseFloat(uslInput.value) || 0;
+            const lsl = parseFloat(lslInput.value) || 0;
+            const target = parseFloat(targetInput?.value) || null;
+
+            if (values.length < 3) return null;
+
+            const mean = values.reduce((a, b) => a + b, 0) / values.length;
+            const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (values.length - 1);
+            const stdDev = Math.sqrt(variance);
+
+            if (stdDev === 0) return null;
+
+            const cpu = (usl - mean) / (3 * stdDev);
+            const cpl = (mean - lsl) / (3 * stdDev);
+            const cp = (usl - lsl) / (6 * stdDev);
+            const cpk = Math.min(cpu, cpl);
+
+            return { mean, stdDev, cp, cpk };
+        }
+
+        function previewCapability() {
+            const result = calculateCapability();
+            const previewCard = document.getElementById('previewCard');
+
+            if (result) {
+                previewCard.style.display = 'block';
+                document.getElementById('previewMean').textContent = result.mean.toFixed(4);
+                document.getElementById('previewStdDev').textContent = result.stdDev.toFixed(4);
+                document.getElementById('previewCp').textContent = result.cp.toFixed(3);
+                document.getElementById('previewCpk').textContent = result.cpk.toFixed(3);
+
+                // Color code Cpk
+                const cpkEl = document.getElementById('previewCpk');
+                cpkEl.className = 'fw-bold';
+                if (result.cpk >= 1.67) cpkEl.classList.add('text-success');
+                else if (result.cpk >= 1.33) cpkEl.classList.add('text-info');
+                else if (result.cpk >= 1.0) cpkEl.classList.add('text-warning');
+                else cpkEl.classList.add('text-danger');
+            } else {
+                previewCard.style.display = 'none';
+            }
+        }
+    </script>
     {% endblock %}
 </body>
 </html>

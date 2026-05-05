@@ -55,6 +55,13 @@ from export_utils import (
 hr_bp = Blueprint('hr', __name__, url_prefix='/hr')
 
 
+def t(key, default=None):
+    """Get translation for current language."""
+    lang = session.get('language', 'en')
+    from translations import get_translation as _get_trans
+    return _get_trans(lang, key, default or key)
+
+
 # =============================================================================
 # EXPORT TYPES AND COLUMNS
 # =============================================================================
@@ -90,7 +97,7 @@ def hr_login_required(f):
         if 'user_id' not in session:
             if request.is_json:
                 return jsonify({'error': 'Authentication required'}), 401
-            flash('Please log in first.', 'error')
+            flash(t('hr_login_required', 'Please log in first.'), 'error')
             return redirect(url_for('login', next=request.url))
         return f(*args, **kwargs)
     return decorated_function
@@ -104,18 +111,16 @@ def hr_permission_required(action: str):
             if 'user_id' not in session:
                 if request.is_json:
                     return jsonify({'error': 'Authentication required'}), 401
-                flash('Please log in first.', 'error')
+                flash(t('hr_login_required', 'Please log in first.'), 'error')
                 return redirect(url_for('login'))
 
-            # Super admin bypass
-            if session.get('role_name') == 'Global Admin':
-                return f(*args, **kwargs)
-
             user_id = session['user_id']
+            # SECURITY: Global Admin bypass is handled internally via wildcard permissions
+            # in user_has_permission(). Do NOT add custom role checks here.
             if not user_has_permission(user_id, 'hr', 'hr', action):
                 if request.is_json:
                     return jsonify({'error': 'Permission denied'}), 403
-                flash(f"You don't have permission to {action} HR records.", 'error')
+                flash(t('hr_permission_denied', f"You don't have permission to {action} HR records."), 'error')
                 return redirect(url_for('index'))
             return f(*args, **kwargs)
         return decorated_function
@@ -550,7 +555,7 @@ def employees_new():
             log_hr_audit('hr_employees', employee_id, 'CREATE', user['id'],
                         new_value=f"Employee {employee_code} created")
             
-            flash(f'Employee {employee_code} created successfully!', 'success')
+            flash(t('hr_employee_created', f'Employee {employee_code} created successfully!'), 'success')
             return redirect(url_for('hr.employees_view', id=employee_id))
             
         except Exception as e:
@@ -593,7 +598,7 @@ def employees_view(id):
     try:
         employee = get_employee_with_employment(id)
         if not employee:
-            flash('Employee not found.', 'error')
+            flash(t('hr_employee_not_found', 'Employee not found.'), 'error')
             return redirect(url_for('hr.employees_list'))
         
         # Get employment history
@@ -705,7 +710,7 @@ def employees_edit(id):
     try:
         employee = db.execute("SELECT * FROM hr_employees WHERE id = ?", (id,)).fetchone()
         if not employee:
-            flash('Employee not found.', 'error')
+            flash(t('hr_employee_not_found', 'Employee not found.'), 'error')
             return redirect(url_for('hr.employees_list'))
         
         if request.method == 'POST':
@@ -768,7 +773,7 @@ def employees_edit(id):
                 log_hr_audit('hr_employees', id, 'UPDATE', user['id'],
                            new_value=f"Employee {employee['employee_code']} updated")
                 
-                flash('Employee updated successfully!', 'success')
+                flash(t('hr_employee_updated', 'Employee updated successfully!'), 'success')
                 return redirect(url_for('hr.employees_view', id=id))
                 
             except Exception as e:
@@ -903,7 +908,7 @@ def departments_new():
             ))
             
             db.commit()
-            flash('Department created successfully!', 'success')
+            flash(t('hr_department_created', 'Department created successfully!'), 'success')
             return redirect(url_for('hr.departments_list'))
         except Exception as e:
             db.rollback()
@@ -1049,7 +1054,7 @@ def attendance_mark():
                 """, (employee_id, att_date, check_in, check_out, work_hours, status, remarks))
             
             db.commit()
-            flash('Attendance marked successfully!', 'success')
+            flash(t('hr_attendance_marked', 'Attendance marked successfully!'), 'success')
             return redirect(url_for('hr.attendance_list'))
             
         except Exception as e:
@@ -1183,7 +1188,7 @@ def leave_new():
             """, (user['id'],)).fetchone()
             
             if not employee:
-                flash('Your user account is not linked to an employee record.', 'error')
+                flash(t('hr_user_not_linked', 'Your user account is not linked to an employee record.'), 'error')
                 return redirect(url_for('hr.leave_list'))
             
             employee_id = employee['id']
@@ -1217,7 +1222,7 @@ def leave_new():
             
             available = float(balance['total_days']) - float(balance['used_days']) - float(balance['pending_days'])
             if total_days > available:
-                flash(f'Insufficient leave balance. Available: {available:.1f} days', 'error')
+                flash(t('hr_insufficient_leave_balance', f'Insufficient leave balance. Available: {available:.1f} days'), 'error')
                 return redirect(url_for('hr.leave_new'))
             
             # Update pending days
@@ -1235,7 +1240,7 @@ def leave_new():
             """, (employee_id, leave_type_id, start_date, end_date, total_days, reason))
             
             db.commit()
-            flash('Leave request submitted!', 'success')
+            flash(t('hr_leave_submitted', 'Leave request submitted!'), 'success')
             return redirect(url_for('hr.leave_list'))
             
         except Exception as e:
@@ -1381,11 +1386,11 @@ def payroll_process(period_id):
     try:
         period = db.execute("SELECT * FROM hr_payroll_periods WHERE id = ?", (period_id,)).fetchone()
         if not period:
-            flash('Payroll period not found.', 'error')
+            flash(t('hr_payroll_period_not_found', 'Payroll period not found.'), 'error')
             return redirect(url_for('hr.payroll_list'))
         
         if period['status'] not in ['Draft', 'Processing']:
-            flash('Payroll can only be processed in Draft or Processing status.', 'error')
+            flash(t('hr_payroll_invalid_status', 'Payroll can only be processed in Draft or Processing status.'), 'error')
             return redirect(url_for('hr.payroll_list'))
         
         # Get active employees
@@ -1492,7 +1497,7 @@ def payroll_process(period_id):
         """, (session['user_id'], len(employees), period_id))
         
         db.commit()
-        flash(f'Payroll processed for {len(employees)} employees!', 'success')
+        flash(t('hr_payroll_processed', f'Payroll processed for {len(employees)} employees!'), 'success')
         return redirect(url_for('hr.payroll_detail', period_id=period_id))
         
     except Exception as e:
@@ -1512,7 +1517,7 @@ def payroll_detail(period_id):
     try:
         period = db.execute("SELECT * FROM hr_payroll_periods WHERE id = ?", (period_id,)).fetchone()
         if not period:
-            flash('Payroll period not found.', 'error')
+            flash(t('hr_payroll_period_not_found', 'Payroll period not found.'), 'error')
             return redirect(url_for('hr.payroll_list'))
         
         records = db.execute("""
@@ -1569,7 +1574,7 @@ def payroll_approve(period_id):
         """, (session['user_id'], period_id))
         
         db.commit()
-        flash('Payroll approved!', 'success')
+        flash(t('hr_payroll_approved', 'Payroll approved!'), 'success')
         return redirect(url_for('hr.payroll_detail', period_id=period_id))
         
     except Exception as e:
@@ -1689,7 +1694,7 @@ def overtime_new():
                   data.get('reason'), ot_rate, calculated_amount))
             
             db.commit()
-            flash('Overtime request submitted!', 'success')
+            flash(t('hr_overtime_submitted', 'Overtime request submitted!'), 'success')
             return redirect(url_for('hr.overtime_list'))
             
         except Exception as e:
@@ -1819,7 +1824,7 @@ def bonuses_new():
                   data.get('reason'), data.get('effective_month'), data.get('effective_year')))
             
             db.commit()
-            flash('Bonus record created!', 'success')
+            flash(t('hr_bonus_created', 'Bonus record created!'), 'success')
             return redirect(url_for('hr.bonuses_list'))
             
         except Exception as e:
@@ -1888,7 +1893,7 @@ def deductions_new():
                   data.get('end_month'), data.get('end_year')))
             
             db.commit()
-            flash('Deduction record created!', 'success')
+            flash(t('hr_deduction_created', 'Deduction record created!'), 'success')
             return redirect(url_for('hr.deductions_list'))
             
         except Exception as e:
@@ -1978,7 +1983,7 @@ def training_program_new():
                 1 if data.get('is_mandatory') else 0,
             ))
             db.commit()
-            flash('Training program created successfully!', 'success')
+            flash(t('hr_training_program_created', 'Training program created successfully!'), 'success')
             return redirect(url_for('hr.training_list'))
         except Exception as e:
             db.rollback()
@@ -1998,7 +2003,7 @@ def training_program_detail(program_id):
     try:
         program = db.execute("SELECT * FROM hr_training_programs WHERE id = ?", (program_id,)).fetchone()
         if not program:
-            flash('Training program not found.', 'error')
+            flash(t('hr_training_program_not_found', 'Training program not found.'), 'error')
             return redirect(url_for('hr.training_list'))
 
         sessions = db.execute("""
@@ -2049,7 +2054,7 @@ def training_session_new():
                 data.get('max_participants', 20),
             ))
             db.commit()
-            flash('Training session scheduled successfully!', 'success')
+            flash(t('hr_training_session_scheduled', 'Training session scheduled successfully!'), 'success')
             return redirect(url_for('hr.training_list'))
         except Exception as e:
             db.rollback()
@@ -2082,7 +2087,7 @@ def training_session_detail(session_id):
         """, (session_id,)).fetchone()
 
         if not session:
-            flash('Training session not found.', 'error')
+            flash(t('hr_training_session_not_found', 'Training session not found.'), 'error')
             return redirect(url_for('hr.training_list'))
 
         enrollments = db.execute("""
@@ -2141,7 +2146,7 @@ def training_session_enroll(session_id):
                     WHERE id = ?
                 """, (session_id,))
         db.commit()
-        flash(f'{len(employee_ids)} employee(s) enrolled successfully!', 'success')
+        flash(t('hr_enrollment_success', f'{len(employee_ids)} employee(s) enrolled successfully!'), 'success')
     except Exception as e:
         db.rollback()
         flash(f'Error: {str(e)}', 'error')
@@ -2193,7 +2198,7 @@ def training_enrollment_update(enrollment_id):
             update_values
         )
         db.commit()
-        flash('Enrollment updated successfully!', 'success')
+        flash(t('hr_enrollment_updated', 'Enrollment updated successfully!'), 'success')
         session_id_row = db.execute("SELECT session_id FROM hr_training_enrollments WHERE id = ?", (enrollment_id,)).fetchone()
         redirect_session_id = session_id_row['session_id'] if session_id_row else 0
     except Exception as e:
@@ -2219,7 +2224,7 @@ def training_enrollment_delete(enrollment_id):
             db.execute("UPDATE hr_training_sessions SET enrolled_count = MAX(0, enrolled_count - 1) WHERE id = ?",
                        (enrollment['session_id'],))
         db.commit()
-        flash('Enrollment removed.', 'success')
+        flash(t('hr_enrollment_removed', 'Enrollment removed.'), 'success')
     except Exception as e:
         db.rollback()
         flash(f'Error: {str(e)}', 'error')
@@ -2239,7 +2244,7 @@ def training_session_update_status(session_id):
         if status in ('Scheduled', 'Ongoing', 'Completed', 'Cancelled'):
             db.execute("UPDATE hr_training_sessions SET status = ? WHERE id = ?", (status, session_id))
             db.commit()
-            flash(f'Session marked as {status}!', 'success')
+            flash(t('hr_session_status_updated', f'Session marked as {status}!'), 'success')
     except Exception as e:
         db.rollback()
         flash(f'Error: {str(e)}', 'error')
@@ -2355,7 +2360,7 @@ def documents_new():
                   data.get('notes')))
             
             db.commit()
-            flash('Document record added!', 'success')
+            flash(t('hr_document_added', 'Document record added!'), 'success')
             return redirect(url_for('hr.documents_list'))
             
         except Exception as e:
@@ -3389,7 +3394,7 @@ def settings_update():
                 setting_key = key.replace('setting_', '')
                 update_hr_setting(setting_key, value)
         
-        flash('Settings updated successfully!', 'success')
+        flash(t('hr_settings_updated', 'Settings updated successfully!'), 'success')
         return redirect(url_for('hr.settings_menu'))
     finally:
         db.close()
@@ -3756,7 +3761,7 @@ def onboarding_detail(employee_id):
     try:
         employee = get_employee_with_employment(employee_id)
         if not employee:
-            flash('Employee not found.', 'error')
+            flash(t('hr_employee_not_found', 'Employee not found.'), 'error')
             return redirect(url_for('hr.onboarding_list'))
 
         # Get tasks/checklist for this onboarding
@@ -3844,7 +3849,7 @@ def offboarding_detail(employee_id):
     try:
         employee = get_employee_with_employment(employee_id)
         if not employee:
-            flash('Employee not found.', 'error')
+            flash(t('hr_employee_not_found', 'Employee not found.'), 'error')
             return redirect(url_for('hr.offboarding_list'))
 
         # Get exit interview if exists
@@ -3929,7 +3934,7 @@ def loans_detail(loan_id):
         """, (loan_id,)).fetchone()
 
         if not loan:
-            flash('Loan not found.', 'error')
+            flash(t('hr_loan_not_found', 'Loan not found.'), 'error')
             return redirect(url_for('hr.loans_list'))
 
         installments = db.execute("""
@@ -3999,7 +4004,7 @@ def loans_new():
                 """, (loan_id, due_date, monthly_installment, principal / tenure, (total_amount - principal) / tenure))
 
             db.commit()
-            flash('Loan created successfully!', 'success')
+            flash(t('hr_loan_created', 'Loan created successfully!'), 'success')
             return redirect(url_for('hr.loans_detail', loan_id=loan_id))
 
         except Exception as e:
@@ -4109,7 +4114,7 @@ def talent_profile(employee_id):
     try:
         employee = get_employee_with_employment(employee_id)
         if not employee:
-            flash('Employee not found.', 'error')
+            flash(t('hr_employee_not_found', 'Employee not found.'), 'error')
             return redirect(url_for('hr.talent_list'))
 
         # Get succession plans
@@ -4294,7 +4299,7 @@ def hr_cases_new():
             ))
 
             db.commit()
-            flash('Case created successfully!', 'success')
+            flash(t('hr_case_created', 'Case created successfully!'), 'success')
             return redirect(url_for('hr.hr_cases_list'))
 
         except Exception as e:

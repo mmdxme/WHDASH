@@ -404,45 +404,166 @@
         <!-- Activity Timeline -->
         <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
             <div class="px-6 py-4 border-b border-slate-700/50">
-                <h3 class="text-lg font-semibold text-white">Activity</h3>
+                <h3 class="text-lg font-semibold text-white">
+                    <i class="fas fa-stream mr-2 text-cyan-400"></i>Activity Timeline
+                </h3>
             </div>
             <div class="p-6">
-                <div class="space-y-4 max-h-80 overflow-y-auto">
-                    {% for activity in activity[:15] %}
-                    <div class="flex items-start gap-3">
-                        <div class="w-8 h-8 {% if activity.activity_type == 'created' %}bg-emerald-500/20{% elif activity.activity_type == 'status_changed' %}bg-blue-500/20{% elif activity.activity_type == 'assigned' %}bg-purple-500/20{% elif activity.activity_type == 'comment_added' %}bg-cyan-500/20{% else %}bg-slate-700/50{% endif %} rounded-lg flex items-center justify-center flex-shrink-0">
-                            <i class="fas {% if activity.activity_type == 'created' %}fa-plus{% elif activity.activity_type == 'status_changed' %}fa-exchange-alt{% elif activity.activity_type == 'assigned' %}fa-user{% elif activity.activity_type == 'comment_added' %}fa-comment{% else %}fa-circle{% endif %} text-xs {% if activity.activity_type == 'created' %}text-emerald-400{% elif activity.activity_type == 'status_changed' %}text-blue-400{% elif activity.activity_type == 'assigned' %}text-purple-400{% elif activity.activity_type == 'comment_added' %}text-cyan-400{% else %}text-slate-400{% endif %}"></i>
+                <div class="space-y-3 max-h-80 overflow-y-auto">
+                    {% for act in activity[:15] %}
+                    <div class="flex items-start gap-3 p-3 bg-slate-700/20 rounded-xl border border-slate-600/20">
+                        <div class="w-10 h-10 {% if act.activity_type == 'created' %}bg-emerald-500/20 text-emerald-400{% elif act.activity_type == 'status_changed' %}bg-blue-500/20 text-blue-400{% elif act.activity_type == 'assigned' %}bg-purple-500/20 text-purple-400{% elif act.activity_type == 'comment_added' %}bg-cyan-500/20 text-cyan-400{% elif act.activity_type == 'deleted' %}bg-rose-500/20 text-rose-400{% else %}bg-slate-600/50 text-slate-400{% endif %} rounded-xl flex items-center justify-center flex-shrink-0">
+                            <i class="fas {% if act.activity_type == 'created' %}fa-plus{% elif act.activity_type == 'status_changed' %}fa-exchange-alt{% elif act.activity_type == 'assigned' %}fa-user-plus{% elif act.activity_type == 'comment_added' %}fa-comment{% elif act.activity_type == 'deleted' %}fa-trash{% else %}fa-circle{% endif %}"></i>
                         </div>
                         <div class="flex-1 min-w-0">
-                            <p class="text-xs text-slate-300">{{ activity.actor_name or 'System' }}</p>
-                            <p class="text-xs text-slate-500 truncate">{{ activity.details or activity.activity_type }}</p>
-                            <p class="text-xs text-slate-600 mt-0.5">{{ activity.created_at[:16] if activity.created_at else '' }}</p>
+                            <div class="flex items-center justify-between">
+                                <p class="text-sm font-medium text-white">{{ act.actor_name or 'System' }}</p>
+                                <span class="text-xs text-slate-500">{{ act.created_at[:16] if act.created_at else '' }}</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-0.5">{{ act.details or act.activity_type }}</p>
                         </div>
                     </div>
                     {% else %}
-                    <p class="text-sm text-slate-500 text-center py-4">No activity recorded</p>
+                    <div class="text-center py-8">
+                        <i class="fas fa-history text-3xl text-slate-600 mb-2"></i>
+                        <p class="text-sm text-slate-500">No activity recorded yet</p>
+                    </div>
                     {% endfor %}
                 </div>
+                {% if activity | length > 15 %}
+                <p class="text-xs text-slate-500 text-center mt-4">Showing 15 of {{ activity | length }} activities</p>
+                {% endif %}
             </div>
         </div>
+
+        <!-- Status History Timeline -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h3 class="text-lg font-semibold text-white">
+                    <i class="fas fa-history mr-2 text-blue-400"></i>Status History
+                </h3>
+            </div>
+            <div class="p-6">
+                {% if status_history %}
+                <div class="relative">
+                    <div class="absolute left-4 top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-500/50 via-slate-700/50 to-transparent"></div>
+                    <div class="space-y-4">
+                        {% for history in status_history %}
+                        <div class="relative pl-10 activity-timeline-item">
+                            <div class="absolute left-2 w-4 h-4 rounded-full bg-slate-700 border-2 border-blue-500"></div>
+                            <div class="bg-slate-700/30 rounded-lg p-3 border border-slate-600/30">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span class="text-sm font-medium text-white">
+                                        {% if history.from_status %}
+                                        <span class="text-slate-400">{{ history.from_status }}</span>
+                                        <i class="fas fa-arrow-right mx-2 text-xs text-slate-500"></i>
+                                        <span class="text-blue-400">{{ history.to_status }}</span>
+                                        {% else %}
+                                        <span class="text-emerald-400">{{ history.to_status }}</span>
+                                        {% endif %}
+                                    </span>
+                                    <span class="text-xs text-slate-500">{{ history.created_at[:16] if history.created_at else '' }}</span>
+                                </div>
+                                {% if history.change_reason %}
+                                <p class="text-xs text-slate-400">{{ history.change_reason }}</p>
+                                {% endif %}
+                                <p class="text-xs text-slate-500 mt-1">
+                                    <i class="fas fa-user mr-1"></i>{{ history.changed_by_name or 'System' }}
+                                </p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% else %}
+                <p class="text-sm text-slate-500 text-center py-4">No status changes recorded</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Actions Panel -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h3 class="text-lg font-semibold text-white">
+                    <i class="fas fa-bolt mr-2 text-amber-400"></i>Quick Actions
+                </h3>
+            </div>
+            <div class="p-6 grid grid-cols-2 gap-3">
+                {% if can_edit %}
+                <a href="{{ url_for('feedback.edit_report', report_id=report.id) }}" class="flex items-center gap-3 px-4 py-3 bg-slate-700/50 hover:bg-slate-700 rounded-xl transition-colors text-slate-300">
+                    <i class="fas fa-edit text-blue-400"></i>
+                    <span class="text-sm">Edit Report</span>
+                </a>
+                {% endif %}
+                {% if can_assign %}
+                <button onclick="showAssignModal()" class="flex items-center gap-3 px-4 py-3 bg-slate-700/50 hover:bg-slate-700 rounded-xl transition-colors text-slate-300 w-full text-left">
+                    <i class="fas fa-user-plus text-purple-400"></i>
+                    <span class="text-sm">Assign Report</span>
+                </button>
+                {% endif %}
+                {% if can_manage %}
+                <button onclick="showStatusModal()" class="flex items-center gap-3 px-4 py-3 bg-slate-700/50 hover:bg-slate-700 rounded-xl transition-colors text-slate-300 w-full text-left">
+                    <i class="fas fa-exchange-alt text-amber-400"></i>
+                    <span class="text-sm">Change Status</span>
+                </button>
+                {% endif %}
+                <button onclick="window.print()" class="flex items-center gap-3 px-4 py-3 bg-slate-700/50 hover:bg-slate-700 rounded-xl transition-colors text-slate-300">
+                    <i class="fas fa-print text-cyan-400"></i>
+                    <span class="text-sm">Print Report</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- SLA Info -->
+        {% if report.sla_due_date %}
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-700/50">
+                <h3 class="text-lg font-semibold text-white">
+                    <i class="fas fa-stopwatch mr-2 text-rose-400"></i>SLA Due Date
+                </h3>
+            </div>
+            <div class="p-6 text-center">
+                <p class="text-2xl font-bold {% if report.sla_breached %}text-rose-400{% else %}text-white{% endif %}">{{ report.sla_due_date }}</p>
+                {% if report.sla_breached %}
+                <p class="text-xs text-rose-400 mt-1"><i class="fas fa-exclamation-triangle mr-1"></i>SLA Breached</p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Resolution Time -->
+        {% if report.resolved_at and report.created_at %}
+        {% set resolution_time = ((datetime.fromisoformat(report.resolved_at) - datetime.fromisoformat(report.created_at)).total_seconds() / 3600) | round(1) %}
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-emerald-500/20 rounded-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-emerald-500/20">
+                <h3 class="text-lg font-semibold text-emerald-400">
+                    <i class="fas fa-check-circle mr-2"></i>Resolution
+                </h3>
+            </div>
+            <div class="p-6 text-center">
+                <p class="text-3xl font-bold text-emerald-400">{{ resolution_time }}h</p>
+                <p class="text-xs text-emerald-400/70 mt-1">Time to Resolution</p>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Stats -->
         <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
             <div class="px-6 py-4 border-b border-slate-700/50">
                 <h3 class="text-lg font-semibold text-white">Statistics</h3>
             </div>
-            <div class="p-6 grid grid-cols-3 gap-4 text-center">
-                <div>
+            <div class="p-6 grid grid-cols-3 gap-4">
+                <div class="text-center p-4 bg-slate-700/30 rounded-xl">
                     <p class="text-2xl font-bold text-white">{{ report.view_count or 0 }}</p>
-                    <p class="text-xs text-slate-500">Views</p>
+                    <p class="text-xs text-slate-500 mt-1">Views</p>
                 </div>
-                <div>
+                <div class="text-center p-4 bg-slate-700/30 rounded-xl">
                     <p class="text-2xl font-bold text-white">{{ report.comment_count or 0 }}</p>
-                    <p class="text-xs text-slate-500">Comments</p>
+                    <p class="text-xs text-slate-500 mt-1">Comments</p>
                 </div>
-                <div>
+                <div class="text-center p-4 bg-slate-700/30 rounded-xl">
                     <p class="text-2xl font-bold text-white">{{ report.attachment_count or 0 }}</p>
-                    <p class="text-xs text-slate-500">Files</p>
+                    <p class="text-xs text-slate-500 mt-1">Files</p>
                 </div>
             </div>
         </div>

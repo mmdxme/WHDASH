@@ -6,15 +6,106 @@
     <div class="d-sm-flex align-items-center justify-content-between mb-4">
         <h1 class="h3 mb-0 text-gray-800">
             <i class="fas fa-brain fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
-            {{ t('btp_ai_providers', 'AI Providers') }}
+            {{ t('btp_ai_providers', 'AI Providers & Cost Analysis') }}
         </h1>
         <a href="{{ url_for('btp_ai_provider_create') }}" class="btn btn-primary btn-sm">
             <i class="fas fa-plus me-1"></i> {{ t('create', 'Create Provider') }}
         </a>
     </div>
 
+    <!-- AI Provider Stats -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">{{ t('btp_total_providers', 'Total Providers') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ providers|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-server fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">{{ t('btp_active_providers', 'Active Providers') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ providers|selectattr('is_active')|list|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">{{ t('btp_total_usage', 'Total Usage (Monthly)') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ providers|sum(attribute='current_usage_monthly')|int }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-pie fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">{{ t('btp_estimated_cost', 'Est. Monthly Cost') }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">${{ (providers|sum(attribute='current_usage_monthly') * providers|sum(attribute='cost_per_token'))|round(2) }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-dollar-sign fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_usage_by_provider', 'Usage by Provider') }}</h6>
+                </div>
+                <div class="card-body" style="height: 280px;">
+                    <canvas id="usageChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_cost_distribution', 'Cost Distribution') }}</h6>
+                </div>
+                <div class="card-body" style="height: 280px;">
+                    <canvas id="costChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Providers Table -->
     <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+            <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_provider_details', 'Provider Details') }}</h6>
+        </div>
         <div class="card-body">
             {% if providers %}
             <div class="table-responsive">
@@ -25,28 +116,51 @@
                             <th>{{ t('btp_provider_code', 'Code') }}</th>
                             <th>{{ t('btp_provider_type', 'Type') }}</th>
                             <th>{{ t('btp_model_name', 'Model') }}</th>
-                            <th>{{ t('btp_current_usage', 'Usage') }}</th>
+                            <th>{{ t('btp_max_tokens', 'Max Tokens') }}</th>
+                            <th>{{ t('btp_usage_this_month', 'Usage / Limit') }}</th>
+                            <th>{{ t('btp_cost_per_token', 'Cost/Token') }}</th>
+                            <th>{{ t('btp_estimated_cost', 'Est. Cost') }}</th>
                             <th>{{ t('btp_status', 'Status') }}</th>
-                            <th>{{ t('btp_last_success', 'Last Test') }}</th>
+                            <th>{{ t('btp_last_test', 'Last Test') }}</th>
+                            <th>{{ t('actions', 'Actions') }}</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for provider in providers %}
+                        {% set usage_pct = ((provider.current_usage_monthly / provider.usage_limit_monthly * 100) if provider.usage_limit_monthly > 0 else 0) %}
+                        {% set est_cost = provider.current_usage_monthly * provider.cost_per_token %}
                         <tr>
                             <td><strong>{{ provider.provider_name }}</strong></td>
                             <td><code>{{ provider.provider_code }}</code></td>
-                            <td>{{ provider.provider_type }}</td>
-                            <td>{{ provider.model_name or 'N/A' }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'primary' if provider.provider_type == 'openai' else 'info' if provider.provider_type == 'azure' else 'secondary' }}">
+                                    {{ provider.provider_type }}
+                                </span>
+                            </td>
+                            <td><code class="small">{{ provider.model_name or 'N/A' }}</code></td>
+                            <td>{{ provider.max_tokens|int if provider.max_tokens else 'N/A' }}</td>
                             <td>
                                 {% if provider.usage_limit_monthly %}
-                                <div class="progress" style="height: 18px; min-width: 80px;">
-                                    <div class="progress-bar bg-{{ 'success' if (provider.current_usage_monthly / provider.usage_limit_monthly * 100) < 80 else 'warning' if (provider.current_usage_monthly / provider.usage_limit_monthly * 100) < 95 else 'danger' }}"
-                                         role="progressbar" style="width: {{ (provider.current_usage_monthly / provider.usage_limit_monthly * 100) }}%">
-                                        {{ provider.current_usage_monthly }}/{{ provider.usage_limit_monthly }}
+                                <div class="d-flex align-items-center">
+                                    <div class="progress me-2" style="height: 16px; width: 80px;">
+                                        <div class="progress-bar bg-{{ 'success' if usage_pct < 80 else 'warning' if usage_pct < 95 else 'danger' }}"
+                                             role="progressbar" style="width: {{ usage_pct }}%">
+                                        </div>
                                     </div>
+                                    <span class="small">{{ provider.current_usage_monthly|int }}/{{ provider.usage_limit_monthly|int }}</span>
                                 </div>
                                 {% else %}
-                                N/A
+                                <span class="text-muted">Unlimited</span>
+                                {% endif %}
+                            </td>
+                            <td>${{ "%.6f"|format(provider.cost_per_token) if provider.cost_per_token else '0.00' }}</td>
+                            <td>
+                                {% if est_cost > 0 %}
+                                <span class="badge bg-{{ 'success' if est_cost < 50 else 'warning' if est_cost < 200 else 'danger' }}">
+                                    ${{ "%.2f"|format(est_cost) }}
+                                </span>
+                                {% else %}
+                                <span class="text-muted">-</span>
                                 {% endif %}
                             </td>
                             <td>
@@ -55,6 +169,16 @@
                                 </span>
                             </td>
                             <td><small>{{ provider.last_test_at or 'Never' }}</small></td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-info" title="{{ t('test_connection', 'Test Connection') }}">
+                                        <i class="fas fa-plug"></i>
+                                    </button>
+                                    <button class="btn btn-outline-primary" title="{{ t('edit', 'Edit') }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                </div>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -64,9 +188,71 @@
             <div class="text-center py-5">
                 <i class="fas fa-brain fa-4x text-gray-300 mb-3"></i>
                 <h5 class="text-gray-500">No AI providers configured</h5>
+                <a href="{{ url_for('btp_ai_provider_create') }}" class="btn btn-primary mt-2">
+                    <i class="fas fa-plus me-1"></i> Add Your First Provider
+                </a>
             </div>
             {% endif %}
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    Chart.defaults.font.family = "'Inter', 'Segoe UI', sans-serif";
+    Chart.defaults.color = '#6c757d';
+
+    // Usage by Provider (Bar)
+    const usageCtx = document.getElementById('usageChart').getContext('2d');
+    const usageLabels = [{% for p in providers %}'{{ p.provider_name }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+    const usageData = [{% for p in providers %}{{ p.current_usage_monthly }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+    new Chart(usageCtx, {
+        type: 'bar',
+        data: {
+            labels: usageLabels.length ? usageLabels : ['No Providers'],
+            datasets: [{
+                data: usageData.length ? usageData : [0],
+                backgroundColor: ['#4e73df', '#28a745', '#17a2b8', '#ffc107', '#dc3545', '#6c757d'],
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+
+    // Cost Distribution (Doughnut)
+    const costCtx = document.getElementById('costChart').getContext('2d');
+    const costs = [{% for p in providers %}{{ p.current_usage_monthly * p.cost_per_token }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+    new Chart(costCtx, {
+        type: 'doughnut',
+        data: {
+            labels: usageLabels.length ? usageLabels : ['No Providers'],
+            datasets: [{
+                data: costs.length ? costs : [1],
+                backgroundColor: ['#4e73df', '#28a745', '#17a2b8', '#ffc107', '#dc3545', '#6c757d'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '60%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { padding: 15, usePointStyle: true, pointStyle: 'circle' }
+                }
+            }
+        }
+    });
+});
+</script>
 {% endblock %}

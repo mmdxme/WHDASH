@@ -1337,6 +1337,286 @@ def get_content_performance(conn, date_from=None, date_to=None, platform=None):
     return conn.execute(query, params).fetchall()
 
 
+def get_engagement_trends(conn, date_from=None, date_to=None, platform=None, interval='daily'):
+    """Get engagement trends over time."""
+    if date_from is None:
+        date_from = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    if date_to is None:
+        date_to = datetime.now().strftime('%Y-%m-%d')
+    
+    date_format = "%Y-%m-%d" if interval == 'daily' else "%Y-%W"
+    
+    query = """
+        SELECT 
+            strftime('{}', published_at) as period,
+            platform,
+            COUNT(*) as posts,
+            SUM(reach) as total_reach,
+            SUM(impressions) as total_impressions,
+            SUM(engagement) as total_engagement,
+            SUM(likes) as total_likes,
+            SUM(comments) as total_comments,
+            SUM(shares) as total_shares,
+            SUM(clicks) as total_clicks,
+            AVG(engagement * 1.0 / NULLIF(reach, 0)) * 100 as engagement_rate
+        FROM social_content_archive
+        WHERE date(published_at) BETWEEN ? AND ?
+    """.format(date_format)
+    
+    params = [date_from, date_to]
+    
+    if platform:
+        query += " AND platform = ?"
+        params.append(platform)
+    
+    query += " GROUP BY period, platform ORDER BY period"
+    return conn.execute(query, params).fetchall()
+
+
+def get_audience_growth(conn, date_from=None, date_to=None):
+    """Get audience growth metrics by platform."""
+    if date_from is None:
+        date_from = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    if date_to is None:
+        date_to = datetime.now().strftime('%Y-%m-%d')
+    
+    return conn.execute("""
+        SELECT 
+            platform,
+            COUNT(*) as total_posts,
+            SUM(reach) as total_reach,
+            SUM(impressions) as total_impressions,
+            SUM(engagement) as total_engagement,
+            AVG(engagement * 1.0 / NULLIF(reach, 0)) * 100 as avg_engagement_rate,
+            SUM(clicks) as total_clicks,
+            SUM(leads_generated) as total_leads,
+            SUM(sales_generated) as total_sales
+        FROM social_content_archive
+        WHERE date(published_at) BETWEEN ? AND ?
+        GROUP BY platform
+        ORDER BY total_engagement DESC
+    """, (date_from, date_to)).fetchall()
+
+
+def get_campaign_roi(conn, campaign_id=None):
+    """Get campaign ROI metrics."""
+    query = """
+        SELECT 
+            c.id, c.campaign_name, c.campaign_type, c.platform,
+            c.approved_budget, c.actual_budget,
+            c.total_reach, c.total_impressions, c.total_engagement,
+            c.total_leads, c.total_inquiries, c.total_sales, c.total_conversions,
+            c.roas, c.cac,
+            CASE WHEN c.actual_budget > 0 
+                 THEN (c.total_sales - c.actual_budget) / c.actual_budget * 100 
+                 ELSE 0 END as roi_percent,
+            CASE WHEN c.total_leads > 0 
+                 THEN c.actual_budget / c.total_leads 
+                 ELSE 0 END as cost_per_lead,
+            CASE WHEN c.total_conversions > 0 
+                 THEN c.actual_budget / c.total_conversions 
+                 ELSE 0 END as cost_per_conversion
+        FROM social_campaigns c
+    """
+    
+    if campaign_id:
+        query += " WHERE c.id = ?"
+        return dict(conn.execute(query, (campaign_id,)).fetchone())
+    return [dict(r) for r in conn.execute(query).fetchall()]
+
+
+def get_content_type_analysis(conn, date_from=None, date_to=None, platform=None):
+    """Analyze performance by content type."""
+    if date_from is None:
+        date_from = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+    if date_to is None:
+        date_to = datetime.now().strftime('%Y-%m-%d')
+    
+    query = """
+        SELECT 
+            content_type,
+            COUNT(*) as count,
+            SUM(reach) as total_reach,
+            SUM(engagement) as total_engagement,
+            AVG(engagement * 1.0 / NULLIF(reach, 0)) * 100 as engagement_rate,
+            SUM(clicks) as total_clicks,
+            SUM(leads_generated) as total_leads
+        FROM social_content_archive
+        WHERE date(published_at) BETWEEN ? AND ?
+    """
+    params = [date_from, date_to]
+    
+    if platform:
+        query += " AND platform = ?"
+        params.append(platform)
+    
+    query += " GROUP BY content_type ORDER BY engagement_rate DESC"
+    return conn.execute(query, params).fetchall()
+
+
+def get_best_posting_times(conn, platform=None):
+    """Get best posting times analysis."""
+    query = """
+        SELECT 
+            CASE 
+                WHEN CAST(strftime('%H', published_at) AS INTEGER) BETWEEN 6 AND 11 THEN 'Morning (6-11)'
+                WHEN CAST(strftime('%H', published_at) AS INTEGER) BETWEEN 12 AND 17 THEN 'Afternoon (12-17)'
+                WHEN CAST(strftime('%H', published_at) AS INTEGER) BETWEEN 18 AND 21 THEN 'Evening (18-21)'
+                ELSE 'Night (22-5)'
+            END as time_slot,
+            CASE 
+                WHEN CAST(strftime('%w', published_at) AS INTEGER) = 0 THEN 'Sunday'
+                WHEN CAST(strftime('%w', published_at) AS INTEGER) = 1 THEN 'Monday'
+                WHEN CAST(strftime('%w', published_at) AS INTEGER) = 2 THEN 'Tuesday'
+                WHEN CAST(strftime('%w', published_at) AS INTEGER) = 3 THEN 'Wednesday'
+                WHEN CAST(strftime('%w', published_at) AS INTEGER) = 4 THEN 'Thursday'
+                WHEN CAST(strftime('%w', published_at) AS INTEGER) = 5 THEN 'Friday'
+                ELSE 'Saturday'
+            END as day_of_week,
+            COUNT(*) as post_count,
+            AVG(engagement * 1.0 / NULLIF(reach, 0)) * 100 as avg_engagement_rate
+        FROM social_content_archive
+        WHERE published_at IS NOT NULL
+    """
+    
+    if platform:
+        query += " AND platform = ?"
+        query += " GROUP BY time_slot, day_of_week ORDER BY avg_engagement_rate DESC"
+        return conn.execute(query, (platform,)).fetchall()
+    
+    query += " GROUP BY time_slot, day_of_week ORDER BY avg_engagement_rate DESC"
+    return conn.execute(query).fetchall()
+
+
+def get_lead_conversion_funnel(conn, date_from=None, date_to=None):
+    """Get detailed lead conversion funnel."""
+    if date_from is None:
+        date_from = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+    if date_to is None:
+        date_to = datetime.now().strftime('%Y-%m-%d')
+    
+    return conn.execute("""
+        SELECT 
+            funnel_stage,
+            COUNT(*) as count,
+            SUM(estimated_value) as total_value,
+            AVG(estimated_value) as avg_value,
+            SUM(CASE WHEN lead_status = 'Converted' THEN 1 ELSE 0 END) as converted
+        FROM social_leads
+        WHERE date(created_at) BETWEEN ? AND ?
+        GROUP BY funnel_stage
+        ORDER BY 
+            CASE funnel_stage
+                WHEN 'Message' THEN 1
+                WHEN 'Inquired' THEN 2
+                WHEN 'Qualified' THEN 3
+                WHEN 'Proposal' THEN 4
+                WHEN 'Negotiating' THEN 5
+                WHEN 'Converted' THEN 6
+                ELSE 7
+            END
+    """, (date_from, date_to)).fetchall()
+
+
+def get_hashtag_performance(conn, limit=20):
+    """Get hashtag performance metrics."""
+    all_content = conn.execute("""
+        SELECT hashtags FROM social_content_archive
+        WHERE hashtags IS NOT NULL AND hashtags != ''
+    """).fetchall()
+    
+    hashtag_stats = {}
+    for row in all_content:
+        if row['hashtags']:
+            tags = [t.strip().lower() for t in row['hashtags'].split(',')]
+            for tag in tags:
+                if tag not in hashtag_stats:
+                    hashtag_stats[tag] = {'count': 0, 'total_engagement': 0, 'total_reach': 0}
+                hashtag_stats[tag]['count'] += 1
+    
+    result = []
+    for tag, stats in hashtag_stats.items():
+        result.append({
+            'hashtag': tag,
+            'usage_count': stats['count'],
+            'total_engagement': stats['total_engagement'],
+            'avg_engagement': stats['total_engagement'] / stats['count'] if stats['count'] > 0 else 0
+        })
+    
+    result.sort(key=lambda x: x['total_engagement'], reverse=True)
+    return result[:limit]
+
+
+def check_sm_permission(user_id, permission, db=None):
+    """Check if user has specific social media permission."""
+    should_close = False
+    if db is None:
+        db = get_db()
+        should_close = True
+    
+    try:
+        role = db.execute("""
+            SELECT r.permissions_json, r.role_code
+            FROM social_user_roles ur
+            JOIN social_roles r ON ur.social_role_id = r.id
+            WHERE ur.user_id = ? AND ur.is_active = 1
+        """, (user_id,)).fetchone()
+        
+        if not role:
+            return False
+        
+        if role['role_code'] in ('SM-SUPER-ADMIN', 'SM-COO'):
+            return True
+        
+        perms = json.loads(role['permissions_json']) if role['permissions_json'] else []
+        return permission in perms or 'all_social_media' in perms
+    finally:
+        if should_close:
+            db.close()
+
+
+def get_user_sm_permissions(user_id, db=None):
+    """Get all permissions for a social media user."""
+    should_close = False
+    if db is None:
+        db = get_db()
+        should_close = True
+    
+    try:
+        role = db.execute("""
+            SELECT r.permissions_json, r.can_view_financials, r.can_approve, 
+                   r.can_publish, r.can_manage_team, r.can_view_all_accounts,
+                   r.role_code
+            FROM social_user_roles ur
+            JOIN social_roles r ON ur.social_role_id = r.id
+            WHERE ur.user_id = ? AND ur.is_active = 1
+        """, (user_id,)).fetchone()
+        
+        if not role:
+            return {
+                'can_view_financials': False,
+                'can_approve': False,
+                'can_publish': False,
+                'can_manage_team': False,
+                'can_view_all_accounts': False,
+                'permissions': [],
+                'role': None
+            }
+        
+        return {
+            'can_view_financials': bool(role['can_view_financials']),
+            'can_approve': bool(role['can_approve']),
+            'can_publish': bool(role['can_publish']),
+            'can_manage_team': bool(role['can_manage_team']),
+            'can_view_all_accounts': bool(role['can_view_all_accounts']),
+            'permissions': json.loads(role['permissions_json']) if role['permissions_json'] else [],
+            'role': role['role_code']
+        }
+    finally:
+        if should_close:
+            db.close()
+
+
 if __name__ == '__main__':
     print("Running Social Media migrations...")
     run_social_media_migrations()

@@ -7,13 +7,153 @@
         {{ t('back_to_reports', lang) }}
     </a>
 
-    <div>
-        <h1 class="text-2xl font-bold text-white">{{ t('process_performance_report', lang) }}</h1>
-        <p class="text-gray-400 mt-1">{{ t('last_days', lang) }}: {{ days }}</p>
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('process_performance_report', lang) }}</h1>
+            <p class="text-gray-400 mt-1">{{ t('last_days', lang) }}: {{ days }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <select id="daysSelect" onchange="changeDays(this.value)" class="input-field px-3 py-2 rounded-lg text-sm">
+                <option value="7" {{ 'selected' if days == 7 else '' }}>7 {{ t('days', lang) }}</option>
+                <option value="14" {{ 'selected' if days == 14 else '' }}>14 {{ t('days', lang) }}</option>
+                <option value="30" {{ 'selected' if days == 30 else '' }}>30 {{ t('days', lang) }}</option>
+                <option value="90" {{ 'selected' if days == 90 else '' }}>90 {{ t('days', lang) }}</option>
+            </select>
+            <button onclick="exportTable()" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-file-csv"></i>
+                {{ t('export_csv', lang) }}
+            </button>
+            <button onclick="window.print()" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-print"></i>
+                {{ t('print', lang) }}
+            </button>
+        </div>
     </div>
 
+    <!-- KPI Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <i class="fas fa-project-diagram text-blue-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('total_instances', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ total_instances }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                    <i class="fas fa-check-circle text-emerald-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('completed', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ total_completed }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                    <i class="fas fa-clock text-amber-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('avg_cycle_time', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ avg_cycle_time }}h</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <i class="fas fa-percentage text-purple-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('completion_rate', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ completion_rate }}%</div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Completion by Workflow -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-bar text-cyan-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('completion_by_workflow', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('instances_by_status', lang) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5">
+                <canvas id="completionChart" height="280"></canvas>
+            </div>
+        </div>
+
+        <!-- Status Distribution -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-pie text-purple-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('status_distribution', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('overall_instance_status', lang) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5">
+                <canvas id="statusChart" height="280"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bottleneck Summary (if available) -->
+    {% if bottlenecks %}
+    <div class="glass-panel rounded-xl overflow-hidden">
+        <div class="p-5 border-b border-gray-700/50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                    <i class="fas fa-bolt text-orange-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-lg font-semibold text-white">{{ t('top_bottlenecks', lang) }}</h2>
+                    <p class="text-sm text-gray-400">{{ t('steps_with_longest_avg_time', lang) }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="divide-y divide-gray-700/50">
+            {% for b in bottlenecks[:5] %}
+            <div class="p-4 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-8 h-8 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                        <i class="fas fa-clock text-orange-400 text-sm"></i>
+                    </div>
+                    <div>
+                        <div class="text-white font-medium">{{ b.step_name }}</div>
+                        <div class="text-gray-500 text-sm">{{ b.workflow_name }}</div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-6">
+                    <div class="text-center">
+                        <div class="text-amber-400 font-bold">{{ b.avg_hours|round(1) if b.avg_hours else '-' }}h</div>
+                        <div class="text-gray-500 text-xs">{{ t('avg_time', lang) }}</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-blue-400 font-bold">{{ b.executions }}</div>
+                        <div class="text-gray-500 text-xs">{{ t('executions', lang) }}</div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Detailed Table -->
     <div class="table-container">
-        <table class="table w-full">
+        <table class="table w-full" id="performanceTable">
             <thead>
                 <tr>
                     <th>{{ t('workflow', lang) }}</th>
@@ -21,20 +161,124 @@
                     <th class="text-center">{{ t('completed', lang) }}</th>
                     <th class="text-center">{{ t('rejected', lang) }}</th>
                     <th class="text-center">{{ t('avg_time', lang) }}</th>
+                    <th class="text-center">{{ t('rate', lang) }}</th>
                 </tr>
             </thead>
             <tbody>
                 {% for m in metrics %}
+                {% set rate = (m.completed / m.total_instances * 100) if m.total_instances > 0 else 0 %}
                 <tr>
                     <td class="text-white font-medium">{{ m.workflow_name }}</td>
                     <td class="text-center text-gray-400">{{ m.total_instances }}</td>
                     <td class="text-center text-emerald-400">{{ m.completed }}</td>
                     <td class="text-center text-red-400">{{ m.rejected }}</td>
                     <td class="text-center text-amber-400">{{ m.avg_hours|round(1) if m.avg_hours else '-' }}h</td>
+                    <td class="text-center">
+                        <span class="text-{{ 'emerald' if rate >= 80 else 'amber' if rate >= 60 else 'red' }}-400">{{ rate|round|int }}%</span>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+function changeDays(days) {
+    window.location.href = '{{ url_for("org_planning.report_process_performance") }}?days=' + days;
+}
+
+function exportTable() {
+    const table = document.getElementById('performanceTable');
+    const rows = table.querySelectorAll('tr');
+    let csv = [];
+    rows.forEach(row => {
+        const cols = row.querySelectorAll('th, td');
+        const rowData = [];
+        cols.forEach(col => {
+            let text = col.innerText.replace(/"/g, '""');
+            rowData.push('"' + text + '"');
+        });
+        csv.push(rowData.join(','));
+    });
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'process_performance_{{ days }}days.csv';
+    link.click();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Completion Bar Chart
+    const compCtx = document.getElementById('completionChart');
+    if (compCtx) {
+        const labels = [{% for m in metrics %}'{{ m.workflow_name|truncate(15, True) }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+        const completed = [{% for m in metrics %}{{ m.completed or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
+        const rejected = [{% for m in metrics %}{{ m.rejected or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+        new Chart(compCtx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '{{ t('completed', lang) }}',
+                        data: completed,
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                        borderRadius: 4,
+                        borderSkipped: false
+                    },
+                    {
+                        label: '{{ t('rejected', lang) }}',
+                        data: rejected,
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                        borderRadius: 4,
+                        borderSkipped: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.7)' } } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'rgba(255,255,255,0.5)' } },
+                    x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.5)', maxRotation: 45 } }
+                }
+            }
+        });
+    }
+
+    // Status Pie Chart
+    const statCtx = document.getElementById('statusChart');
+    if (statCtx) {
+        const inProgress = {{ total_instances - total_completed }};
+        new Chart(statCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['{{ t('completed', lang) }}', '{{ t('in_progress', lang) }}', '{{ t('rejected', lang) }}'],
+                datasets: [{
+                    data: [{{ total_completed }}, inProgress, {{ total_rejected }}],
+                    backgroundColor: [
+                        'rgba(16, 185, 129, 0.7)',
+                        'rgba(14, 165, 233, 0.7)',
+                        'rgba(239, 68, 68, 0.7)'
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.7)', padding: 20 } }
+                }
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

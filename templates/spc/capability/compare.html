@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @media (max-width: 768px) {
+            .metric-value { font-size: 1.5rem; }
+            .chart-container { height: 250px; }
+        }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-1">
+                        <li class="breadcrumb-item"><a href="{{ url_for('spc.capability_list') }}">Capability Studies</a></li>
+                        <li class="breadcrumb-item"><a href="{{ url_for('spc.capability_view', study_id=current.id) }}">{{ current.study_number }}</a></li>
+                        <li class="breadcrumb-item active">Compare</li>
+                    </ol>
+                </nav>
+                <h1 class="h3 mb-1"><i class="fas fa-balance-scale me-2 text-primary"></i>{{ page_title }}</h1>
+                <p class="text-muted mb-0">{{ current.study_name }} ({{ current.study_number }})</p>
+            </div>
+            <a href="{{ url_for('spc.capability_view', study_id=current.id) }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Back to Study
+            </a>
+        </div>
+
+        <div class="row g-4 mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Current Study vs Historical</h5>
+                    </div>
+                    <div class="card-body">
+                        <div style="height: 300px;">
+                            <canvas id="comparisonChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if trend_data %}
+        <div class="row g-4 mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-area me-2"></i>Capability Trend Over Time</h5>
+                    </div>
+                    <div class="card-body">
+                        <div style="height: 250px;">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header bg-dark text-white">
+                        <h5 class="mb-0"><i class="fas fa-star me-2"></i>Current Study Summary</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tr>
+                                <th>Study Number:</th>
+                                <td>{{ current.study_number }}</td>
+                            </tr>
+                            <tr>
+                                <th>Study Date:</th>
+                                <td>{{ current.study_date }}</td>
+                            </tr>
+                            <tr>
+                                <th>Sample Size:</th>
+                                <td>{{ current.sample_size }}</td>
+                            </tr>
+                            <tr>
+                                <th>Cp:</th>
+                                <td class="fw-bold">{{ "%.3f"|format(current.cp) if current.cp else '-' }}</td>
+                            </tr>
+                            <tr>
+                                <th>Cpk:</th>
+                                <td class="fw-bold {% if current.cpk and current.cpk >= 1.33 %}text-success{% elif current.cpk and current.cpk >= 1.0 %}text-warning{% else %}text-danger{% endif %}">
+                                    {{ "%.3f"|format(current.cpk) if current.cpk else '-' }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Sigma Level:</th>
+                                <td>{{ "%.2f"|format(current.sigma_level) if current.sigma_level else '-' }}σ</td>
+                            </tr>
+                            <tr>
+                                <th>Assessment:</th>
+                                <td>
+                                    {% if current.assessment %}
+                                    <span class="badge badge-{{ current.assessment }}">{{ current.assessment.replace('_', ' ') }}</span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-history me-2"></i>Comparison Studies</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Study</th>
+                                        <th>Date</th>
+                                        <th>Cpk</th>
+                                        <th>Assessment</th>
+                                        <th>Change</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% set current_cpk = current.cpk|float if current.cpk else 0 %}
+                                    {% for comp in comparisons %}
+                                    {% set comp_cpk = comp.cpk|float if comp.cpk else 0 %}
+                                    {% set cpk_diff = comp_cpk - current_cpk %}
+                                    <tr>
+                                        <td>{{ comp.study_number }}</td>
+                                        <td>{{ comp.study_date }}</td>
+                                        <td>{{ "%.3f"|format(comp.cpk) if comp.cpk else '-' }}</td>
+                                        <td>
+                                            {% if comp.assessment %}
+                                            <span class="badge badge-{{ comp.assessment }}">{{ comp.assessment[:3] }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if cpk_diff > 0 %}
+                                            <span class="text-success"><i class="fas fa-arrow-up"></i> +{{ "%.3f"|format(cpk_diff) }}</span>
+                                            {% elif cpk_diff < 0 %}
+                                            <span class="text-danger"><i class="fas fa-arrow-down"></i> {{ "%.3f"|format(cpk_diff) }}</span>
+                                            {% else %}
+                                            <span class="text-muted">-</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% else %}
+                                    <tr>
+                                        <td colspan="5" class="text-center py-4 text-muted">No other studies for comparison</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Comparison Chart
+        const compCtx = document.getElementById('comparisonChart').getContext('2d');
+        new Chart(compCtx, {
+            type: 'bar',
+            data: {
+                labels: ['Cp', 'Cpk', 'Pp', 'Ppk'],
+                datasets: [{
+                    label: 'Current Study',
+                    data: [
+                        {{ current.cp|default(0) }},
+                        {{ current.cpk|default(0) }},
+                        {{ current.pp|default(0) }},
+                        {{ current.ppk|default(0) }}
+                    ],
+                    backgroundColor: '#4F46E5'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, position: 'bottom' }
+                },
+                scales: {
+                    y: { beginAtZero: true, max: 2.5 }
+                }
+            }
+        });
+
+        {% if trend_data %}
+        // Trend Chart
+        const trendCtx = document.getElementById('trendChart').getContext('2d');
+        new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: {{ trend_data|map(attribute='date')|list|string|safe }},
+                datasets: [
+                    {
+                        label: 'Cpk',
+                        data: {{ trend_data|map(attribute='avg_cpk')|list|string|safe }},
+                        borderColor: '#4F46E5',
+                        fill: false,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: true, position: 'bottom' } },
+                scales: {
+                    y: { beginAtZero: false }
+                }
+            }
+        });
+        {% endif %}
+    </script>
+    {% endblock %}
+</body>
+</html>

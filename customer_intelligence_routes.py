@@ -453,6 +453,10 @@ def register_ci_routes(app):
             offset = (page - 1) * per_page
             
             search = request.args.get('search', '')
+            sort_by = request.args.get('sort', 'total_orders')
+            sort_dir = request.args.get('dir', 'desc').upper()
+            if sort_dir not in ('ASC', 'DESC'):
+                sort_dir = 'DESC'
             customer_type = request.args.get('type', '')
             market = request.args.get('market', '')
             salesperson_list = request.args.getlist('salesperson') if request.args.getlist('salesperson') else ['']
@@ -635,6 +639,82 @@ def register_ci_routes(app):
         flash("Customer profile enriched successfully.", "success")
         return redirect(url_for('ci_profile_detail', customer_id=customer_id))
 
+    @app.route('/customer-intelligence/profiles/create', methods=['GET', 'POST'])
+    @ci_permission_required('edit_profiles')
+    def ci_profile_create():
+        """Create a new customer."""
+        db = get_db()
+        try:
+            if request.method == 'POST':
+                name = request.form.get('name', '').strip()
+                if not name:
+                    flash("Customer name is required.", "error")
+                    return redirect(url_for('ci_profile_create'))
+
+                db.execute("""
+                    INSERT INTO sdad_customers (name, phone, email, city, country, location,
+                        salesperson_name, credit_limit, payment_method, active, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+                """, (
+                    name,
+                    request.form.get('phone'),
+                    request.form.get('email'),
+                    request.form.get('city'),
+                    request.form.get('country'),
+                    request.form.get('location', 'retail'),
+                    request.form.get('salesperson_name'),
+                    request.form.get('credit_limit', 0, type=float),
+                    request.form.get('payment_method', 'Net 30')
+                ))
+                db.commit()
+                flash(f"Customer '{name}' created.", "success")
+                return redirect(url_for('ci_profiles'))
+
+            return render_template('customer_intelligence/profile_edit.html', title='Create Customer')
+        finally:
+            db.close()
+
+    @app.route('/customer-intelligence/profiles/<int:customer_id>/edit', methods=['GET', 'POST'])
+    @ci_permission_required('edit_profiles')
+    def ci_profile_edit(customer_id):
+        """Edit an existing customer."""
+        db = get_db()
+        try:
+            customer = db.execute("SELECT * FROM sdad_customers WHERE id = ?", (customer_id,)).fetchone()
+            if not customer:
+                flash("Customer not found.", "error")
+                return redirect(url_for('ci_profiles'))
+
+            if request.method == 'POST':
+                db.execute("""
+                    UPDATE sdad_customers SET
+                        name = ?, phone = ?, email = ?, city = ?, country = ?,
+                        location = ?, salesperson_name = ?, credit_limit = ?,
+                        payment_method = ?, active = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                """, (
+                    request.form.get('name'),
+                    request.form.get('phone'),
+                    request.form.get('email'),
+                    request.form.get('city'),
+                    request.form.get('country'),
+                    request.form.get('location'),
+                    request.form.get('salesperson_name'),
+                    request.form.get('credit_limit', 0, type=float),
+                    request.form.get('payment_method'),
+                    1 if request.form.get('active') else 0,
+                    customer_id
+                ))
+                db.commit()
+                flash("Customer updated.", "success")
+                return redirect(url_for('ci_profile_detail', customer_id=customer_id))
+
+            return render_template('customer_intelligence/profile_edit.html',
+                                 title=f'Edit: {customer["name"]}',
+                                 customer=dict(customer))
+        finally:
+            db.close()
+
     @app.route('/customer-intelligence/profiles/delete', methods=['POST'])
     @ci_permission_required('edit_profiles')
     def ci_delete_customers():
@@ -689,20 +769,273 @@ def register_ci_routes(app):
             if not segment:
                 flash("Segment not found.", "error")
                 return redirect(url_for('ci_segments'))
-            
+
             members = db.execute("""
-                SELECT c.*, m.added_at 
+                SELECT c.*, m.added_at
                 FROM ci_segment_members m
                 JOIN sdad_customers c ON m.customer_id = c.id
                 WHERE m.segment_id = ?
                 ORDER BY c.total_orders DESC
             """, (segment_id,)).fetchall()
-            
+
             return render_template(
                 'customer_intelligence/segment_detail.html',
                 title=f'Segment: {segment["segment_name"]}',
                 segment=dict(segment),
                 members=[dict(r) for r in members]
+            )
+        finally:
+            db.close()
+
+    @app.route('/customer-intelligence/segments/create', methods=['GET', 'POST'])
+    @ci_permission_required('manage_segments')
+    def ci_segment_create():
+        """Create a new segment."""
+        db = get_db()
+        try:
+            if request.method == 'POST':
+                name = request.form.get('segment_name', '').strip()
+                code = request.form.get('segment_code', '').strip()
+                seg_type = request.form.get('segment_type', 'behavioral')
+                description = request.form.get('description', '')
+                is_dynamic = 1 if request.form.get('is_dynamic') else 0
+
+                if not name or not code:
+                    flash("Name and code are required.", "error")
+                    return redirect(url_for('ci_segment_create'))
+
+                db.execute("""
+                    INSERT INTO ci_customer_segments
+                    (segment_name, segment_code, segment_type, description, is_dynamic, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (name, code, seg_type, description, is_dynamic, session.get('user_id')))
+                db.commit()
+                flash(f"Segment '{name}' created.", "success")
+                return redirect(url_for('ci_segments'))
+
+            return render_template('customer_intelligence/segment_create.html', title='Create Segment')
+        finally:
+            db.close()
+
+    @app.route('/customer-intelligence/segments/<int:segment_id>/add-customers', methods=['POST'])
+    @ci_permission_required('manage_segments')
+    def ci_segment_add_customers(segment_id):
+        """Add customers to a segment."""
+        db = get_db()
+        try:
+            data = request.get_json()
+            customer_ids = data.get('customer_ids', [])
+            if not customer_ids:
+                return jsonify({'success': False, 'error': 'No customers selected'}), 400
+
+            for cid in customer_ids:
+                db.execute("""
+                    INSERT OR IGNORE INTO ci_segment_members (segment_id, customer_id, added_by)
+                    VALUES (?, ?, ?)
+                """, (segment_id, cid, session.get('user_id')))
+            db.commit()
+            return jsonify({'success': True, 'added': len(customer_ids)})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+        finally:
+            db.close()
+
+    @app.route('/customer-intelligence/segments/<int:segment_id>/remove-customers', methods=['POST'])
+    @ci_permission_required('manage_segments')
+    def ci_segment_remove_customers(segment_id):
+        """Remove customers from a segment."""
+        db = get_db()
+        try:
+            data = request.get_json()
+            customer_ids = data.get('customer_ids', [])
+            if not customer_ids:
+                return jsonify({'success': False, 'error': 'No customers selected'}), 400
+
+            placeholders = ','.join('?' * len(customer_ids))
+            db.execute(f"DELETE FROM ci_segment_members WHERE segment_id = ? AND customer_id IN ({placeholders})",
+                       [segment_id] + customer_ids)
+            db.commit()
+            return jsonify({'success': True, 'removed': len(customer_ids)})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+        finally:
+            db.close()
+
+    # ── RFM Analysis ───────────────────────────────────────────────────────────
+
+    @app.route('/customer-intelligence/rfm')
+    @ci_permission_required('view_analytics')
+    def ci_rfm_analysis():
+        """RFM (Recency, Frequency, Monetary) segmentation analysis."""
+        db = get_db()
+        try:
+            today = datetime.now()
+
+            # Compute RFM scores for all customers
+            rfm_data = db.execute("""
+                SELECT
+                    c.id,
+                    c.name,
+                    c.city,
+                    c.country,
+                    c.total_orders,
+                    c.total_payments,
+                    c.last_purchase_date,
+                    c.active,
+                    julianday('now') - julianday(COALESCE(c.last_purchase_date, c.created_at)) as days_inactive
+                FROM sdad_customers c
+                WHERE c.active = 1
+            """).fetchall()
+
+            # Score customers: R=1-3, F=1-3, M=1-3
+            rfm_records = []
+            for c in rfm_data:
+                d = dict(c)
+
+                # Recency: lower days_inactive = better (score 3), >180 days = score 1
+                if d['days_inactive'] <= 30:
+                    r_score = 3
+                elif d['days_inactive'] <= 90:
+                    r_score = 2
+                else:
+                    r_score = 1
+
+                # Frequency: based on total_orders (proxy for order count)
+                orders = d['total_orders'] or 0
+                if orders >= 50000:
+                    f_score = 3
+                elif orders >= 10000:
+                    f_score = 2
+                else:
+                    f_score = 1
+
+                # Monetary: total_payments as proxy
+                payments = d['total_payments'] or 0
+                if payments >= 40000:
+                    m_score = 3
+                elif payments >= 10000:
+                    m_score = 2
+                else:
+                    m_score = 1
+
+                rfm_score = r_score * 100 + f_score * 10 + m_score
+
+                # Segment label
+                if rfm_score >= 333:
+                    segment = 'Champions'
+                    seg_color = 'purple'
+                elif rfm_score >= 323:
+                    segment = 'Loyal'
+                    seg_color = 'blue'
+                elif rfm_score >= 313:
+                    segment = 'Promising'
+                    seg_color = 'cyan'
+                elif rfm_score >= 233:
+                    segment = 'At Risk'
+                    seg_color = 'amber'
+                elif rfm_score >= 133:
+                    segment = 'Needs Attention'
+                    seg_color = 'orange'
+                else:
+                    segment = 'Churned'
+                    seg_color = 'red'
+
+                rfm_records.append({
+                    'id': d['id'],
+                    'name': d['name'],
+                    'city': d['city'],
+                    'country': d['country'],
+                    'total_orders': d['total_orders'],
+                    'total_payments': d['total_payments'],
+                    'days_inactive': int(d['days_inactive']),
+                    'r_score': r_score,
+                    'f_score': f_score,
+                    'm_score': m_score,
+                    'rfm_score': rfm_score,
+                    'segment': segment,
+                    'seg_color': seg_color,
+                    'active': d['active']
+                })
+
+            # Sort by RFM score descending
+            rfm_records.sort(key=lambda x: x['rfm_score'], reverse=True)
+
+            # Summary counts
+            segment_summary = {}
+            for r in rfm_records:
+                seg = r['segment']
+                if seg not in segment_summary:
+                    segment_summary[seg] = {'count': 0, 'total_revenue': 0, 'color': r['seg_color']}
+                segment_summary[seg]['count'] += 1
+                segment_summary[seg]['total_revenue'] += r['total_orders'] or 0
+
+            # RFM matrix data (count per R x F combination)
+            rfm_matrix = {}
+            for r in rfm_records:
+                key = f"R{r['r_score']}F{r['f_score']}"
+                rfm_matrix[key] = rfm_matrix.get(key, 0) + 1
+
+            return render_template(
+                'customer_intelligence/rfm.html',
+                title='RFM Analysis',
+                rfm_records=rfm_records[:200],
+                segment_summary=segment_summary,
+                rfm_matrix=rfm_matrix,
+                total_analyzed=len(rfm_records)
+            )
+        finally:
+            db.close()
+
+    @app.route('/customer-intelligence/rfm/export')
+    @ci_permission_required('export_reports')
+    def ci_rfm_export():
+        """Export RFM analysis as CSV."""
+        db = get_db()
+        try:
+            today = datetime.now()
+            rfm_data = db.execute("""
+                SELECT
+                    c.id, c.name, c.city, c.country, c.total_orders, c.total_payments,
+                    c.last_purchase_date, c.active,
+                    julianday('now') - julianday(COALESCE(c.last_purchase_date, c.created_at)) as days_inactive
+                FROM sdad_customers c WHERE c.active = 1
+            """).fetchall()
+
+            output = io.StringIO()
+            writer = csv.writer(output)
+            writer.writerow(['Customer ID', 'Name', 'City', 'Country', 'Total Orders', 'Total Payments',
+                             'Last Purchase', 'Days Inactive', 'R Score', 'F Score', 'M Score', 'RFM Score', 'Segment'])
+
+            for c in rfm_data:
+                d = dict(c)
+                days = int(d['days_inactive'])
+                r_score = 3 if days <= 30 else (2 if days <= 90 else 1)
+                f_score = 3 if (d['total_orders'] or 0) >= 50000 else (2 if (d['total_orders'] or 0) >= 10000 else 1)
+                m_score = 3 if (d['total_payments'] or 0) >= 40000 else (2 if (d['total_payments'] or 0) >= 10000 else 1)
+                rfm_score = r_score * 100 + f_score * 10 + m_score
+
+                if rfm_score >= 333:
+                    segment = 'Champions'
+                elif rfm_score >= 323:
+                    segment = 'Loyal'
+                elif rfm_score >= 313:
+                    segment = 'Promising'
+                elif rfm_score >= 233:
+                    segment = 'At Risk'
+                elif rfm_score >= 133:
+                    segment = 'Needs Attention'
+                else:
+                    segment = 'Churned'
+
+                writer.writerow([d['id'], d['name'], d['city'], d['country'], d['total_orders'],
+                                 d['total_payments'], d['last_purchase_date'], days,
+                                 r_score, f_score, m_score, rfm_score, segment])
+
+            output.seek(0)
+            return Response(
+                output.getvalue(),
+                mimetype='text/csv',
+                headers={'Content-Disposition': f'attachment; filename=CI_RFM_{today.strftime("%Y%m%d")}.csv'}
             )
         finally:
             db.close()
@@ -1227,23 +1560,14 @@ def register_ci_routes(app):
     @ci_permission_required('export_reports')
     def ci_report_export(report_type):
         """Export a customer intelligence report."""
+        fmt = request.args.get('format', 'xlsx').lower()
         db = get_db()
         try:
-            wb = Workbook()
-            ws = wb.active
-            ws.title = report_type.replace('_', ' ').title()
-            
-            # Headers style
-            header_fill = PatternFill("solid", fgColor="0D3B66")
-            header_font = Font(bold=True, color="FFFFFF", size=11)
-            header_alignment = Alignment(horizontal="center", vertical="center")
-            
             if report_type == 'customers':
                 headers = ['Name', 'Phone', 'City', 'Country', 'Location', 'Salesperson',
                           'Total Orders', 'Total Payments', 'Total Debt', 'Credit Limit',
                           'Credit Status', 'Active', 'Last Purchase']
                 data = db.execute("SELECT name, phone, city, country, location, salesperson_name, total_orders, total_payments, total_debt, credit_limit, credit_status, active, last_purchase_date FROM sdad_customers ORDER BY total_orders DESC").fetchall()
-            
             elif report_type == 'segments':
                 headers = ['Segment Name', 'Code', 'Type', 'Description', 'Dynamic', 'System', 'Member Count']
                 data = db.execute("""
@@ -1252,19 +1576,17 @@ def register_ci_routes(app):
                            (SELECT COUNT(*) FROM ci_segment_members WHERE segment_id = s.id) as member_count
                     FROM ci_customer_segments s ORDER BY s.segment_name
                 """).fetchall()
-            
             elif report_type == 'alerts':
                 headers = ['Customer', 'Alert Type', 'Category', 'Level', 'Title', 'Description', 'Status', 'Created']
                 data = db.execute("""
                     SELECT c.name, a.alert_type, a.alert_category, a.alert_level, a.title,
-                           a.description, 
+                           a.description,
                            CASE WHEN a.is_resolved = 0 THEN 'Open' ELSE 'Resolved' END as status,
                            a.created_at
                     FROM ci_risk_alerts a
                     LEFT JOIN sdad_customers c ON a.customer_id = c.id
                     ORDER BY a.created_at DESC
                 """).fetchall()
-            
             elif report_type == 'recommendations':
                 headers = ['Customer', 'Type', 'Title', 'Priority', 'Status', 'Target Date', 'Created']
                 data = db.execute("""
@@ -1274,7 +1596,6 @@ def register_ci_routes(app):
                     LEFT JOIN sdad_customers c ON r.customer_id = c.id
                     ORDER BY r.created_at DESC
                 """).fetchall()
-            
             elif report_type == 'lost_sales':
                 headers = ['Customer', 'Date', 'Reason', 'Category', 'Amount', 'Profit Lost', 'Competitor']
                 data = db.execute("""
@@ -1284,23 +1605,63 @@ def register_ci_routes(app):
                     LEFT JOIN sdad_customers c ON l.customer_id = c.id
                     ORDER BY l.lost_date DESC
                 """).fetchall()
-            
+            elif report_type == 'financial_summary':
+                headers = ['Customer', 'City', 'Country', 'Total Revenue', 'Total Payments',
+                          'Outstanding Debt', 'Credit Limit', 'Credit Status', 'Payment Method', 'Active']
+                data = db.execute("""
+                    SELECT c.name, c.city, c.country, c.total_orders, c.total_payments,
+                           c.total_debt, c.credit_limit, c.credit_status, c.payment_method, c.active
+                    FROM sdad_customers c ORDER BY c.total_orders DESC
+                """).fetchall()
+            elif report_type == 'churn_analysis':
+                headers = ['Customer', 'City', 'Country', 'Total Orders', 'Total Payments',
+                          'Last Purchase Date', 'Days Inactive', 'Churn Risk Score', 'Active']
+                data = db.execute("""
+                    SELECT c.name, c.city, c.country, c.total_orders, c.total_payments,
+                           c.last_purchase_date,
+                           CAST(julianday('now') - julianday(COALESCE(c.last_purchase_date, c.created_at)) AS INTEGER) as days_inactive,
+                           CASE
+                               WHEN julianday('now') - julianday(COALESCE(c.last_purchase_date, c.created_at)) > 180 THEN 'High'
+                               WHEN julianday('now') - julianday(COALESCE(c.last_purchase_date, c.created_at)) > 90 THEN 'Medium'
+                               ELSE 'Low'
+                           END as churn_risk,
+                           c.active
+                    FROM sdad_customers c ORDER BY days_inactive DESC
+                """).fetchall()
             else:
                 data = []
-            
-            # Write headers
+                headers = []
+
+            if fmt == 'csv':
+                output = io.StringIO()
+                writer = csv.writer(output)
+                writer.writerow(headers)
+                for row in data:
+                    writer.writerow([v for v in row])
+                output.seek(0)
+                return Response(
+                    output.getvalue(),
+                    mimetype='text/csv',
+                    headers={'Content-Disposition': f'attachment; filename=CI_{report_type}_{datetime.now().strftime("%Y%m%d")}.csv'}
+                )
+
+            wb = Workbook()
+            ws = wb.active
+            ws.title = report_type.replace('_', ' ').title()
+            header_fill = PatternFill("solid", fgColor="0D3B66")
+            header_font = Font(bold=True, color="FFFFFF", size=11)
+            header_alignment = Alignment(horizontal="center", vertical="center")
+
             for col, header in enumerate(headers, 1):
                 cell = ws.cell(row=1, column=col, value=header)
                 cell.fill = header_fill
                 cell.font = header_font
                 cell.alignment = header_alignment
-            
-            # Write data
+
             for row_idx, row in enumerate(data, 2):
                 for col_idx, value in enumerate(row, 1):
                     ws.cell(row=row_idx, column=col_idx, value=value)
-            
-            # Auto-size columns
+
             for col in ws.columns:
                 max_length = 0
                 column = col[0].column_letter
@@ -1312,11 +1673,11 @@ def register_ci_routes(app):
                         pass
                 adjusted_width = min(max_length + 2, 50)
                 ws.column_dimensions[column].width = adjusted_width
-            
+
             output = io.BytesIO()
             wb.save(output)
             output.seek(0)
-            
+
             return Response(
                 output.getvalue(),
                 mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

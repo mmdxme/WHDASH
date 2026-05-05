@@ -9,71 +9,96 @@
 {% endif %}
 {% endblock %}
 {% block feedback_content %}
+<!-- Quick Stats Row -->
+<div class="flex items-center gap-4 mb-6 overflow-x-auto pb-2">
+    <a href="{{ url_for('feedback.reports_list') }}" class="px-4 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-xl text-sm font-medium whitespace-nowrap">
+        All <span class="ml-1 opacity-70">({{ stats.total }})</span>
+    </a>
+    <a href="{{ url_for('feedback.reports_list', status='Open') }}" class="px-4 py-2 bg-slate-800/50 text-slate-400 border border-slate-700/50 rounded-xl text-sm font-medium whitespace-nowrap hover:bg-slate-700/50">
+        Open <span class="ml-1 opacity-70">({{ stats.open }})</span>
+    </a>
+    <a href="{{ url_for('feedback.reports_list', status='In Progress') }}" class="px-4 py-2 bg-slate-800/50 text-slate-400 border border-slate-700/50 rounded-xl text-sm font-medium whitespace-nowrap hover:bg-slate-700/50">
+        In Progress <span class="ml-1 opacity-70">({{ stats.by_status.get('In Progress', 0) }})</span>
+    </a>
+    <a href="{{ url_for('feedback.reports_list', status='Resolved') }}" class="px-4 py-2 bg-slate-800/50 text-slate-400 border border-slate-700/50 rounded-xl text-sm font-medium whitespace-nowrap hover:bg-slate-700/50">
+        Resolved <span class="ml-1 opacity-70">({{ stats.resolved }})</span>
+    </a>
+    <a href="{{ url_for('feedback.assigned_to_me') }}" class="px-4 py-2 bg-slate-800/50 text-cyan-400 border border-slate-700/50 rounded-xl text-sm font-medium whitespace-nowrap hover:bg-slate-700/50">
+        My Assignments <span class="ml-1 opacity-70">({{ assigned_count }})</span>
+    </a>
+</div>
+
 <!-- Stats Grid -->
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
     <!-- Total Reports -->
-    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 hover:border-slate-600/50 transition-all duration-200">
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 feedback-kpi-card">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-sm text-slate-400 mb-1">Total Reports</p>
                 <p class="text-3xl font-bold text-white">{{ stats.total }}</p>
             </div>
-            <div class="w-14 h-14 bg-blue-500/20 rounded-2xl flex items-center justify-center">
-                <i class="fas fa-inbox text-2xl text-blue-400"></i>
+            <div class="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-inbox text-xl text-blue-400"></i>
             </div>
         </div>
-        <div class="mt-4 flex items-center gap-2 text-sm">
-            <span class="text-emerald-400"><i class="fas fa-arrow-up mr-1"></i>{{ stats.resolved }}</span>
-            <span class="text-slate-500">resolved</span>
+        <div class="mt-3 flex items-center gap-2 text-xs">
+            <span class="text-emerald-400"><i class="fas fa-check-circle mr-1"></i>{{ stats.resolved }} resolved</span>
+            <span class="text-slate-500">•</span>
+            <span class="text-amber-400"><i class="fas fa-clock mr-1"></i>{{ stats.pending }} pending</span>
         </div>
     </div>
 
     <!-- Open Reports -->
-    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 hover:border-slate-600/50 transition-all duration-200">
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 feedback-kpi-card">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-sm text-slate-400 mb-1">Open Reports</p>
-                <p class="text-3xl font-bold text-white">{{ stats.open }}</p>
+                <p class="text-3xl font-bold text-amber-400">{{ stats.open }}</p>
             </div>
-            <div class="w-14 h-14 bg-amber-500/20 rounded-2xl flex items-center justify-center">
-                <i class="fas fa-folder-open text-2xl text-amber-400"></i>
+            <div class="w-12 h-12 bg-amber-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-folder-open text-xl text-amber-400"></i>
             </div>
         </div>
-        <div class="mt-4 flex items-center gap-2 text-sm">
-            <span class="text-amber-400"><i class="fas fa-clock mr-1"></i>{{ stats.pending }}</span>
-            <span class="text-slate-500">pending</span>
+        <div class="mt-3">
+            <div class="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+                <div class="h-full bg-amber-500 rounded-full" style="width: {% if stats.total > 0 %}{{ (stats.open / stats.total * 100) | round }}{% else %}0{% endif %}%"></div>
+            </div>
         </div>
     </div>
 
     <!-- My Reports -->
-    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 hover:border-slate-600/50 transition-all duration-200">
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 feedback-kpi-card">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-sm text-slate-400 mb-1">My Reports</p>
                 <p class="text-3xl font-bold text-white">{{ my_reports_count }}</p>
             </div>
-            <div class="w-14 h-14 bg-violet-500/20 rounded-2xl flex items-center justify-center">
-                <i class="fas fa-user text-2xl text-violet-400"></i>
+            <div class="w-12 h-12 bg-violet-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-user text-xl text-violet-400"></i>
             </div>
         </div>
-        <div class="mt-4">
-            <a href="{{ url_for('feedback.my_reports') }}" class="text-sm text-violet-400 hover:text-violet-300">View all →</a>
+        <div class="mt-3">
+            <a href="{{ url_for('feedback.my_reports') }}" class="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1">
+                View all <i class="fas fa-arrow-right"></i>
+            </a>
         </div>
     </div>
 
     <!-- Assigned to Me -->
-    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 hover:border-slate-600/50 transition-all duration-200">
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-5 feedback-kpi-card">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-sm text-slate-400 mb-1">Assigned to Me</p>
-                <p class="text-3xl font-bold text-white">{{ assigned_count }}</p>
+                <p class="text-3xl font-bold text-cyan-400">{{ assigned_count }}</p>
             </div>
-            <div class="w-14 h-14 bg-cyan-500/20 rounded-2xl flex items-center justify-center">
-                <i class="fas fa-tasks text-2xl text-cyan-400"></i>
+            <div class="w-12 h-12 bg-cyan-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-tasks text-xl text-cyan-400"></i>
             </div>
         </div>
-        <div class="mt-4">
-            <a href="{{ url_for('feedback.assigned_to_me') }}" class="text-sm text-cyan-400 hover:text-cyan-300">View all →</a>
+        <div class="mt-3">
+            <a href="{{ url_for('feedback.assigned_to_me') }}" class="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1">
+                View all <i class="fas fa-arrow-right"></i>
+            </a>
         </div>
     </div>
 </div>
@@ -91,6 +116,11 @@
                 <p class="text-sm text-slate-400">Overdue Reports</p>
             </div>
         </div>
+        {% if stats.overdue > 0 %}
+        <div class="mt-3 p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg">
+            <p class="text-xs text-rose-300"><i class="fas fa-warning mr-1"></i>SLA breaches require attention</p>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Avg Resolution Time -->
@@ -100,9 +130,12 @@
                 <i class="fas fa-clock text-xl text-emerald-400"></i>
             </div>
             <div>
-                <p class="text-2xl font-bold text-white">{{ stats.avg_resolution_hours }}h</p>
+                <p class="text-2xl font-bold text-white">{% if stats.avg_resolution_hours >= 24 %}{{ (stats.avg_resolution_hours / 24) | round(1) }}d{% else %}{{ stats.avg_resolution_hours }}h{% endif %}</p>
                 <p class="text-sm text-slate-400">Avg Resolution Time</p>
             </div>
+        </div>
+        <div class="mt-3">
+            <p class="text-xs text-slate-500">{{ stats.resolved_count }} reports resolved</p>
         </div>
     </div>
 
@@ -116,6 +149,9 @@
                 <p class="text-2xl font-bold text-white">{{ stats.closed }}</p>
                 <p class="text-sm text-slate-400">Closed Reports</p>
             </div>
+        </div>
+        <div class="mt-3 flex items-center gap-2">
+            <span class="text-xs text-emerald-400"><i class="fas fa-chart-line mr-1"></i>{% if stats.total > 0 %}{{ ((stats.resolved + stats.closed) / stats.total * 100) | round }}{% else %}0{% endif %}% closure rate</span>
         </div>
     </div>
 </div>
@@ -164,42 +200,57 @@
         </div>
     </div>
 
-    <!-- Status Breakdown -->
-    <div>
-        <!-- By Status -->
-        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden mb-6">
+    <!-- Charts Section -->
+    <div class="space-y-6">
+        <!-- By Status Donut Chart -->
+        <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
             <div class="px-6 py-4 border-b border-slate-700/50">
                 <h2 class="text-lg font-semibold text-white">By Status</h2>
             </div>
-            <div class="p-6 space-y-3">
-                {% for status, count in status_breakdown.items() %}
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <span class="w-3 h-3 rounded-full {% if status == 'Open' %}bg-sky-400{% elif status == 'In Progress' %}bg-amber-400{% elif status == 'Resolved' %}bg-teal-400{% elif status == 'Closed' %}bg-emerald-400{% else %}bg-slate-400{% endif %}"></span>
-                        <span class="text-sm text-slate-300">{{ status }}</span>
-                    </div>
-                    <span class="text-sm font-medium text-white">{{ count }}</span>
+            <div class="p-6">
+                <div class="chart-container" style="height: 200px;">
+                    <canvas id="statusChart"></canvas>
                 </div>
-                {% else %}
-                <p class="text-sm text-slate-500 text-center py-4">No data</p>
-                {% endfor %}
             </div>
         </div>
 
-        <!-- By Type -->
+        <!-- By Type Bar Chart -->
         <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
             <div class="px-6 py-4 border-b border-slate-700/50">
                 <h2 class="text-lg font-semibold text-white">By Type</h2>
             </div>
-            <div class="p-6 space-y-3">
-                {% for type, count in type_breakdown.items() %}
-                <div class="flex items-center justify-between">
-                    <span class="text-sm text-slate-300 capitalize">{{ type.replace('_', ' ') }}</span>
-                    <span class="text-sm font-medium text-white">{{ count }}</span>
+            <div class="p-6">
+                <div class="chart-container" style="height: 200px;">
+                    <canvas id="typeChart"></canvas>
                 </div>
-                {% else %}
-                <p class="text-sm text-slate-500 text-center py-4">No data</p>
-                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Trend & Priority Section -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+    <!-- Trend Line Chart -->
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-white">Report Trend (Last 14 Days)</h2>
+            <a href="{{ url_for('feedback.reports_analytics') }}" class="text-sm text-blue-400 hover:text-blue-300">Analytics →</a>
+        </div>
+        <div class="p-6">
+            <div class="chart-container" style="height: 180px;">
+                <canvas id="trendChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Priority Distribution -->
+    <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-700/50">
+            <h2 class="text-lg font-semibold text-white">Priority Distribution</h2>
+        </div>
+        <div class="p-6">
+            <div class="chart-container" style="height: 180px;">
+                <canvas id="priorityChart"></canvas>
             </div>
         </div>
     </div>
@@ -254,4 +305,152 @@
     </div>
 </div>
 {% endif %}
+
+<!-- Chart Initialization -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Status Donut Chart
+    const statusCtx = document.getElementById('statusChart');
+    if (statusCtx) {
+        const statusData = {{ status_breakdown | tojson | safe }};
+        new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(statusData),
+                datasets: [{
+                    data: Object.values(statusData),
+                    backgroundColor: [
+                        'rgba(56, 189, 248, 0.8)',   // sky - Submitted
+                        'rgba(59, 130, 246, 0.8)',   // blue - New
+                        'rgba(99, 102, 241, 0.8)',   // indigo - Acknowledged
+                        'rgba(245, 158, 11, 0.8)',   // amber - In Progress
+                        'rgba(168, 85, 247, 0.8)',   // purple - Assigned
+                        'rgba(20, 184, 166, 0.8)',   // teal - Resolved
+                        'rgba(107, 114, 128, 0.8)',  // gray - Closed
+                        'rgba(239, 68, 68, 0.8)',    // red - Escalated
+                        'rgba(236, 72, 153, 0.8)',   // rose - Reopened
+                    ],
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: { boxWidth: 12, padding: 8, font: { size: 11 } }
+                    }
+                },
+                cutout: '60%',
+            }
+        });
+    }
+
+    // Type Bar Chart
+    const typeCtx = document.getElementById('typeChart');
+    if (typeCtx) {
+        const typeData = {{ type_breakdown | tojson | safe }};
+        new Chart(typeCtx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(typeData).map(t => t.replace('_', ' ')),
+                datasets: [{
+                    data: Object.values(typeData),
+                    backgroundColor: 'rgba(168, 85, 247, 0.7)',
+                    borderRadius: 4,
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(71, 85, 105, 0.3)' }, ticks: { font: { size: 10 }, stepSize: 1 } }
+                }
+            }
+        });
+    }
+
+    // Trend Line Chart
+    const trendCtx = document.getElementById('trendChart');
+    if (trendCtx) {
+        const trendLabels = {{ trend_data | map(attribute='date') | list | tojson | safe }}.map(d => d.slice(5));
+        const trendTotals = {{ trend_data | map(attribute='total') | list | tojson | safe }};
+        const trendOpen = {{ trend_data | map(attribute='open') | list | tojson | safe }};
+        const maxTotal = Math.max(...trendTotals, 1);
+        new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: trendLabels,
+                datasets: [
+                    {
+                        label: 'Total',
+                        data: trendTotals,
+                        borderColor: 'rgba(59, 130, 246, 0.8)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 2,
+                    },
+                    {
+                        label: 'Open',
+                        data: trendOpen,
+                        borderColor: 'rgba(245, 158, 11, 0.8)',
+                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 2,
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+                    y: { beginAtZero: true, grid: { color: 'rgba(71, 85, 105, 0.3)' }, ticks: { font: { size: 10 }, stepSize: Math.max(1, Math.ceil(maxTotal / 4)) } }
+                }
+            }
+        });
+    }
+
+    // Priority Chart
+    const priorityCtx = document.getElementById('priorityChart');
+    if (priorityCtx) {
+        const priorityData = {{ priority_breakdown | tojson | safe }};
+        const priorityColors = {
+            'Critical': 'rgba(239, 68, 68, 0.8)',
+            'High': 'rgba(249, 115, 22, 0.8)',
+            'Medium': 'rgba(245, 158, 11, 0.8)',
+            'Low': 'rgba(34, 197, 94, 0.8)',
+        };
+        new Chart(priorityCtx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(priorityData),
+                datasets: [{
+                    data: Object.values(priorityData),
+                    backgroundColor: Object.keys(priorityData).map(k => priorityColors[k] || 'rgba(100, 100, 100, 0.8)'),
+                    borderRadius: 4,
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: 'rgba(71, 85, 105, 0.3)' }, ticks: { font: { size: 10 }, stepSize: 1 } },
+                    y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

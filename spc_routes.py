@@ -283,6 +283,93 @@ def add_measurement(chart_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@spc_bp.route('/charts/<int:chart_id>/import', methods=['GET', 'POST'])
+def import_measurements(chart_id):
+    """Import measurements from CSV file."""
+    page_title = "Import Measurements"
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM spc_control_charts WHERE id = ?", (chart_id,))
+    chart = cursor.fetchone()
+    conn.close()
+
+    if not chart:
+        flash('Control chart not found', 'danger')
+        return redirect(url_for('spc.charts_list'))
+
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('No file uploaded', 'danger')
+            return render_template('spc/charts/import.html', page_title=page_title, chart=dict(chart), error='No file provided')
+
+        file = request.files['file']
+        if file.filename == '':
+            flash('No file selected', 'danger')
+            return render_template('spc/charts/import.html', page_title=page_title, chart=dict(chart), error='No file selected')
+
+        if not file.filename.endswith('.csv'):
+            flash('Please upload a CSV file', 'danger')
+            return render_template('spc/charts/import.html', page_title=page_title, chart=dict(chart), error='Invalid file type')
+
+        try:
+            import csv
+            from io import TextIOWrapper
+
+            csv_content = TextIOWrapper(file.stream, encoding='utf-8-sig')
+            reader = csv.DictReader(csv_content)
+
+            imported = 0
+            errors = []
+            row_num = 1
+
+            for row in reader:
+                row_num += 1
+                try:
+                    measurement_group = row.get('group', row.get('measurement_group', f"Import-{datetime.now().strftime('%Y%m%d%H%M')}"))
+                    values_str = row.get('values', row.get('sample_values', row.get('measurement')))
+
+                    if not values_str:
+                        errors.append(f"Row {row_num}: No values found")
+                        continue
+
+                    sample_values = [float(v.strip()) for v in values_str.split(',') if v.strip()]
+
+                    if len(sample_values) == 0:
+                        errors.append(f"Row {row_num}: Empty values")
+                        continue
+
+                    measurement_date = row.get('date', row.get('measurement_date', datetime.now().strftime('%Y-%m-%d')))
+                    notes = row.get('notes', '')
+
+                    add_spc_measurement(
+                        chart_id=chart_id,
+                        chart_code=chart['chart_code'],
+                        measurement_group=measurement_group,
+                        sample_values=sample_values,
+                        measurement_date=measurement_date,
+                        notes=notes
+                    )
+                    imported += 1
+
+                except ValueError as ve:
+                    errors.append(f"Row {row_num}: Invalid number format - {str(ve)}")
+                except Exception as e:
+                    errors.append(f"Row {row_num}: {str(e)}")
+
+            flash(f'Successfully imported {imported} measurements', 'success' if imported > 0 else 'warning')
+            if errors:
+                flash(f'{len(errors)} rows had errors', 'warning')
+
+            return redirect(url_for('spc.chart_view', chart_id=chart_id))
+
+        except Exception as e:
+            flash(f'Error reading file: {str(e)}', 'danger')
+
+    return render_template('spc/charts/import.html', page_title=page_title, chart=dict(chart), error=None)
+
+
 @spc_bp.route('/charts/<int:chart_id>/spec-limits', methods=['POST'])
 def update_spec_limits(chart_id):
     """Update specification and control limits for a chart."""
@@ -439,6 +526,123 @@ def capability_view(study_id):
                          capability=capability)
 
 
+@spc_bp.route('/capability/<int:study_id>/compare')
+def capability_compare(study_id):
+    """Compare capability study with others."""
+    page_title = "Capability Comparison"
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Get current study
+    cursor.execute("""
+        SELECT s.*, l.characteristic_name, l.usl, l.lsl, l.target
+        FROM spc_capability_studies s
+        LEFT JOIN spc_specification_limits l ON s.characteristic_id = l.id
+        WHERE s.id = ?
+    """, (study_id,))
+    current = cursor.fetchone()
+
+    if not current:
+        conn.close()
+        flash('Capability study not found', 'danger')
+        return redirect(url_for('spc.capability_list'))
+
+    # Get comparable studies (same characteristic or all if no characteristic)
+    if current['characteristic_id']:
+        cursor.execute("""
+            SELECT s.*, l.characteristic_name
+            FROM spc_capability_studies s
+            LEFT JOIN spc_specification_limits l ON s.characteristic_id = l.id
+            WHERE s.characteristic_id = ? AND s.id != ?
+            ORDER BY s.study_date DESC
+            LIMIT 10
+        """, (current['characteristic_id'], study_id))
+    else:
+        cursor.execute("""
+            SELECT s.*, l.characteristic_name
+            FROM spc_capability_studies s
+            LEFT JOIN spc_specification_limits l ON s.characteristic_id = l.id
+            WHERE s.id != ?
+            ORDER BY s.study_date DESC
+            LIMIT 10
+        """, (study_id,))
+
+    comparisons = cursor.fetchall()
+
+    # Get trend data
+    cursor.execute("""
+        SELECT study_date, cp, cpk, pp, ppk, sigma_level
+        FROM spc_capability_studies
+        WHERE characteristic_id = ? OR characteristic_id IS NULL
+        ORDER BY study_date ASC
+        LIMIT 30
+    """, (current['characteristic_id'] if current['characteristic_id'] else 0,))
+    trend_data = cursor.fetchall()
+
+    conn.close()
+
+    return render_template('spc/capability/compare.html',
+                         page_title=page_title,
+                         current=dict(current),
+                         comparisons=list(comparisons),
+                         trend_data=list(trend_data))
+
+
+@spc_bp.route('/capability/trends')
+def capability_trends():
+    """View capability trends across all studies."""
+    page_title = "Capability Trends"
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Get trends by date
+    cursor.execute("""
+        SELECT DATE(study_date) as date,
+               AVG(cp) as avg_cp,
+               AVG(cpk) as avg_cpk,
+               MIN(cpk) as min_cpk,
+               MAX(cpk) as max_cpk,
+               COUNT(*) as study_count
+        FROM spc_capability_studies
+        WHERE study_date >= datetime('now', '-6 months')
+        GROUP BY DATE(study_date)
+        ORDER BY date ASC
+    """)
+    date_trends = cursor.fetchall()
+
+    # Get assessment distribution
+    cursor.execute("""
+        SELECT assessment, COUNT(*) as count
+        FROM spc_capability_studies
+        GROUP BY assessment
+    """)
+    distribution = cursor.fetchall()
+
+    # Get capability by characteristic
+    cursor.execute("""
+        SELECT l.characteristic_name,
+               AVG(s.cpk) as avg_cpk,
+               COUNT(s.id) as study_count,
+               MIN(s.study_date) as first_study,
+               MAX(s.study_date) as last_study
+        FROM spc_capability_studies s
+        LEFT JOIN spc_specification_limits l ON s.characteristic_id = l.id
+        GROUP BY s.characteristic_id
+        ORDER BY avg_cpk ASC
+    """)
+    by_characteristic = cursor.fetchall()
+
+    conn.close()
+
+    return render_template('spc/capability/trends.html',
+                         page_title=page_title,
+                         date_trends=list(date_trends),
+                         distribution=list(distribution),
+                         by_characteristic=list(by_characteristic))
+
+
 # =============================================================================
 # SAMPLING PLANS
 # =============================================================================
@@ -547,6 +751,58 @@ def evaluate_sampling():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@spc_bp.route('/sampling-plans/<int:plan_id>/inspect', methods=['GET', 'POST'])
+def sampling_inspection(plan_id):
+    """Record inspection result for a sampling plan."""
+    page_title = "Record Inspection"
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM spc_sampling_plans WHERE id = ?", (plan_id,))
+    plan = cursor.fetchone()
+    conn.close()
+
+    if not plan:
+        flash('Sampling plan not found', 'danger')
+        return redirect(url_for('spc.sampling_plans_list'))
+
+    if request.method == 'POST':
+        lot_size = int(request.form.get('lot_size', 100))
+        sample_size = int(request.form.get('sample_size', 0))
+        defects_found = int(request.form.get('defects_found', 0))
+        inspection_date = request.form.get('inspection_date', datetime.now().strftime('%Y-%m-%d'))
+        inspector_name = request.form.get('inspector_name', '')
+        notes = request.form.get('notes', '')
+
+        # Evaluate based on plan
+        result = SamplingPlanCalculator.evaluate_lot(lot_size, defects_found, plan['aql'])
+
+        # Store inspection record
+        conn = get_db()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO spc_aql_inspections
+            (plan_id, lot_size, sample_size, defects_found, acceptance_number,
+             rejection_number, result, inspection_date, inspector_name, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (plan_id, lot_size, sample_size, defects_found,
+              result['acceptance_number'], result['rejection_number'],
+              result['decision'], inspection_date, inspector_name, notes))
+
+        conn.commit()
+        inspection_id = cursor.lastrowid
+        conn.close()
+
+        flash(f'Inspection recorded: {result["decision"]}', 'success' if result['decision'] == 'ACCEPT' else 'warning')
+        return redirect(url_for('spc.sampling_plan_view', plan_id=plan_id))
+
+    return render_template('spc/sampling/inspect.html',
+                         page_title=page_title,
+                         plan=dict(plan))
 
 
 # =============================================================================
@@ -1012,7 +1268,7 @@ def export_capability(study_id):
     cursor = conn.cursor()
 
     cursor.execute("""
-        SELECT s.*, l.characteristic_name, l.usl, l.lsl, l.target
+        SELECT s.*, l.characteristic_name, l.usl, l.lsl, l.target, l.unit_of_measure
         FROM spc_capability_studies s
         LEFT JOIN spc_specification_limits l ON s.characteristic_id = l.id
         WHERE s.id = ?
@@ -1024,81 +1280,228 @@ def export_capability(study_id):
         flash('Study not found', 'danger')
         return redirect(url_for('spc.capability_list'))
 
-    # Create Excel export
+    # Create Excel export with enhanced formatting
     from openpyxl import Workbook
-    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side, GradientFill
+    from openpyxl.utils import get_column_letter
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Capability Study"
 
-    # Styles
-    header_font = Font(bold=True, size=12)
+    # Define styles
+    header_font = Font(bold=True, size=14, color='FFFFFF')
+    section_font = Font(bold=True, size=12, color='FFFFFF')
     label_font = Font(bold=True)
-    border = Border(
+    value_font = Font(size=11)
+    thin_border = Border(
         left=Side(style='thin'),
         right=Side(style='thin'),
         top=Side(style='thin'),
         bottom=Side(style='thin')
     )
+    header_fill = PatternFill(start_color='4F46E5', end_color='4F46E5', fill_type='solid')
+    section_fill = PatternFill(start_color='7C3AED', end_color='7C3AED', fill_type='solid')
+    light_fill = PatternFill(start_color='F3F4F6', end_color='F3F4F6', fill_type='solid')
 
-    # Header
-    ws['A1'] = "Process Capability Study Report"
-    ws['A1'].font = Font(bold=True, size=16)
+    # Set column widths
+    ws.column_dimensions['A'].width = 25
+    ws.column_dimensions['B'].width = 20
+    ws.column_dimensions['C'].width = 15
+
+    # Title
     ws.merge_cells('A1:C1')
+    ws['A1'] = "Process Capability Study Report"
+    ws['A1'].font = Font(bold=True, size=18, color='4F46E5')
+    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
+    ws.row_dimensions[1].height = 30
 
-    # Study Info
-    ws['A3'] = "Study Number"
-    ws['B3'] = study['study_number']
-    ws['A4'] = "Study Name"
-    ws['B4'] = study['study_name']
-    ws['A5'] = "Study Date"
-    ws['B5'] = study['study_date']
-    ws['A6'] = "Sample Size"
-    ws['B6'] = study['sample_size']
+    # Company/Report Info
+    ws['A2'] = f"Report Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    ws['A2'].font = Font(size=9, italic=True, color='6B7280')
 
-    # Capability Metrics
-    ws['A8'] = "Process Statistics"
-    ws['A8'].font = header_font
-    ws['A9'] = "Mean"
-    ws['B9'] = f"{study['mean']:.4f}"
-    ws['A10'] = "Std Dev"
-    ws['B10'] = f"{study['std_dev']:.4f}"
+    # Study Information Section
+    ws.merge_cells('A4:C4')
+    ws['A4'] = "STUDY INFORMATION"
+    ws['A4'].fill = section_fill
+    ws['A4'].font = section_font
+    ws['A4'].alignment = Alignment(horizontal='center')
 
-    # Specification Limits
-    ws['A12'] = "Specification Limits"
-    ws['A12'].font = header_font
-    ws['A13'] = "USL"
-    ws['B13'] = study['usl']
-    ws['A14'] = "Target"
-    ws['B14'] = study['target']
-    ws['A15'] = "LSL"
-    ws['B15'] = study['lsl']
+    ws['A5'] = "Study Number"
+    ws['A5'].font = label_font
+    ws['B5'] = study['study_number']
+    ws['B5'].fill = light_fill
 
-    # Capability Indices
-    ws['A17'] = "Capability Indices"
-    ws['A17'].font = header_font
-    ws['A18'] = "Cp"
-    ws['B18'] = f"{study['cp']:.3f}"
-    ws['A19'] = "Cpk"
-    ws['B19'] = f"{study['cpk']:.3f}"
-    ws['A20'] = "Pp"
-    ws['B20'] = f"{study['pp']:.3f}"
-    ws['A21'] = "Ppk"
-    ws['B21'] = f"{study['ppk']:.3f}"
+    ws['A6'] = "Study Name"
+    ws['A6'].font = label_font
+    ws['B6'] = study['study_name']
+    ws['B6'].fill = light_fill
 
-    # Sigma Level
-    ws['A23'] = "Sigma Level"
-    ws['B23'] = f"{study['sigma_level']:.2f}σ"
-    ws['A24'] = "DPMO"
-    ws['B24'] = f"{study['ppmm']:.0f}"
-    ws['A25'] = "Assessment"
-    ws['B25'] = study['assessment']
+    ws['A7'] = "Study Date"
+    ws['A7'].font = label_font
+    ws['B7'] = study['study_date']
+    ws['B7'].fill = light_fill
 
-    # Apply borders
-    for row in range(3, 26):
-        for col in ['A', 'B']:
-            ws[f'{col}{row}'].border = border
+    ws['A8'] = "Sample Size"
+    ws['A8'].font = label_font
+    ws['B8'] = study['sample_size']
+    ws['B8'].fill = light_fill
+
+    ws['A9'] = "Study Type"
+    ws['A9'].font = label_font
+    ws['B9'] = study['study_type']
+    ws['B9'].fill = light_fill
+
+    # Process Statistics Section
+    ws.merge_cells('A11:C11')
+    ws['A11'] = "PROCESS STATISTICS"
+    ws['A11'].fill = section_fill
+    ws['A11'].font = section_font
+    ws['A11'].alignment = Alignment(horizontal='center')
+
+    mean = float(study['mean']) if study['mean'] else 0
+    std_dev = float(study['std_dev']) if study['std_dev'] else 0
+
+    ws['A12'] = "Mean (μ)"
+    ws['A12'].font = label_font
+    ws['B12'] = f"{mean:.6f}"
+    ws['B12'].alignment = Alignment(horizontal='right')
+
+    ws['A13'] = "Standard Deviation (σ)"
+    ws['A13'].font = label_font
+    ws['B13'] = f"{std_dev:.6f}"
+    ws['B13'].alignment = Alignment(horizontal='right')
+
+    ws['A14'] = "Sample Size"
+    ws['A14'].font = label_font
+    ws['B14'] = study['sample_size']
+    ws['B14'].alignment = Alignment(horizontal='right')
+
+    # Specification Limits Section
+    ws.merge_cells('A16:C16')
+    ws['A16'] = "SPECIFICATION LIMITS"
+    ws['A16'].fill = section_fill
+    ws['A16'].font = section_font
+    ws['A16'].alignment = Alignment(horizontal='center')
+
+    ws['A17'] = "Upper Specification Limit (USL)"
+    ws['A17'].font = label_font
+    ws['B17'] = f"{study['usl']:.4f}" if study['usl'] else 'N/A'
+    ws['B17'].font = Font(color='DC2626', bold=True)
+
+    ws['A18'] = "Target"
+    ws['A18'].font = label_font
+    ws['B18'] = f"{study['target']:.4f}" if study['target'] else 'N/A'
+    ws['B18'].font = Font(color='059669', bold=True)
+
+    ws['A19'] = "Lower Specification Limit (LSL)"
+    ws['A19'].font = label_font
+    ws['B19'] = f"{study['lsl']:.4f}" if study['lsl'] else 'N/A'
+    ws['B19'].font = Font(color='D97706', bold=True)
+
+    unit = study['unit_of_measure'] or ''
+    ws['C17'] = unit
+    ws['C18'] = unit
+    ws['C19'] = unit
+
+    # Capability Indices Section
+    ws.merge_cells('A21:C21')
+    ws['A21'] = "CAPABILITY INDICES"
+    ws['A21'].fill = section_fill
+    ws['A21'].font = section_font
+    ws['A21'].alignment = Alignment(horizontal='center')
+
+    ws['A22'] = "Cp (Potential Capability)"
+    ws['A22'].font = label_font
+    ws['B22'] = f"{study['cp']:.4f}" if study['cp'] else 'N/A'
+
+    ws['A23'] = "Cpk (Actual Capability)"
+    ws['A23'].font = label_font
+    cpk_val = study['cpk']
+    ws['B23'] = f"{cpk_val:.4f}" if cpk_val else 'N/A'
+    if cpk_val and float(cpk_val) >= 1.33:
+        ws['B23'].font = Font(color='059669', bold=True)
+    elif cpk_val and float(cpk_val) >= 1.0:
+        ws['B23'].font = Font(color='D97706', bold=True)
+    else:
+        ws['B23'].font = Font(color='DC2626', bold=True)
+
+    ws['A24'] = "Cpu (Upper Capability)"
+    ws['A24'].font = label_font
+    ws['B24'] = f"{study.get('cpu', 'N/A'):.4f}" if study.get('cpu') else 'N/A'
+
+    ws['A25'] = "Cpl (Lower Capability)"
+    ws['A25'].font = label_font
+    ws['B25'] = f"{study.get('cpl', 'N/A'):.4f}" if study.get('cpl') else 'N/A'
+
+    ws['A26'] = "Pp (Overall Potential)"
+    ws['A26'].font = label_font
+    ws['B26'] = f"{study['pp']:.4f}" if study['pp'] else 'N/A'
+
+    ws['A27'] = "Ppk (Overall Performance)"
+    ws['A27'].font = label_font
+    ws['B27'] = f"{study['ppk']:.4f}" if study['ppk'] else 'N/A'
+
+    # Sigma Level Section
+    ws.merge_cells('A29:C29')
+    ws['A29'] = "SIGMA LEVEL & PERFORMANCE"
+    ws['A29'].fill = section_fill
+    ws['A29'].font = section_font
+    ws['A29'].alignment = Alignment(horizontal='center')
+
+    sigma_val = study['sigma_level']
+    ws['A30'] = "Sigma Level"
+    ws['A30'].font = label_font
+    ws['B30'] = f"{sigma_val:.2f}σ" if sigma_val else 'N/A'
+
+    dpmo_val = study['ppmm']
+    ws['A31'] = "DPMO (Defects Per Million Opportunities)"
+    ws['A31'].font = label_font
+    ws['B31'] = f"{dpmo_val:,.0f}" if dpmo_val else '0'
+
+    ws['A32'] = "Process Assessment"
+    ws['A32'].font = label_font
+    ws['B32'] = study['assessment'] or 'N/A'
+    assessment = study['assessment']
+    if assessment == 'WORLD_CLASS':
+        ws['B32'].font = Font(color='059669', bold=True)
+    elif assessment == 'EXCELLENT':
+        ws['B32'].font = Font(color='7C3AED', bold=True)
+    elif assessment == 'GOOD':
+        ws['B32'].font = Font(color='2563EB', bold=True)
+    elif assessment == 'ACCEPTABLE':
+        ws['B32'].font = Font(color='D97706', bold=True)
+    else:
+        ws['B32'].font = Font(color='DC2626', bold=True)
+
+    # Assessment Legend
+    ws.merge_cells('A34:C34')
+    ws['A34'] = "ASSESSMENT GUIDELINES"
+    ws['A34'].fill = header_fill
+    ws['A34'].font = section_font
+    ws['A34'].alignment = Alignment(horizontal='center')
+
+    guidelines = [
+        ("Cpk ≥ 2.0", "WORLD_CLASS", "World Class - Six Sigma Performance"),
+        ("Cpk ≥ 1.67", "EXCELLENT", "Excellent - Exceptional Process Capability"),
+        ("Cpk ≥ 1.33", "GOOD", "Good - Meets Customer Requirements"),
+        ("Cpk ≥ 1.0", "ACCEPTABLE", "Acceptable - Baseline Process Capability"),
+        ("Cpk ≥ 0.67", "MARGINAL", "Marginal - Requires Monitoring"),
+        ("Cpk < 0.67", "NOT_CAPABLE", "Not Capable - Immediate Action Required"),
+    ]
+
+    row = 35
+    for criteria, level, desc in guidelines:
+        ws[f'A{row}'] = criteria
+        ws[f'B{row}'] = level
+        ws[f'C{row}'] = desc
+        ws[f'A{row}'].font = label_font
+        row += 1
+
+    # Apply borders to data cells
+    for r in range(5, 32):
+        for col in ['A', 'B', 'C']:
+            ws[f'{col}{r}'].border = thin_border
 
     # Save
     output = BytesIO()
@@ -1111,3 +1514,321 @@ def export_capability(study_id):
         as_attachment=True,
         download_name=f"Capability_Study_{study['study_number']}.xlsx"
     )
+
+
+@spc_bp.route('/export/chart/<int:chart_id>')
+def export_chart_data(chart_id):
+    """Export control chart data to CSV."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT chart_name, chart_code, chart_type FROM spc_control_charts WHERE id = ?", (chart_id,))
+    chart = cursor.fetchone()
+
+    if not chart:
+        conn.close()
+        flash('Chart not found', 'danger')
+        return redirect(url_for('spc.charts_list'))
+
+    cursor.execute("""
+        SELECT m.measurement_date, m.measurement_group, m.sample_size,
+               m.average, m.range_val, m.std_dev, m.control_status,
+               s.usl, s.lsl, s.target
+        FROM spc_measurement_data m
+        LEFT JOIN spc_specification_limits s ON m.chart_id = s.chart_id AND s.is_active = 1
+        WHERE m.chart_id = ?
+        ORDER BY m.measurement_date ASC
+    """, (chart_id,))
+    data = cursor.fetchall()
+    conn.close()
+
+    # Create CSV
+    from csv import writer
+    output = BytesIO()
+    csv_writer = writer(output)
+
+    # Header
+    csv_writer.writerow([
+        'Date', 'Group', 'Sample Size', 'Mean', 'Range', 'Std Dev',
+        'Status', 'USL', 'Target', 'LSL'
+    ])
+
+    # Data rows
+    for row in data:
+        csv_writer.writerow([
+            row['measurement_date'],
+            row['measurement_group'],
+            row['sample_size'],
+            f"{row['average']:.6f}" if row['average'] else '',
+            f"{row['range_val']:.6f}" if row['range_val'] else '',
+            f"{row['std_dev']:.6f}" if row['std_dev'] else '',
+            row['control_status'],
+            f"{row['usl']:.4f}" if row['usl'] else '',
+            f"{row['target']:.4f}" if row['target'] else '',
+            f"{row['lsl']:.4f}" if row['lsl'] else ''
+        ])
+
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f"ControlChart_{chart['chart_code']}_{datetime.now().strftime('%Y%m%d')}.csv"
+    )
+
+
+@spc_bp.route('/export/alerts')
+def export_alerts():
+    """Export alerts to CSV."""
+    status = request.args.get('status', 'ALL')
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    if status == 'ALL':
+        cursor.execute("""
+            SELECT a.alert_number, a.rule_violated, a.rule_description,
+                   a.severity, a.status, a.detected_at, a.acknowledged_at,
+                   a.resolved_at, c.chart_name, c.chart_code
+            FROM spc_anomaly_alerts a
+            LEFT JOIN spc_control_charts c ON a.chart_id = c.id
+            ORDER BY a.detected_at DESC
+        """)
+    else:
+        cursor.execute("""
+            SELECT a.alert_number, a.rule_violated, a.rule_description,
+                   a.severity, a.status, a.detected_at, a.acknowledged_at,
+                   a.resolved_at, c.chart_name, c.chart_code
+            FROM spc_anomaly_alerts a
+            LEFT JOIN spc_control_charts c ON a.chart_id = c.id
+            WHERE a.status = ?
+            ORDER BY a.detected_at DESC
+        """, (status,))
+
+    alerts = cursor.fetchall()
+    conn.close()
+
+    from csv import writer
+    output = BytesIO()
+    csv_writer = writer(output)
+
+    csv_writer.writerow([
+        'Alert Number', 'Chart', 'Rule Violated', 'Description',
+        'Severity', 'Status', 'Detected', 'Acknowledged', 'Resolved'
+    ])
+
+    for alert in alerts:
+        csv_writer.writerow([
+            alert['alert_number'],
+            alert['chart_name'] or alert['chart_code'],
+            alert['rule_violated'],
+            alert['rule_description'],
+            alert['severity'],
+            alert['status'],
+            alert['detected_at'],
+            alert['acknowledged_at'] or '',
+            alert['resolved_at'] or ''
+        ])
+
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f"SPC_Alerts_{datetime.now().strftime('%Y%m%d')}.csv"
+    )
+
+
+@spc_bp.route('/export/equipment')
+def export_equipment():
+    """Export equipment calibration status to CSV."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT e.equipment_code, e.equipment_name, e.equipment_type,
+               e.manufacturer, e.model_number, e.serial_number,
+               e.calibration_status, e.last_calibration_date,
+               e.next_calibration_date, e.calibration_interval_days,
+               (SELECT COUNT(*) FROM spc_calibration_records WHERE equipment_id = e.id) as calibration_count
+        FROM spc_equipment_registry e
+        WHERE e.is_active = 1
+        ORDER BY e.equipment_name
+    """)
+    equipment = cursor.fetchall()
+    conn.close()
+
+    from csv import writer
+    output = BytesIO()
+    csv_writer = writer(output)
+
+    csv_writer.writerow([
+        'Code', 'Name', 'Type', 'Manufacturer', 'Model', 'Serial',
+        'Status', 'Last Calibration', 'Next Due', 'Interval (days)', 'Calibrations'
+    ])
+
+    for eq in equipment:
+        csv_writer.writerow([
+            eq['equipment_code'],
+            eq['equipment_name'],
+            eq['equipment_type'],
+            eq['manufacturer'] or '',
+            eq['model_number'] or '',
+            eq['serial_number'] or '',
+            eq['calibration_status'],
+            eq['last_calibration_date'] or 'Never',
+            eq['next_calibration_date'] or 'Not Set',
+            eq['calibration_interval_days'],
+            eq['calibration_count']
+        ])
+
+    output.seek(0)
+
+    return send_file(
+        output,
+        mimetype='text/csv',
+        as_attachment=True,
+        download_name=f"SPC_Equipment_{datetime.now().strftime('%Y%m%d')}.csv"
+    )
+
+
+@spc_bp.route('/api/we-rules/evaluate', methods=['POST'])
+def api_evaluate_we_rules():
+    """Evaluate Western Electric rules for provided data."""
+    try:
+        data = request.get_json()
+
+        values = [float(x) for x in data.get('values', [])]
+        mean = float(data.get('mean', 0))
+        std_dev = float(data.get('std_dev', 0))
+
+        if len(values) < 5:
+            return jsonify({'error': 'Minimum 5 data points required'}), 400
+
+        if std_dev <= 0:
+            return jsonify({'error': 'Standard deviation must be positive'}), 400
+
+        violations = SPCCalculator.check_western_electric_rules(values, mean, std_dev, {})
+
+        return jsonify({
+            'violations': violations,
+            'total_violations': len(violations),
+            'has_critical': any(v['severity'] == 'CRITICAL' for v in violations),
+            'has_major': any(v['severity'] == 'MAJOR' for v in violations),
+            'status': 'OUT_OF_CONTROL' if any(v['severity'] in ['CRITICAL', 'MAJOR'] for v in violations) else 'IN_CONTROL'
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@spc_bp.route('/api/chart-types')
+def api_chart_types():
+    """Get available chart types."""
+    chart_types = [
+        {'code': 'I_MR', 'name': 'Individual-Moving Range (I-MR)', 'description': 'For individual measurements'},
+        {'code': 'XBAR_R', 'name': 'X-bar and R Chart', 'description': 'Variables chart for subgroup sizes 2-10'},
+        {'code': 'XBAR_S', 'name': 'X-bar and S Chart', 'description': 'Variables chart for subgroup sizes >10'},
+        {'code': 'C', 'name': 'C Chart', 'description': 'Count of defects'},
+        {'code': 'P', 'name': 'P Chart', 'description': 'Proportion defective'},
+        {'code': 'NP', 'name': 'NP Chart', 'description': 'Number of defective items'},
+        {'code': 'U', 'name': 'U Chart', 'description': 'Defects per unit'},
+    ]
+    return jsonify(chart_types)
+
+
+@spc_bp.route('/api/aql-table')
+def api_aql_table():
+    """Get AQL sampling table."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM spc_aql_levels ORDER BY lot_size_min")
+    rows = cursor.fetchall()
+    conn.close()
+
+    aql_levels = [dict(row) for row in rows]
+
+    return jsonify({
+        'aql_values': [0.010, 0.015, 0.025, 0.040, 0.065, 0.100, 0.150, 0.250, 0.400, 0.650, 1.0],
+        'data': aql_levels
+    })
+
+
+@spc_bp.route('/api/equipment/status')
+def api_equipment_status():
+    """Get equipment calibration status summary."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT calibration_status, COUNT(*) as count
+        FROM spc_equipment_registry
+        WHERE is_active = 1
+        GROUP BY calibration_status
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+
+    status_counts = {row['calibration_status']: row['count'] for row in rows}
+
+    total = sum(status_counts.values())
+    overdue = status_counts.get('OVERDUE', 0)
+    due = status_counts.get('DUE', 0)
+    current = status_counts.get('CURRENT', 0)
+
+    return jsonify({
+        'total': total,
+        'current': current,
+        'due': due,
+        'overdue': overdue,
+        'by_status': status_counts,
+        'compliance_rate': round((current / total * 100) if total > 0 else 100, 2)
+    })
+
+
+@spc_bp.route('/api/dashboard/summary')
+def api_dashboard_summary():
+    """Get dashboard summary data for charts."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Measurement trends (last 30 days)
+    cursor.execute("""
+        SELECT DATE(measurement_date) as date,
+               AVG(average) as avg_value,
+               COUNT(*) as measurement_count,
+               SUM(CASE WHEN control_status != 'IN_CONTROL' THEN 1 ELSE 0 END) as ooc_count
+        FROM spc_measurement_data
+        WHERE measurement_date >= datetime('now', '-30 days')
+        GROUP BY DATE(measurement_date)
+        ORDER BY date ASC
+    """)
+    trends = cursor.fetchall()
+
+    # Capability distribution
+    cursor.execute("""
+        SELECT assessment, COUNT(*) as count
+        FROM spc_capability_studies
+        GROUP BY assessment
+    """)
+    capability_dist = cursor.fetchall()
+
+    # Chart types distribution
+    cursor.execute("""
+        SELECT c.chart_type, COUNT(m.id) as measurement_count
+        FROM spc_control_charts c
+        LEFT JOIN spc_measurement_data m ON c.id = m.chart_id
+        GROUP BY c.chart_type
+    """)
+    chart_types = cursor.fetchall()
+
+    conn.close()
+
+    return jsonify({
+        'measurement_trends': [dict(row) for row in trends],
+        'capability_distribution': {row['assessment']: row['count'] for row in capability_dist},
+        'chart_types_distribution': {row['chart_type']: row['measurement_count'] for row in chart_types}
+    })

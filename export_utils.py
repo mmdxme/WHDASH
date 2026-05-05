@@ -6,8 +6,14 @@ Supports 20 export types: CSV, Excel (text/general), JSON, XML, TXT, PDF, DOCX, 
 Printable, Barcode Labels, API, Email, ZIP, Backup, SQL Dump, Dashboard, Summary,
 Detailed, and Audit Log exports.
 
+Supports streaming/chunked exports for large datasets:
+- CHUNK_SIZE (default 5000): Rows per batch for batch-based exports
+- STREAMING_THRESHOLD (default 10000): Auto-enable streaming above this row count
+- export_to_csv_streaming(): Generator-based CSV export yielding chunks
+- export_to_excel_streaming(): Batch-based Excel export for large datasets
+
 Usage:
-    from export_utils import send_export_response, export_to_csv, export_to_pdf, etc.
+    from export_utils import send_export_response, export_to_csv, export_to_pdf, export_to_csv_streaming, export_to_excel_streaming
 """
 
 from flask import make_response, jsonify
@@ -24,6 +30,159 @@ from functools import reduce
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
+
+
+# =============================================================================
+# STREAMING EXPORT CONFIGURATION
+# =============================================================================
+
+# Chunk size for streaming exports (rows per batch)
+CHUNK_SIZE = 5000
+
+# Threshold for automatic streaming (rows). Exports larger than this use streaming.
+STREAMING_THRESHOLD = 10000
+
+
+# =============================================================================
+# GENERATOR-BASED CSV STREAMING EXPORT
+# =============================================================================
+
+def export_to_csv_streaming(data_iterator, filename, columns):
+    """
+    Export data to CSV format using generator-based streaming.
+    Yields chunks of CSV data to avoid loading all data into memory.
+
+    Args:
+        data_iterator: Generator or iterable yielding row dictionaries
+        filename: Name for the file (without extension)
+        columns: List of column keys to include
+
+    Yields:
+        Bytes chunks of CSV data (can be streamed to response)
+    """
+    # BOM for Excel UTF-8 compatibility
+    yield '\ufeff'.encode('utf-8-sig')
+
+    # Yield header row
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore')
+    writer.writeheader()
+    yield output.getvalue().encode('utf-8-sig')
+
+    # Yield data rows in chunks
+    chunk_buffer = []
+    for row in data_iterator:
+        row_data = {}
+        for col in columns:
+            value = _get_nested_value(row, col)
+            row_data[col] = _sanitize_value(value)
+        chunk_buffer.append(row_data)
+
+        if len(chunk_buffer) >= CHUNK_SIZE:
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore')
+            for r in chunk_buffer:
+                writer.writerow(r)
+            yield output.getvalue().encode('utf-8-sig')
+            chunk_buffer = []
+
+    # Yield remaining rows
+    if chunk_buffer:
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=columns, extrasaction='ignore')
+        for r in chunk_buffer:
+            writer.writerow(r)
+        yield output.getvalue().encode('utf-8-sig')
+
+
+# =============================================================================
+# BATCH-BASED EXCEL STREAMING EXPORT
+# =============================================================================
+
+def export_to_excel_streaming(data_iterator, filename, columns, total_rows=None):
+    """
+    Export data to Excel format using batch writes.
+    Writes rows in chunks to avoid memory issues with large datasets.
+
+    Args:
+        data_iterator: Generator or iterable yielding row dictionaries
+        filename: Name for the file (without extension)
+        columns: List of column keys/headers
+        total_rows: Optional total row count for progress tracking
+
+    Returns:
+        BytesIO containing Excel file (written in batches)
+    """
+    wb = Workbook()
+    ws = wb.active
+    ws.title = filename[:31] if len(filename) > 31 else filename
+
+    # Header style
+    header_fill = PatternFill(start_color="366092", end_color="366092", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # Write header
+    for col_idx, col_name in enumerate(columns, 1):
+        cell = ws.cell(row=1, column=col_idx, value=col_name)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = thin_border
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    # Track column widths for auto-adjustment
+    col_widths = [len(str(col)) for col in columns]
+
+    # Write data rows in batches
+    row_idx = 2
+    batch = []
+
+    for row in data_iterator:
+        batch.append(row)
+
+        if len(batch) >= CHUNK_SIZE:
+            _write_excel_batch(ws, batch, columns, row_idx, col_widths, thin_border)
+            row_idx += CHUNK_SIZE
+            batch = []
+
+    # Write remaining batch
+    if batch:
+        _write_excel_batch(ws, batch, columns, row_idx, col_widths, thin_border)
+
+    # Auto-adjust column widths
+    for col_idx, max_width in enumerate(col_widths, 1):
+        col_letter = get_column_letter(col_idx)
+        ws.column_dimensions[col_letter].width = min(max_width + 2, 50)
+
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output.getvalue()
+
+
+def _write_excel_batch(ws, batch, columns, start_row, col_widths, thin_border):
+    """Write a batch of rows to worksheet with text number format."""
+    for row_idx_offset, row in enumerate(batch, start_row):
+        for col_idx, col_key in enumerate(columns, 1):
+            value = _get_nested_value(row, col_key)
+            cell = ws.cell(row=row_idx_offset, column=col_idx)
+            cell.value = _sanitize_value(value)
+            cell.number_format = '@'
+            cell.border = thin_border
+            if isinstance(value, (int, float)):
+                cell.alignment = Alignment(horizontal='right')
+            else:
+                cell.alignment = Alignment(horizontal='left')
+
+            # Track max width for column adjustment
+            value_str = str(value) if value is not None else ''
+            if len(value_str) > col_widths[col_idx - 1]:
+                col_widths[col_idx - 1] = len(value_str)
 
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.units import inch
@@ -1362,16 +1521,18 @@ def export_audit_log(data, filename, columns):
 # RESPONSE HELPERS
 # =============================================================================
 
-def send_export_response(data, export_type, filename, columns, title=None):
+def send_export_response(data, export_type, filename, columns, title=None, data_iterator=None):
     """
     Generate Flask response for the appropriate export type.
+    Automatically uses streaming for large datasets (> STREAMING_THRESHOLD rows).
 
     Args:
-        data: Data to export
+        data: Data to export (list of dicts or iterable)
         export_type: Type of export ('csv', 'excel_text', 'excel_general', etc.)
         filename: Base filename without extension
         columns: List of column keys/headers
         title: Optional title for reports
+        data_iterator: Optional generator/iterator for streaming large datasets
 
     Returns:
         Flask response object with appropriate headers
@@ -1379,6 +1540,26 @@ def send_export_response(data, export_type, filename, columns, title=None):
     # Provide sample data if data is empty or None
     if not data:
         data = _get_sample_data(columns, filename)
+
+    # Handle streaming for large datasets
+    if data_iterator is not None:
+        return _stream_export_response(data_iterator, export_type, filename, columns, title)
+
+    # Check if data is a generator or iterator (can be consumed once)
+    is_streaming = hasattr(data, '__iter__') and not isinstance(data, (list, dict, str, bytes))
+
+    # Count rows if needed for threshold check
+    row_count = None
+    if not is_streaming and hasattr(data, '__len__'):
+        row_count = len(data)
+    elif is_streaming:
+        # For generators, we need to materialize to count
+        data = list(data)
+        row_count = len(data)
+
+    # Use streaming for large datasets automatically
+    if row_count is not None and row_count > STREAMING_THRESHOLD:
+        return _stream_export_response(iter(data), export_type, filename, columns, title)
 
     export_handlers = {
         'csv': lambda: (export_to_csv(data, filename, columns), 'text/csv; charset=utf-8-sig', '.csv'),
@@ -1414,6 +1595,53 @@ def send_export_response(data, export_type, filename, columns, title=None):
     response.headers['X-Generated-At'] = datetime.now().isoformat()
 
     return response
+
+
+def _stream_export_response(data_iterator, export_type, filename, columns, title=None):
+    """
+    Generate streaming Flask response for large dataset exports.
+    Uses generators to avoid loading all data into memory.
+
+    Args:
+        data_iterator: Generator yielding row dictionaries
+        export_type: Type of export ('csv' or 'excel' supported for streaming)
+        filename: Base filename without extension
+        columns: List of column keys/headers
+        title: Optional title for reports
+
+    Returns:
+        Flask streaming response object
+    """
+    if export_type == 'csv':
+        # Generator-based CSV streaming - yields chunks
+        def generate():
+            for chunk in export_to_csv_streaming(data_iterator, filename, columns):
+                yield chunk
+
+        response = make_response(generate())
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8-sig'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}.csv'
+        response.headers['X-Export-Type'] = 'csv'
+        response.headers['X-Generated-At'] = datetime.now().isoformat()
+        response.headers['X-Streaming'] = 'true'
+        return response
+
+    elif export_type in ('excel_text', 'excel_general'):
+        # Batch-based Excel export (still returns BytesIO but uses batch writes)
+        content = export_to_excel_streaming(data_iterator, filename, columns)
+        response = make_response(content)
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}.xlsx'
+        response.headers['X-Export-Type'] = export_type
+        response.headers['X-Generated-At'] = datetime.now().isoformat()
+        response.headers['X-Streaming'] = 'true'
+        return response
+
+    else:
+        # Fall back to regular export for unsupported streaming types
+        # Materialize the iterator
+        data = list(data_iterator)
+        return send_export_response(data, export_type, filename, columns, title)
 
 
 def _get_sample_data(columns, filename):

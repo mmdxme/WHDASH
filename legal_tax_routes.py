@@ -92,10 +92,7 @@ from legal_tax_models import (
 )
 
 # Import permissions helper
-def check_permission(user_id, module, resource, action):
-    """Check if user has a specific permission."""
-    from permissions import user_has_permission
-    return user_has_permission(user_id, module, resource, action)
+from permissions import require_permission
 
 # Import export utilities
 from export_utils import send_export_response, get_export_columns
@@ -133,29 +130,6 @@ LEGAL_TAX_EXPORT_COLUMNS = {
     'audit_packs': ['pack_number', 'pack_name', 'pack_type', 'period', 'completeness_score', 'status', 'generated_at'],
     'dashboard_stats': ['metric', 'value'],
 }
-
-
-def require_permission(module, resource, action):
-    """Decorator to require a specific permission."""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            user_id = session.get('user_id')
-            if not user_id:
-                if request.is_json:
-                    return jsonify({'error': 'Authentication required'}), 401
-                flash("Please login to access this page.", "error")
-                return redirect(url_for('login'))
-
-            if not check_permission(user_id, module, resource, action):
-                if request.is_json:
-                    return jsonify({'error': 'Access denied'}), 403
-                flash(f"You don't have permission to {action} {resource}.", "error")
-                return redirect(url_for('index'))
-
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
 
 
 def get_current_user_id():

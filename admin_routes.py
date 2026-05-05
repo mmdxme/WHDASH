@@ -24,7 +24,7 @@ from functools import wraps
 import json
 
 from database import (
-    get_db, get_db_context, get_one, get_all, 
+    get_db, get_db_context, get_one, get_all,
     log_audit, get_user_notifications
 )
 from permissions import (
@@ -48,6 +48,9 @@ from navigation import (
     prepare_menu_for_template
 )
 from theme_engine import get_available_themes
+
+# Note: CSRF protection is applied inline within route handlers where needed
+# to avoid circular import issues with app.py
 
 
 def register_admin_routes(app):
@@ -123,6 +126,41 @@ def register_admin_routes(app):
         
         return render_template('admin/settings/index.html', **context)
     
+    # Safe table names for admin routes - used to prevent SQL injection
+    _ALLOWED_TABLE_NAMES = {
+        'companies', 'branches', 'departments', 'divisions', 'teams', 'warehouses',
+        'users', 'roles', 'permissions', 'settings', 'notifications',
+        'documents', 'document_categories', 'workflows', 'approvals'
+    }
+
+    # Helper functions for safe DB access
+    def _safe_count(table_name):
+        """Safe row count that handles missing tables with table name validation."""
+        import logging
+        _logger = logging.getLogger('admin_routes')
+
+        # Validate table name against allowlist to prevent SQL injection
+        if table_name not in _ALLOWED_TABLE_NAMES:
+            _logger.warning(f"Table '{table_name}' is not in the allowed list - rejecting")
+            return 0
+
+        try:
+            result = get_one(f"SELECT COUNT(*) as cnt FROM {table_name} WHERE is_active = 1")
+            return result['cnt'] if result else 0
+        except Exception as e:
+            _logger.warning(f"Table '{table_name}' does not exist or query failed: {e}")
+            return 0
+
+    def _get_all_safe(sql, params=None):
+        """Safe get_all that handles table not existing."""
+        import logging
+        _logger = logging.getLogger('admin_routes')
+        try:
+            return get_all(sql, params) if params else get_all(sql)
+        except Exception as e:
+            _logger.warning(f"Query failed: {e}")
+            return []
+
     @app.route('/admin/settings/<category>')
     @admin_require_login
     def admin_settings_category(category):
@@ -145,7 +183,66 @@ def register_admin_routes(app):
         # Load settings for this category
         context['settings'] = get_settings_by_category(category.upper())
         context['default_settings'] = _get_default_settings_for_category(category.upper())
-        
+        # Always provide stats to avoid undefined errors in template
+        context['stats'] = {}
+
+        # Add sample data for AUDIT category dashboard
+        if category.upper() == 'AUDIT':
+            context['sample_data'] = {
+                'security_events': '247',
+                'logs_today': '1,847',
+                'failed_logins': '23',
+                'compliance_score': '94%'
+            }
+
+        # Add ORGANIZATION data — companies, branches, departments, divisions, teams, warehouses
+        if category.upper() == 'ORGANIZATION':
+            context['stats'] = {
+                'companies': _safe_count('companies'),
+                'branches': _safe_count('branches'),
+                'departments': _safe_count('departments'),
+                'divisions': _safe_count('divisions'),
+                'teams': _safe_count('teams'),
+                'warehouses': _safe_count('warehouses'),
+            }
+            context['org_companies'] = _get_all_safe("""
+                SELECT c.*,
+                    (SELECT COUNT(*) FROM branches WHERE company_id = c.id) as branch_count
+                FROM companies c ORDER BY c.name
+            """)
+            context['org_branches'] = _get_all_safe("""
+                SELECT b.*, c.name as company_name
+                FROM branches b
+                LEFT JOIN companies c ON b.company_id = c.id
+                ORDER BY b.name
+            """)
+            context['org_departments'] = _get_all_safe("""
+                SELECT d.*,
+                    (SELECT COUNT(*) FROM departments d2 WHERE d2.parent_department_id = d.id) as sub_count,
+                    c.name as company_name
+                FROM departments d
+                LEFT JOIN companies c ON d.company_id = c.id
+                ORDER BY d.name
+            """)
+            context['org_divisions'] = _get_all_safe("""
+                SELECT d.*, c.name as company_name
+                FROM divisions d
+                LEFT JOIN companies c ON d.company_id = c.id
+                WHERE d.is_active = 1 ORDER BY d.name
+            """)
+            context['org_warehouses'] = _get_all_safe("""
+                SELECT w.*, c.name as company_name
+                FROM warehouses w
+                LEFT JOIN companies c ON w.company_id = c.id
+                ORDER BY w.name
+            """)
+            context['org_teams'] = _get_all_safe("""
+                SELECT t.*, d.name as department_name
+                FROM teams t
+                LEFT JOIN departments d ON t.department_id = d.id
+                ORDER BY t.name
+            """)
+
         # Handle form submission
         if request.method == 'POST':
             _handle_settings_save(category.upper(), user_id)
@@ -153,32 +250,135 @@ def register_admin_routes(app):
             return redirect(url_for('admin_settings_category', category=category))
         
         return render_template('admin/settings/category.html', **context)
-    
+
+    @app.route('/admin/settings/ROLES')
+    @admin_require_login
+    def admin_settings_roles():
+        """Dedicated Roles & Permissions management page with full SAP-style UI."""
+        user_id = session.get('user_id')
+        language = session.get('language', 'en')
+
+        if session.get('role_name') != 'Global Admin':
+            if not user_has_permission(user_id, 'platform', 'roles', 'view'):
+                flash("Access denied.", "error")
+                return redirect(url_for('index'))
+
+        context = _get_admin_context(user_id, language)
+        context['page_title'] = 'Roles & Permissions'
+        context['category_key'] = 'ROLES'
+        context['category_info'] = ADMIN_CATEGORIES.get('ROLES', {})
+
+        # Get all roles with counts
+        all_roles = get_all("""
+            SELECT r.*,
+                   (SELECT COUNT(*) FROM users WHERE role_id = r.id AND is_active = 1) as user_count,
+                   (SELECT COUNT(*) FROM role_permissions WHERE role_id = r.id) as permission_count,
+                   c.name as company_name
+            FROM roles r
+            LEFT JOIN companies c ON r.company_id = c.id
+            WHERE r.is_active = 1
+            ORDER BY r.role_group, r.role_name
+        """)
+
+        context['all_roles'] = all_roles
+
+        # Get role summary stats
+        context['roles_summary'] = {
+            'total': len(all_roles),
+            'active': len([r for r in all_roles if r.get('is_active')]),
+            'system': len([r for r in all_roles if r.get('is_system')]),
+            'custom': len([r for r in all_roles if not r.get('is_system')]),
+            'users_assigned': sum(r.get('user_count', 0) for r in all_roles)
+        }
+
+        context['companies'] = get_all("SELECT * FROM companies WHERE is_active = 1 ORDER BY name")
+        context['modules'] = MODULE_PERMISSIONS
+
+        # Get selected role from query param or default to first
+        selected_role_id = request.args.get('role', type=int)
+        selected_role = None
+        if selected_role_id:
+            selected_role = get_one("""
+                SELECT r.*, c.name as company_name
+                FROM roles r
+                LEFT JOIN companies c ON r.company_id = c.id
+                WHERE r.id = ? AND r.is_active = 1
+            """, (selected_role_id,))
+        elif all_roles:
+            selected_role = all_roles[0]
+            selected_role_id = selected_role['id']
+
+        context['selected_role'] = selected_role
+
+        # Get users assigned to selected role
+        role_users = []
+        if selected_role_id:
+            role_users = get_all("""
+                SELECT u.id, u.user_name, u.login_name, u.department, u.is_active
+                FROM users u
+                WHERE u.role_id = ?
+                ORDER BY u.user_name
+            """, (selected_role_id,))
+        context['role_users'] = role_users
+
+        # Get permissions for selected role
+        role_permissions = []
+        if selected_role_id:
+            perms = get_all("""
+                SELECT module, resource, GROUP_CONCAT(action) as actions
+                FROM role_permissions
+                WHERE role_id = ?
+                GROUP BY module, resource
+            """, (selected_role_id,))
+            role_permissions = [{'module': p['module'], 'resource': p['resource'], 'actions': p['actions'].split(',') if p['actions'] else []} for p in perms]
+        context['role_permissions'] = role_permissions
+
+        # Get audit log for selected role
+        role_audit_log = []
+        if selected_role_id:
+            role_audit_log = get_all("""
+                SELECT pal.*, u.user_name
+                FROM platform_audit_log pal
+                LEFT JOIN users u ON pal.user_id = u.id
+                WHERE pal.entity_type = 'role' AND pal.entity_id = ?
+                ORDER BY pal.created_at DESC
+                LIMIT 50
+            """, (str(selected_role_id),))
+        context['role_audit_log'] = role_audit_log
+
+        return render_template('admin/settings/roles.html', **context)
+
     @app.route('/admin/api/settings', methods=['GET', 'POST'])
     @admin_require_login
     def admin_api_settings():
         """API endpoint for settings operations."""
         user_id = session.get('user_id')
-        
-        if not user_has_permission(user_id, 'platform', 'settings', 'edit'):
-            return jsonify({'error': 'Access denied'}), 403
-        
+
         if request.method == 'POST':
+            # Validate CSRF for POST requests
+            from app import validate_csrf_token
+            token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+            if not validate_csrf_token(token):
+                return jsonify({'error': 'CSRF token required'}), 403
+
+            if not user_has_permission(user_id, 'platform', 'settings', 'edit'):
+                return jsonify({'error': 'Access denied'}), 403
+
             data = request.get_json()
             key = data.get('key')
             value = data.get('value')
             category = data.get('category', 'GENERAL')
-            
+
             if not key:
                 return jsonify({'error': 'Key is required'}), 400
-            
+
             success = set_setting(key, value, category, 'GLOBAL', None, None, user_id)
-            
+
             if success:
                 return jsonify({'success': True})
             else:
                 return jsonify({'error': 'Failed to save setting'}), 500
-        
+
         # GET - return all settings
         settings = get_settings_by_category(request.args.get('category', 'GENERAL'))
         return jsonify(settings)
@@ -187,6 +387,12 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_api_settings_bulk():
         """Bulk save multiple settings."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            return jsonify({'error': 'CSRF token required'}), 403
+
         user_id = session.get('user_id')
         
         if not user_has_permission(user_id, 'platform', 'settings', 'edit'):
@@ -269,10 +475,17 @@ def register_admin_routes(app):
     def admin_api_master_data(md_type):
         """API for master data CRUD operations."""
         user_id = session.get('user_id')
-        
-        if not user_has_permission(user_id, 'platform', 'settings', 'edit'):
-            return jsonify({'error': 'Access denied'}), 403
-        
+
+        if request.method in ('POST', 'PUT', 'DELETE'):
+            # Validate CSRF for mutating requests
+            from app import validate_csrf_token
+            token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+            if not validate_csrf_token(token):
+                return jsonify({'error': 'CSRF token required'}), 403
+
+            if not user_has_permission(user_id, 'platform', 'settings', 'edit'):
+                return jsonify({'error': 'Access denied'}), 403
+
         if request.method == 'GET':
             record_id = request.args.get('id')
             if record_id:
@@ -281,15 +494,15 @@ def register_admin_routes(app):
             else:
                 records = get_master_data(md_type, is_active=True)
                 return jsonify(records)
-        
+
         data = request.get_json()
-        
+
         if request.method == 'POST':
             record_id, error = create_master_data(md_type, data, user_id)
             if error:
                 return jsonify({'error': error}), 400
             return jsonify({'success': True, 'id': record_id})
-        
+
         elif request.method == 'PUT':
             record_id = data.get('id')
             if not record_id:
@@ -298,7 +511,7 @@ def register_admin_routes(app):
             if error:
                 return jsonify({'error': error}), 400
             return jsonify({'success': True})
-        
+
         elif request.method == 'DELETE':
             record_id = data.get('id')
             if not record_id:
@@ -467,13 +680,19 @@ def register_admin_routes(app):
     def admin_api_notification_rules():
         """API for notification rules."""
         user_id = session.get('user_id')
-        
-        if not user_has_permission(user_id, 'platform', 'settings', 'edit'):
-            return jsonify({'error': 'Access denied'}), 403
-        
+
         if request.method == 'POST':
+            # Validate CSRF for POST requests
+            from app import validate_csrf_token
+            token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+            if not validate_csrf_token(token):
+                return jsonify({'error': 'CSRF token required'}), 403
+
+            if not user_has_permission(user_id, 'platform', 'settings', 'edit'):
+                return jsonify({'error': 'Access denied'}), 403
+
             data = request.get_json()
-            
+
             with get_db_context() as db:
                 existing = db.execute(
                     "SELECT id FROM notification_rules WHERE rule_code = ?",
@@ -625,7 +844,7 @@ def register_admin_routes(app):
             'language': language,
             'direction': 'rtl' if language in ['ar', 'fa'] else 'ltr',
             'menu': prepare_menu_for_template(menu, current_path),
-            'permissions': user_perms,
+            'permissions': sorted(user_perms) if user_perms else [],
             'available_themes': get_available_themes(),
             'notifications': get_user_notifications(user_id, unread_only=True, limit=10),
             'categories': ADMIN_CATEGORIES,
@@ -633,27 +852,68 @@ def register_admin_routes(app):
         }
     
     def _get_admin_stats():
-        """Get dashboard statistics."""
+        """Get comprehensive dashboard statistics."""
+        import logging
+        _logger = logging.getLogger('admin_routes')
+
+        def safe_get_cnt(sql):
+            """Safely execute count query and return 0 on failure."""
+            try:
+                result = get_one(sql)
+                return result['cnt'] if result and 'cnt' in result else 0
+            except Exception as e:
+                _logger.warning(f"Count query failed: {e}")
+                return 0
+
         stats = {
-            'total_settings': get_one("SELECT COUNT(*) as cnt FROM admin_settings WHERE is_active = 1")['cnt'],
-            'total_users': get_one("SELECT COUNT(*) as cnt FROM users")['cnt'],
-            'total_roles': get_one("SELECT COUNT(*) as cnt FROM roles")['cnt'],
-            'total_workflows': get_one("SELECT COUNT(*) as cnt FROM workflows WHERE is_active = 1")['cnt'],
-            'total_numbering_rules': get_one("SELECT COUNT(*) as cnt FROM numbering_rules WHERE is_active = 1")['cnt'],
+            'total_settings': safe_get_cnt("SELECT COUNT(*) as cnt FROM admin_settings WHERE is_active = 1"),
+            'total_users': safe_get_cnt("SELECT COUNT(*) as cnt FROM users"),
+            'total_roles': safe_get_cnt("SELECT COUNT(*) as cnt FROM roles"),
+            'total_workflows': safe_get_cnt("SELECT COUNT(*) as cnt FROM workflows WHERE is_active = 1"),
+            'total_numbering_rules': safe_get_cnt("SELECT COUNT(*) as cnt FROM numbering_rules WHERE is_active = 1"),
         }
-        
+
+        # Organization counts
+        stats['companies'] = safe_get_cnt("SELECT COUNT(*) as cnt FROM companies WHERE is_active = 1")
+        stats['branches'] = safe_get_cnt("SELECT COUNT(*) as cnt FROM branches WHERE is_active = 1")
+        stats['warehouses'] = safe_get_cnt("SELECT COUNT(*) as cnt FROM warehouses WHERE is_active = 1")
+
+        # Business entity counts
+        stats['categories'] = safe_get_cnt("SELECT COUNT(*) as cnt FROM categories")
+        stats['brands'] = safe_get_cnt("SELECT COUNT(*) as cnt FROM brands")
+        stats['suppliers'] = safe_get_cnt("SELECT COUNT(*) as cnt FROM suppliers WHERE status = 'Active'")
+        stats['customers'] = safe_get_cnt("SELECT COUNT(*) as cnt FROM customers WHERE is_active = 1")
+        stats['vehicles'] = safe_get_cnt("SELECT COUNT(*) as cnt FROM vehicles WHERE status = 'Active'")
+        stats['locations'] = safe_get_cnt("SELECT COUNT(*) as cnt FROM locations WHERE is_active = 1")
+
         # Count master data records
         md_counts = {}
-        for md_type in MASTER_DATA_TYPES.keys():
+        md_types_list = []
+        # Validate table name prefix to prevent SQL injection
+        valid_md_prefixes = set()
+        for key in MASTER_DATA_TYPES.keys():
+            # Only allow alphanumeric + underscore, max 20 chars
+            if key and isinstance(key, str) and len(key) <= 20 and key.replace('_', '').isalnum():
+                valid_md_prefixes.add(key)
+
+        for md_type in valid_md_prefixes:
             table_name = f"md_{md_type}"
             try:
                 count = get_one(f"SELECT COUNT(*) as cnt FROM {table_name} WHERE is_active = 1")
-                md_counts[md_type] = count['cnt'] if count else 0
-            except:
+                md_counts[md_type] = count['cnt'] if count and 'cnt' in count else 0
+                if count and count['cnt'] > 0:
+                    md_types_list.append(md_type)
+            except Exception as e:
+                _logger.warning(f"Master data table '{table_name}' query failed: {e}")
                 md_counts[md_type] = 0
-        
+
         stats['master_data_counts'] = md_counts
-        
+        stats['master_data_types'] = md_types_list
+
+        # Additional stats
+        stats['notification_rules'] = safe_get_cnt("SELECT COUNT(*) as cnt FROM notification_rules WHERE is_active = 1")
+        stats['numbering_sequences'] = safe_get_cnt("SELECT COUNT(*) as cnt FROM numbering_sequences")
+
         return stats
     
     def _get_default_settings_for_category(category):
@@ -720,28 +980,77 @@ def register_admin_routes(app):
         """Handle master data create form submission."""
         md_info = MASTER_DATA_TYPES.get(md_type, {})
         fields = md_info.get('fields', [])
-        
+
         data = {}
         for field in fields:
             if field in ['is_active']:
                 data[field] = 1 if request.form.get(field) == 'on' else 0
+            elif field in ['category', 'channel']:
+                # These go into extra_data for lead_source
+                pass
             else:
                 data[field] = request.form.get(field, '')
-        
+
+        # Handle extra_data for priority_level
+        if md_type == 'priority_level':
+            extra_data = {}
+            level = request.form.get('level', '')
+            response_hours = request.form.get('response_hours', '')
+            resolution_hours = request.form.get('resolution_hours', '')
+            color = request.form.get('color', '')
+            escalation_level = request.form.get('escalation_level', '')
+            if level:
+                extra_data['level'] = int(level)
+            if response_hours:
+                extra_data['response_hours'] = int(response_hours)
+            if resolution_hours:
+                extra_data['resolution_hours'] = int(resolution_hours)
+            if color:
+                extra_data['color'] = color
+            if escalation_level:
+                extra_data['escalation_level'] = escalation_level
+            if extra_data:
+                import json
+                data['extra_data'] = json.dumps(extra_data)
+
         create_master_data(md_type, data, user_id)
     
     def _handle_master_data_update(md_type, record_id, user_id):
         """Handle master data update form submission."""
         md_info = MASTER_DATA_TYPES.get(md_type, {})
         fields = md_info.get('fields', [])
-        
+
         data = {}
         for field in fields:
             if field in ['is_active']:
-                data[field] = 1 if request.form.get(f'{field}') == 'on' else 0
+                data[field] = 1 if request.form.get(field) == 'on' else 0
+            elif field in ['category', 'channel']:
+                pass
             else:
                 data[field] = request.form.get(field, '')
-        
+
+        # Handle extra_data for priority_level
+        if md_type == 'priority_level':
+            extra_data = {}
+            level = request.form.get('level', '')
+            response_hours = request.form.get('response_hours', '')
+            resolution_hours = request.form.get('resolution_hours', '')
+            color = request.form.get('color', '')
+            escalation_level = request.form.get('escalation_level', '')
+            if level:
+                extra_data['level'] = int(level)
+            if response_hours:
+                extra_data['response_hours'] = int(response_hours)
+            if resolution_hours:
+                extra_data['resolution_hours'] = int(resolution_hours)
+            if color:
+                extra_data['color'] = color
+            if escalation_level:
+                extra_data['escalation_level'] = escalation_level
+            if extra_data:
+                import json
+                data['extra_data'] = json.dumps(extra_data)
+
         update_master_data(md_type, record_id, data, user_id)
 
     # =====================================================================
@@ -833,6 +1142,13 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_create_user():
         """Create a new user."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            flash("CSRF validation failed. Please refresh and try again.", "error")
+            return redirect(url_for('admin_users'))
+
         user_id = session.get('user_id')
 
         if not user_has_permission(user_id, 'platform', 'users', 'create'):
@@ -886,6 +1202,13 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_edit_user():
         """Update an existing user."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            flash("CSRF validation failed. Please refresh and try again.", "error")
+            return redirect(url_for('admin_users'))
+
         user_id = session.get('user_id')
 
         if not user_has_permission(user_id, 'platform', 'users', 'edit'):
@@ -947,6 +1270,13 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_toggle_user(user_id):
         """Toggle user active status."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            flash("CSRF validation failed. Please refresh and try again.", "error")
+            return redirect(url_for('admin_users'))
+
         current_user_id = session.get('user_id')
 
         if not user_has_permission(current_user_id, 'platform', 'users', 'edit'):
@@ -1019,6 +1349,13 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_update_user_access():
         """Update user access scopes."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            flash("CSRF validation failed. Please refresh and try again.", "error")
+            return redirect(url_for('admin_users'))
+
         user_id = session.get('user_id')
 
         if not user_has_permission(user_id, 'platform', 'users', 'edit'):
@@ -1093,6 +1430,13 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_create_role():
         """Create a new role."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            flash("CSRF validation failed. Please refresh and try again.", "error")
+            return redirect(url_for('admin_roles'))
+
         user_id = session.get('user_id')
 
         if not user_has_permission(user_id, 'platform', 'roles', 'create'):
@@ -1117,9 +1461,14 @@ def register_admin_routes(app):
                 return redirect(url_for('admin_roles'))
 
             db.execute("""
-                INSERT INTO roles (role_name, description, company_id, is_system)
-                VALUES (?, ?, ?, 0)
-            """, (role_name, description, company_id))
+                INSERT INTO roles (role_name, description, company_id, is_system,
+                                   role_group, role_class, valid_from, valid_to)
+                VALUES (?, ?, ?, 0, ?, ?, ?, ?)
+            """, (role_name, description, company_id,
+                  request.form.get('role_group', 'GENERAL'),
+                  request.form.get('role_class', 'General'),
+                  request.form.get('valid_from', '2020-01-01'),
+                  request.form.get('valid_to', '9999-12-31')))
             db.commit()
 
             log_audit(entity_type='role', entity_id=role_name, action='CREATE',
@@ -1132,6 +1481,13 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_edit_role():
         """Update an existing role."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            flash("CSRF validation failed. Please refresh and try again.", "error")
+            return redirect(url_for('admin_roles'))
+
         user_id = session.get('user_id')
 
         if not user_has_permission(user_id, 'platform', 'roles', 'edit'):
@@ -1155,9 +1511,16 @@ def register_admin_routes(app):
 
         with get_db_context() as db:
             db.execute("""
-                UPDATE roles SET role_name = ?, description = ?, company_id = ?
+                UPDATE roles SET role_name = ?, description = ?, company_id = ?,
+                                role_group = ?, role_class = ?,
+                                valid_from = ?, valid_to = ?
                 WHERE id = ? AND is_system = 0
-            """, (role_name, description, company_id, role_id))
+            """, (role_name, description, company_id,
+                  request.form.get('role_group', 'GENERAL'),
+                  request.form.get('role_class', 'General'),
+                  request.form.get('valid_from', '2020-01-01'),
+                  request.form.get('valid_to', '9999-12-31'),
+                  role_id))
             db.commit()
 
             log_audit(entity_type='role', entity_id=str(role_id), action='UPDATE',
@@ -1193,6 +1556,12 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_api_update_role_permissions():
         """API endpoint to update role permissions."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            return jsonify({'error': 'CSRF token required'}), 403
+
         user_id = session.get('user_id')
 
         if not user_has_permission(user_id, 'platform', 'roles', 'edit'):
@@ -1235,6 +1604,12 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_delete_role(role_id):
         """Delete a role."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            return jsonify({'error': 'CSRF token required'}), 403
+
         user_id = session.get('user_id')
 
         if not user_has_permission(user_id, 'platform', 'roles', 'delete'):
@@ -1329,6 +1704,13 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_save_visibility_rules():
         """Save visibility rules."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            flash("CSRF validation failed. Please refresh and try again.", "error")
+            return redirect(url_for('admin_access_scopes'))
+
         user_id = session.get('user_id')
 
         if not user_has_permission(user_id, 'platform', 'settings', 'edit'):
@@ -1449,6 +1831,13 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_save_organization():
         """Handle organization entity CRUD."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            flash("CSRF validation failed. Please refresh and try again.", "error")
+            return redirect(url_for('admin_settings_category', category='ORGANIZATION'))
+
         user_id = session.get('user_id')
 
         if not user_has_permission(user_id, 'platform', 'settings', 'edit'):
@@ -1476,52 +1865,117 @@ def register_admin_routes(app):
             return result is not None
 
         with get_db_context() as db:
-            if action == 'create_company':
-                db.execute("""
-                    INSERT INTO companies (code, name, company_type, description, is_active, created_at)
-                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (code, name, entity_type, description, is_active))
-                flash("Company created.", "success")
+            # Parse all form fields
+            company_id = request.form.get('company_id') or None
+            branch_type = request.form.get('branch_type') or ''
+            department_type = request.form.get('department_type') or ''
+            cost_center = request.form.get('cost_center') or ''
+            city = request.form.get('city') or ''
+            country = request.form.get('country') or 'UAE'
+            email = request.form.get('email') or ''
+            phone = request.form.get('phone') or ''
+            address = request.form.get('address') or ''
+            manager_name = request.form.get('manager_name') or ''
+            manager_phone = request.form.get('manager_phone') or ''
+            industry = request.form.get('industry') or ''
+            division_type = request.form.get('division_type') or ''
+            team_type = request.form.get('team_type') or ''
 
-            elif action == 'edit_company':
-                db.execute("""
-                    UPDATE companies SET code = ?, name = ?, company_type = ?, description = ?,
-                                   is_active = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                """, (code, name, entity_type, description, is_active, entity_id))
-                flash("Company updated.", "success")
-
-            elif action == 'create_branch':
-                db.execute("""
-                    INSERT INTO branches (code, name, company_id, branch_type, description, is_active, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (code, name, parent_id, entity_type, description, is_active))
-                flash("Branch created.", "success")
-
-            elif action == 'edit_branch':
-                db.execute("""
-                    UPDATE branches SET code = ?, name = ?, company_id = ?, branch_type = ?,
-                                   description = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                """, (code, name, parent_id, entity_type, description, is_active, entity_id))
-                flash("Branch updated.", "success")
-
-            elif action == 'create_department':
-                if _table_exists('departments'):
+            if action in ('create_company', 'edit_company'):
+                if action == 'create_company':
                     db.execute("""
-                        INSERT INTO departments (code, name, company_id, description, is_active, created_at)
-                        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    """, (code, name, parent_id, description, is_active))
-                    flash("Department created.", "success")
-
-            elif action == 'edit_department':
-                if _table_exists('departments'):
+                        INSERT INTO companies (code, name, company_type, industry, description, address, city, country, phone, email, is_active, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """, (code, name, entity_type, industry, description, address, city, country, phone, email, is_active))
+                    flash("Company created successfully.", "success")
+                else:
                     db.execute("""
-                        UPDATE departments SET code = ?, name = ?, company_id = ?,
+                        UPDATE companies SET code = ?, name = ?, company_type = ?, industry = ?, description = ?,
+                                       address = ?, city = ?, country = ?, phone = ?, email = ?,
+                                       is_active = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (code, name, entity_type, industry, description, address, city, country, phone, email, is_active, entity_id))
+                    flash("Company updated successfully.", "success")
+
+            elif action in ('create_branch', 'edit_branch'):
+                if action == 'create_branch':
+                    db.execute("""
+                        INSERT INTO branches (code, name, company_id, branch_type, description, address, city, country, phone, manager_name, manager_phone, is_active, is_operational, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+                    """, (code, name, company_id, branch_type, description, address, city, country, phone, manager_name, manager_phone, is_active))
+                    flash("Branch created successfully.", "success")
+                else:
+                    db.execute("""
+                        UPDATE branches SET code = ?, name = ?, company_id = ?, branch_type = ?,
+                                       description = ?, address = ?, city = ?, country = ?,
+                                       phone = ?, manager_name = ?, manager_phone = ?,
+                                       is_active = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (code, name, company_id, branch_type, description, address, city, country, phone, manager_name, manager_phone, is_active, entity_id))
+                    flash("Branch updated successfully.", "success")
+
+            elif action in ('create_department', 'edit_department'):
+                if action == 'create_department':
+                    db.execute("""
+                        INSERT INTO departments (code, name, company_id, department_type, description, cost_center, is_active, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """, (code, name, company_id, department_type, description, cost_center, is_active))
+                    flash("Department created successfully.", "success")
+                else:
+                    db.execute("""
+                        UPDATE departments SET code = ?, name = ?, company_id = ?, department_type = ?,
+                                       description = ?, cost_center = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (code, name, company_id, department_type, description, cost_center, is_active, entity_id))
+                    flash("Department updated successfully.", "success")
+
+            elif action in ('create_division', 'edit_division'):
+                if action == 'create_division':
+                    db.execute("""
+                        INSERT INTO divisions (code, name, company_id, division_type, description, is_active, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """, (code, name, company_id, division_type, description, is_active))
+                    flash("Division created successfully.", "success")
+                else:
+                    db.execute("""
+                        UPDATE divisions SET code = ?, name = ?, company_id = ?, division_type = ?,
                                        description = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE id = ?
-                    """, (code, name, parent_id, description, is_active, entity_id))
-                    flash("Department updated.", "success")
+                    """, (code, name, company_id, division_type, description, is_active, entity_id))
+                    flash("Division updated successfully.", "success")
+
+            elif action in ('create_team', 'edit_team'):
+                dept_id = request.form.get('department_id') or None
+                if action == 'create_team':
+                    db.execute("""
+                        INSERT INTO teams (code, name, company_id, department_id, team_type, description, is_active, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """, (code, name, company_id, dept_id, team_type, description, is_active))
+                    flash("Team created successfully.", "success")
+                else:
+                    db.execute("""
+                        UPDATE teams SET code = ?, name = ?, company_id = ?, department_id = ?,
+                                       team_type = ?, description = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (code, name, company_id, dept_id, team_type, description, is_active, entity_id))
+                    flash("Team updated successfully.", "success")
+
+            elif action in ('create_warehouse', 'edit_warehouse'):
+                warehouse_type = request.form.get('warehouse_type') or ''
+                if action == 'create_warehouse':
+                    db.execute("""
+                        INSERT INTO warehouses (code, name, company_id, type, address, city, country, phone, email, is_active, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """, (code, name, company_id, warehouse_type, address, city, country, phone, email, is_active))
+                    flash("Warehouse created successfully.", "success")
+                else:
+                    db.execute("""
+                        UPDATE warehouses SET code = ?, name = ?, company_id = ?, type = ?,
+                                       address = ?, city = ?, country = ?, phone = ?, email = ?,
+                                       is_active = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                    """, (code, name, company_id, warehouse_type, address, city, country, phone, email, is_active, entity_id))
+                    flash("Warehouse updated successfully.", "success")
 
             db.commit()
 
@@ -1529,7 +1983,8 @@ def register_admin_routes(app):
                      action=action.split('_')[0].upper(),
                      user_id=user_id, notes=f"Action: {action}, Code: {code}")
 
-        return redirect(url_for('admin_organization'))
+        # Return to ORGANIZATION settings page
+        return redirect(url_for('admin_settings_category', category='ORGANIZATION'))
 
     @app.route('/admin/api/departments/<int:dept_id>')
     @admin_require_login
@@ -1543,6 +1998,46 @@ def register_admin_routes(app):
             return jsonify({'error': 'Department not found'}), 404
 
         return jsonify(dict(dept))
+
+    @app.route('/admin/api/companies/<int:company_id>')
+    @admin_require_login
+    def admin_api_company_detail(company_id):
+        if not user_has_permission(session.get('user_id'), 'platform', 'settings', 'view'):
+            return jsonify({'error': 'Access denied'}), 403
+        company = get_one("SELECT * FROM companies WHERE id = ?", (company_id,))
+        if not company:
+            return jsonify({'error': 'Company not found'}), 404
+        return jsonify(dict(company))
+
+    @app.route('/admin/api/branches/<int:branch_id>')
+    @admin_require_login
+    def admin_api_branch_detail(branch_id):
+        if not user_has_permission(session.get('user_id'), 'platform', 'settings', 'view'):
+            return jsonify({'error': 'Access denied'}), 403
+        branch = get_one("SELECT * FROM branches WHERE id = ?", (branch_id,))
+        if not branch:
+            return jsonify({'error': 'Branch not found'}), 404
+        return jsonify(dict(branch))
+
+    @app.route('/admin/api/divisions/<int:division_id>')
+    @admin_require_login
+    def admin_api_get_division(division_id):
+        if not user_has_permission(session.get('user_id'), 'platform', 'settings', 'view'):
+            return jsonify({'error': 'Access denied'}), 403
+        division = get_one("SELECT * FROM divisions WHERE id = ?", (division_id,))
+        if not division:
+            return jsonify({'error': 'Division not found'}), 404
+        return jsonify(dict(division))
+
+    @app.route('/admin/api/teams/<int:team_id>')
+    @admin_require_login
+    def admin_api_get_team(team_id):
+        if not user_has_permission(session.get('user_id'), 'platform', 'settings', 'view'):
+            return jsonify({'error': 'Access denied'}), 403
+        team = get_one("SELECT * FROM teams WHERE id = ?", (team_id,))
+        if not team:
+            return jsonify({'error': 'Team not found'}), 404
+        return jsonify(dict(team))
 
     # =====================================================================
     # PERSONALIZATION & PREFERENCES
@@ -1623,6 +2118,13 @@ def register_admin_routes(app):
     @admin_require_login
     def admin_save_personalization():
         """Save personalization settings."""
+        # Validate CSRF for POST requests
+        from app import validate_csrf_token
+        token = request.headers.get('X-CSRF-Token') or request.form.get('csrf_token')
+        if not validate_csrf_token(token):
+            flash("CSRF validation failed. Please refresh and try again.", "error")
+            return redirect(url_for('admin_personalization'))
+
         user_id = session.get('user_id')
 
         if not user_has_permission(user_id, 'platform', 'settings', 'edit'):

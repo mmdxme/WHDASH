@@ -240,6 +240,40 @@
         </div>
     </div>
 
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_job_status', 'Job Status Distribution') }}</h6>
+                </div>
+                <div class="card-body" style="height: 220px;">
+                    <canvas id="jobStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_connector_health', 'Connector Health') }}</h6>
+                </div>
+                <div class="card-body" style="height: 220px;">
+                    <canvas id="connectorHealthChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('btp_incident_severity', 'Incidents by Severity') }}</h6>
+                </div>
+                <div class="card-body" style="height: 220px;">
+                    <canvas id="incidentSeverityChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Charts and Tables Row -->
     <div class="row">
         <!-- Recent Incidents -->
@@ -488,4 +522,91 @@
         </div>
     </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Chart.js defaults
+    Chart.defaults.font.family = "'Inter', 'Segoe UI', sans-serif";
+    Chart.defaults.color = '#6c757d';
+
+    // Job Status Distribution (Doughnut)
+    const jobStatusCtx = document.getElementById('jobStatusChart').getContext('2d');
+    new Chart(jobStatusCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Completed', 'Failed', 'Queued', 'Processing'],
+            datasets: [{
+                data: [
+                    {{ stats.completed_jobs }},
+                    {{ stats.failed_jobs }},
+                    {{ stats.pending_retries }},
+                    0
+                ],
+                backgroundColor: ['#28a745', '#dc3545', '#ffc107', '#17a2b8'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { padding: 15, usePointStyle: true, pointStyle: 'circle' }
+                }
+            }
+        }
+    });
+
+    // Connector Health (Bar)
+    const healthScore = {{ stats.active_connectors }} || 0;
+    const totalConn = {{ stats.total_connectors }} || 1;
+    const failedConn = {{ stats.failed_connectors_24h }} || 0;
+    const connectorHealthCtx = document.getElementById('connectorHealthChart').getContext('2d');
+    new Chart(connectorHealthCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Healthy', 'Degraded', 'Failed'],
+            datasets: [{
+                data: [healthScore, totalConn - healthScore - failedConn, failedConn],
+                backgroundColor: ['#28a745', '#ffc107', '#dc3545'],
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+        }
+    });
+
+    // Incident Severity (Horizontal Bar)
+    const incidentSevCtx = document.getElementById('incidentSeverityChart').getContext('2d');
+    const criticalCount = {{ stats.critical_incidents }};
+    const openCount = {{ stats.open_incidents }};
+    new Chart(incidentSevCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Critical', 'High', 'Medium', 'Low'],
+            datasets: [{
+                data: [criticalCount, Math.max(0, openCount - criticalCount), 0, 0],
+                backgroundColor: ['#dc3545', '#fd7e14', '#ffc107', '#17a2b8'],
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { beginAtZero: true, ticks: { stepSize: 1 } }
+            }
+        }
+    });
+});
+</script>
 {% endblock %}

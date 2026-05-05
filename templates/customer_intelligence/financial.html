@@ -64,27 +64,104 @@
             <div class="p-5 border-b border-white/5 bg-slate-800/20">
                 <h3 class="font-bold text-white text-sm">Payment Methods</h3>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-xs">
-                    <thead>
-                        <tr class="text-slate-500 uppercase text-[10px]">
-                            <th class="text-left px-5 py-3">Method</th>
-                            <th class="text-right px-5 py-3">Customers</th>
-                            <th class="text-right px-5 py-3">Revenue</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-white/5">
-                        {% for p in payment_analysis %}
-                        <tr class="hover:bg-white/5">
-                            <td class="px-5 py-3 text-slate-300 capitalize">{{ p.payment_method or 'Unknown' }}</td>
-                            <td class="px-5 py-3 text-right text-slate-400">{{ p.cnt }}</td>
-                            <td class="px-5 py-3 text-right text-emerald-400 font-bold">{{ "{:,.0f}".format(p.revenue or 0) }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+            <div class="p-4">
+                <canvas id="paymentMethodChart" height="180"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Credit Utilization Gauge -->
+    <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/5">
+        <div class="p-5 border-b border-white/5 bg-slate-800/20">
+            <h3 class="font-bold text-white text-sm">Credit Utilization Overview</h3>
+        </div>
+        <div class="p-6 flex flex-col lg:flex-row items-center gap-8">
+            <div class="relative w-48 h-48">
+                <canvas id="creditGaugeChart"></canvas>
+                <div class="absolute inset-0 flex flex-col items-center justify-center">
+                    <span class="text-3xl font-black text-white">{{ "%.0f"|format((total_debt / total_revenue * 100) if total_revenue > 0 else 0) }}%</span>
+                    <span class="text-[10px] text-slate-500 uppercase tracking-widest">Debt/Revenue</span>
+                </div>
+            </div>
+            <div class="flex-1">
+                <div class="grid grid-cols-3 gap-6">
+                    <div class="text-center">
+                        <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Total Revenue</p>
+                        <p class="text-2xl font-black text-emerald-400">{{ "{:,.0f}".format(total_revenue) }}</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Total Debt</p>
+                        <p class="text-2xl font-black text-red-400">{{ "{:,.0f}".format(total_debt) }}</p>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Credit Risky</p>
+                        <p class="text-2xl font-black text-amber-400">{{ credit_risky }}</p>
+                    </div>
+                </div>
+                <div class="mt-4 space-y-2">
+                    {% for p in payment_analysis %}
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs text-slate-300 capitalize">{{ p.payment_method or 'Unknown' }}</span>
+                        <div class="flex items-center gap-2">
+                            <div class="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
+                                <div class="h-full bg-brand-500" style="width: {{ (p.revenue / total_revenue * 100) if total_revenue > 0 else 0 }}%"></div>
+                            </div>
+                            <span class="text-xs text-emerald-400 font-bold w-16 text-right">{{ "{:,.0f}".format(p.revenue or 0) }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+const chartDefaults = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false }, tooltip: { backgroundColor: '#1e293b', titleColor: '#f1f5f9', bodyColor: '#94a3b8', borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1, cornerRadius: 8, padding: 12 } },
+    scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } }
+    }
+};
+
+new Chart(document.getElementById('paymentMethodChart'), {
+    type: 'bar',
+    data: {
+        labels: [{% for p in payment_analysis %}'{{ p.payment_method or "Unknown" }}',{% endfor %}],
+        datasets: [{
+            label: 'Revenue',
+            data: [{% for p in payment_analysis %}{{ p.revenue or 0 }},{% endfor %}],
+            backgroundColor: '#0ea5e9',
+            borderRadius: 4
+        }]
+    },
+    options: { ...chartDefaults }
+});
+
+// Credit Utilization Gauge
+const debtRatio = {{ (total_debt / total_revenue) if total_revenue > 0 else 0 }};
+const gaugeValue = Math.min(debtRatio * 100, 100);
+new Chart(document.getElementById('creditGaugeChart'), {
+    type: 'doughnut',
+    data: {
+        datasets: [{
+            data: [gaugeValue, 100 - gaugeValue],
+            backgroundColor: ['#ef4444', '#1e293b'],
+            borderWidth: 0,
+            circumference: 270,
+            rotation: 225
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '75%',
+        plugins: { legend: { display: false }, tooltip: { enabled: false } }
+    }
+});
+</script>
 {% endblock %}

@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - MMDx</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .trend-card { border-left: 4px solid var(--primary); }
+        @media (max-width: 768px) {
+            .chart-container { height: 250px; }
+        }
+    </style>
+</head>
+<body>
+    {% include 'base.html' %}
+
+    {% block content %}
+    <div class="container-fluid py-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1"><i class="fas fa-chart-area me-2 text-primary"></i>{{ page_title }}</h1>
+                <p class="text-muted mb-0">Process Capability Analysis Over Time</p>
+            </div>
+            <a href="{{ url_for('spc.capability_list') }}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Back to List
+            </a>
+        </div>
+
+        <!-- Assessment Distribution -->
+        {% if distribution %}
+        <div class="row g-4 mb-4">
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Assessment Distribution</h5>
+                    </div>
+                    <div class="card-body">
+                        <div style="height: 200px;">
+                            <canvas id="distChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Cpk Trend (Last 6 Months)</h5>
+                    </div>
+                    <div class="card-body">
+                        <div style="height: 200px;">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Capability by Characteristic -->
+        {% if by_characteristic %}
+        <div class="row g-4 mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="fas fa-list me-2"></i>Capability by Characteristic</h5>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Characteristic</th>
+                                        <th>Avg Cpk</th>
+                                        <th>Studies</th>
+                                        <th>First Study</th>
+                                        <th>Last Study</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for item in by_characteristic %}
+                                    <tr>
+                                        <td class="fw-bold">{{ item.characteristic_name or 'Unnamed' }}</td>
+                                        <td>
+                                            {% if item.avg_cpk %}
+                                            <span class="cpk-indicator {% if item.avg_cpk >= 1.33 %}bg-success text-white{% elif item.avg_cpk >= 1.0 %}bg-warning text-dark{% else %}bg-danger text-white{% endif %}">
+                                                {{ "%.3f"|format(item.avg_cpk) }}
+                                            </span>
+                                            {% else %}
+                                            -
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ item.study_count }}</td>
+                                        <td>{{ item.first_study[:10] if item.first_study else '-' }}</td>
+                                        <td>{{ item.last_study[:10] if item.last_study else '-' }}</td>
+                                        <td>
+                                            {% if item.avg_cpk and item.avg_cpk >= 1.33 %}
+                                            <span class="badge bg-success">Capable</span>
+                                            {% elif item.avg_cpk and item.avg_cpk >= 1.0 %}
+                                            <span class="badge bg-warning">Marginal</span>
+                                            {% else %}
+                                            <span class="badge bg-danger">Action Needed</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if not distribution and not by_characteristic %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            No capability data available yet. Create capability studies to see trends.
+        </div>
+        {% endif %}
+    </div>
+
+    {% if distribution %}
+    <script>
+        // Distribution Chart
+        const distCtx = document.getElementById('distChart').getContext('2d');
+        const distLabels = {{ distribution|map(attribute='assessment')|list|string|safe }};
+        const distData = {{ distribution|map(attribute='count')|list|string|safe }};
+
+        new Chart(distCtx, {
+            type: 'doughnut',
+            data: {
+                labels: distLabels.map(l => l ? l.replace('_', ' ') : 'Unknown'),
+                datasets: [{
+                    data: distData,
+                    backgroundColor: ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#6B7280']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } }
+            }
+        });
+
+        // Trend Chart
+        {% if date_trends %}
+        const trendCtx = document.getElementById('trendChart').getContext('2d');
+        new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: {{ date_trends|map(attribute='date')|list|string|safe }},
+                datasets: [
+                    {
+                        label: 'Avg Cpk',
+                        data: {{ date_trends|map(attribute='avg_cpk')|list|string|safe }},
+                        borderColor: '#4F46E5',
+                        fill: false,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Min Cpk',
+                        data: {{ date_trends|map(attribute='min_cpk')|list|string|safe }},
+                        borderColor: '#EF4444',
+                        borderDash: [5, 5],
+                        fill: false,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom' } },
+                scales: {
+                    y: { beginAtZero: false }
+                }
+            }
+        });
+        {% endif %}
+    </script>
+    {% endif %}
+    {% endblock %}
+</body>
+</html>

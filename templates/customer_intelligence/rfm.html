@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in pb-20">
+
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="text-3xl font-extrabold text-white tracking-tight">RFM Analysis</h2>
+            <p class="text-slate-500 font-medium mt-1 text-xs uppercase tracking-widest">Recency, Frequency, Monetary Segmentation</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="{{ url_for('ci_rfm_export') }}" class="px-5 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-bold transition-all">
+                <i class="fa-solid fa-file-csv mr-1"></i> Export CSV
+            </a>
+            <a href="{{ url_for('ci_dashboard') }}" class="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 rounded-xl text-xs font-bold transition-all">
+                <i class="fa-solid fa-arrow-left mr-1"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {% for seg, info in segment_summary.items() %}
+        <div class="glass-panel rounded-2xl p-4 border-l-4 border-l-{% if info.color == 'purple' %}purple-500{% elif info.color == 'blue' %}blue-500{% elif info.color == 'cyan' %}cyan-500{% elif info.color == 'amber' %}amber-500{% elif info.color == 'orange' %}orange-500{% else %}red-500{% endif %}">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1">{{ seg }}</p>
+            <div class="flex items-end justify-between">
+                <span class="text-2xl font-black text-white">{{ info.count }}</span>
+                <i class="fa-solid fa-users text-{% if info.color == 'purple' %}purple-400{% elif info.color == 'blue' %}blue-400{% elif info.color == 'cyan' %}cyan-400{% elif info.color == 'amber' %}amber-400{% elif info.color == 'orange' %}orange-400{% else %}red-400{% endif %} text-lg"></i>
+            </div>
+            <p class="text-[10px] text-emerald-400 mt-1">{{ "{:,.0f}".format(info.total_revenue or 0) }} revenue</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        <!-- RFM Matrix Heatmap -->
+        <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/5">
+            <div class="p-5 border-b border-white/5 bg-slate-800/20">
+                <h3 class="font-bold text-white text-sm">RFM Matrix Heatmap</h3>
+                <p class="text-[10px] text-slate-500 mt-1">Count of customers by Recency × Frequency score</p>
+            </div>
+            <div class="p-5">
+                <canvas id="rfmMatrixChart" height="220"></canvas>
+            </div>
+            <div class="px-5 pb-4">
+                <div class="grid grid-cols-3 gap-2 text-center">
+                    {% for r in range(1, 4) %}
+                        {% for f in range(1, 4) %}
+                        {% set key = 'R' ~ r ~ 'F' ~ f %}
+                        {% set count = rfm_matrix.get(key, 0) %}
+                        <div class="rounded-xl p-3 {% if count > 0 %}bg-brand-500/10{% else %}bg-slate-800/30{% endif %} border border-white/5">
+                            <p class="text-[10px] text-slate-500">R{{ r }}F{{ f }}</p>
+                            <p class="text-lg font-black text-white">{{ count }}</p>
+                        </div>
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Segment Distribution -->
+        <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/5">
+            <div class="p-5 border-b border-white/5 bg-slate-800/20">
+                <h3 class="font-bold text-white text-sm">Segment Distribution</h3>
+            </div>
+            <div class="p-5">
+                <canvas id="segmentPieChart" height="200"></canvas>
+            </div>
+            <div class="px-5 pb-4 space-y-2">
+                {% for seg, info in segment_summary.items() %}
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <div class="w-3 h-3 rounded-full bg-{% if info.color == 'purple' %}purple-{% endif %}{% if info.color == 'blue' %}blue-{% endif %}{% if info.color == 'cyan' %}cyan-{% endif %}{% if info.color == 'amber' %}amber-{% endif %}{% if info.color == 'orange' %}orange-{% endif %}{% if info.color == 'red' %}red-{% endif %}400"></div>
+                        <span class="text-xs text-slate-300">{{ seg }}</span>
+                    </div>
+                    <span class="text-xs font-bold text-white">{{ info.count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Score Scatter -->
+        <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/5">
+            <div class="p-5 border-b border-white/5 bg-slate-800/20">
+                <h3 class="font-bold text-white text-sm">Recency vs Monetary</h3>
+                <p class="text-[10px] text-slate-500 mt-1">Recent buyers with high spend are best</p>
+            </div>
+            <div class="p-5">
+                <canvas id="scatterChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- RFM Table -->
+    <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/5">
+        <div class="p-4 border-b border-white/5 bg-slate-800/20 flex items-center justify-between">
+            <p class="text-xs font-bold text-slate-400">{{ total_analyzed }} customers analyzed</p>
+            <div class="flex items-center gap-2 text-[10px] text-slate-500">
+                <span class="px-2 py-1 rounded-full bg-purple-500/10 text-purple-400">Champions (R3F3M3)</span>
+                <span class="px-2 py-1 rounded-full bg-blue-500/10 text-blue-400">Loyal</span>
+                <span class="px-2 py-1 rounded-full bg-amber-500/10 text-amber-400">At Risk</span>
+                <span class="px-2 py-1 rounded-full bg-red-500/10 text-red-400">Churned</span>
+            </div>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="bg-slate-900/40">
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">#</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Customer</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Segment</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">R</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">F</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">M</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-center">Score</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Revenue</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest text-right">Payments</th>
+                        <th class="px-5 py-3 text-[10px] font-black text-slate-500 uppercase tracking-widest">Last Purchase</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    {% for r in rfm_records %}
+                    <tr class="hover:bg-white/5 transition-all">
+                        <td class="px-5 py-4 text-center text-xs text-slate-500">{{ loop.index }}</td>
+                        <td class="px-5 py-4">
+                            <a href="{{ url_for('ci_profile_detail', customer_id=r.id) }}" class="font-bold text-white text-sm hover:text-brand-400">{{ r.name }}</a>
+                            <div class="text-[10px] text-slate-500">{{ r.city }}, {{ r.country }}</div>
+                        </td>
+                        <td class="px-5 py-4">
+                            <span class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-{% if r.seg_color == 'purple' %}purple-500/10 text-purple-400{% elif r.seg_color == 'blue' %}blue-500/10 text-blue-400{% elif r.seg_color == 'cyan' %}cyan-500/10 text-cyan-400{% elif r.seg_color == 'amber' %}amber-500/10 text-amber-400{% elif r.seg_color == 'orange' %}orange-500/10 text-orange-400{% else %}red-500/10 text-red-400{% endif %} border border-{% if r.seg_color == 'purple' %}purple-500/20{% elif r.seg_color == 'blue' %}blue-500/20{% elif r.seg_color == 'cyan' %}cyan-500/20{% elif r.seg_color == 'amber' %}amber-500/20{% elif r.seg_color == 'orange' %}orange-500/20{% else %}red-500/20{% endif %}">
+                                {{ r.segment }}
+                            </span>
+                        </td>
+                        <td class="px-5 py-4 text-center">
+                            <span class="w-8 h-8 inline-flex items-center justify-center rounded-full text-xs font-black {% if r.r_score == 3 %}bg-emerald-500/20 text-emerald-400{% elif r.r_score == 2 %}bg-amber-500/20 text-amber-400{% else %}bg-red-500/20 text-red-400{% endif %}">
+                                {{ r.r_score }}
+                            </span>
+                        </td>
+                        <td class="px-5 py-4 text-center">
+                            <span class="w-8 h-8 inline-flex items-center justify-center rounded-full text-xs font-black {% if r.f_score == 3 %}bg-emerald-500/20 text-emerald-400{% elif r.f_score == 2 %}bg-amber-500/20 text-amber-400{% else %}bg-red-500/20 text-red-400{% endif %}">
+                                {{ r.f_score }}
+                            </span>
+                        </td>
+                        <td class="px-5 py-4 text-center">
+                            <span class="w-8 h-8 inline-flex items-center justify-center rounded-full text-xs font-black {% if r.m_score == 3 %}bg-emerald-500/20 text-emerald-400{% elif r.m_score == 2 %}bg-amber-500/20 text-amber-400{% else %}bg-red-500/20 text-red-400{% endif %}">
+                                {{ r.m_score }}
+                            </span>
+                        </td>
+                        <td class="px-5 py-4 text-center">
+                            <span class="text-lg font-black text-white">{{ r.rfm_score }}</span>
+                        </td>
+                        <td class="px-5 py-4 text-right text-emerald-400 font-bold">{{ "{:,.0f}".format(r.total_orders or 0) }}</td>
+                        <td class="px-5 py-4 text-right text-blue-400 font-bold">{{ "{:,.0f}".format(r.total_payments or 0) }}</td>
+                        <td class="px-5 py-4 text-xs text-slate-400">{{ r.days_inactive }} days ago</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const chartDefaults = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: { display: false },
+        tooltip: {
+            backgroundColor: '#1e293b',
+            titleColor: '#f1f5f9',
+            bodyColor: '#94a3b8',
+            borderColor: 'rgba(255,255,255,0.1)',
+            borderWidth: 1,
+            cornerRadius: 8,
+            padding: 12
+        }
+    },
+    scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } }
+    }
+};
+
+// RFM Matrix Heatmap
+new Chart(document.getElementById('rfmMatrixChart'), {
+    type: 'bar',
+    data: {
+        labels: ['R1F1','R1F2','R1F3','R2F1','R2F2','R2F3','R3F1','R3F2','R3F3'],
+        datasets: [{
+            label: 'Customers',
+            data: [{% for r in range(1, 4) %}{% for f in range(1, 4) %}{{ rfm_matrix.get('R' ~ r ~ 'F' ~ f, 0) }}{% if not (r == 3 and f == 3) %},{% endif %}{% endfor %}{% endfor %}],
+            backgroundColor: ['#ef4444','#f97316','#eab308','#f59e0b','#eab308','#84cc16','#22c55e','#84cc16','#22c55e'],
+            borderRadius: 6
+        }]
+    },
+    options: { ...chartDefaults }
+});
+
+// Segment Pie
+new Chart(document.getElementById('segmentPieChart'), {
+    type: 'doughnut',
+    data: {
+        labels: [{% for seg in segment_summary.keys() %}'{{ seg }}',{% endfor %}],
+        datasets: [{
+            data: [{% for seg, info in segment_summary.items() %}{{ info.count }},{% endfor %}],
+            backgroundColor: ['#8b5cf6','#0ea5e9','#06b6d4','#f59e0b','#f97316','#ef4444'],
+            borderWidth: 0
+        }]
+    },
+    options: { ...chartDefaults, cutout: '60%' }
+});
+
+// Scatter
+new Chart(document.getElementById('scatterChart'), {
+    type: 'scatter',
+    data: {
+        datasets: [{
+            label: 'Customers',
+            data: [{% for r in rfm_records[:100] %]{x: {{ r.days_inactive }}, y: {{ r.total_orders or 0 }}{% if not loop.last %},{% endif %}{% endfor %}],
+            backgroundColor: 'rgba(14,165,233,0.5)',
+            pointRadius: 5,
+            pointBackgroundColor: '#0ea5e9'
+        }]
+    },
+    options: { ...chartDefaults }
+});
+</script>
+{% endblock %}

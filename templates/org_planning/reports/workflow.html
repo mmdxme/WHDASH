@@ -1,0 +1,255 @@
+{% extends "org_planning/base.html" %}
+
+{% block content %}
+<div class="space-y-6 fade-in">
+    <a href="{{ url_for('org_planning.reports') }}" class="inline-flex items-center gap-2 text-gray-400 hover:text-white">
+        <i class="fas fa-arrow-left"></i>
+        {{ t('back_to_reports', lang) }}
+    </a>
+
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-white">{{ t('workflow_report', lang) }}</h1>
+            <p class="text-gray-400 mt-1">{{ t('workflow_cycle_time_analysis', lang) }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="exportTable()" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-file-csv"></i>
+                {{ t('export_csv', lang) }}
+            </button>
+            <button onclick="window.print()" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-print"></i>
+                {{ t('print', lang) }}
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <i class="fas fa-stream text-blue-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('active_workflows', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ active_workflows }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                    <i class="fas fa-check text-emerald-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('completed_this_week', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ completed_week }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                    <i class="fas fa-clock text-amber-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('avg_cycle_time', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ avg_cycle_time }}h</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <i class="fas fa-percentage text-purple-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('approval_rate', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-emerald-400">{{ approval_rate }}%</div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Cycle Time by Workflow -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-bar text-cyan-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('cycle_time_by_workflow', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('average_completion_hours', lang) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5">
+                <canvas id="cycleTimeChart" height="280"></canvas>
+            </div>
+        </div>
+
+        <!-- Approval vs Rejection -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-pie text-purple-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('approval_vs_rejection', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('overall_outcomes', lang) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5">
+                <canvas id="outcomeChart" height="280"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Completions -->
+    {% if recent_completions %}
+    <div class="glass-panel rounded-xl overflow-hidden">
+        <div class="p-5 border-b border-gray-700/50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                    <i class="fas fa-history text-emerald-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-lg font-semibold text-white">{{ t('recent_completions', lang) }}</h2>
+                    <p class="text-sm text-gray-400">{{ t('last_7_days', lang) }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="divide-y divide-gray-700/50">
+            {% for c in recent_completions[:5] %}
+            <div class="p-4 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                        <i class="fas fa-check text-emerald-400 text-sm"></i>
+                    </div>
+                    <div>
+                        <div class="text-white font-medium">{{ c.title }}</div>
+                        <div class="text-gray-500 text-sm">{{ c.workflow_name }} &bull; {{ c.completed_at[:10] if c.completed_at else '' }}</div>
+                    </div>
+                </div>
+                <div class="text-amber-400 text-sm">{{ c.cycle_hours|round(1) if c.cycle_hours else '-' }}h</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Detailed Table -->
+    <div class="table-container">
+        <table class="table w-full" id="workflowTable">
+            <thead>
+                <tr>
+                    <th>{{ t('workflow', lang) }}</th>
+                    <th class="text-center">{{ t('category', lang) }}</th>
+                    <th class="text-center">{{ t('active_instances', lang) }}</th>
+                    <th class="text-center">{{ t('completed_30d', lang) }}</th>
+                    <th class="text-center">{{ t('rejected_30d', lang) }}</th>
+                    <th class="text-center">{{ t('avg_cycle_time', lang) }}</th>
+                    <th class="text-center">{{ t('approval_rate', lang) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for w in workflow_stats %}
+                <tr>
+                    <td class="text-white font-medium">{{ w.workflow_name }}</td>
+                    <td class="text-center"><span class="badge badge-secondary">{{ w.category|replace('_', ' ')|title or 'General' }}</span></td>
+                    <td class="text-center text-blue-400">{{ w.active_instances }}</td>
+                    <td class="text-center text-emerald-400">{{ w.completed_30d }}</td>
+                    <td class="text-center text-red-400">{{ w.rejected_30d }}</td>
+                    <td class="text-center text-amber-400">{{ w.avg_cycle_hours|round(1) if w.avg_cycle_hours else '-' }}h</td>
+                    <td class="text-center">
+                        <span class="text-{{ 'emerald' if w.approval_rate >= 80 else 'amber' if w.approval_rate >= 60 else 'red' }}-400">{{ w.approval_rate|round|int }}%</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function exportTable() {
+    const table = document.getElementById('workflowTable');
+    const rows = table.querySelectorAll('tr');
+    let csv = [];
+    rows.forEach(row => {
+        const cols = row.querySelectorAll('th, td');
+        const rowData = [];
+        cols.forEach(col => {
+            let text = col.innerText.replace(/"/g, '""');
+            rowData.push('"' + text + '"');
+        });
+        csv.push(rowData.join(','));
+    });
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'workflow_report.csv';
+    link.click();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Cycle Time Bar Chart
+    const cycleCtx = document.getElementById('cycleTimeChart');
+    if (cycleCtx) {
+        const labels = [{% for w in workflow_stats %}'{{ w.workflow_name|truncate(15, True) }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+        const cycleTimes = [{% for w in workflow_stats %}{{ w.avg_cycle_hours or 0 }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+        new Chart(cycleCtx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: '{{ t('avg_hours', lang) }}',
+                    data: cycleTimes,
+                    backgroundColor: 'rgba(14, 165, 233, 0.7)',
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'rgba(255,255,255,0.5)' } },
+                    x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.5)', maxRotation: 45 } }
+                }
+            }
+        });
+    }
+
+    // Outcome Pie Chart
+    const outcomeCtx = document.getElementById('outcomeChart');
+    if (outcomeCtx) {
+        new Chart(outcomeCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['{{ t('approved', lang) }}', '{{ t('rejected', lang) }}', '{{ t('cancelled', lang) }}'],
+                datasets: [{
+                    data: [{{ total_approved }}, {{ total_rejected }}, {{ total_cancelled }}],
+                    backgroundColor: [
+                        'rgba(16, 185, 129, 0.7)',
+                        'rgba(239, 68, 68, 0.7)',
+                        'rgba(100, 116, 139, 0.7)'
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '65%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.7)', padding: 20 } }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

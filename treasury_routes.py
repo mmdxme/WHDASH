@@ -27,6 +27,9 @@ import json
 
 treasury_bp = Blueprint('treasury', __name__, url_prefix='/finance/treasury')
 
+# Import unified permission decorator
+from permissions import require_permission
+
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
@@ -51,23 +54,6 @@ def get_current_user():
         'name': session.get('user_name', 'System User'),
         'role': session.get('user_role', 'Treasury Manager')
     }
-
-
-def require_permission(module, resource, action):
-    """Permission decorator for treasury routes."""
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            from flask import session, abort
-            user_permissions = session.get('permissions', {})
-            mod_perms = user_permissions.get(module, {})
-            resource_perms = mod_perms.get(resource, [])
-            if action not in resource_perms and 'admin' not in resource_perms:
-                flash(f'You do not have permission to {action} {resource}', 'error')
-                return redirect(url_for('finance.dashboard'))
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
 
 
 def check_treasury_permission(resource, action='view'):

@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-1 text-gray-800">
+                <i class="fas fa-calendar-alt me-2" style="color: var(--primary-color, #4e73df);"></i>
+                {{ t('capacity_planning', 'Capacity Planning') }}
+            </h1>
+            <p class="text-muted mb-0">{{ t('capacity_week_ahead', 'Capacity utilization for the next 7-14 days') }}</p>
+        </div>
+        <a href="{{ url_for('manufacturing.reports') }}" class="btn btn-outline-primary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i> {{ t('back_to_reports', 'Back to Reports') }}
+        </a>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-primary shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                {{ t('total_capacity', 'Total Weekly Capacity') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ work_centers|sum(attribute='capacity_hours') * 7|round|int }} {{ t('hrs', 'hrs') }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-success shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                {{ t('total_scheduled', 'Total Scheduled') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {{ work_centers|sum(attribute='scheduled_hours')|round|int }} {{ t('hrs', 'hrs') }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar-check fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-{% if work_centers|sum(attribute='scheduled_hours') / (work_centers|sum(attribute='capacity_hours') * 7) * 100 >= 85 %}danger{% elif work_centers|sum(attribute='scheduled_hours') / (work_centers|sum(attribute='capacity_hours') * 7) * 100 >= 70 %}warning{% else %}success{% endif %} shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-uppercase mb-1">
+                                {{ t('avg_utilization', 'Avg Utilization') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set total_cap = work_centers|sum(attribute='capacity_hours') * 7 %}
+                                {% set total_sched = work_centers|sum(attribute='scheduled_hours') %}
+                                {% if total_cap > 0 %}{{ (total_sched / total_cap * 100)|round|int }}{% else %}0{% endif }}%
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-pie fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6">
+            <div class="card border-left-secondary shadow py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col me-2">
+                            <div class="text-xs font-weight-bold text-secondary text-uppercase mb-1">
+                                {{ t('available', 'Available') }}
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% set total_cap = work_centers|sum(attribute='capacity_hours') * 7 %}
+                                {% set total_sched = work_centers|sum(attribute='scheduled_hours') %}
+                                {{ (total_cap - total_sched)|round|int }} {{ t('hrs', 'hrs') }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Work Center Capacity -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-cogs me-2"></i>{{ t('work_center_capacity', 'Work Center Capacity (Next 7 Days)') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ t('work_center', 'Work Center') }}</th>
+                                    <th class="text-center">{{ t('daily_capacity', 'Daily Capacity') }}</th>
+                                    <th class="text-center">{{ t('weekly_capacity', 'Weekly Capacity') }}</th>
+                                    <th class="text-center">{{ t('scheduled', 'Scheduled') }}</th>
+                                    <th class="text-center">{{ t('utilization', 'Utilization') }}</th>
+                                    <th>{{ t('status', 'Status') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for wc in work_centers %}
+                                {% set weekly_cap = wc.capacity_hours * 7 %}
+                                {% set util_pct = (wc.scheduled_hours / weekly_cap * 100)|round if weekly_cap > 0 else 0 %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('manufacturing.work_center_detail', center_id=wc.id) }}">
+                                            <strong>{{ wc.code }}</strong>: {{ wc.name }}
+                                        </a>
+                                    </td>
+                                    <td class="text-center">{{ wc.capacity_hours }} {{ t('hrs', 'hrs') }}</td>
+                                    <td class="text-center">{{ weekly_cap|round|int }} {{ t('hrs', 'hrs') }}</td>
+                                    <td class="text-center">{{ wc.scheduled_hours|round|int }} {{ t('hrs', 'hrs') }}</td>
+                                    <td class="text-center">
+                                        <div class="d-flex align-items-center justify-content-center">
+                                            <div class="me-2">{{ util_pct }}%</div>
+                                            <div class="progress" style="width: 80px; height: 8px;">
+                                                <div class="progress-bar bg-{% if util_pct >= 90 %}danger{% elif util_pct >= 70 %}warning{% else %}success{% endif %}"
+                                                     role="progressbar" style="width: {{ util_pct }}%"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if util_pct >= 90 %}
+                                            <span class="badge bg-danger">{{ t('overloaded', 'OVERLOADED') }}</span>
+                                        {% elif util_pct >= 70 %}
+                                            <span class="badge bg-warning">{{ t('high_load', 'HIGH LOAD') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-success">{{ t('available', 'AVAILABLE') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule Details -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-list me-2"></i>{{ t('schedule_details', 'Schedule Details (Next 14 Days)') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if schedule_details %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>{{ t('date', 'Date') }}</th>
+                                    <th>{{ t('work_center', 'Work Center') }}</th>
+                                    <th>{{ t('order', 'Order') }}</th>
+                                    <th>{{ t('product', 'Product') }}</th>
+                                    <th>{{ t('shift', 'Shift') }}</th>
+                                    <th class="text-center">{{ t('planned_hrs', 'Planned Hrs') }}</th>
+                                    <th>{{ t('status', 'Status') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in schedule_details %}
+                                <tr>
+                                    <td>{{ entry.scheduled_date[:10] }}</td>
+                                    <td>{{ entry.work_center_code }} - {{ entry.work_center_name }}</td>
+                                    <td>{{ entry.order_number }}</td>
+                                    <td>{{ entry.product_name or '-' }}</td>
+                                    <td>{{ entry.shift or '-' }}</td>
+                                    <td class="text-center">{{ entry.planned_hours }}</td>
+                                    <td>
+                                        <span class="badge bg-{% if entry.status == 'COMPLETED' %}success{% elif entry.status == 'IN_PROGRESS' %}primary{% else %}info{% endif %}">
+                                            {{ entry.status }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-calendar-times fa-3x mb-3"></i>
+                        <p class="mb-0">{{ t('no_scheduled_work', 'No work scheduled for the next 14 days.') }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

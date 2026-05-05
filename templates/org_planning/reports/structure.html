@@ -10,31 +10,145 @@
     <div class="flex items-center justify-between">
         <div>
             <h1 class="text-2xl font-bold text-white">{{ t('org_structure_report', lang) }}</h1>
+            <p class="text-gray-400 mt-1">{{ total_units }} {{ t('total_units', lang) }}</p>
         </div>
-        <button onclick="window.print()" class="btn-secondary px-4 py-2 rounded-lg">
-            <i class="fas fa-print mr-2"></i>{{ t('print', lang) }}
-        </button>
+        <div class="flex items-center gap-3">
+            <select id="companySelect" onchange="changeCompany(this.value)" class="input-field px-3 py-2 rounded-lg text-sm">
+                <option value="">{{ t('all_companies', lang) }}</option>
+                {% for c in companies %}
+                <option value="{{ c.id }}" {{ 'selected' if selected_company == c.id else '' }}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+            <button onclick="exportTable()" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-file-csv"></i>
+                {{ t('export_csv', lang) }}
+            </button>
+            <button onclick="window.print()" class="btn-secondary px-4 py-2 rounded-lg flex items-center gap-2">
+                <i class="fas fa-print"></i>
+                {{ t('print', lang) }}
+            </button>
+        </div>
     </div>
 
+    <!-- KPI Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                    <i class="fas fa-building text-blue-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('companies', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ total_companies }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <i class="fas fa-layer-group text-purple-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('org_units', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ total_units }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                    <i class="fas fa-users text-emerald-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('total_employees', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-white">{{ total_employees }}</div>
+        </div>
+        <div class="glass-panel p-5 rounded-xl">
+            <div class="flex items-center gap-3 mb-3">
+                <div class="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                    <i class="fas fa-check-circle text-amber-400"></i>
+                </div>
+                <span class="text-gray-400 text-sm">{{ t('active_units', lang) }}</span>
+            </div>
+            <div class="text-2xl font-bold text-emerald-400">{{ active_units }}</div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Units by Type -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-pie text-blue-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('units_by_type', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('distribution_by_unit_type', lang) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5">
+                <canvas id="typeChart" height="280"></canvas>
+            </div>
+        </div>
+
+        <!-- Units by Company -->
+        <div class="glass-panel rounded-xl overflow-hidden">
+            <div class="p-5 border-b border-gray-700/50">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-bar text-purple-400"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold text-white">{{ t('units_by_company', lang) }}</h2>
+                        <p class="text-sm text-gray-400">{{ t('org_units_per_company', lang) }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5">
+                <canvas id="companyChart" height="280"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active vs Inactive -->
+    <div class="glass-panel rounded-xl overflow-hidden">
+        <div class="p-5 border-b border-gray-700/50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                    <i class="fas fa-chart-line text-emerald-400"></i>
+                </div>
+                <div>
+                    <h2 class="text-lg font-semibold text-white">{{ t('active_vs_inactive', lang) }}</h2>
+                    <p class="text-sm text-gray-400">{{ t('unit_status_overview', lang) }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="p-5">
+            <canvas id="statusChart" height="120"></canvas>
+        </div>
+    </div>
+
+    <!-- Detailed Table -->
     <div class="table-container">
-        <table class="table w-full">
+        <table class="table w-full" id="structureTable">
             <thead>
                 <tr>
                     <th>{{ t('name', lang) }}</th>
                     <th>{{ t('type', lang) }}</th>
+                    <th>{{ t('company', lang) }}</th>
                     <th>{{ t('code', lang) }}</th>
-                    <th>{{ t('employees', lang) }}</th>
-                    <th>{{ t('status', lang) }}</th>
+                    <th class="text-center">{{ t('employees', lang) }}</th>
+                    <th class="text-center">{{ t('status', lang) }}</th>
                 </tr>
             </thead>
             <tbody>
                 {% for unit in org_units %}
                 <tr>
                     <td class="text-white font-medium">{{ unit.name }}</td>
-                    <td class="text-gray-400">{{ unit.unit_type|replace('_', ' ')|title }}</td>
+                    <td><span class="badge badge-secondary">{{ unit.unit_type|replace('_', ' ')|title }}</span></td>
+                    <td class="text-gray-400">{{ unit.company_name or '-' }}</td>
                     <td class="text-gray-400">{{ unit.code or '-' }}</td>
                     <td class="text-center text-gray-400">{{ unit.employee_count or 0 }}</td>
-                    <td>
+                    <td class="text-center">
                         {% if unit.is_active %}
                         <span class="badge badge-success">{{ t('active', lang) }}</span>
                         {% else %}
@@ -47,4 +161,133 @@
         </table>
     </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+function changeCompany(companyId) {
+    const url = new URL(window.location.href);
+    if (companyId) {
+        url.searchParams.set('company', companyId);
+    } else {
+        url.searchParams.delete('company');
+    }
+    window.location.href = url.toString();
+}
+
+function exportTable() {
+    const table = document.getElementById('structureTable');
+    const rows = table.querySelectorAll('tr');
+    let csv = [];
+    rows.forEach(row => {
+        const cols = row.querySelectorAll('th, td');
+        const rowData = [];
+        cols.forEach(col => {
+            let text = col.innerText.replace(/"/g, '""');
+            rowData.push('"' + text + '"');
+        });
+        csv.push(rowData.join(','));
+    });
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'org_structure_report.csv';
+    link.click();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Units by Type Pie Chart
+    const typeCtx = document.getElementById('typeChart');
+    if (typeCtx) {
+        const typeLabels = [{% for t, count in units_by_type %}'{{ t|replace('_', ' ')|title }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+        const typeData = [{% for t, count in units_by_type %}{{ count }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+        new Chart(typeCtx, {
+            type: 'doughnut',
+            data: {
+                labels: typeLabels,
+                datasets: [{
+                    data: typeData,
+                    backgroundColor: [
+                        'rgba(14, 165, 233, 0.7)',
+                        'rgba(99, 102, 241, 0.7)',
+                        'rgba(16, 185, 129, 0.7)',
+                        'rgba(245, 158, 11, 0.7)',
+                        'rgba(239, 68, 68, 0.7)',
+                        'rgba(236, 72, 153, 0.7)'
+                    ],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '60%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: 'rgba(255,255,255,0.7)', padding: 15 } }
+                }
+            }
+        });
+    }
+
+    // Units by Company Bar Chart
+    const compCtx = document.getElementById('companyChart');
+    if (compCtx) {
+        const compLabels = [{% for c, count in units_by_company %}'{{ c|truncate(12, True) }}'{% if not loop.last %}, {% endif %}{% endfor %}];
+        const compData = [{% for c, count in units_by_company %}{{ count }}{% if not loop.last %}, {% endif %}{% endfor %}];
+
+        new Chart(compCtx, {
+            type: 'bar',
+            data: {
+                labels: compLabels,
+                datasets: [{
+                    label: '{{ t('units', lang) }}',
+                    data: compData,
+                    backgroundColor: 'rgba(99, 102, 241, 0.7)',
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'rgba(255,255,255,0.5)', stepSize: 1 } },
+                    x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.5)' } }
+                }
+            }
+        });
+    }
+
+    // Active vs Inactive
+    const statCtx = document.getElementById('statusChart');
+    if (statCtx) {
+        new Chart(statCtx, {
+            type: 'bar',
+            data: {
+                labels: ['{{ t('active', lang) }}', '{{ t('inactive', lang) }}'],
+                datasets: [{
+                    data: [{{ active_units }}, {{ total_units - active_units }}],
+                    backgroundColor: [
+                        'rgba(16, 185, 129, 0.7)',
+                        'rgba(100, 116, 139, 0.7)'
+                    ],
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: 'rgba(255,255,255,0.5)' } },
+                    x: { grid: { display: false }, ticks: { color: 'rgba(255,255,255,0.5)' } }
+                }
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

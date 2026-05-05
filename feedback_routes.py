@@ -34,6 +34,7 @@ import uuid
 import secrets
 import hmac
 import mimetypes
+import csv
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import (
@@ -422,6 +423,21 @@ def dashboard():
     """)
     recent_activity = [dict(row) for row in recent_activity] if recent_activity else []
     
+    # Trend data (last 14 days for dashboard)
+    from collections import Counter
+    from datetime import date as dt_date
+    today = dt_date.today()
+    trend_data = []
+    for i in range(14, -1, -1):
+        day = (today - timedelta(days=i)).strftime('%Y-%m-%d')
+        day_stats = get_stats(filters={'date_from': day, 'date_to': day})
+        trend_data.append({
+            'date': day,
+            'total': day_stats['total'],
+            'open': day_stats['open'],
+            'resolved': day_stats['resolved'],
+        })
+    
     return render_template('feedback/dashboard.html',
         title='Feedback Dashboard',
         stats=stats,
@@ -434,6 +450,8 @@ def dashboard():
         type_breakdown=type_breakdown,
         category_breakdown=category_breakdown,
         recent_activity=recent_activity,
+        trend_data=trend_data,
+        date=today,
         can_create=can_create_feedback(),
         can_manage=can_manage_feedback(),
         csrf_token=_csrf_token(),
@@ -500,6 +518,7 @@ def reports_list():
         status_counts=status_counts,
         report_types=REPORT_TYPES,
         priority_choices=PRIORITY_CHOICES,
+        order_by=order_by,
         can_create=can_create_feedback(),
         can_manage=can_manage_feedback(),
         csrf_token=_csrf_token(),
@@ -1236,6 +1255,122 @@ def export_reports():
     return response
 
 
+@feedback_bp.route('/export/pdf')
+@require_login
+def export_reports_pdf():
+    """Export reports summary to PDF-friendly HTML for printing."""
+    if not can_manage_feedback():
+        flash("You don't have permission to export reports.", "error")
+        return redirect(url_for('feedback.dashboard'))
+    
+    filters = {}
+    if request.args.get('status'):
+        filters['status'] = request.args.get('status')
+    if request.args.get('type'):
+        filters['type'] = request.args.get('type')
+    if request.args.get('priority'):
+        filters['priority'] = request.args.get('priority')
+    if request.args.get('date_from'):
+        filters['date_from'] = request.args.get('date_from')
+    if request.args.get('date_to'):
+        filters['date_to'] = request.args.get('date_to')
+    
+    result = get_reports(filters=filters, page=1, per_page=100)
+    reports = [prepare_report_for_view(r) for r in result['reports']]
+    stats = get_stats(filters=filters)
+    
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Feedback Report Export - {datetime.now().strftime('%Y-%m-%d')}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; margin: 20px; color: #333; }}
+            h1 {{ color: #1a1a1a; border-bottom: 2px solid #3b82f6; padding-bottom: 10px; }}
+            .stats {{ display: flex; gap: 20px; margin: 20px 0; }}
+            .stat-box {{ background: #f1f5f9; padding: 15px; border-radius: 8px; text-align: center; flex: 1; }}
+            .stat-value {{ font-size: 24px; font-weight: bold; color: #3b82f6; }}
+            .stat-label {{ font-size: 12px; color: #64748b; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            th, td {{ border: 1px solid #e2e8f0; padding: 10px; text-align: left; }}
+            th {{ background: #3b82f6; color: white; }}
+            tr:nth-child(even) {{ background: #f8fafc; }}
+            .badge {{ display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; }}
+            .status-{{'New'}} {{ background: #dbeafe; color: #1d4ed8; }}
+            .status-{{'In Progress'}} {{ background: #fef3c7; color: #b45309; }}
+            .status-{{'Resolved'}} {{ background: #d1fae5; color: #059669; }}
+            .status-{{'Closed'}} {{ background: #f1f5f9; color: #475569; }}
+            .footer {{ margin-top: 30px; text-align: center; font-size: 11px; color: #94a3b8; }}
+        </style>
+    </head>
+    <body>
+        <h1>Feedback Report Summary</h1>
+        <p>Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-value">{stats['total']}</div>
+                <div class="stat-label">Total Reports</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">{stats['open']}</div>
+                <div class="stat-label">Open</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">{stats['resolved']}</div>
+                <div class="stat-label">Resolved</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value">{stats.get('avg_resolution_hours', 0)}h</div>
+                <div class="stat-label">Avg Resolution</div>
+            </div>
+        </div>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th>Reference</th>
+                    <th>Title</th>
+                    <th>Status</th>
+                    <th>Priority</th>
+                    <th>Assignee</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+    
+    for report in reports:
+        status_class = report.get('status', '').replace(' ', '-')
+        html_content += f"""
+                <tr>
+                    <td>{report.get('reference_number', '')}</td>
+                    <td>{report.get('title', '')[:50]}</td>
+                    <td><span class="badge status-{status_class}">{report.get('status', '')}</span></td>
+                    <td>{report.get('priority', '')}</td>
+                    <td>{report.get('assigned_to_name') or report.get('assigned_username') or 'Unassigned'}</td>
+                    <td>{report.get('created_at', '')[:10] if report.get('created_at') else '-'}</td>
+                </tr>
+        """
+    
+    html_content += """
+            </tbody>
+        </table>
+        
+        <div class="footer">
+            <p>WHDASH Feedback Management System - Page 1</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    response = make_response(html_content)
+    response.headers['Content-Type'] = 'text/html'
+    response.headers['Content-Disposition'] = f'attachment; filename=feedback_report_{datetime.now().strftime("%Y%m%d")}.html'
+    
+    return response
+
+
 # =============================================================================
 # ROUTES: REPORTS (REPORTING/ANALYTICS)
 # =============================================================================
@@ -1264,10 +1399,59 @@ def reports_analytics():
         })
     trend_data.reverse()
     
+    # Team performance data
+    team_stats = get_all("""
+        SELECT 
+            fr.assigned_to_name as assignee_name,
+            COUNT(*) as total_assigned,
+            SUM(CASE WHEN fr.status IN ('Resolved', 'Verified', 'Closed') THEN 1 ELSE 0 END) as resolved_count,
+            AVG(CASE 
+                WHEN fr.resolved_at IS NOT NULL AND fr.created_at IS NOT NULL 
+                THEN (julianday(fr.resolved_at) - julianday(fr.created_at)) * 24 
+                ELSE NULL END) as avg_resolution_hours
+        FROM feedback_reports fr
+        WHERE fr.is_deleted = 0 AND fr.assigned_to_name IS NOT NULL
+        GROUP BY fr.assigned_to_name
+        ORDER BY total_assigned DESC
+        LIMIT 10
+    """)
+    team_stats = [dict(row) for row in team_stats] if team_stats else []
+    
+    # SLA compliance
+    sla_stats = get_all("""
+        SELECT 
+            COUNT(*) as total_with_sla,
+            SUM(CASE WHEN sla_breached = 1 THEN 1 ELSE 0 END) as breached_count,
+            SUM(CASE WHEN status IN ('Resolved', 'Closed') THEN 1 ELSE 0 END) as completed_count
+        FROM feedback_reports
+        WHERE is_deleted = 0 AND sla_due_date IS NOT NULL AND sla_due_date != ''
+    """)
+    sla_data = dict(sla_stats[0]) if sla_stats else {'total_with_sla': 0, 'breached_count': 0, 'completed_count': 0}
+    
+    # Category performance
+    category_stats = get_all("""
+        SELECT 
+            fc.name as category_name,
+            COUNT(fr.id) as total_count,
+            AVG(CASE 
+                WHEN fr.resolved_at IS NOT NULL AND fr.created_at IS NOT NULL 
+                THEN (julianday(fr.resolved_at) - julianday(fr.created_at)) * 24 
+                ELSE NULL END) as avg_resolution_hours
+        FROM feedback_categories fc
+        LEFT JOIN feedback_reports fr ON fc.id = fr.category_id AND fr.is_deleted = 0
+        WHERE fc.is_active = 1
+        GROUP BY fc.id, fc.name
+        ORDER BY total_count DESC
+    """)
+    category_stats = [dict(row) for row in category_stats] if category_stats else []
+    
     return render_template('feedback/reports_analytics.html',
         title='Feedback Analytics',
         stats=stats,
         trend_data=trend_data,
+        team_stats=team_stats,
+        sla_data=sla_data,
+        category_stats=category_stats,
         can_manage=can_manage_feedback(),
         csrf_token=_csrf_token(),
     )

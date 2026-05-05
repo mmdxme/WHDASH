@@ -76,10 +76,16 @@
                 Clear
             </a>
             {% if can_manage %}
-            <a href="{{ url_for('feedback.export_reports') }}{% if request.query_string %}?{{ request.query_string }}{% endif %}" class="ml-auto px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors flex items-center gap-2">
-                <i class="fas fa-download"></i>
-                <span>Export CSV</span>
-            </a>
+            <div class="ml-auto flex items-center gap-2">
+                <a href="{{ url_for('feedback.export_reports_pdf') }}{% if request.query_string %}?{{ request.query_string }}{% endif %}" target="_blank" class="px-4 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded-xl transition-colors flex items-center gap-2">
+                    <i class="fas fa-file-pdf"></i>
+                    <span>Print Report</span>
+                </a>
+                <a href="{{ url_for('feedback.export_reports') }}{% if request.query_string %}?{{ request.query_string }}{% endif %}" class="px-4 py-2 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors flex items-center gap-2">
+                    <i class="fas fa-download"></i>
+                    <span>Export CSV</span>
+                </a>
+            </div>
             {% endif %}
         </div>
     </form>
@@ -101,22 +107,60 @@
 
 <!-- Results Table -->
 <div class="bg-slate-800/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden">
+    <div class="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+            <span class="text-sm text-slate-400">Showing</span>
+            <select id="perPageSelect" onchange="changePerPage(this.value)" class="px-3 py-1 bg-slate-700/50 border border-slate-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500/50">
+                <option value="10" {% if result.per_page == 10 %}selected{% endif %}>10</option>
+                <option value="25" {% if result.per_page == 25 %}selected{% endif %}>25</option>
+                <option value="50" {% if result.per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if result.per_page == 100 %}selected{% endif %}>100</option>
+            </select>
+            <span class="text-sm text-slate-400">of {{ result.total }} reports</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <button onclick="toggleColumnFilters()" class="px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-400 rounded-lg transition-colors text-sm flex items-center gap-2">
+                <i class="fas fa-filter"></i>
+                <span>Columns</span>
+            </button>
+            <button onclick="printReport()" class="px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-400 rounded-lg transition-colors text-sm flex items-center gap-2">
+                <i class="fas fa-print"></i>
+                <span>Print</span>
+            </button>
+        </div>
+    </div>
     <div class="overflow-x-auto">
         <table class="w-full">
             <thead>
-                <tr class="border-b border-slate-700/50">
-                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Report</th>
-                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Type</th>
-                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Status</th>
-                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Priority</th>
-                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Assignee</th>
-                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Created</th>
-                    <th class="px-6 py-4 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Updated</th>
+                <tr class="border-b border-slate-700/50 bg-slate-800/30">
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                        <a href="{{ url_for('feedback.reports_list', page=result.page, sort='reference_number ASC' if order_by != 'reference_number ASC' else 'reference_number DESC', status=filters.status, type=filters.type, priority=filters.priority, search=filters.search) }}" class="flex items-center gap-1 hover:text-white">
+                            Report <i class="fas fa-sort text-slate-600"></i>
+                        </a>
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Type</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                        <a href="{{ url_for('feedback.reports_list', page=result.page, sort='status ASC' if order_by != 'status ASC' else 'status DESC', status=filters.status, type=filters.type, priority=filters.priority, search=filters.search) }}" class="flex items-center gap-1 hover:text-white">
+                            Status <i class="fas fa-sort text-slate-600"></i>
+                        </a>
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                        <a href="{{ url_for('feedback.reports_list', page=result.page, sort='priority DESC' if order_by != 'priority DESC' else 'priority ASC', status=filters.status, type=filters.type, priority=filters.priority, search=filters.search) }}" class="flex items-center gap-1 hover:text-white">
+                            Priority <i class="fas fa-sort text-slate-600"></i>
+                        </a>
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Assignee</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                        <a href="{{ url_for('feedback.reports_list', page=result.page, sort='created_at DESC' if order_by != 'created_at DESC' else 'created_at ASC', status=filters.status, type=filters.type, priority=filters.priority, search=filters.search) }}" class="flex items-center gap-1 hover:text-white">
+                            Created <i class="fas fa-sort text-slate-600"></i>
+                        </a>
+                    </th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">Updated</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-700/50">
                 {% for report in reports %}
-                <tr class="hover:bg-slate-700/30 transition-colors cursor-pointer" onclick="window.location='{{ url_for('feedback.report_detail', report_id=report.id) }}'">
+                <tr class="hover:bg-slate-700/30 transition-colors cursor-pointer report-row" onclick="window.location='{{ url_for('feedback.report_detail', report_id=report.id) }}'">
                     <td class="px-6 py-4">
                         <div>
                             <div class="flex items-center gap-2 mb-1">
@@ -124,6 +168,11 @@
                                 {% if report.is_confidential %}
                                 <span class="px-1.5 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded border border-amber-500/30">
                                     <i class="fas fa-lock"></i>
+                                </span>
+                                {% endif %}
+                                {% if report.category_name %}
+                                <span class="px-1.5 py-0.5 text-xs bg-slate-600/50 text-slate-300 rounded">
+                                    {{ report.category_name }}
                                 </span>
                                 {% endif %}
                             </div>
@@ -149,8 +198,8 @@
                     <td class="px-6 py-4">
                         {% if report.assigned_to_name or report.assigned_username %}
                         <div class="flex items-center gap-2">
-                            <div class="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center">
-                                <i class="fas fa-user text-xs text-slate-400"></i>
+                            <div class="w-8 h-8 bg-purple-500/20 rounded-full flex items-center justify-center">
+                                <i class="fas fa-user text-xs text-purple-400"></i>
                             </div>
                             <span class="text-sm text-white">{{ report.assigned_to_name or report.assigned_username }}</span>
                         </div>
@@ -184,7 +233,7 @@
     {% if result.pages > 1 %}
     <div class="px-6 py-4 border-t border-slate-700/50 flex items-center justify-between">
         <p class="text-sm text-slate-400">
-            Showing {{ (result.page - 1) * result.per_page + 1 }} to {{ [result.page * result.per_page, result.total] | min }} of {{ result.total }} results
+            Page {{ result.page }} of {{ result.pages }}
         </p>
         <div class="flex items-center gap-2">
             {% if result.page > 1 %}
@@ -211,4 +260,17 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+function changePerPage(value) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('per_page', value);
+    url.searchParams.set('page', '1');
+    window.location.href = url.toString();
+}
+
+function toggleColumnFilters() {
+    alert('Column filter toggles coming soon');
+}
+</script>
 {% endblock %}

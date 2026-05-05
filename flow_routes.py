@@ -179,8 +179,13 @@ def check_message_rate_limit(user_id):
 
 # File upload configuration
 FLOW_UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'flow_uploads')
-FLOW_MAX_CONTENT_LENGTH = 2 * 1024 * 1024 * 1024  # 2GB
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'webm', 'mov', 'mp3', 'wav', 'ogg', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv', 'zip', 'rar'}
+# Reasonable file size limits for security
+FLOW_MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB for regular files
+FLOW_MAX_VIDEO_SIZE = 500 * 1024 * 1024  # 500MB for video files
+# Block dangerous file types - no executables, no archives (can contain malware)
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'webm', 'mov', 'mp3', 'wav', 'ogg', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv'}
+# Blocked extensions - executable and archive types that pose security risks
+BLOCKED_EXTENSIONS = {'exe', 'bat', 'cmd', 'sh', 'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'js', 'jar', 'msi', 'dll', 'so', 'dmg', 'pkg'}
 
 os.makedirs(FLOW_UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(os.path.join(FLOW_UPLOAD_FOLDER, 'images'), exist_ok=True)
@@ -3289,14 +3294,23 @@ def api_upload_file():
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
     
-    # Check file size
+    # Check file size (use appropriate limit based on type)
     file.seek(0, 2)
     size = file.tell()
     file.seek(0)
-    
-    if size > FLOW_MAX_CONTENT_LENGTH:
-        return jsonify({'error': 'File too large (max 2GB)'}), 400
-    
+
+    # Determine max size based on file extension
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    is_video = ext in {'mp4', 'webm', 'mov'}
+    max_size = FLOW_MAX_VIDEO_SIZE if is_video else FLOW_MAX_FILE_SIZE
+
+    if size > max_size:
+        return jsonify({'error': f'File too large (max {"500MB" if is_video else "50MB"})'}), 400
+
+    # Block dangerous extensions
+    if ext in BLOCKED_EXTENSIONS:
+        return jsonify({'error': 'File type not allowed for security reasons'}), 400
+
     # Get file type
     filename = secure_filename(file.filename)
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''

@@ -49,18 +49,21 @@ if len(SECRET_KEY) < 32 and ENV == 'production':
     raise RuntimeError("SECRET_KEY must be at least 32 characters (64 hex digits) for adequate security")
 
 # VAPID keys for Web Push - MUST come from environment in production
-_VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY')
-_VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY')
+_VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY') or None
+_VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY') or None
+
 if not _VAPID_PUBLIC_KEY or not _VAPID_PRIVATE_KEY:
     if ENV == 'production':
         raise RuntimeError(
             "VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY environment variables must be set in production. "
             "Generate keys with: python -c \"from webpush import vapid; v = vapid.VAPID(); print('PUBLIC:', v.public_key); print('PRIVATE:', v.private_key)\""
         )
-    # Development fallback - use insecure defaults
-    _VAPID_PUBLIC_KEY = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEY-hwQ6_Hdk7VJ4fTNt1P1S0qX63wxwwtrfbnfPDPGwpckcjeTF337se9o6Ncgn5lp6rHPSzoJq_rwDUAqlI_oQ'
-    _VAPID_PRIVATE_KEY = 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgIrq9m4IxBGkkkOX315urB7sbbkE7_GIvRGD0csfA6hehRANCAARj6HBDr8d2TtUnh9M23U_VLSpfrfDHDC2t9ud88M8bClyRyN5MXffux72jo1yCfmWnqsc9LOgmr-vANQCqUj+h'
+    # Development fallback - set to empty string to allow graceful degradation
+    # VAPID functionality will be disabled but app will still run
+    _VAPID_PUBLIC_KEY = _VAPID_PUBLIC_KEY or ''
+    _VAPID_PRIVATE_KEY = _VAPID_PRIVATE_KEY or ''
 
+# Set module-level vars
 VAPID_PUBLIC_KEY = _VAPID_PUBLIC_KEY
 VAPID_PRIVATE_KEY = _VAPID_PRIVATE_KEY
 VAPID_SUBJECT = os.environ.get('VAPID_SUBJECT', 'mailto:notifications@example.com')
@@ -339,8 +342,8 @@ QUALITY_DEFAULT_SEVERITY = 'MINOR'
 #   python -c "from webpush import vapid; v = vapid.VAPID(); print(v.public_key, v.private_key)"
 # Or use the generate_vapid_keys.py script
 
-VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEY-hwQ6_Hdk7VJ4fTNt1P1S0qX63wxwwtrfbnfPDPGwpckcjeTF337se9o6Ncgn5lp6rHPSzoJq_rwDUAqlI_oQ')
-VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', 'MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgIrq9m4IxBGkkkOX315urB7sbbkE7_GIvRGD0csfA6hehRANCAARj6HBDr8d2TtUnh9M23U_VLSpfrfDHDC2t9ud88M8bClyRyN5MXffux72jo1yCfmWnqsc9LOgmr-vANQCqUj-h')
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY') or _VAPID_PUBLIC_KEY
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY') or _VAPID_PRIVATE_KEY
 
 # VAPID subject (mailto or URL for emergency contact)
 VAPID_SUBJECT = os.environ.get('VAPID_SUBJECT', 'mailto:notifications@example.com')

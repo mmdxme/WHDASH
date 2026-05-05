@@ -1,26 +1,29 @@
-import re
-from pathlib import Path
+import sqlite3
+conn = sqlite3.connect('warehouse.db')
+cur = conn.cursor()
 
-filepath = Path('templates/documents/report_access_log.html')
-content = filepath.read_text(encoding='utf-8')
+# Test the original query that was failing
+print("Testing original query:")
+result = cur.execute('''
+    SELECT o.*, p.name as product_name, w.name as work_center_name
+    FROM mfg_production_orders o
+    LEFT JOIN products p ON o.product_id = p.id
+    LEFT JOIN mfg_work_centers w ON o.work_center_id = w.id
+    ORDER BY o.created_at DESC
+    LIMIT 5
+''').fetchall()
+print(f"Got {len(result)} rows")
+for r in result:
+    print(f"  order: {r[1]}, product: {r[-2]}, work_center: {r[-1]}")
 
-print('Lines around include:')
-for i, line in enumerate(content.split('\n')[:20], 1):
-    print(f'{i:3}: {repr(line)}')
+print()
 
-# Check include regex
-INCLUDE_RE = re.compile(r"^\s*\{\% include ['\"]base\.html['\"] \%\}")
-match = INCLUDE_RE.search(content)
-print('\nInclude match:', match)
+# Test order form query
+print("Testing order form query:")
+products = cur.execute('SELECT id, name, code FROM products ORDER BY name').fetchall()
+print(f"Got {len(products)} products")
+for p in products[:3]:
+    print(f"  {p}")
 
-# Check block content
-block_match = re.search(r"\{% block content %\}", content)
-print('Block match:', block_match)
-
-# Check endblock
-endblock_match = re.search(r"\{% endblock %\}", content)
-print('Endblock match:', endblock_match)
-
-# Try simpler include regex
-simple = re.search(r"\{\% include 'base\.html' \%\}", content)
-print('Simple include:', simple)
+conn.close()
+print("\nAll queries work!")

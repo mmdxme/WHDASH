@@ -2,12 +2,13 @@
  * Quick Tools Panel
  * ================
  * Floating quick-tools system with:
- * - Calculator
- * - Quick Notes
+ * - Calculator (Basic + Scientific)
+ * - Quick Notes (with search, sort, categories)
  * - Quick Task Creator
  * - Quick Issue Creator
- * - Personal Reminders
+ * - Personal Reminders (with repeat options, snooze)
  * - Quick Navigation / Favorites
+ * - Usage Analytics Dashboard
  */
 
 (function() {
@@ -18,10 +19,31 @@
     let currentTool = 'calculator';
     let calcExpression = '';
     let calcHistory = [];
+    let calcScientificMode = false;
 
     // DOM Elements
     let panelEl = null;
     let fabEl = null;
+
+    // Tool launcher state
+    let recentTools = [];
+    let favoriteTools = [];
+
+    // Notes state
+    let notesSearchQuery = '';
+    let notesSortBy = 'updated';
+
+    // Tasks state
+    let tasksFilter = 'all';
+
+    // Reminder snooze options
+    const SNOOZE_OPTIONS = [
+        { label: '5 min', minutes: 5 },
+        { label: '10 min', minutes: 10 },
+        { label: '15 min', minutes: 15 },
+        { label: '30 min', minutes: 30 },
+        { label: '1 hour', minutes: 60 }
+    ];
 
     // Translations helper
     function t(key, fallback) {
@@ -48,12 +70,19 @@
             window.csrfToken = csrfInput.content;
         }
 
+        // Load recent tools from localStorage
+        try {
+            recentTools = JSON.parse(localStorage.getItem('qt_recent_tools') || '[]');
+            favoriteTools = JSON.parse(localStorage.getItem('qt_favorite_tools') || '[]');
+        } catch (e) {}
+
         createFAB();
         createPanel();
         bindEvents();
         loadPreferences();
         loadFavorites(); // Load favorites for sidebar
         checkDueReminders();
+        loadUsageAnalytics();
     }
 
     // Create Floating Action Button
@@ -85,6 +114,10 @@
         return `
             <div class="quick-panel-header">
                 <div class="quick-panel-tabs">
+                    <button class="quick-tab" data-tool="launcher" title="${t('tools', 'Tools')}">
+                        <i class="fa-solid fa-grip"></i>
+                        <span>${t('tools', 'Tools')}</span>
+                    </button>
                     <button class="quick-tab active" data-tool="calculator" title="${t('calculator', 'Calculator')}">
                         <i class="fa-solid fa-calculator"></i>
                         <span>${t('calculator', 'Calc')}</span>
@@ -115,6 +148,10 @@
                 </button>
             </div>
             <div class="quick-panel-content">
+                <!-- Tool Launcher -->
+                <div id="quick-tool-launcher" class="quick-tool-content">
+                    ${getLauncherHTML()}
+                </div>
                 <!-- Calculator Tool -->
                 <div id="quick-tool-calculator" class="quick-tool-content active">
                     ${getCalculatorHTML()}
@@ -143,11 +180,58 @@
         `;
     }
 
+    function getLauncherHTML() {
+        return `
+            <div class="launcher-container">
+                <div class="launcher-search">
+                    <i class="fa-solid fa-search"></i>
+                    <input type="text" id="launcher-search" placeholder="${t('search_tools', 'Search tools...')}" autocomplete="off">
+                </div>
+                <div class="launcher-grid">
+                    ${getToolCards()}
+                </div>
+            </div>
+        `;
+    }
+
+    function getToolCards() {
+        const tools = [
+            { id: 'calculator', icon: 'fa-calculator', label: t('calculator', 'Calculator'), desc: t('calc_desc', 'Basic & scientific calculations') },
+            { id: 'notes', icon: 'fa-note-sticky', label: t('quick_notes', 'Notes'), desc: t('notes_desc', 'Quick notes & reminders') },
+            { id: 'tasks', icon: 'fa-check-circle', label: t('quick_task', 'Tasks'), desc: t('tasks_desc', 'Create quick tasks') },
+            { id: 'issues', icon: 'fa-bug', label: t('quick_issue', 'Issues'), desc: t('issues_desc', 'Report issues quickly') },
+            { id: 'reminders', icon: 'fa-bell', label: t('reminders', 'Reminders'), desc: t('reminders_desc', 'Set reminders & alerts') },
+            { id: 'favorites', icon: 'fa-star', label: t('favorites', 'Favorites'), desc: t('favorites_desc', 'Quick access links') },
+            { id: 'analytics', icon: 'fa-chart-bar', label: t('analytics', 'Analytics'), desc: t('analytics_desc', 'Usage reports & stats') }
+        ];
+
+        return tools.map(tool => `
+            <div class="tool-card" data-tool="${tool.id}">
+                <div class="tool-card-icon">
+                    <i class="fa-solid ${tool.icon}"></i>
+                </div>
+                <div class="tool-card-label">${tool.label}</div>
+                <div class="tool-card-desc">${tool.desc}</div>
+            </div>
+        `).join('');
+    }
+
     function getCalculatorHTML() {
         return `
             <div class="calc-display">
+                <div class="calc-mode-toggle">
+                    <button class="calc-mode-btn ${calcScientificMode ? '' : 'active'}" data-mode="basic">${t('basic', 'Basic')}</button>
+                    <button class="calc-mode-btn ${calcScientificMode ? 'active' : ''}" data-mode="scientific">${t('scientific', 'Scientific')}</button>
+                </div>
                 <input type="text" id="calc-expression" class="calc-expression" value="" readonly placeholder="0">
                 <div id="calc-result" class="calc-result"></div>
+                ${calcHistory.length > 0 ? `
+                <div class="calc-history-toggle">
+                    <button id="calc-history-toggle" title="${t('calc_history', 'History')}">
+                        <i class="fa-solid fa-clock-rotate-left"></i>
+                    </button>
+                </div>
+                ` : ''}
             </div>
             <div class="calc-buttons">
                 <button class="calc-btn calc-clear" data-action="clear">C</button>
@@ -172,6 +256,30 @@
                 <button class="calc-btn" data-action=".">.</button>
                 <button class="calc-btn calc-equals" data-action="=">=</button>
             </div>
+            <div class="calc-scientific-buttons ${calcScientificMode ? 'active' : ''}">
+                <button class="calc-btn calc-sci" data-sci="sin">sin</button>
+                <button class="calc-btn calc-sci" data-sci="cos">cos</button>
+                <button class="calc-btn calc-sci" data-sci="tan">tan</button>
+                <button class="calc-btn calc-sci" data-sci="sqrt">&radic;</button>
+                <button class="calc-btn calc-sci" data-sci="sq">x&sup2;</button>
+                <button class="calc-btn calc-sci" data-sci="pow">x<sup>y</sup></button>
+                <button class="calc-btn calc-sci" data-sci="pi">&pi;</button>
+                <button class="calc-btn calc-sci" data-sci="e">e</button>
+            </div>
+            <div class="calc-history-panel ${calcHistory.length > 0 ? 'active' : ''}" id="calc-history-panel">
+                <div class="calc-history-header">
+                    <span>${t('history', 'History')}</span>
+                    <button id="calc-history-clear">${t('clear', 'Clear')}</button>
+                </div>
+                <div class="calc-history-list" id="calc-history-list">
+                    ${calcHistory.slice(-10).reverse().map(h => `
+                        <div class="calc-history-item" data-expr="${escapeHtml(h.expression)}">
+                            <span class="hist-expr">${escapeHtml(h.expression)}</span>
+                            <span class="hist-result">= ${h.result}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
             <div class="calc-actions">
                 <button class="calc-copy-btn" id="calc-copy" title="${t('copy_result', 'Copy Result')}">
                     <i class="fa-regular fa-copy"></i> ${t('copy_result', 'Copy')}
@@ -183,6 +291,19 @@
     function getNotesHTML() {
         return `
             <div class="notes-container">
+                <div class="notes-toolbar">
+                    <div class="notes-search">
+                        <i class="fa-solid fa-search"></i>
+                        <input type="text" id="notes-search" placeholder="${t('search_notes', 'Search notes...')}" value="${escapeHtml(notesSearchQuery)}">
+                    </div>
+                    <div class="notes-sort">
+                        <select id="notes-sort">
+                            <option value="updated" ${notesSortBy === 'updated' ? 'selected' : ''}>${t('sort_updated', 'Last Updated')}</option>
+                            <option value="created" ${notesSortBy === 'created' ? 'selected' : ''}>${t('sort_created', 'Created')}</option>
+                            <option value="alpha" ${notesSortBy === 'alpha' ? 'selected' : ''}>${t('sort_alpha', 'A-Z')}</option>
+                        </select>
+                    </div>
+                </div>
                 <div class="notes-input-area">
                     <input type="text" id="note-title" class="note-title-input" placeholder="${t('quick_note', 'Note title...')}">
                     <textarea id="note-content" class="note-content-input" placeholder="${t('note_placeholder', 'Write your note here...')}"></textarea>
@@ -212,6 +333,12 @@
     function getTaskHTML() {
         return `
             <div class="task-form-container">
+                <div class="task-filters">
+                    <button class="task-filter-btn ${tasksFilter === 'all' ? 'active' : ''}" data-filter="all">${t('all', 'All')}</button>
+                    <button class="task-filter-btn ${tasksFilter === 'today' ? 'active' : ''}" data-filter="today">${t('today', 'Today')}</button>
+                    <button class="task-filter-btn ${tasksFilter === 'overdue' ? 'active' : ''}" data-filter="overdue">${t('overdue', 'Overdue')}</button>
+                    <button class="task-filter-btn ${tasksFilter === 'completed' ? 'active' : ''}" data-filter="completed">${t('completed', 'Completed')}</button>
+                </div>
                 <div class="task-form">
                     <div class="form-group">
                         <label>${t('task_title', 'Title')}</label>
@@ -299,6 +426,20 @@
                             <button class="preset-btn" data-preset="biweekly">${t('biweekly', '2 Weeks')}</button>
                         </div>
                     </div>
+                    <div class="reminder-repeat-row">
+                        <label>${t('repeat', 'Repeat')}:</label>
+                        <select id="reminder-repeat">
+                            <option value="">${t('no_repeat', 'No repeat')}</option>
+                            <option value="daily">${t('daily', 'Daily')}</option>
+                            <option value="weekly">${t('weekly', 'Weekly')}</option>
+                            <option value="monthly">${t('monthly', 'Monthly')}</option>
+                            <option value="weekdays">${t('weekdays', 'Weekdays')}</option>
+                        </select>
+                    </div>
+                    <div class="reminder-link-row">
+                        <input type="text" id="reminder-link" placeholder="${t('link_url', 'Link URL (optional)')}">
+                        <input type="text" id="reminder-link-label" placeholder="${t('link_label', 'Link label')}">
+                    </div>
                     <button class="reminder-add-btn" id="reminder-add">
                         <i class="fa-solid fa-bell"></i> ${t('add_reminder', 'Set Reminder')}
                     </button>
@@ -341,6 +482,7 @@
             const fabBtn = e.target.closest('#quick-tools-btn');
             const panelClose = e.target.closest('.quick-panel-close');
             const tabBtn = e.target.closest('.quick-tab');
+            const toolCard = e.target.closest('.tool-card');
 
             if (fabBtn) {
                 togglePanel();
@@ -357,6 +499,11 @@
                 return;
             }
 
+            if (toolCard) {
+                switchTool(toolCard.dataset.tool);
+                return;
+            }
+
             // Click outside to close
             if (isPanelOpen && panelEl && !panelEl.contains(e.target) && !fabEl.contains(e.target)) {
                 closePanel();
@@ -368,6 +515,40 @@
             const calcBtn = e.target.closest('.calc-btn');
             if (calcBtn && isPanelOpen && currentTool === 'calculator') {
                 handleCalcClick(calcBtn);
+            }
+
+            // Scientific mode toggle
+            if (e.target.closest('.calc-mode-btn')) {
+                const mode = e.target.closest('.calc-mode-btn').dataset.mode;
+                calcScientificMode = mode === 'scientific';
+                document.querySelectorAll('.calc-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+                document.querySelector('.calc-scientific-buttons')?.classList.toggle('active', calcScientificMode);
+            }
+
+            // History toggle
+            if (e.target.closest('#calc-history-toggle')) {
+                document.getElementById('calc-history-panel')?.classList.toggle('active');
+            }
+
+            // History clear
+            if (e.target.closest('#calc-history-clear')) {
+                calcHistory = [];
+                document.getElementById('calc-history-panel')?.classList.remove('active');
+                renderCalcButtons();
+            }
+
+            // History item click
+            if (e.target.closest('.calc-history-item')) {
+                const expr = e.target.closest('.calc-history-item').dataset.expr;
+                calcExpression = expr;
+                document.getElementById('calc-expression').value = expr;
+                document.getElementById('calc-history-panel')?.classList.remove('active');
+            }
+
+            // Scientific functions
+            if (e.target.closest('[data-sci]') && currentTool === 'calculator') {
+                const sciFunc = e.target.closest('[data-sci]').dataset.sci;
+                handleScientificFunc(sciFunc);
             }
         });
 
@@ -391,6 +572,24 @@
                 deleteNote(e.target.closest('.note-item').dataset.id);
             } else if (e.target.closest('.note-pin')) {
                 togglePinNote(e.target.closest('.note-item').dataset.id);
+            } else if (e.target.closest('.note-edit')) {
+                editNoteInline(e.target.closest('.note-item').dataset.id);
+            }
+        });
+
+        // Notes search
+        document.addEventListener('input', function(e) {
+            if (e.target.id === 'notes-search') {
+                notesSearchQuery = e.target.value;
+                loadNotes();
+            }
+        });
+
+        // Notes sort
+        document.addEventListener('change', function(e) {
+            if (e.target.id === 'notes-sort') {
+                notesSortBy = e.target.value;
+                loadNotes();
             }
         });
 
@@ -398,6 +597,13 @@
         document.addEventListener('click', function(e) {
             if (e.target.closest('#task-create') && isPanelOpen && currentTool === 'tasks') {
                 createQuickTask();
+            }
+
+            // Task filters
+            if (e.target.closest('.task-filter-btn') && isPanelOpen && currentTool === 'tasks') {
+                tasksFilter = e.target.closest('.task-filter-btn').dataset.filter;
+                document.querySelectorAll('.task-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === tasksFilter));
+                // Filter display would be applied to loaded tasks
             }
         });
 
@@ -419,9 +625,15 @@
             } else if (e.target.closest('.reminder-done')) {
                 markReminderDone(e.target.closest('.reminder-item').dataset.id);
             } else if (e.target.closest('.reminder-snooze')) {
-                snoozeReminder(e.target.closest('.reminder-item').dataset.id);
+                showSnoozeOptions(e.target.closest('.reminder-item').dataset.id, e.target.closest('.reminder-snooze'));
             } else if (e.target.closest('.reminder-delete')) {
                 deleteReminder(e.target.closest('.reminder-item').dataset.id);
+            } else if (e.target.closest('.snooze-option')) {
+                const snoozeMinutes = parseInt(e.target.closest('.snooze-option').dataset.minutes);
+                const reminderId = e.target.closest('.snooze-dropdown')?.dataset.reminderId;
+                if (reminderId) {
+                    snoozeReminder(reminderId, snoozeMinutes);
+                }
             }
         });
 
@@ -438,6 +650,13 @@
                 if (url) {
                     window.location.href = url;
                 }
+            }
+        });
+
+        // Launcher search
+        document.addEventListener('input', function(e) {
+            if (e.target.id === 'launcher-search') {
+                filterTools(e.target.value);
             }
         });
 
@@ -473,13 +692,23 @@
             }
         });
 
-        // Reminder preset buttons
+        // Close snooze dropdown when clicking outside
         document.addEventListener('click', function(e) {
-            if (!isPanelOpen || currentTool !== 'reminders') return;
-            if (e.target.closest('.preset-btn')) {
-                const preset = e.target.closest('.preset-btn').dataset.preset;
-                applyReminderPreset(preset);
+            if (!e.target.closest('.snooze-dropdown')) {
+                document.querySelectorAll('.snooze-dropdown').forEach(d => d.remove());
             }
+        });
+    }
+
+    // Filter tools in launcher
+    function filterTools(query) {
+        const cards = document.querySelectorAll('.tool-card');
+        const lowerQuery = query.toLowerCase();
+        cards.forEach(card => {
+            const label = card.querySelector('.tool-card-label').textContent.toLowerCase();
+            const desc = card.querySelector('.tool-card-desc').textContent.toLowerCase();
+            const matches = label.includes(lowerQuery) || desc.includes(lowerQuery);
+            card.style.display = matches ? '' : 'none';
         });
     }
 
@@ -549,7 +778,20 @@
             case 'favorites':
                 loadFavorites();
                 break;
+            case 'launcher':
+                // Just render tool cards
+                break;
         }
+    }
+
+    // Track recent tools
+    function trackRecentTool(tool) {
+        recentTools = recentTools.filter(t => t !== tool);
+        recentTools.unshift(tool);
+        recentTools = recentTools.slice(0, 6); // Keep only 6 recent
+        try {
+            localStorage.setItem('qt_recent_tools', JSON.stringify(recentTools));
+        } catch (e) {}
     }
 
     // Calculator Functions
@@ -569,6 +811,56 @@
         } else if (btn.dataset.action === '=') {
             calculateResult();
         }
+    }
+
+    function handleScientificFunc(func) {
+        const funcs = {
+            'sin': Math.sin,
+            'cos': Math.cos,
+            'tan': Math.tan,
+            'sqrt': Math.sqrt,
+            'sq': (x) => x * x,
+            'pi': Math.PI,
+            'e': Math.E
+        };
+
+        if (func === 'pow') {
+            appendToCalc('^');
+            return;
+        }
+
+        if (funcs[func]) {
+            const val = funcs[func];
+            if (typeof val === 'function') {
+                appendToCalc(func + '(');
+            } else {
+                appendToCalc(String(val));
+            }
+        }
+    }
+
+    function showSnoozeOptions(reminderId, btn) {
+        // Remove existing dropdowns
+        document.querySelectorAll('.snooze-dropdown').forEach(d => d.remove());
+
+        const dropdown = document.createElement('div');
+        dropdown.className = 'snooze-dropdown';
+        dropdown.dataset.reminderId = reminderId;
+        dropdown.innerHTML = SNOOZE_OPTIONS.map(opt =>
+            `<button class="snooze-option" data-minutes="${opt.minutes}">${opt.label}</button>`
+        ).join('');
+
+        document.body.appendChild(dropdown);
+
+        // Position near button
+        const rect = btn.getBoundingClientRect();
+        dropdown.style.top = rect.bottom + 'px';
+        dropdown.style.left = rect.left + 'px';
+
+        // Auto remove after 3 seconds
+        setTimeout(() => {
+            if (dropdown.parentNode) dropdown.remove();
+        }, 3000);
     }
 
     function appendToCalc(val) {
@@ -980,6 +1272,9 @@
     async function addReminder() {
         const title = document.getElementById('reminder-title');
         const datetime = document.getElementById('reminder-datetime');
+        const repeat = document.getElementById('reminder-repeat');
+        const linkUrl = document.getElementById('reminder-link');
+        const linkLabel = document.getElementById('reminder-link-label');
 
         if (!title || !title.value.trim()) {
             if (window.toast) window.toast(t('quick_reminder', 'Reminder title required'), 'error');
@@ -997,7 +1292,10 @@
                 headers: getCsrfHeaders(),
                 body: JSON.stringify({
                     title: title.value.trim(),
-                    remind_at: datetime.value
+                    remind_at: datetime.value,
+                    repeat: repeat?.value || '',
+                    link_url: linkUrl?.value?.trim() || '',
+                    link_label: linkLabel?.value?.trim() || ''
                 })
             });
 
@@ -1006,6 +1304,9 @@
             if (data.success) {
                 title.value = '';
                 datetime.value = '';
+                if (repeat) repeat.value = '';
+                if (linkUrl) linkUrl.value = '';
+                if (linkLabel) linkLabel.value = '';
                 loadReminders();
                 if (window.toast) window.toast(t('reminder_set', 'Reminder set'), 'success');
             } else {
@@ -1066,19 +1367,20 @@
         }
     }
 
-    async function snoozeReminder(id) {
+    async function snoozeReminder(id, minutes = 30) {
+        minutes = minutes || 30;
         try {
             const response = await fetch(`/api/quick-tools/reminders/${id}/snooze`, {
                 method: 'POST',
                 headers: getCsrfHeaders(),
-                body: JSON.stringify({ minutes: 60 })
+                body: JSON.stringify({ minutes: minutes })
             });
 
             const data = await response.json();
 
             if (data.success) {
                 loadReminders();
-                if (window.toast) window.toast(t('snooze', 'Snoozed') + ' 1h', 'info');
+                if (window.toast) window.toast(t('snooze', 'Snoozed') + ` ${minutes}m`, 'info');
             }
         } catch (err) {
             console.error('Snooze error:', err);
@@ -1177,6 +1479,99 @@
                 console.error('Check reminders error:', err);
             }
         }, 30000);
+    }
+
+    // Analytics functions
+    async function loadUsageAnalytics() {
+        try {
+            const response = await fetch('/api/quick-tools/analytics/usage?days=7');
+            const data = await response.json();
+
+            if (data.success && data.analytics) {
+                // Update badge with reminder count if any due
+                if (data.analytics.due_reminders) {
+                    updateReminderBadge(data.analytics.due_reminders);
+                }
+            }
+        } catch (err) {
+            console.error('Load analytics error:', err);
+        }
+    }
+
+    // Edit note inline
+    function editNoteInline(noteId) {
+        const noteEl = document.querySelector(`.note-item[data-id="${noteId}"]`);
+        if (!noteEl) return;
+
+        const contentEl = noteEl.querySelector('.note-text');
+        const titleEl = noteEl.querySelector('.note-title');
+        const currentContent = contentEl.textContent;
+        const currentTitle = titleEl?.textContent || '';
+
+        // Create edit form
+        const editForm = document.createElement('div');
+        editForm.className = 'note-edit-form';
+        editForm.innerHTML = `
+            <input type="text" class="note-edit-title" value="${escapeHtml(currentTitle)}" placeholder="Title">
+            <textarea class="note-edit-content">${escapeHtml(currentContent)}</textarea>
+            <div class="note-edit-actions">
+                <button class="note-edit-save"><i class="fa-solid fa-check"></i> Save</button>
+                <button class="note-edit-cancel"><i class="fa-solid fa-xmark"></i> Cancel</button>
+            </div>
+        `;
+
+        // Replace note content with edit form
+        noteEl.querySelector('.note-content-wrapper').style.display = 'none';
+        noteEl.appendChild(editForm);
+
+        // Bind save/cancel
+        editForm.querySelector('.note-edit-save').addEventListener('click', () => saveNoteInline(noteId, editForm));
+        editForm.querySelector('.note-edit-cancel').addEventListener('click', () => {
+            noteEl.querySelector('.note-content-wrapper').style.display = '';
+            editForm.remove();
+        });
+    }
+
+    async function saveNoteInline(noteId, editForm) {
+        const title = editForm.querySelector('.note-edit-title').value;
+        const content = editForm.querySelector('.note-edit-content').value;
+
+        if (!content.trim()) {
+            if (window.toast) window.toast(t('content_required', 'Content is required'), 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/quick-tools/notes/${noteId}`, {
+                method: 'PUT',
+                headers: getCsrfHeaders(),
+                body: JSON.stringify({ title, content })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                loadNotes();
+                if (window.toast) window.toast(t('note_updated', 'Note updated'), 'success');
+            } else {
+                if (window.toast) window.toast(data.error || 'Error', 'error');
+            }
+        } catch (err) {
+            console.error('Update note error:', err);
+        }
+    }
+
+    // Re-render calc buttons for history update
+    function renderCalcButtons() {
+        const calcContent = document.getElementById('quick-tool-calculator');
+        if (calcContent) {
+            const activeTab = document.querySelector('.quick-tab.active');
+            const tool = activeTab ? activeTab.dataset.tool : 'calculator';
+            if (tool === 'calculator') {
+                // Re-render just the calculator portion
+                calcContent.innerHTML = getCalculatorHTML();
+            }
+        }
     }
 
     // Favorites Functions

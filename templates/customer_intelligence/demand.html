@@ -28,11 +28,15 @@
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Top Demanders Chart + Table -->
         <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/5">
             <div class="p-5 border-b border-white/5 bg-slate-800/20">
                 <h3 class="font-bold text-white text-sm">Top Demanders</h3>
             </div>
-            <div class="overflow-x-auto">
+            <div class="p-4">
+                <canvas id="demandTopChart" height="160"></canvas>
+            </div>
+            <div class="overflow-x-auto max-h-[240px]">
                 <table class="w-full text-xs">
                     <thead>
                         <tr class="text-slate-500 uppercase text-[10px]">
@@ -43,7 +47,7 @@
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-white/5">
-                        {% for c in top_demand %}
+                        {% for c in top_demand[:10] %}
                         <tr class="hover:bg-white/5">
                             <td class="px-5 py-3">
                                 <a href="{{ url_for('ci_profile_detail', customer_id=c.id) }}" class="text-slate-200 hover:text-brand-400 font-medium">{{ c.name }}</a>
@@ -58,11 +62,15 @@
             </div>
         </div>
 
+        <!-- Demand by Location Chart + Table -->
         <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/5">
             <div class="p-5 border-b border-white/5 bg-slate-800/20">
                 <h3 class="font-bold text-white text-sm">Demand by Location</h3>
             </div>
-            <div class="overflow-x-auto">
+            <div class="p-4">
+                <canvas id="locationDemandChart" height="160"></canvas>
+            </div>
+            <div class="overflow-x-auto max-h-[240px]">
                 <table class="w-full text-xs">
                     <thead>
                         <tr class="text-slate-500 uppercase text-[10px]">
@@ -87,9 +95,13 @@
         </div>
     </div>
 
+    <!-- By Salesperson -->
     <div class="glass-panel rounded-3xl overflow-hidden shadow-2xl border border-white/5">
         <div class="p-5 border-b border-white/5 bg-slate-800/20">
             <h3 class="font-bold text-white text-sm">By Salesperson</h3>
+        </div>
+        <div class="p-4">
+            <canvas id="salespersonDemandChart" height="100"></canvas>
         </div>
         <div class="overflow-x-auto">
             <table class="w-full text-xs">
@@ -115,4 +127,69 @@
         </div>
     </div>
 </div>
+{% endblock %}
+{% block scripts %}
+<script>
+const chartDefaults = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+        legend: { display: false },
+        tooltip: {
+            backgroundColor: '#1e293b',
+            titleColor: '#f1f5f9',
+            bodyColor: '#94a3b8',
+            borderColor: 'rgba(255,255,255,0.1)',
+            borderWidth: 1,
+            cornerRadius: 8,
+            padding: 12
+        }
+    },
+    scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 9 } } },
+        y: { grid: { color: 'rgba(255,255,255,0.05)' }, ticks: { color: '#64748b', font: { size: 10 } } }
+    }
+};
+
+new Chart(document.getElementById('demandTopChart'), {
+    type: 'bar',
+    data: {
+        labels: [{% for c in top_demand[:10] %}'{{ c.name[:15] }}',{% endfor %}],
+        datasets: [{
+            label: 'Revenue',
+            data: [{% for c in top_demand[:10] %}{{ c.total_orders or 0 }},{% endfor %}],
+            backgroundColor: '#0ea5e9',
+            borderRadius: 4
+        }]
+    },
+    options: { ...chartDefaults }
+});
+
+new Chart(document.getElementById('locationDemandChart'), {
+    type: 'doughnut',
+    data: {
+        labels: [{% for loc in demand_by_location %}'{{ loc.location or "Unknown" }}',{% endfor %}],
+        datasets: [{
+            data: [{% for loc in demand_by_location %}{{ loc.total_demand or 0 }},{% endfor %}],
+            backgroundColor: ['#0ea5e9','#10b981','#f59e0b','#8b5cf6','#ec4899','#06b6d4'],
+            borderWidth: 0
+        }]
+    },
+    options: { ...chartDefaults, cutout: '60%' }
+});
+
+new Chart(document.getElementById('salespersonDemandChart'), {
+    type: 'bar',
+    data: {
+        labels: [{% for sp in demand_by_salesperson[:8] %}'{{ sp.salesperson_name[:15] }}',{% endfor %}],
+        datasets: [{
+            label: 'Revenue',
+            data: [{% for sp in demand_by_salesperson[:8] %}{{ sp.total_demand or 0 }},{% endfor %}],
+            backgroundColor: '#8b5cf6',
+            borderRadius: 4
+        }]
+    },
+    options: { ...chartDefaults }
+});
+</script>
 {% endblock %}

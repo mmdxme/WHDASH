@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-heartbeat fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('connector_health', 'Connector Health Report') }}
+        </h1>
+        <div class="d-flex gap-2">
+            <button onclick="exportChart('png')" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-image me-1"></i> {{ t('export_chart', 'Export Chart') }}
+            </button>
+            <a href="{{ url_for('integration_reports') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back_to_reports', 'Back to Reports') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary KPIs -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-success text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ totals.healthy }}</div>
+                    <div class="small">{{ t('healthy_connectors', 'Healthy') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ totals.unhealthy }}</div>
+                    <div class="small">{{ t('unhealthy_connectors', 'Unhealthy') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-secondary text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ totals.unknown }}</div>
+                    <div class="small">{{ t('unknown', 'Unknown') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-primary text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ totals.total }}</div>
+                    <div class="small">{{ t('total_connectors', 'Total') }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <div class="col-xl-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('health_distribution', 'Health Distribution') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="healthDonutChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('health_by_type', 'Health by Connector Type') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="healthByTypeChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Details Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('connector_details', 'Connector Details') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('connector_type', 'Type') }}</th>
+                                    <th class="text-center text-success">{{ t('healthy', 'Healthy') }}</th>
+                                    <th class="text-center text-danger">{{ t('unhealthy', 'Unhealthy') }}</th>
+                                    <th class="text-center text-secondary">{{ t('unknown', 'Unknown') }}</th>
+                                    <th class="text-center">{{ t('total', 'Total') }}</th>
+                                    <th class="text-center">{{ t('health_rate', 'Health Rate') }}</th>
+                                    <th class="text-center">{{ t('status', 'Status') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for d in data %}
+                                <tr>
+                                    <td>
+                                        <i class="fas fa-circle me-2" style="color: {{ d.color }};"></i>
+                                        {{ d.type }}
+                                    </td>
+                                    <td class="text-center text-success">{{ d.healthy }}</td>
+                                    <td class="text-center text-danger">{{ d.unhealthy }}</td>
+                                    <td class="text-center text-secondary">{{ d.unknown }}</td>
+                                    <td class="text-center">{{ d.total }}</td>
+                                    <td class="text-center">
+                                        {% if d.total > 0 %}
+                                            {% set rate = (d.healthy / d.total * 100)|round|1 %}
+                                            <div class="progress" style="height: 20px;">
+                                                <div class="progress-bar bg-success" role="progressbar" style="width: {{ rate }}%">
+                                                    {{ rate }}%
+                                                </div>
+                                            </div>
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if d.unhealthy > 0 %}
+                                            <span class="badge bg-danger">{{ t('issues_detected', 'Issues') }}</span>
+                                        {% elif d.healthy > 0 %}
+                                            <span class="badge bg-success">{{ t('healthy', 'Healthy') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ t('no_data', 'No Data') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">
+                                        {{ t('no_connector_data', 'No connector data available') }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const chartData = {{ data|tojson }};
+    
+    const healthyTotal = chartData.reduce((sum, d) => sum + (d.healthy || 0), 0);
+    const unhealthyTotal = chartData.reduce((sum, d) => sum + (d.unhealthy || 0), 0);
+    const unknownTotal = chartData.reduce((sum, d) => sum + (d.unknown || 0), 0);
+    const total = healthyTotal + unhealthyTotal + unknownTotal;
+
+    // Doughnut chart - overall health distribution
+    const donutCtx = document.getElementById('healthDonutChart').getContext('2d');
+    new Chart(donutCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['{{ t("healthy", "Healthy") }}', '{{ t("unhealthy", "Unhealthy") }}', '{{ t("unknown", "Unknown") }}'],
+            datasets: [{
+                data: [healthyTotal, unhealthyTotal, unknownTotal],
+                backgroundColor: ['#28a745', '#dc3545', '#6c757d'],
+                borderWidth: 2,
+                borderColor: '#fff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: { padding: 20, font: { size: 12 } }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const value = context.raw;
+                            const pct = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                            return `${context.label}: ${value} (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Bar chart - health by connector type
+    const barCtx = document.getElementById('healthByTypeChart').getContext('2d');
+    new Chart(barCtx, {
+        type: 'bar',
+        data: {
+            labels: chartData.map(d => d.type),
+            datasets: [
+                {
+                    label: '{{ t("healthy", "Healthy") }}',
+                    data: chartData.map(d => d.healthy),
+                    backgroundColor: '#28a745',
+                    stack: 'stack1'
+                },
+                {
+                    label: '{{ t("unhealthy", "Unhealthy") }}',
+                    data: chartData.map(d => d.unhealthy),
+                    backgroundColor: '#dc3545',
+                    stack: 'stack1'
+                },
+                {
+                    label: '{{ t("unknown", "Unknown") }}',
+                    data: chartData.map(d => d.unknown),
+                    backgroundColor: '#6c757d',
+                    stack: 'stack1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { stacked: true },
+                y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
+            },
+            plugins: {
+                legend: { position: 'bottom', labels: { padding: 15 } }
+            }
+        }
+    });
+});
+
+function exportChart(format) {
+    const canvas = document.getElementById('healthDonutChart');
+    const link = document.createElement('a');
+    link.download = 'connector-health.' + format;
+    link.href = canvas.toDataURL('image/' + format);
+    link.click();
+}
+</script>
+{% endblock %}

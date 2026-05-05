@@ -2939,3 +2939,58 @@ def register_project_routes(app):
     """Register project routes with Flask app."""
     init_project()
     app.register_blueprint(project_bp)
+
+    # =========================================================================
+    # ENDPOINT ALIASES - backward compatibility for template references
+    # =========================================================================
+    # Templates reference endpoints without blueprint prefix (e.g., 'project_list')
+    # but blueprint routes register with prefix 'project.' (e.g., 'project.project_list')
+    # These aliases ensure url_for('project_X') resolves correctly.
+    # =========================================================================
+
+    # Build URL mapping from registered blueprint routes
+    endpoint_to_url = {}
+    for rule in app.url_map.iter_rules():
+        if rule.endpoint.startswith('project.'):
+            # Strip the blueprint prefix to get the short name
+            short_name = rule.endpoint[len('project.'):]
+            endpoint_to_url[short_name] = rule.rule
+
+    # Helper to create endpoint alias with proper URL
+    def _add_alias(endpoint_name, view_func):
+        # Find the URL from the blueprint registration
+        url_path = endpoint_to_url.get(endpoint_name)
+        if url_path:
+            app.add_url_rule(
+                url_path,
+                endpoint=endpoint_name,
+                view_func=view_func,
+                methods=['GET', 'POST']
+            )
+
+    # Get the registered view functions from the blueprint
+    project_view_functions = {
+        'project_list': project_list,
+        'project_create': project_create,
+        'project_detail': project_detail,
+        'project_edit': project_edit,
+        'project_charter': project_charter,
+        'project_phases': project_phases,
+        'project_wbs': project_wbs,
+        'project_milestones': project_milestones,
+        'project_tasks': project_tasks,
+        'project_resources': project_resources,
+        'project_budget': project_budget,
+        'project_procurement': project_procurement,
+        'project_timesheet': project_timesheet,
+        'project_risks': project_risks,
+        'project_issues': project_issues,
+        'project_changes': project_changes,
+        'project_documents': project_documents,
+        'project_governance': project_governance,
+        'project_reports': reports_list,
+        'project_settings': settings_list,
+    }
+
+    for endpoint_name, view_func in project_view_functions.items():
+        _add_alias(endpoint_name, view_func)

@@ -36,10 +36,12 @@ import os
 import time
 import hashlib
 import json
+import re
 import threading
 from contextlib import contextmanager
 from functools import wraps
 from collections import OrderedDict
+from typing import Optional, List, Dict, Any, Tuple, Union, Generator, Callable
 import queue
 
 # ============================================================================
@@ -71,16 +73,145 @@ STANDARD_PRAGMAS = [
 
 
 # ============================================================================
+# QUERY TIMING AND LOGGING (7.1)
+# ============================================================================
+
+import logging as _logging
+import time as _time
+
+# Configure slow query logging
+_query_logger = _logging.getLogger('db_queries')
+_query_logger.setLevel(_logging.INFO)
+
+# Query timing threshold (seconds) - queries slower than this are logged as warnings
+SLOW_QUERY_THRESHOLD = float(os.environ.get('SLOW_QUERY_THRESHOLD', '0.5'))
+
+# Query stats tracking
+_query_stats = {
+    'total_queries': 0,
+    'slow_queries': 0,
+    'total_time': 0.0,
+}
+
+
+def log_query(query, duration, params=None):
+    """
+    Log a database query with timing information.
+
+    Args:
+        query: SQL query string
+        duration: Query execution time in seconds
+        params: Query parameters (optional)
+    """
+    global _query_stats
+    _query_stats['total_queries'] += 1
+    _query_stats['total_time'] += duration
+
+    if duration > SLOW_QUERY_THRESHOLD:
+        _query_stats['slow_queries'] += 1
+        _query_logger.warning(
+            f'Slow query ({duration:.3f}s): {query[:100]}...'
+            f' params={params[:3] if params else None}'
+        )
+    else:
+        _query_logger.debug(
+            f'Query ({duration:.3f}s): {query[:100]}...'
+        )
+
+
+def get_query_stats():
+    """Return query statistics."""
+    total = _query_stats['total_queries']
+    slow = _query_stats['slow_queries']
+    return {
+        'total_queries': total,
+        'slow_queries': slow,
+        'slow_query_rate': f"{(slow / total * 100) if total > 0 else 0:.1f}%",
+        'total_time': f"{_query_stats['total_time']:.3f}s",
+        'avg_time': f"{(_query_stats['total_time'] / total) if total > 0 else 0:.4f}s"
+    }
+
+
+def reset_query_stats():
+    """Reset query statistics."""
+    global _query_stats
+    _query_stats = {
+        'total_queries': 0,
+        'slow_queries': 0,
+        'total_time': 0.0,
+    }
+
+
+class QueryLogger:
+    """
+    Context manager for timing and logging database queries.
+
+    Usage:
+        with QueryLogger('SELECT * FROM users'):
+            db.execute('SELECT * FROM users')
+    """
+
+    def __init__(self, query_name='', query=None, params=None):
+        self.query_name = query_name
+        self.query = query
+        self.params = params
+        self.duration = 0
+        self.error = None
+
+    def __enter__(self):
+        self.start_time = _time.time()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.duration = _time.time() - self.start_time
+        if exc_type is None:
+            log_query(self.query or self.query_name, self.duration, self.params)
+        else:
+            self.error = str(exc_val)
+            _query_logger.error(f'Query error: {self.query_name} - {self.error}')
+        return False  # Don't suppress exceptions
+
+
+def timed_query(query, params=None):
+    """
+    Execute a query and time it, logging if slow.
+
+    Args:
+        query: SQL query string
+        params: Query parameters
+
+    Returns:
+        tuple: (results, duration)
+    """
+    start = _time.time()
+    try:
+        with get_db_context() as db:
+            cursor = db.execute(query, params) if params else db.execute(query)
+            results = cursor.fetchall()
+        duration = _time.time() - start
+        log_query(query, duration, params)
+        return results, duration
+    except Exception as e:
+        duration = _time.time() - start
+        _query_logger.error(f'Query failed ({duration:.3f}s): {query[:50]}... - {e}')
+        raise
+
+
+# ============================================================================
 # CORE DATABASE CONNECTION FACTORY
 # ============================================================================
 
-def get_db():
+# Global flag to enable connection pooling via environment variable
+_DB_POOLING_ENABLED = os.environ.get('DB_POOLING_ENABLED', '0') == '1'
+
+
+def get_db() -> sqlite3.Connection:
     """
     Get a database connection with standardized settings.
-    
+
     Returns:
         sqlite3.Connection: A SQLite connection with Row factory and optimized PRAGMAs.
-    
+
     Example:
         db = get_db()
         try:
@@ -88,31 +219,57 @@ def get_db():
             return dict(result) if result else None
         finally:
             db.close()
-    
+
     Note:
         Always close the connection when done, or use the context manager:
         `with get_db() as db: ...`
+
+    Connection Pooling:
+        When DB_POOLING_ENABLED=1, uses the connection pool for better
+        concurrency. Connections must be returned via return_connection()
+        or by using get_db_context() which handles this automatically.
     """
+    if _DB_POOLING_ENABLED:
+        return get_pool().get_connection()
+
     conn = sqlite3.connect(DATABASE_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
-    
+
     # Apply all standard PRAGMAs
     for pragma_sql, _ in STANDARD_PRAGMAS:
         conn.execute(pragma_sql)
-    
+
     return conn
 
 
+def get_db_pooled():
+    """
+    Get a database connection from the pool.
+    Use return_connection() to return to pool when done.
+
+    This is equivalent to get_db() when DB_POOLING_ENABLED=1.
+    """
+    return get_pool().get_connection()
+
+
+def is_pooling_enabled() -> bool:
+    """Check if connection pooling is enabled."""
+    return _DB_POOLING_ENABLED
+
+
 @contextmanager
-def get_db_context():
+def get_db_context() -> Generator[sqlite3.Connection, None, None]:
     """
     Context manager for database operations.
     Automatically handles connection close, even on exceptions.
-    
+
     Usage:
         with get_db_context() as db:
             db.execute("INSERT INTO ... VALUES (?)", (value,))
             db.commit()
+
+    Returns:
+        Generator yielding sqlite3.Connection
     """
     db = get_db()
     try:
@@ -165,12 +322,12 @@ def execute_with_retry(sql, params=None, max_retries=3):
 # DICTIONARY HELPERS
 # ============================================================================
 
-def row_to_dict(row):
+def row_to_dict(row: Optional[sqlite3.Row]) -> Optional[Dict[str, Any]]:
     """Convert a sqlite3.Row to a regular dictionary."""
     return dict(row) if row else None
 
 
-def rows_to_list(rows):
+def rows_to_list(rows: Optional[List[sqlite3.Row]]) -> List[Dict[str, Any]]:
     """Convert a list of sqlite3.Row objects to a list of dictionaries."""
     return [dict(row) for row in rows] if rows else []
 
@@ -179,7 +336,7 @@ def rows_to_list(rows):
 # COMMON QUERY HELPERS
 # ============================================================================
 
-def get_one(sql, params=None):
+def get_one(sql: str, params: Optional[Tuple[Any, ...]] = None) -> Optional[Dict[str, Any]]:
     """Execute a query and return a single row as dictionary."""
     with get_db_context() as db:
         cursor = db.execute(sql, params) if params else db.execute(sql)
@@ -187,7 +344,7 @@ def get_one(sql, params=None):
         return row_to_dict(row)
 
 
-def get_all(sql, params=None):
+def get_all(sql: str, params: Optional[Tuple[Any, ...]] = None) -> List[Dict[str, Any]]:
     """Execute a query and return all rows as list of dictionaries."""
     with get_db_context() as db:
         cursor = db.execute(sql, params) if params else db.execute(sql)
@@ -195,8 +352,41 @@ def get_all(sql, params=None):
         return rows_to_list(rows)
 
 
+def _validate_identifier(name, type_name="identifier"):
+    """
+    Validate that a name is safe for use in SQL (tables, columns, indexes).
+    Only allows alphanumeric characters and underscores.
+    
+    Args:
+        name: The identifier to validate
+        type_name: Name of the type for error messages
+    
+    Returns:
+        The validated name
+    
+    Raises:
+        ValueError: If the name contains unsafe characters
+    """
+    if not name or not isinstance(name, str):
+        raise ValueError(f"{type_name} must be a non-empty string")
+    
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+        raise ValueError(f"{type_name} contains invalid characters: {name}")
+    
+    # Check length
+    if len(name) > 64:
+        raise ValueError(f"{type_name} is too long (max 64 characters)")
+    
+    return name
+
+
 def get_count(table, where_clause="", params=None):
     """Get count of rows in a table with optional WHERE clause."""
+    table = _validate_identifier(table, "table name")
+    if where_clause:
+        # Only validate table name in where_clause, params are parameterized
+        # Note: where_clause here is expected to be safe (constructed internally)
+        where_clause = _validate_identifier(where_clause.split('=')[0].strip(), "where clause field") if '=' in where_clause else ""
     sql = f"SELECT COUNT(*) as cnt FROM {table}"
     if where_clause:
         sql += f" WHERE {where_clause}"
@@ -206,6 +396,8 @@ def get_count(table, where_clause="", params=None):
 
 def exists(table, where_clause, params=None):
     """Check if a record exists in a table."""
+    table = _validate_identifier(table, "table name")
+    # where_clause should be parameterized - only use for field names
     sql = f"SELECT 1 FROM {table} WHERE {where_clause} LIMIT 1"
     result = get_one(sql, params)
     return result is not None
@@ -227,6 +419,8 @@ def table_exists(table_name):
 
 def column_exists(table_name, column_name):
     """Check if a column exists in a table."""
+    table_name = _validate_identifier(table_name, "table name")
+    column_name = _validate_identifier(column_name, "column name")
     with get_db_context() as db:
         result = db.execute(f"PRAGMA table_info({table_name})").fetchall()
         columns = [row['name'] for row in result]
@@ -236,12 +430,14 @@ def column_exists(table_name, column_name):
 def add_column_if_not_exists(table_name, column_name, column_definition):
     """
     Add a column to a table if it doesn't exist.
-    
+
     Args:
-        table_name: Name of the table
-        column_name: Name of the column to add
+        table_name: Name of the table (must be validated identifier)
+        column_name: Name of the column to add (must be validated identifier)
         column_definition: SQLite column definition (e.g., "INTEGER DEFAULT 0")
     """
+    table_name = _validate_identifier(table_name, "table name")
+    column_name = _validate_identifier(column_name, "column name")
     if not column_exists(table_name, column_name):
         with get_db_context() as db:
             db.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
@@ -831,12 +1027,14 @@ class QueryCache:
 
             # Invalidate by prefix match
             keys_to_delete = []
-            for key in self._cache:
-                # Check if key starts with prefix (approximate match via string comparison)
-                cache_entry = self._cache[key]
-                # We don't have stored prefix info, so just clear all for now
-                # A more sophisticated implementation would store prefix with each entry
-            self._cache.clear()
+            for key in list(self._cache.keys()):
+                # Check if key starts with prefix
+                if key.startswith(prefix):
+                    keys_to_delete.append(key)
+
+            # Delete only matching keys
+            for key in keys_to_delete:
+                del self._cache[key]
 
     def get_stats(self):
         """Return cache hit/miss statistics."""
@@ -969,8 +1167,8 @@ def get_with_fallback(cache_key, fallback_func, ttl=300, cache=None):
         cached = cache.get(cache_key)
         if cached is not None:
             return cached
-    except Exception:
-        pass  # Cache error, continue to fallback
+    except Exception as e:
+        _query_logger.warning(f"Cache read error for key '{cache_key}': {e}")
 
     # Try fallback function
     try:
@@ -978,8 +1176,8 @@ def get_with_fallback(cache_key, fallback_func, ttl=300, cache=None):
         # Cache the result if possible
         try:
             cache.set(result, cache_key, _ttl=ttl)
-        except Exception:
-            pass  # Cache write error, return anyway
+        except Exception as e:
+            _query_logger.warning(f"Cache write error for key '{cache_key}': {e}")
         return result
     except Exception as e:
         # Fallback also failed - return empty but valid response
@@ -1030,8 +1228,8 @@ def batch_get_with_fallback(items, key_func, fallback_func, ttl=300, batch_size=
                         results[item_id] = value
                         try:
                             cache.set(value, key, _ttl=ttl)
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            _query_logger.warning(f"Cache batch write error for key '{key}': {e}")
                 else:
                     # Non-dict fallback result, assign to all
                     for item_id in batch:
@@ -1048,23 +1246,176 @@ def batch_get_with_fallback(items, key_func, fallback_func, ttl=300, batch_size=
     return results
 
 
+# ============================================================================
+# REDIS CACHE BACKEND (Optional - falls back to in-memory)
+# ============================================================================
+
+_redis_client = None
+
+
+def get_redis_client():
+    """
+    Get or create Redis client for distributed caching.
+    Returns None if Redis is not available.
+    """
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
+
+    try:
+        import redis
+        from config import REDIS_URL, REDIS_CACHE_URL
+
+        redis_url = REDIS_CACHE_URL or REDIS_URL
+        if not redis_url:
+            return None
+
+        _redis_client = redis.from_url(redis_url)
+        _redis_client.ping()  # Test connection
+        return _redis_client
+    except Exception:
+        return None
+
+
+def invalidate_redis_cache(pattern):
+    """
+    Invalidate Redis cache keys matching pattern.
+
+    Args:
+        pattern: Redis key pattern (e.g., 'user_perms:*' or '*')
+
+    Returns:
+        Number of keys deleted
+    """
+    client = get_redis_client()
+    if not client:
+        return 0
+
+    try:
+        deleted = 0
+        for key in client.scan_iter(match=pattern):
+            client.delete(key)
+            deleted += 1
+        return deleted
+    except Exception:
+        return 0
+
+
+class RedisQueryCache:
+    """
+    Redis-backed distributed query cache.
+    Falls back to in-memory cache if Redis is unavailable.
+    """
+
+    def __init__(self, default_ttl=300):
+        self.default_ttl = default_ttl
+        self._local_cache = QueryCache(max_size=100, default_ttl=60)  # Local L1 cache
+        self._hits = 0
+        self._misses = 0
+        self._local_hits = 0
+
+    def _make_key(self, prefix, *args, **kwargs):
+        """Generate a cache key from prefix and arguments."""
+        key_parts = [prefix] + [str(arg) for arg in args]
+        key_parts.extend(f"{k}={v}" for k, v in sorted(kwargs.items()))
+        key_str = ':'.join(key_parts)
+        return f"mmdx:cache:{hashlib.md5(key_str.encode()).hexdigest()}"
+
+    def get(self, prefix, *args, **kwargs):
+        """Get cached result, checking local cache first, then Redis."""
+        # Check local L1 cache first (very fast)
+        local_result = self._local_cache.get(prefix, *args, **kwargs)
+        if local_result is not None:
+            self._local_hits += 1
+            return local_result
+
+        # Try Redis
+        client = get_redis_client()
+        if not client:
+            self._misses += 1
+            return None
+
+        key = self._make_key(prefix, *args, **kwargs)
+        try:
+            cached = client.get(key)
+            if cached is not None:
+                import json
+                result = json.loads(cached)
+                self._hits += 1
+                # Also populate local cache
+                self._local_cache.set(result, prefix, *args, **kwargs)
+                return result
+        except Exception:
+            pass
+
+        self._misses += 1
+        return None
+
+    def set(self, data, prefix, *args, **kwargs):
+        """Cache a result in both local and Redis cache."""
+        ttl = kwargs.pop('_ttl', self.default_ttl)
+
+        # Always set in local cache
+        self._local_cache.set(data, prefix, *args, _ttl=ttl, **kwargs)
+
+        # Try Redis
+        client = get_redis_client()
+        if not client:
+            return
+
+        key = self._make_key(prefix, *args, **kwargs)
+        try:
+            import json
+            client.setex(key, ttl, json.dumps(data))
+        except Exception:
+            pass
+
+    def invalidate(self, prefix=None):
+        """Invalidate cache entries."""
+        # Clear local cache
+        if prefix is None:
+            self._local_cache.invalidate()
+        else:
+            self._local_cache.invalidate(prefix)
+
+        # Invalidate Redis
+        if prefix:
+            invalidate_redis_cache(f"mmdx:cache:{prefix}:*")
+        else:
+            invalidate_redis_cache("mmdx:cache:*")
+
+    def get_stats(self):
+        """Return cache hit/miss statistics."""
+        total = self._hits + self._misses
+        hit_rate = (self._hits / total * 100) if total > 0 else 0
+        local_hit_rate = (self._local_hits / (self._local_hits + 1)) * 100  # Approximate
+
+        return {
+            'hits': self._hits,
+            'misses': self._misses,
+            'local_hits': self._local_hits,
+            'hit_rate': hit_rate,
+            'local_cache_size': len(self._local_cache._cache),
+            'backend': 'redis' if get_redis_client() else 'memory'
+        }
+
+
 # Global query cache instance
 _query_cache = None
 
 
 def get_cache():
-    """Get or create the global query cache."""
+    """Get or create the global query cache (Redis-backed if available)."""
     global _query_cache
     if _query_cache is None:
-        max_size = int(os.environ.get('QUERY_CACHE_SIZE', '1000'))
         default_ttl = int(os.environ.get('QUERY_CACHE_TTL', '300'))
-        _query_cache = QueryCache(max_size=max_size, default_ttl=default_ttl)
+        _query_cache = RedisQueryCache(default_ttl=default_ttl)
     return _query_cache
 
 
 def cached_query(prefix, ttl, query_func, *args, **kwargs):
     """
-    Execute a query with caching.
+    Execute a query with caching (Redis-backed if available).
 
     Args:
         prefix: Cache key prefix
@@ -1092,6 +1443,93 @@ def cached_query(prefix, ttl, query_func, *args, **kwargs):
 
 
 # ============================================================================
+# CURSOR-BASED PAGINATION
+# ============================================================================
+
+def paginate_query(sql, params=None, cursor_after=None, limit=50, order_by_column='id'):
+    """
+    Cursor-based pagination for efficient scrolling.
+
+    Args:
+        sql: Base query (should include ORDER BY for consistent ordering)
+        params: Query parameters dictionary
+        cursor_after: Row ID to cursor after (exclusive) - fetches rows with id < cursor_after
+        limit: Page size (will fetch limit+1 to check if there's more)
+        order_by_column: Column name to use for cursor comparison (default: 'id')
+
+    Returns:
+        tuple: (results as list of dicts, next_cursor or None)
+    """
+    if params is None:
+        params = {}
+
+    if cursor_after is not None:
+        # Add WHERE clause to skip to cursor position
+        # The cursor condition assumes ordering by id DESC
+        cursor_condition = f"{order_by_column} < :cursor_after"
+        if "WHERE" in sql.upper():
+            sql = sql.replace("WHERE", f"{cursor_condition} AND (", 1)
+        else:
+            sql = sql.replace("ORDER BY", f"WHERE {cursor_condition} ORDER BY", 1)
+
+        params['cursor_after'] = cursor_after
+
+    # Add limit + 1 to detect if there are more results
+    sql = sql.rstrip(';')
+    sql += " LIMIT :limit"
+    params['limit'] = limit + 1
+
+    with get_db_context() as db:
+        rows = db.execute(sql, params).fetchall()
+
+    has_more = len(rows) > limit
+    if has_more:
+        rows = rows[:-1]  # Remove the extra row
+
+    next_cursor = None
+    if rows and has_more:
+        # Use the last row's order_by_column value as next cursor
+        next_cursor = rows[-1][order_by_column]
+
+    return rows_to_list(rows), next_cursor
+
+
+def paginate_query_with_metadata(sql, params=None, cursor_after=None, limit=50,
+                                   order_by_column='id', result_key='items'):
+    """
+    Cursor-based pagination with standardized response metadata.
+
+    Args:
+        sql: Base query (should include ORDER BY for consistent ordering)
+        params: Query parameters dictionary
+        cursor_after: Row ID to cursor after (exclusive)
+        limit: Page size
+        order_by_column: Column name to use for cursor comparison
+        result_key: Key name for results in response
+
+    Returns:
+        dict: {
+            result_key: [...list of items...],
+            'pagination': {
+                'next_cursor': cursor_value or None,
+                'has_more': bool,
+                'limit': int
+            }
+        }
+    """
+    rows, next_cursor = paginate_query(sql, params, cursor_after, limit, order_by_column)
+
+    return {
+        result_key: rows,
+        'pagination': {
+            'next_cursor': next_cursor,
+            'has_more': next_cursor is not None,
+            'limit': limit
+        }
+    }
+
+
+# ============================================================================
 # INDEX OPTIMIZATION
 # ============================================================================
 
@@ -1109,8 +1547,15 @@ def ensure_index(table_name, index_name, columns, unique=False):
         ensure_index('users', 'idx_users_email', ['email'])
         ensure_index('orders', 'idx_orders_customer_date', ['customer_id', 'order_date'])
     """
+    # Validate all identifiers
+    table_name = _validate_identifier(table_name, "table name")
+    index_name = _validate_identifier(index_name, "index name")
+
     if isinstance(columns, str):
         columns = [columns]
+
+    # Validate column names
+    validated_columns = [_validate_identifier(col, "column name") for col in columns]
 
     # Check if index already exists
     existing = get_one("""
@@ -1122,7 +1567,7 @@ def ensure_index(table_name, index_name, columns, unique=False):
         return False  # Index already exists
 
     # Create index
-    columns_str = ', '.join(columns)
+    columns_str = ', '.join(validated_columns)
     unique_str = 'UNIQUE ' if unique else ''
 
     sql = f"CREATE {unique_str}INDEX IF NOT EXISTS {index_name} ON {table_name} ({columns_str})"
@@ -1184,6 +1629,32 @@ PLATFORM_INDEXES = [
     # Sessions
     ('user_sessions', 'idx_sessions_user', ['user_id'], False),
     ('user_sessions', 'idx_sessions_token', ['session_token'], False),
+
+    # Flow messages (critical for chat performance)
+    ('flow_messages', 'idx_flow_messages_conversation_time', ['conversation_id', 'created_at'], False),
+    ('flow_messages', 'idx_flow_messages_sender', ['sender_id', 'created_at'], False),
+
+    # Flow conversation members
+    ('flow_conversation_members', 'idx_flow_conv_members_user', ['user_id', 'unread_count'], False),
+
+    # WMS inventory (critical for SCM dashboards)
+    ('wms_inventory_balances', 'idx_wms_inventory_item_wh', ['item_id', 'warehouse_id'], False),
+    ('wms_items', 'idx_wms_items_active_code', ['is_active', 'item_code'], False),
+
+    # Planning demand history
+    ('planning_demand_history', 'idx_planning_demand_item_date', ['item_id', 'demand_date'], False),
+
+    # Planning item profiles
+    ('planning_item_profiles', 'idx_planning_profiles_item', ['item_id'], False),
+
+    # SCM alerts
+    ('planning_alerts', 'idx_planning_alerts_ack', ['is_acknowledged', 'severity', 'created_at'], False),
+
+    # Platform notifications (additional composite index)
+    ('platform_notifications', 'idx_platform_notif_user_read', ['user_id', 'is_read', 'created_at'], False),
+
+    # Audit log (additional composite index for entity lookups)
+    ('platform_audit_log', 'idx_platform_audit_entity_time', ['entity_type', 'entity_id', 'created_at'], False),
 ]
 
 
@@ -1203,17 +1674,19 @@ def initialize_platform_indexes():
 def export_to_dict_list(query_or_table, params=None):
     """
     Execute a query or table name and return as list of dicts.
-    
+
     Args:
         query_or_table: SQL query string or table name
         params: Query parameters
-    
+
     Returns:
         List of dictionaries
     """
     if query_or_table.strip().upper().startswith("SELECT"):
         return get_all(query_or_table, params)
     else:
+        # Validate table name before interpolation
+        query_or_table = _validate_identifier(query_or_table, "table name")
         return get_all(f"SELECT * FROM {query_or_table}")
 
 
@@ -1493,8 +1966,13 @@ def deactivate_session(session_id):
         db.commit()
 
 
-def deactivate_all_user_sessions(user_id, except_current=True):
-    """Deactivate all sessions for a user, optionally except current."""
+def deactivate_all_user_sessions(user_id, except_current=False):
+    """Deactivate all sessions for a user, optionally except current.
+
+    Args:
+        user_id: The user ID whose sessions to deactivate
+        except_current: If True, keeps the current session active (default: False for proper logout)
+    """
     with get_db_context() as db:
         if except_current:
             db.execute("""

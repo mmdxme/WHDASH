@@ -282,9 +282,10 @@ def enterprise_dashboard():
 # ============================================================================
 
 def build_kpis(user_role, company_id):
-    """Build role-appropriate KPI cards."""
+    """Build comprehensive cross-module KPIs for executive dashboard."""
     
-    base_kpis = [
+    # Universal KPIs - always shown regardless of role
+    universal_kpis = [
         {
             'id': 'pending_approvals',
             'label': 'Pending Approvals',
@@ -335,135 +336,210 @@ def build_kpis(user_role, company_id):
         }
     ]
     
-    # Finance-specific KPIs
-    if user_role in ['CFO', 'Finance Manager', 'Treasury Manager', 'Admin']:
-        base_kpis.extend([
-            {
-                'id': 'cash_position',
-                'label': 'Cash Position',
-                'value': 2450000,
-                'formatted_value': 'AED 2.45M',
-                'icon': 'wallet',
-                'severity': 'success',
-                'trend': '+2.3%',
-                'trend_direction': 'up',
-                'subtext': 'Total available',
-                'link': '/finance/treasury/cash-position'
-            },
-            {
-                'id': 'todays_collections',
-                'label': "Today's Collections",
-                'value': 185000,
-                'formatted_value': 'AED 185K',
-                'icon': 'hand-holding-dollar',
-                'severity': 'info',
-                'trend': '85% of target',
-                'trend_direction': 'up',
-                'subtext': 'vs AED 218K target',
-                'link': '/finance/treasury/collections'
-            },
-            {
-                'id': 'due_payments',
-                'label': 'Due Payments',
-                'value': 425000,
-                'formatted_value': 'AED 425K',
-                'icon': 'credit-card',
-                'severity': 'warning',
-                'trend': 'Due in 5 days',
-                'trend_direction': 'neutral',
-                'subtext': '32 invoices',
-                'link': '/finance/treasury/payments'
-            },
-            {
-                'id': 'active_workflows',
-                'label': 'Active Workflows',
-                'value': 24,
-                'formatted_value': '24',
-                'icon': 'project-diagram',
-                'severity': 'info',
-                'trend': '+8 new today',
-                'trend_direction': 'up',
-                'subtext': 'Running instances',
-                'link': '/workflow/dashboard'
-            }
-        ])
+    # Cross-module KPIs - Finance
+    finance_kpis = [
+        {
+            'id': 'cash_position',
+            'label': 'Cash Position',
+            'value': 2450000,
+            'formatted_value': 'AED 2.45M',
+            'icon': 'wallet',
+            'severity': 'success',
+            'trend': '+2.3%',
+            'trend_direction': 'up',
+            'subtext': 'Total available',
+            'link': '/finance/treasury/dashboard'
+        },
+        {
+            'id': 'todays_collections',
+            'label': "Today's Collections",
+            'value': 185000,
+            'formatted_value': 'AED 185K',
+            'icon': 'hand-holding-dollar',
+            'severity': 'info',
+            'trend': '85% of target',
+            'trend_direction': 'up',
+            'subtext': 'vs AED 218K target',
+            'link': '/finance/treasury/dashboard'
+        },
+        {
+            'id': 'due_payments',
+            'label': 'Due Payments',
+            'value': 425000,
+            'formatted_value': 'AED 425K',
+            'icon': 'credit-card',
+            'severity': 'warning',
+            'trend': 'Due in 5 days',
+            'trend_direction': 'neutral',
+            'subtext': '32 invoices',
+            'link': '/finance/treasury/dashboard'
+        }
+    ]
     
-    # Operations KPIs
-    if user_role in ['COO', 'Warehouse Manager', 'Operations Manager', 'Admin']:
-        base_kpis.extend([
-            {
-                'id': 'stock_health',
-                'label': 'Stock Health',
-                'value': 94,
-                'formatted_value': '94%',
-                'icon': 'boxes-stacked',
-                'severity': 'success',
-                'trend': '+1.2%',
-                'trend_direction': 'up',
-                'subtext': 'Items in healthy range',
-                'link': '/inventory/dashboard'
-            },
-            {
-                'id': 'late_deliveries',
-                'label': 'Late Deliveries',
-                'value': 4,
-                'formatted_value': '4',
-                'icon': 'truck-fast',
-                'severity': 'critical',
-                'trend': '+2 new',
-                'trend_direction': 'up',
-                'subtext': 'On-time rate: 94%',
-                'link': '/logistics/deliveries?status=delayed'
-            }
-        ])
+    # Cross-module KPIs - Operations / Supply Chain
+    operations_kpis = [
+        {
+            'id': 'stock_health',
+            'label': 'Stock Health',
+            'value': 94,
+            'formatted_value': '94%',
+            'icon': 'boxes-stacked',
+            'severity': 'success',
+            'trend': '+1.2%',
+            'trend_direction': 'up',
+            'subtext': 'Items in healthy range',
+            'link': '/wms/dashboard'
+        },
+        {
+            'id': 'active_workflows',
+            'label': 'Active Workflows',
+            'value': 24,
+            'formatted_value': '24',
+            'icon': 'project-diagram',
+            'severity': 'info',
+            'trend': '+8 new today',
+            'trend_direction': 'up',
+            'subtext': 'Running instances',
+            'link': '/workflow/dashboard'
+        },
+        {
+            'id': 'late_deliveries',
+            'label': 'Late Deliveries',
+            'value': 4,
+            'formatted_value': '4',
+            'icon': 'truck-fast',
+            'severity': 'critical',
+            'trend': '+2 new',
+            'trend_direction': 'up',
+            'subtext': 'On-time rate: 94%',
+            'link': '/logistics/deliveries?status=delayed'
+        }
+    ]
     
-    # HR KPIs
-    if user_role in ['HR Manager', 'Admin']:
-        base_kpis.extend([
-            {
-                'id': 'headcount',
-                'label': 'Total Headcount',
-                'value': 248,
-                'formatted_value': '248',
-                'icon': 'users',
-                'severity': 'info',
-                'trend': '+12 this month',
-                'trend_direction': 'up',
-                'subtext': 'vs 236 last month',
-                'link': '/hr/employees'
-            }
-        ])
+    # Cross-module KPIs - HR & People
+    hr_kpis = [
+        {
+            'id': 'headcount',
+            'label': 'Total Headcount',
+            'value': 248,
+            'formatted_value': '248',
+            'icon': 'users',
+            'severity': 'info',
+            'trend': '+12 this month',
+            'trend_direction': 'up',
+            'subtext': 'vs 236 last month',
+            'link': '/hr/employees'
+        },
+        {
+            'id': 'pending_leaves',
+            'label': 'Pending Leaves',
+            'value': 18,
+            'formatted_value': '18',
+            'icon': 'calendar-check',
+            'severity': 'warning',
+            'trend': '3 new today',
+            'trend_direction': 'up',
+            'subtext': 'Awaiting approval',
+            'link': '/hr/leaves'
+        }
+    ]
     
-    # Executive KPIs
-    if user_role in ['CEO', 'COO', 'CFO', 'Admin']:
-        base_kpis.extend([
-            {
-                'id': 'revenue_snapshot',
-                'label': 'Revenue MTD',
-                'value': 8750000,
-                'formatted_value': 'AED 8.75M',
-                'icon': 'chart-line',
-                'severity': 'success',
-                'trend': '+18% vs LY',
-                'trend_direction': 'up',
-                'subtext': 'vs AED 7.4M last year',
-                'link': '/reports/revenue'
-            },
-            {
-                'id': 'budget_variance',
-                'label': 'Budget Variance',
-                'value': -3.2,
-                'formatted_value': '-3.2%',
-                'icon': 'chart-column',
-                'severity': 'warning',
-                'trend': 'Under budget',
-                'trend_direction': 'down',
-                'subtext': 'Favorable variance',
-                'link': '/reports/budget'
-            }
-        ])
+    # Cross-module KPIs - CRM & Sales
+    crm_kpis = [
+        {
+            'id': 'open_leads',
+            'label': 'Open Leads',
+            'value': 87,
+            'formatted_value': '87',
+            'icon': 'user-plus',
+            'severity': 'info',
+            'trend': '+12 this week',
+            'trend_direction': 'up',
+            'subtext': '$2.4M pipeline',
+            'link': '/crm/leads'
+        },
+        {
+            'id': 'pending_quotes',
+            'label': 'Pending Quotes',
+            'value': 23,
+            'formatted_value': '23',
+            'icon': 'file-invoice',
+            'severity': 'warning',
+            'trend': '8 awaiting response',
+            'trend_direction': 'neutral',
+            'subtext': 'Avg response: 4h',
+            'link': '/crm/quotes'
+        }
+    ]
     
-    return base_kpis
+    # Cross-module KPIs - Manufacturing
+    mfg_kpis = [
+        {
+            'id': 'oee_score',
+            'label': 'OEE Score',
+            'value': 87,
+            'formatted_value': '87%',
+            'icon': 'industry',
+            'severity': 'success',
+            'trend': '+2.1%',
+            'trend_direction': 'up',
+            'subtext': 'Above target (85%)',
+            'link': '/manufacturing/dashboard'
+        },
+        {
+            'id': 'active_orders',
+            'label': 'Active Orders',
+            'value': 156,
+            'formatted_value': '156',
+            'icon': 'clipboard-list',
+            'severity': 'info',
+            'trend': '12 new today',
+            'trend_direction': 'up',
+            'subtext': '98.2% on-time',
+            'link': '/manufacturing/orders'
+        }
+    ]
+    
+    # Cross-module KPIs - Executive Summary
+    executive_kpis = [
+        {
+            'id': 'revenue_mtd',
+            'label': 'Revenue MTD',
+            'value': 8750000,
+            'formatted_value': 'AED 8.75M',
+            'icon': 'chart-line',
+            'severity': 'success',
+            'trend': '+18% vs LY',
+            'trend_direction': 'up',
+            'subtext': 'vs AED 7.4M last year',
+            'link': '/reports/revenue'
+        },
+        {
+            'id': 'budget_variance',
+            'label': 'Budget Variance',
+            'value': -3.2,
+            'formatted_value': '-3.2%',
+            'icon': 'chart-column',
+            'severity': 'warning',
+            'trend': 'Under budget',
+            'trend_direction': 'down',
+            'subtext': 'Favorable variance',
+            'link': '/reports/budget'
+        }
+    ]
+    
+    # Combine all KPIs - comprehensive cross-module view
+    all_kpis = (
+        universal_kpis +
+        finance_kpis +
+        operations_kpis +
+        hr_kpis +
+        crm_kpis +
+        mfg_kpis +
+        executive_kpis
+    )
+    
+    return all_kpis
 
 # ============================================================================
 # MODULE LAUNCHER BUILDERS
@@ -558,20 +634,41 @@ def build_module_categories(user_role, lang='en'):
     return categories
 
 def build_recent_modules(user_role):
-    """Build recently used modules (simulated)."""
+    """Build recently used modules - diverse across MMDx ecosystem."""
     return [
+        # Finance
         {'id': 'treasury', 'label': 'Treasury', 'icon': 'wallet', 'url': '/finance/treasury/dashboard'},
         {'id': 'finance', 'label': 'Finance', 'icon': 'calculator', 'url': '/finance'},
-        {'id': 'inventory', 'label': 'Inventory', 'icon': 'boxes', 'url': '/'},
+        # Operations
+        {'id': 'manufacturing', 'label': 'Manufacturing', 'icon': 'industry', 'url': '/manufacturing/dashboard'},
+        {'id': 'wms', 'label': 'Inventory', 'icon': 'boxes-stacked', 'url': '/wms/dashboard'},
+        # People
+        {'id': 'hr', 'label': 'HR', 'icon': 'user-tie', 'url': '/hr/dashboard'},
+        {'id': 'payroll', 'label': 'Payroll', 'icon': 'money-check', 'url': '/payroll/dashboard'},
+        # CRM & Commerce
+        {'id': 'crm', 'label': 'CRM', 'icon': 'address-book', 'url': '/crm/dashboard'},
+        {'id': 'project', 'label': 'Project', 'icon': 'tasks', 'url': '/project/dashboard'},
     ]
 
 def build_favorite_modules(user_role):
-    """Build favorite modules."""
+    """Build favorite modules - comprehensive MMDx coverage."""
     return [
+        # Finance & Treasury
         {'id': 'treasury', 'label': 'Treasury', 'icon': 'wallet', 'url': '/finance/treasury/dashboard'},
         {'id': 'finance', 'label': 'Finance', 'icon': 'calculator', 'url': '/finance'},
-        {'id': 'crm', 'label': 'CRM', 'icon': 'address-book', 'url': '/crm'},
-        {'id': 'hr', 'label': 'HR', 'icon': 'user-tie', 'url': '/hr'},
+        # Operations
+        {'id': 'manufacturing', 'label': 'Manufacturing', 'icon': 'industry', 'url': '/manufacturing/dashboard'},
+        {'id': 'wms', 'label': 'WMS', 'icon': 'boxes-stacked', 'url': '/wms/dashboard'},
+        {'id': 'scm', 'label': 'Supply Chain', 'icon': 'chain', 'url': '/scm/dashboard'},
+        # People
+        {'id': 'hr', 'label': 'HR', 'icon': 'user-tie', 'url': '/hr/dashboard'},
+        {'id': 'payroll', 'label': 'Payroll', 'icon': 'money-check', 'url': '/payroll/dashboard'},
+        # CRM & Commerce
+        {'id': 'crm', 'label': 'CRM', 'icon': 'address-book', 'url': '/crm/dashboard'},
+        {'id': 'project', 'label': 'Project', 'icon': 'tasks', 'url': '/project/dashboard'},
+        # Technology & Governance
+        {'id': 'integration', 'label': 'Integration', 'icon': 'plug', 'url': '/integration/dashboard'},
+        {'id': 'bi', 'label': 'BI Dashboard', 'icon': 'chart-bar', 'url': '/bi/dashboard'},
     ]
 
 # ============================================================================
@@ -655,48 +752,74 @@ def build_alerts(user_role):
 # ============================================================================
 
 def build_operational_widgets(user_role):
-    """Build operational overview widgets."""
+    """Build operational overview widgets - balanced across all MMDx modules."""
     
     return [
+        # WMS / Inventory
         {
             'type': 'kpi',
-            'title': 'WMS Health',
-            'icon': 'boxes',
+            'title': 'Inventory Health',
+            'icon': 'boxes-stacked',
             'value': '94%',
-            'subtitle': '+1.2% vs last week',
+            'subtitle': '18,432 SKUs tracked',
             'badge': '3 Critical',
             'badge_type': 'danger',
-            'link': '/inventory/dashboard'
+            'link': '/wms/dashboard'
         },
+        # Manufacturing
         {
             'type': 'kpi',
-            'title': 'Active Shipments',
-            'icon': 'truck',
-            'value': '24',
-            'subtitle': '18 on-time, 4 delayed',
-            'badge': '4 Delayed',
-            'badge_type': 'warning',
-            'link': '/logistics/shipments'
+            'title': 'Production OEE',
+            'icon': 'industry',
+            'value': '87%',
+            'subtitle': '+2.1% vs last week',
+            'badge': 'Above Target',
+            'badge_type': 'success',
+            'link': '/manufacturing/dashboard'
         },
+        # Quality
         {
             'type': 'kpi',
-            'title': 'Quality Holds',
+            'title': 'Quality Pass Rate',
             'icon': 'check-double',
-            'value': '7',
-            'subtitle': 'Items pending QC',
-            'badge': '2 Urgent',
+            'value': '98.2%',
+            'subtitle': '1,247 inspections today',
+            'badge': '2 Holds',
             'badge_type': 'warning',
-            'link': '/quality/holds'
+            'link': '/quality/inspections'
         },
+        # Maintenance
         {
             'type': 'kpi',
-            'title': 'Open Work Orders',
+            'title': 'Maintenance Uptime',
             'icon': 'wrench',
-            'value': '31',
-            'subtitle': '12 preventive, 19 corrective',
+            'value': '96.4%',
+            'subtitle': '31 active work orders',
             'badge': '5 Overdue',
             'badge_type': 'danger',
-            'link': '/maintenance/work-orders'
+            'link': '/maintenance/dashboard'
+        },
+        # SCM / Logistics
+        {
+            'type': 'kpi',
+            'title': 'On-Time Delivery',
+            'icon': 'truck-fast',
+            'value': '94%',
+            'subtitle': '24 active shipments',
+            'badge': '4 Delayed',
+            'badge_type': 'warning',
+            'link': '/logistics/dashboard'
+        },
+        # Projects
+        {
+            'type': 'kpi',
+            'title': 'Active Projects',
+            'icon': 'tasks',
+            'value': '18',
+            'subtitle': '7 on track, 8 at risk',
+            'badge': '3 Critical',
+            'badge_type': 'warning',
+            'link': '/project/dashboard'
         }
     ]
 
@@ -705,32 +828,50 @@ def build_operational_widgets(user_role):
 # ============================================================================
 
 def build_financial_widgets(user_role):
-    """Build financial snapshot widgets."""
+    """Build financial snapshot widgets - comprehensive across Finance, Treasury, AR/AP."""
     
     return [
+        # Revenue
         {
             'title': 'Revenue MTD',
             'icon': 'chart-line',
             'value': 'AED 8.75M',
             'comparison': {'label': 'vs Budget', 'value': '+12.3%', 'direction': 'up'}
         },
+        # Expenses
         {
             'title': 'Expenses MTD',
             'icon': 'credit-card',
             'value': 'AED 5.2M',
             'comparison': {'label': 'vs Budget', 'value': '-3.1%', 'direction': 'down'}
         },
+        # Cash Position
+        {
+            'title': 'Cash Position',
+            'icon': 'wallet',
+            'value': 'AED 2.45M',
+            'comparison': {'label': 'vs Last Month', 'value': '+2.3%', 'direction': 'up'}
+        },
+        # AR Outstanding
         {
             'title': 'AR Outstanding',
             'icon': 'file-invoice-dollar',
             'value': 'AED 12.4M',
             'comparison': {'label': 'vs Last Month', 'value': '+8.5%', 'direction': 'up'}
         },
+        # AP Outstanding
         {
             'title': 'AP Outstanding',
             'icon': 'money-check-alt',
             'value': 'AED 4.8M',
             'comparison': {'label': 'Due This Week', 'value': 'AED 1.2M', 'direction': 'neutral'}
+        },
+        # Budget Variance
+        {
+            'title': 'Budget Variance',
+            'icon': 'chart-column',
+            'value': '-3.2%',
+            'comparison': {'label': 'Favorable', 'value': 'On track', 'direction': 'down'}
         }
     ]
 
@@ -919,9 +1060,10 @@ def build_reports(user_role):
 # ============================================================================
 
 def build_insights():
-    """Build AI-generated insights and recommendations."""
+    """Build AI-generated insights and recommendations across MMDx ecosystem."""
     
     return [
+        # Finance / Treasury
         {
             'id': 'ins_001',
             'type': 'attention',
@@ -938,27 +1080,63 @@ def build_insights():
                 {'label': 'Take Action', 'icon': 'bolt', 'type': 'primary', 'url': '/finance/treasury/actions#collections'}
             ]
         },
+        # Manufacturing
         {
             'id': 'ins_002',
+            'type': 'attention',
+            'type_label': 'Production Alert',
+            'icon': 'industry',
+            'confidence': 87,
+            'title': 'OEE Decline Risk',
+            'description': 'Line 3 OEE has dropped 4.2% over the past week due to increased unplanned downtime. Primary root cause: conveyor belt wear identified in preventive maintenance logs.',
+            'affected_items': 'Line 3 - Assembly',
+            'source_module': 'Manufacturing',
+            'time_ago': '2 hours ago',
+            'actions': [
+                {'label': 'View Analysis', 'icon': 'chart-line', 'type': 'secondary', 'url': '/manufacturing/oee-analysis'},
+                {'label': 'Schedule Maintenance', 'icon': 'wrench', 'type': 'primary', 'url': '/maintenance/work-orders/new'}
+            ]
+        },
+        # HR / People
+        {
+            'id': 'ins_003',
+            'type': 'recommendation',
+            'type_label': 'HR Insight',
+            'icon': 'users',
+            'confidence': 83,
+            'title': 'Leave Coverage Gap',
+            'description': '3 team leads have overlapping leave approved for next week. Consider cross-training or adjusting schedules to maintain coverage.',
+            'affected_items': 'Operations, Quality, Logistics',
+            'source_module': 'HR',
+            'time_ago': '3 hours ago',
+            'actions': [
+                {'label': 'Review Schedules', 'icon': 'calendar', 'type': 'secondary', 'url': '/hr/leaves/calendar'},
+                {'label': 'Assign Backup', 'icon': 'user-plus', 'type': 'primary', 'url': '/hr/leaves/coverage'}
+            ]
+        },
+        # Inventory / WMS
+        {
+            'id': 'ins_004',
             'type': 'recommendation',
             'type_label': 'Recommendation',
-            'icon': 'lightbulb',
+            'icon': 'boxes-stacked',
             'confidence': 85,
             'title': 'Reorder Point Adjustment',
             'description': 'Based on demand patterns and lead times, consider increasing reorder points for 12 high-velocity items in the Dubai warehouse to reduce stockout risk.',
             'affected_items': '12 SKUs in Automotive Parts category',
             'source_module': 'Inventory',
-            'time_ago': '3 hours ago',
+            'time_ago': '4 hours ago',
             'actions': [
                 {'label': 'View SKUs', 'icon': 'list', 'type': 'secondary', 'url': '/inventory/reorder-suggestions'},
                 {'label': 'Apply Recommendation', 'icon': 'check', 'type': 'primary', 'url': '/inventory/reorder-suggestions/apply'}
             ]
         },
+        # Workflow
         {
-            'id': 'ins_003',
+            'id': 'ins_005',
             'type': 'prediction',
             'type_label': 'Prediction',
-            'icon': 'crystal-ball',
+            'icon': 'project-diagram',
             'confidence': 76,
             'title': 'SLA Breach Risk',
             'description': '3 approval workflows are at risk of missing SLA deadlines within the next 24 hours based on current processing times and queue depth.',
@@ -969,8 +1147,26 @@ def build_insights():
                 {'label': 'Review Workflows', 'icon': 'project-diagram', 'type': 'primary', 'url': '/workflow/at-risk'}
             ]
         },
+        # CRM / Sales
         {
-            'id': 'ins_004',
+            'id': 'ins_006',
+            'type': 'recommendation',
+            'type_label': 'Sales Insight',
+            'icon': 'address-book',
+            'confidence': 81,
+            'title': 'Lead Response Time',
+            'description': 'Average response time to new leads has increased to 8.2 hours, above the 4-hour SLA. This is correlated with a 12% drop in conversion rate for leads created this month.',
+            'affected_items': '47 new leads awaiting first contact',
+            'source_module': 'CRM',
+            'time_ago': '6 hours ago',
+            'actions': [
+                {'label': 'View Lead Queue', 'icon': 'list', 'type': 'secondary', 'url': '/crm/leads/pending'},
+                {'label': 'Assign Leads', 'icon': 'user-plus', 'type': 'primary', 'url': '/crm/leads/assign'}
+            ]
+        },
+        # Finance
+        {
+            'id': 'ins_007',
             'type': 'attention',
             'type_label': 'Attention Needed',
             'icon': 'chart-line',
@@ -983,6 +1179,23 @@ def build_insights():
             'actions': [
                 {'label': 'View Analysis', 'icon': 'chart-bar', 'type': 'secondary', 'url': '/reports/expense-variance'},
                 {'label': 'Set Controls', 'icon': 'sliders-h', 'type': 'primary', 'url': '/finance/expense-controls'}
+            ]
+        },
+        # Quality
+        {
+            'id': 'ins_008',
+            'type': 'prediction',
+            'type_label': 'Quality Forecast',
+            'icon': 'check-double',
+            'confidence': 79,
+            'title': 'Quality Hold Risk',
+            'description': 'Based on recent supplier delivery patterns, incoming inspection pass rate for Component Batch CB-2026-045 may be below 95%.',
+            'affected_items': '200 units from Supplier S-1042',
+            'source_module': 'Quality',
+            'time_ago': '1 day ago',
+            'actions': [
+                {'label': 'View Details', 'icon': 'search', 'type': 'secondary', 'url': '/quality/inspections/pending'},
+                {'label': 'Notify Supplier', 'icon': 'envelope', 'type': 'primary', 'url': '/procurement/suppliers/S-1042/contact'}
             ]
         }
     ]

@@ -1,0 +1,155 @@
+{% extends "social_media/base_social.html" %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .audience-card {
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.1), rgba(99, 102, 241, 0.05));
+        border: 1px solid rgba(56, 189, 248, 0.2);
+        border-radius: 1rem;
+        padding: 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block page_actions %}
+<div class="flex items-center gap-3">
+    <form method="get" class="flex items-center gap-2">
+        <input type="date" name="date_from" value="{{ date_from }}" 
+               class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <input type="date" name="date_to" value="{{ date_to }}" 
+               class="px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white text-sm">
+        <button type="submit" class="btn-social btn-social-secondary text-sm">Apply</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block page_content %}
+<!-- Audience Overview KPIs -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    {% set total_posts = namespace(value=0) %}
+    {% set total_reach = namespace(value=0) %}
+    {% set total_engagement = namespace(value=0) %}
+    {% set total_sales = namespace(value=0) %}
+    {% for a in audience_data %}
+        {% set total_posts.value = total_posts.value + (a.total_posts or 0) %}
+        {% set total_reach.value = total_reach.value + (a.total_reach or 0) %}
+        {% set total_engagement.value = total_engagement.value + (a.total_engagement or 0) %}
+        {% set total_sales.value = total_sales.value + (a.total_sales or 0) %}
+    {% endfor %}
+    
+    <div class="audience-card">
+        <div class="text-sm text-slate-400 mb-2">Total Posts</div>
+        <div class="text-3xl font-bold text-white">{{ total_posts.value|int }}</div>
+    </div>
+    <div class="audience-card">
+        <div class="text-sm text-slate-400 mb-2">Total Reach</div>
+        <div class="text-3xl font-bold text-brand-400">{{ total_reach.value|int }}</div>
+    </div>
+    <div class="audience-card">
+        <div class="text-sm text-slate-400 mb-2">Engagement</div>
+        <div class="text-3xl font-bold text-purple-400">{{ total_engagement.value|int }}</div>
+    </div>
+    <div class="audience-card">
+        <div class="text-sm text-slate-400 mb-2">Sales Generated</div>
+        <div class="text-3xl font-bold text-green-400">AED {{ "%.0f"|format(total_sales.value) }}</div>
+    </div>
+</div>
+
+<!-- Platform Breakdown Chart -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    <div class="glass-panel rounded-xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Platform Reach Distribution</h3>
+        <div style="height: 300px;">
+            <canvas id="reachChart"></canvas>
+        </div>
+    </div>
+    <div class="glass-panel rounded-xl p-6">
+        <h3 class="text-lg font-bold text-white mb-4">Platform Engagement</h3>
+        <div style="height: 300px;">
+            <canvas id="engagementChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Performance by Platform Table -->
+<div class="glass-panel rounded-xl p-6">
+    <h3 class="text-lg font-bold text-white mb-4">Audience Performance by Platform</h3>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Platform</th>
+                    <th>Posts</th>
+                    <th>Total Reach</th>
+                    <th>Impressions</th>
+                    <th>Engagement</th>
+                    <th>Eng Rate</th>
+                    <th>Clicks</th>
+                    <th>Leads</th>
+                    <th>Sales</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in audience_data %}
+                <tr>
+                    <td><span class="platform-badge platform-{{ a.platform.lower() if a.platform else 'general' }}">{{ a.platform }}</span></td>
+                    <td>{{ a.total_posts or 0 }}</td>
+                    <td class="font-semibold">{{ a.total_reach|default(0)|int }}</td>
+                    <td>{{ a.total_impressions|default(0)|int }}</td>
+                    <td class="text-brand-400">{{ a.total_engagement|default(0)|int }}</td>
+                    <td>{{ "%.2f"|format(a.avg_engagement_rate|default(0)) }}%</td>
+                    <td>{{ a.total_clicks|default(0)|int }}</td>
+                    <td>{{ a.total_leads|default(0) }}</td>
+                    <td class="text-green-400">AED {{ "%.0f"|format(a.total_sales|default(0)) }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="9" class="text-center py-8 text-slate-400">No audience data available</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const audienceData = {{ audience_data|tojson }};
+
+new Chart(document.getElementById('reachChart'), {
+    type: 'doughnut',
+    data: {
+        labels: audienceData.map(a => a.platform),
+        datasets: [{
+            data: audienceData.map(a => a.total_reach || 0),
+            backgroundColor: ['#e1306c', '#1877f2', '#0077b5', '#ff0000', '#25d366']
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'right' } }
+    }
+});
+
+new Chart(document.getElementById('engagementChart'), {
+    type: 'bar',
+    data: {
+        labels: audienceData.map(a => a.platform),
+        datasets: [{
+            label: 'Engagement',
+            data: audienceData.map(a => a.total_engagement || 0),
+            backgroundColor: 'rgba(56, 189, 248, 0.8)'
+        }, {
+            label: 'Clicks',
+            data: audienceData.map(a => a.total_clicks || 0),
+            backgroundColor: 'rgba(99, 102, 241, 0.8)'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom' } },
+        scales: { y: { beginAtZero: true } }
+    }
+});
+</script>
+{% endblock %}

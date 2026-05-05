@@ -1,0 +1,242 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-database fa-fw me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('queue_dlq', 'Queue & DLQ Report') }}
+        </h1>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('integration_dlq') }}" class="btn btn-outline-danger btn-sm">
+                <i class="fas fa-exclamation-circle me-1"></i> {{ t('view_dlq', 'View DLQ') }}
+            </a>
+            <a href="{{ url_for('integration_reports') }}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> {{ t('back_to_reports', 'Back to Reports') }}
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary KPIs -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ queues|length }}</div>
+                    <div class="small">{{ t('queues', 'Queues') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-secondary text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ queues|sum(attribute='total') }}</div>
+                    <div class="small">{{ t('total_items', 'Total Items') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ queues|sum(attribute='pending') }}</div>
+                    <div class="small">{{ t('pending', 'Pending') }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white shadow">
+                <div class="card-body text-center">
+                    <div class="h2 mb-0">{{ queues|sum(attribute='dlq_count') }}</div>
+                    <div class="small">{{ t('dlq_items', 'DLQ Items') }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Queue Status Chart -->
+    <div class="row mb-4">
+        <div class="col-xl-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('queue_depth', 'Queue Depth by Queue') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="queueDepthChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-xl-6">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('queue_status_breakdown', 'Queue Status Breakdown') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 300px;">
+                    <canvas id="queueStatusChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- DLQ by Queue Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-danger">{{ t('dlq_items_by_queue', 'DLQ Items by Queue') }}</h6>
+                </div>
+                <div class="card-body" style="position: relative; height: 250px;">
+                    <canvas id="dlqChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Queue Details Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">{{ t('queue_details', 'Queue Details') }}</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered" width="100%" cellspacing="0">
+                            <thead>
+                                <tr>
+                                    <th>{{ t('queue_name', 'Queue Name') }}</th>
+                                    <th class="text-center">{{ t('total', 'Total') }}</th>
+                                    <th class="text-center text-success">{{ t('completed', 'Completed') }}</th>
+                                    <th class="text-center text-warning">{{ t('pending', 'Pending') }}</th>
+                                    <th class="text-center text-danger">{{ t('failed', 'Failed') }}</th>
+                                    <th class="text-center text-danger">{{ t('dlq_count', 'DLQ Items') }}</th>
+                                    <th class="text-center">{{ t('health', 'Health') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for q in queues %}
+                                <tr>
+                                    <td><strong>{{ q.queue }}</strong></td>
+                                    <td class="text-center">{{ q.total }}</td>
+                                    <td class="text-center text-success">{{ q.completed }}</td>
+                                    <td class="text-center text-warning">{{ q.pending }}</td>
+                                    <td class="text-center text-danger">{{ q.failed }}</td>
+                                    <td class="text-center text-danger">
+                                        {% if q.dlq_count > 0 %}
+                                            <span class="badge bg-danger">{{ q.dlq_count }}</span>
+                                        {% else %}
+                                            <span class="text-success">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if q.dlq_count == 0 and q.failed == 0 %}
+                                            <span class="badge bg-success">{{ t('healthy', 'Healthy') }}</span>
+                                        {% elif q.dlq_count > 0 %}
+                                            <span class="badge bg-danger">{{ t('dlq_overflow', 'DLQ Issue') }}</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">{{ t('has_failures', 'Has Failures') }}</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">
+                                        {{ t('no_queue_data', 'No queue data available') }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const queues = {{ queues|tojson }};
+
+    // Bar chart - queue depth
+    const depthCtx = document.getElementById('queueDepthChart').getContext('2d');
+    new Chart(depthCtx, {
+        type: 'bar',
+        data: {
+            labels: queues.map(q => q.queue),
+            datasets: [{
+                label: '{{ t("total_items", "Total Items") }}',
+                data: queues.map(q => q.total || 0),
+                backgroundColor: '#4e73df',
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+
+    // Stacked bar - status breakdown
+    const statusCtx = document.getElementById('queueStatusChart').getContext('2d');
+    new Chart(statusCtx, {
+        type: 'bar',
+        data: {
+            labels: queues.map(q => q.queue),
+            datasets: [
+                {
+                    label: '{{ t("completed", "Completed") }}',
+                    data: queues.map(q => q.completed || 0),
+                    backgroundColor: '#28a745'
+                },
+                {
+                    label: '{{ t("pending", "Pending") }}',
+                    data: queues.map(q => q.pending || 0),
+                    backgroundColor: '#ffc107'
+                },
+                {
+                    label: '{{ t("failed", "Failed") }}',
+                    data: queues.map(q => q.failed || 0),
+                    backgroundColor: '#dc3545'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { stacked: true },
+                y: { stacked: true, beginAtZero: true }
+            },
+            plugins: { legend: { position: 'bottom' } }
+        }
+    });
+
+    // DLQ items bar chart
+    const dlqCtx = document.getElementById('dlqChart').getContext('2d');
+    new Chart(dlqCtx, {
+        type: 'bar',
+        data: {
+            labels: queues.map(q => q.queue),
+            datasets: [{
+                label: '{{ t("dlq_items", "DLQ Items") }}',
+                data: queues.map(q => q.dlq_count || 0),
+                backgroundColor: queues.map(q => (q.dlq_count || 0) > 0 ? '#dc3545' : '#6c757d'),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, ticks: { stepSize: 1 } }
+            },
+            plugins: { legend: { display: false } }
+        }
+    });
+});
+</script>
+{% endblock %}

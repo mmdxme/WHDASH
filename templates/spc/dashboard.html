@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{ page_title }} - MMDx</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -16,6 +16,8 @@
             --info: #3B82F6;
             --dark: #1F2937;
             --light-bg: #F9FAFB;
+            --purple: #7C3AED;
+            --teal: #14B8A6;
         }
         body { background: var(--light-bg); font-family: 'Segoe UI', system-ui, sans-serif; }
         .stat-card { border: none; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: transform 0.2s; }
@@ -36,6 +38,50 @@
         .badge-ACCEPTABLE { background: #FEF3C7; color: #92400E; }
         .badge-MARGINAL { background: #FEE2E2; color: #991B1B; }
         .badge-NOT_CAPABLE { background: #FEE2E2; color: #991B1B; }
+        .gauge-container { display: flex; justify-content: center; align-items: center; height: 120px; }
+        .sigma-gauge { position: relative; width: 100px; height: 100px; }
+        .sigma-ring { fill: none; stroke-width: 10; }
+        .sigma-ring-bg { stroke: #E5E7EB; }
+        .sigma-ring-fill { stroke-linecap: round; transition: stroke-dashoffset 0.5s ease; }
+        .sigma-value { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 1.5rem; font-weight: 700; }
+        .alert-card { border-left: 4px solid var(--danger); transition: all 0.2s; }
+        .alert-card:hover { background: #FEF2F2; }
+        .alert-card.warning { border-left-color: var(--warning); }
+        .alert-card.warning:hover { background: #FFFBEB; }
+        .quick-action { background: white; border-radius: 8px; padding: 1rem; text-align: center; transition: all 0.2s; cursor: pointer; }
+        .quick-action:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .status-indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .status-good { background: var(--success); box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2); }
+        .status-warning { background: var(--warning); box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2); }
+        .status-danger { background: var(--danger); box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .progress-thin { height: 6px; border-radius: 3px; }
+        .cpk-indicator { font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+        .kpi-trend { font-size: 0.7rem; padding: 1px 4px; border-radius: 3px; }
+        .kpi-trend.up { background: #D1FAE5; color: #065F46; }
+        .kpi-trend.down { background: #FEE2E2; color: #991B1B; }
+        .equipment-card { border: 1px solid #E5E7EB; border-radius: 8px; padding: 0.75rem; margin-bottom: 0.5rem; }
+        .equipment-status { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .metric-card { padding: 1rem; }
+            .metric-value { font-size: 1.75rem; }
+            .chart-container { height: 250px; }
+            .quick-action { padding: 0.75rem; }
+            .table-responsive { font-size: 0.85rem; }
+            .btn { padding: 0.4rem 0.8rem; font-size: 0.85rem; }
+            .d-flex.gap-2 { gap: 0.5rem !important; }
+            .card-body { padding: 0.75rem; }
+            .display-4 { font-size: 2rem; }
+        }
+        @media (max-width: 576px) {
+            .metric-card { padding: 0.75rem; }
+            .metric-value { font-size: 1.5rem; }
+            .chart-container { height: 200px; padding: 0.5rem; }
+            .breadcrumb { font-size: 0.8rem; }
+            .h3, h3 { font-size: 1.25rem; }
+        }
     </style>
 </head>
 <body>
@@ -65,45 +111,113 @@
         <!-- Key SPC Metrics -->
         <div class="row g-4 mb-4">
             <div class="col-md-2">
-                <div class="metric-card">
-                    <div class="metric-value text-success">{{ metrics.sigma_level|default('6.0') }}σ</div>
+                <div class="metric-card h-100">
+                    <div class="gauge-container">
+                        <svg class="sigma-gauge" viewBox="0 0 100 100">
+                            <circle class="sigma-ring sigma-ring-bg" cx="50" cy="50" r="40"/>
+                            <circle class="sigma-ring sigma-ring-fill" cx="50" cy="50" r="40"
+                                    stroke="#10B981"
+                                    stroke-dasharray="251.2"
+                                    stroke-dashoffset="251.2"
+                                    transform="rotate(-90 50 50)"
+                                    id="sigmaGauge"/>
+                        </svg>
+                        <div class="sigma-value text-success" id="sigmaValue">{{ metrics.sigma_level|default('6.0') }}σ</div>
+                    </div>
                     <div class="metric-label">Sigma Level</div>
                     <small class="text-muted">Target: 6σ</small>
                 </div>
             </div>
             <div class="col-md-2">
-                <div class="metric-card">
-                    <div class="metric-value text-primary">{{ metrics.dpmo|default('0') }}</div>
+                <div class="metric-card h-100">
+                    <div class="metric-value text-primary">{{ "{:,.0f}".format(metrics.dpmo|default(0)) }}</div>
                     <div class="metric-label">DPMO</div>
+                    <div class="progress progress-thin mt-2">
+                        <div class="progress-bar bg-primary" style="width: {{ (100 - min(metrics.dpmo|default(0)/10000, 100)) }}%"></div>
+                    </div>
                     <small class="text-muted">Defects Per Million</small>
                 </div>
             </div>
             <div class="col-md-2">
-                <div class="metric-card">
-                    <div class="metric-value text-success">{{ metrics.in_control_rate|default('100') }}%</div>
+                <div class="metric-card h-100">
+                    <div class="metric-value {% if metrics.in_control_rate|default(100) >= 95 %}text-success{% elif metrics.in_control_rate|default(100) >= 85 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ metrics.in_control_rate|default('100') }}%
+                    </div>
                     <div class="metric-label">In-Control Rate</div>
+                    <div class="progress progress-thin mt-2">
+                        <div class="progress-bar {% if metrics.in_control_rate|default(100) >= 95 %}bg-success{% elif metrics.in_control_rate|default(100) >= 85 %}bg-warning{% else %}bg-danger{% endif %}"
+                             style="width: {{ metrics.in_control_rate|default(100) }}%"></div>
+                    </div>
                     <small class="text-muted">Process Stability</small>
                 </div>
             </div>
             <div class="col-md-2">
-                <div class="metric-card">
-                    <div class="metric-value text-info">{{ metrics.pass_rate|default('99') }}%</div>
+                <div class="metric-card h-100">
+                    <div class="metric-value {% if metrics.pass_rate|default(99) >= 99 %}text-success{% elif metrics.pass_rate|default(99) >= 95 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ metrics.pass_rate|default('99') }}%
+                    </div>
                     <div class="metric-label">Pass Rate</div>
+                    <div class="progress progress-thin mt-2">
+                        <div class="progress-bar {% if metrics.pass_rate|default(99) >= 99 %}bg-success{% elif metrics.pass_rate|default(99) >= 95 %}bg-warning{% else %}bg-danger{% endif %}"
+                             style="width: {{ metrics.pass_rate|default(99) }}%"></div>
+                    </div>
                     <small class="text-muted">Within Spec</small>
                 </div>
             </div>
             <div class="col-md-2">
-                <div class="metric-card">
-                    <div class="metric-value text-warning">{{ metrics.out_of_control_count|default('0') }}</div>
+                <div class="metric-card h-100">
+                    <div class="metric-value {% if metrics.out_of_control_count|default(0) == 0 %}text-success{% elif metrics.out_of_control_count|default(0) < 5 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ metrics.out_of_control_count|default('0') }}
+                    </div>
                     <div class="metric-label">OOC Signals</div>
                     <small class="text-muted">Requires Attention</small>
                 </div>
             </div>
             <div class="col-md-2">
-                <div class="metric-card">
-                    <div class="metric-value text-danger">{{ alerts|length }}</div>
+                <div class="metric-card h-100">
+                    <div class="metric-value {% if alerts|length == 0 %}text-success{% elif alerts|length < 5 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ alerts|length }}
+                    </div>
                     <div class="metric-label">Open Alerts</div>
                     <small class="text-muted">Anomaly Detection</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="row g-4 mb-4">
+            <div class="col-12">
+                <div class="d-flex gap-3 flex-wrap">
+                    <a href="{{ url_for('spc.charts_list') }}" class="quick-action text-decoration-none">
+                        <i class="fas fa-chart-line fa-lg text-primary mb-2"></i>
+                        <div class="small fw-bold">Control Charts</div>
+                        <small class="text-muted">{{ charts|length }} configured</small>
+                    </a>
+                    <a href="{{ url_for('spc.capability_list') }}" class="quick-action text-decoration-none">
+                        <i class="fas fa-bullseye fa-lg text-success mb-2"></i>
+                        <div class="small fw-bold">Capability</div>
+                        <small class="text-muted">{{ capability_studies|length }} studies</small>
+                    </a>
+                    <a href="{{ url_for('spc.equipment_list') }}" class="quick-action text-decoration-none">
+                        <i class="fas fa-tools fa-lg text-warning mb-2"></i>
+                        <div class="small fw-bold">Equipment</div>
+                        <small class="text-muted">Calibration</small>
+                    </a>
+                    <a href="{{ url_for('spc.sampling_plans_list') }}" class="quick-action text-decoration-none">
+                        <i class="fas fa-filter fa-lg text-info mb-2"></i>
+                        <div class="small fw-bold">Sampling</div>
+                        <small class="text-muted">AQL Plans</small>
+                    </a>
+                    <a href="{{ url_for('spc.gage_rr_list') }}" class="quick-action text-decoration-none">
+                        <i class="fas fa-chart-pie fa-lg" style="color: #7C3AED; mb-2"></i>
+                        <div class="small fw-bold">Gage R&R</div>
+                        <small class="text-muted">MSA Studies</small>
+                    </a>
+                    <a href="{{ url_for('spc.alerts_list') }}" class="quick-action text-decoration-none">
+                        <i class="fas fa-exclamation-triangle fa-lg text-danger mb-2"></i>
+                        <div class="small fw-bold">Alerts</div>
+                        <small class="text-muted">{{ alerts|length }} open</small>
+                    </a>
                 </div>
             </div>
         </div>
@@ -268,10 +382,34 @@
                                     {% for study in capability_studies %}
                                     <tr>
                                         <td class="fw-bold">{{ study.study_number }}</td>
-                                        <td>{{ "%.3f"|format(study.cp) if study.cp else '-' }}</td>
-                                        <td>{{ "%.3f"|format(study.cpk) if study.cpk else '-' }}</td>
+                                        <td>
+                                            {% if study.cp %}
+                                            <span class="cpk-indicator {% if study.cp >= 1.33 %}bg-success text-white{% elif study.cp >= 1.0 %}bg-warning text-dark{% else %}bg-danger text-white{% endif %}">
+                                                {{ "%.3f"|format(study.cp) }}
+                                            </span>
+                                            {% else %}
+                                            -
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if study.cpk %}
+                                            <span class="cpk-indicator {% if study.cpk >= 1.67 %}bg-success text-white{% elif study.cpk >= 1.33 %}bg-info text-white{% elif study.cpk >= 1.0 %}bg-warning text-dark{% else %}bg-danger text-white{% endif %}">
+                                                {{ "%.3f"|format(study.cpk) }}
+                                            </span>
+                                            {% else %}
+                                            -
+                                            {% endif %}
+                                        </td>
                                         <td>{{ "%.3f"|format(study.ppk) if study.ppk else '-' }}</td>
-                                        <td>{{ "%.2fσ"|format(study.sigma_level) if study.sigma_level else '-' }}</td>
+                                        <td>
+                                            {% if study.sigma_level %}
+                                            <span class="kpi-trend {% if study.sigma_level >= 4.5 %}up{% elif study.sigma_level >= 3.0 %}down{% else %}down{% endif %}">
+                                                {{ "%.2fσ"|format(study.sigma_level) }}
+                                            </span>
+                                            {% else %}
+                                            -
+                                            {% endif %}
+                                        </td>
                                         <td>
                                             {% if study.assessment %}
                                             <span class="badge badge-{{ study.assessment }}">{{ study.assessment.replace('_', ' ') }}</span>
@@ -281,9 +419,14 @@
                                         </td>
                                         <td>{{ study.study_date }}</td>
                                         <td>
-                                            <a href="{{ url_for('spc.capability_view', study_id=study.id) }}" class="btn btn-sm btn-outline-primary">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
+                                            <div class="d-flex gap-1">
+                                                <a href="{{ url_for('spc.capability_view', study_id=study.id) }}" class="btn btn-sm btn-outline-primary" title="View">
+                                                    <i class="fas fa-eye"></i>
+                                                </a>
+                                                <a href="{{ url_for('spc.export_capability', study_id=study.id) }}" class="btn btn-sm btn-outline-success" title="Export">
+                                                    <i class="fas fa-download"></i>
+                                                </a>
+                                            </div>
                                         </td>
                                     </tr>
                                     {% else %}

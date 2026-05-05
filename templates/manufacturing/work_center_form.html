@@ -1,73 +1,137 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <h1 class="mt-4 mb-4">
-                <i class="fas fa-plus"></i> Create Work Center
-            </h1>
-        </div>
-    </div>
-
-    <div class="row mb-3">
-        <div class="col-12">
-            <a href="{{ url_for('manufacturing.work_centers') }}" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Back to Work Centers
-            </a>
-        </div>
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-{% if center %}edit{% else %}plus{% endif %} me-2" style="color: var(--primary-color, #4e73df);"></i>
+            {{ t('work_center', 'Work Center') }}: {% if center %}{{ t('edit', 'Edit') }}{% else %}{{ t('create', 'Create') }}{% endif %}
+        </h1>
+        <a href="{{ url_for('manufacturing.work_centers') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i> {{ t('back', 'Back') }}
+        </a>
     </div>
 
     <div class="row">
-        <div class="col-md-6 offset-md-3">
-            <div class="card">
-                <div class="card-header">
-                    <h5>New Work Center</h5>
+        <div class="col-lg-8">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-cogs me-2"></i>{{ t('work_center_details', 'Work Center Details') }}
+                    </h6>
                 </div>
                 <div class="card-body">
-                    <form method="POST">
-                        <div class="form-group">
-                            <label for="code">Code</label>
-                            <input type="text" class="form-control" id="code" name="code" required>
+                    <form method="POST" id="workCenterForm" class="needs-validation" novalidate>
+                        <div class="row g-3">
+                            <!-- Code -->
+                            <div class="col-md-6">
+                                <label for="code" class="form-label">{{ t('code', 'Code') }} <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="code" name="code"
+                                       required maxlength="20" pattern="[A-Za-z0-9\-_]+"
+                                       value="{{ center.code if center else '' }}"
+                                       {% if center %}readonly{% endif %}>
+                                <div class="invalid-feedback">{{ t('code_required', 'Code is required (letters, numbers, - and _ only)') }}</div>
+                                {% if not center %}
+                                <small class="text-muted">{{ t('code_help', 'Cannot be changed after creation') }}</small>
+                                {% endif %}
+                            </div>
+
+                            <!-- Name -->
+                            <div class="col-md-6">
+                                <label for="name" class="form-label">{{ t('name', 'Name') }} <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="name" name="name"
+                                       required maxlength="100"
+                                       value="{{ center.name if center else '' }}">
+                                <div class="invalid-feedback">{{ t('name_required', 'Name is required') }}</div>
+                            </div>
+
+                            <!-- Description -->
+                            <div class="col-12">
+                                <label for="description" class="form-label">{{ t('description', 'Description') }}</label>
+                                <textarea class="form-control" id="description" name="description"
+                                          rows="2" maxlength="500">{{ center.description if center else '' }}</textarea>
+                            </div>
+
+                            <!-- Location -->
+                            <div class="col-md-6">
+                                <label for="location" class="form-label">{{ t('location', 'Location') }}</label>
+                                <input type="text" class="form-control" id="location" name="location"
+                                       maxlength="100"
+                                       value="{{ center.location if center else '' }}">
+                            </div>
+
+                            <!-- Capacity Hours -->
+                            <div class="col-md-6">
+                                <label for="capacity_hours" class="form-label">{{ t('capacity_hours', 'Capacity (hours/day)') }}</label>
+                                <input type="number" class="form-control" id="capacity_hours" name="capacity_hours"
+                                       step="0.5" min="0" max="24"
+                                       value="{{ center.capacity_hours if center else 8 }}">
+                                <small class="text-muted">{{ t('capacity_help', 'Standard working hours per day') }}</small>
+                            </div>
+
+                            <!-- Efficiency -->
+                            <div class="col-md-6">
+                                <label for="efficiency" class="form-label">{{ t('efficiency', 'Efficiency (%)') }}</label>
+                                <input type="number" class="form-control" id="efficiency" name="efficiency"
+                                       step="1" min="0" max="150"
+                                       value="{{ center.efficiency if center else 100 }}">
+                                <small class="text-muted">{{ t('efficiency_help', 'Target efficiency percentage') }}</small>
+                            </div>
+
+                            <!-- Status -->
+                            <div class="col-md-6">
+                                <label for="status" class="form-label">{{ t('status', 'Status') }}</label>
+                                <select class="form-select" id="status" name="status">
+                                    <option value="ACTIVE" {% if (not center) or (center.status == 'ACTIVE') %}selected{% endif %}>
+                                        {{ t('active', 'Active') }}
+                                    </option>
+                                    <option value="INACTIVE" {% if center and center.status == 'INACTIVE' %}selected{% endif %}>
+                                        {{ t('inactive', 'Inactive') }}
+                                    </option>
+                                </select>
+                            </div>
                         </div>
 
-                        <div class="form-group">
-                            <label for="name">Name</label>
-                            <input type="text" class="form-control" id="name" name="name" required>
-                        </div>
+                        <hr class="my-4">
 
-                        <div class="form-group">
-                            <label for="description">Description</label>
-                            <textarea class="form-control" id="description" name="description" rows="2"></textarea>
+                        <div class="d-flex justify-content-between">
+                            <a href="{{ url_for('manufacturing.work_centers') }}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times me-1"></i> {{ t('cancel', 'Cancel') }}
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-1"></i> {% if center %}{{ t('update_center', 'Update Work Center') }}{% else %}{{ t('create_center_btn', 'Create Work Center') }}{% endif %}
+                            </button>
                         </div>
-
-                        <div class="form-group">
-                            <label for="location">Location</label>
-                            <input type="text" class="form-control" id="location" name="location">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="capacity_hours">Capacity (hours/day)</label>
-                            <input type="number" class="form-control" id="capacity_hours" name="capacity_hours" value="8" step="0.5">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="efficiency">Efficiency (%)</label>
-                            <input type="number" class="form-control" id="efficiency" name="efficiency" value="100" min="0" max="150">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="status">Status</label>
-                            <select class="form-control" id="status" name="status">
-                                <option value="ACTIVE">Active</option>
-                                <option value="INACTIVE">Inactive</option>
-                            </select>
-                        </div>
-
-                        <button type="submit" class="btn btn-success">
-                            <i class="fas fa-save"></i> Create Work Center
-                        </button>
                     </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-lg-4">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-info-circle me-2"></i>{{ t('help', 'Help') }}
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <h6 class="text-primary">{{ t('capacity_planning', 'Capacity Planning') }}</h6>
+                    <p class="small text-muted">
+                        {{ t('capacity_help_text', 'Set the daily capacity hours for this work center. This is used to calculate utilization rates and detect capacity overloads.') }}
+                    </p>
+
+                    <h6 class="text-primary mt-3">{{ t('efficiency', 'Efficiency') }}</h6>
+                    <p class="small text-muted">
+                        {{ t('efficiency_help_text', 'Efficiency affects how much work can be scheduled. A 100% efficiency means full capacity utilization. Values above 100% indicate overtime.') }}
+                    </p>
+
+                    <h6 class="text-primary mt-3">{{ t('status_info', 'Status') }}</h6>
+                    <ul class="small">
+                        <li><strong>{{ t('active', 'Active') }}:</strong> {{ t('active_help', 'Available for scheduling') }}</li>
+                        <li><strong>{{ t('inactive', 'Inactive') }}:</strong> {{ t('inactive_help', 'Not available for use') }}</li>
+                    </ul>
                 </div>
             </div>
         </div>

@@ -18,7 +18,9 @@ from quick_tools_models import (
     get_user_favorites, create_favorite, update_favorite,
     delete_favorite, reorder_favorites,
     get_quick_preferences, update_quick_preferences,
-    initialize_quick_tools_schema, get_default_favorites_for_user
+    initialize_quick_tools_schema, get_default_favorites_for_user,
+    track_tool_usage, get_usage_analytics, get_notes_report,
+    get_tasks_report, get_reminders_report
 )
 from database import get_db_context, get_one
 from permissions import user_has_permission
@@ -70,11 +72,47 @@ def get_current_user_id():
 
 def check_tool_permission(tool_name):
     """Check if user has permission to use a specific tool."""
-    # Most tools are available to all logged-in users
-    # Only certain admin tools would require special permissions
-    if tool_name in ['admin_shortcuts']:
-        return user_has_permission(session.get('user_id'), 'platform', 'settings', 'view')
+    user_id = session.get('user_id')
+    if not user_id:
+        return False
+
+    # Admin tools - require platform settings permission
+    if tool_name in ['admin_shortcuts', 'tool_management']:
+        return user_has_permission(user_id, 'platform', 'settings', 'view')
+
+    # Manager-level tools - require reports view
+    if tool_name in ['team_overview', 'team_analytics']:
+        return user_has_permission(user_id, 'reports', 'reports', 'view')
+
+    # Basic tools - all authenticated users have access
+    if tool_name in ['calculator', 'notes', 'tasks', 'issues', 'reminders', 'favorites', 'analytics']:
+        return True
+
     return True
+
+
+def require_tool_permission(tool_name):
+    """Decorator to check tool permission before accessing route."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not check_tool_permission(tool_name):
+                return jsonify({'success': False, 'error': 'Access denied to this tool'}), 403
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+def is_admin_user():
+    """Check if current user has admin privileges."""
+    user_id = session.get('user_id')
+    return user_has_permission(user_id, 'platform', 'settings', 'view')
+
+
+def is_manager_user():
+    """Check if current user has manager privileges (can view team data)."""
+    user_id = session.get('user_id')
+    return user_has_permission(user_id, 'reports', 'reports', 'view')
 
 
 # ============================================================================
@@ -239,6 +277,7 @@ def evaluate_expression(expr):
 @require_login
 def calculate():
     """Evaluate a mathematical expression."""
+    user_id = get_current_user_id()
     data = request.get_json() or {}
     expression = data.get('expression', '')
     
@@ -249,6 +288,8 @@ def calculate():
     
     if error:
         return jsonify({'success': False, 'error': error})
+    
+    track_tool_usage(user_id, 'calculator', 'calculate', {'expression': expression[:50]})
     
     return jsonify({'success': True, 'result': result})
 
@@ -292,6 +333,8 @@ def add_note():
     
     note_id = create_note(user_id, content, title, color)
     note = get_one("SELECT * FROM quick_notes WHERE id = ?", (note_id,))
+    
+    track_tool_usage(user_id, 'notes', 'create')
     
     return jsonify({'success': True, 'note': note})
 
@@ -402,6 +445,8 @@ def add_reminder():
     
     reminder_id = create_reminder(user_id, title, remind_at, description, link_url, link_label)
     reminder = get_one("SELECT * FROM quick_reminders WHERE id = ?", (reminder_id,))
+    
+    track_tool_usage(user_id, 'reminders', 'create')
     
     return jsonify({'success': True, 'reminder': reminder})
 
@@ -787,6 +832,8 @@ def create_quick_task():
     
     task = get_one("SELECT * FROM task_items WHERE id = ?", (task_id,))
     
+    track_tool_usage(user_id, 'tasks', 'create')
+    
     return jsonify({
         'success': True,
         'task': task,
@@ -866,6 +913,8 @@ def create_quick_issue():
 
     issue = get_one("SELECT * FROM issue_items WHERE id = ?", (issue_id,))
     
+    track_tool_usage(user_id, 'issues', 'create')
+    
     return jsonify({
         'success': True,
         'issue': issue,
@@ -942,6 +991,68 @@ def check_due_reminders():
         'due': formatted,
         'count': len(formatted)
     })
+
+
+# ============================================================================
+# USAGE ANALYTICS & REPORTS
+# ============================================================================
+
+@quick_tools_bp.route('/analytics/usage', methods=['GET'])
+@require_login
+def get_usage_analytics_route():
+    """Get usage analytics for quick tools."""
+    user_id = get_current_user_id()
+    days = request.args.get('days', 30, type=int)
+    include_team = request.args.get('team', 'false').lower() == 'true'
+
+    # Track this request
+    track_tool_usage(user_id, 'analytics', 'view', {'report': 'usage'})
+
+    # Only admins/managers can see team analytics
+    if include_team and not is_manager_user():
+        return jsonify({'success': False, 'error': 'Team analytics require manager access'}), 403
+
+    analytics = get_usage_analytics(user_id=user_id if not include_team else None, days=days)
+    return jsonify({'success': True, 'analytics': analytics, 'is_admin': is_admin_user(), 'is_manager': is_manager_user()})
+
+
+@quick_tools_bp.route('/analytics/notes', methods=['GET'])
+@require_login
+def get_notes_analytics_route():
+    """Get notes analytics report."""
+    user_id = get_current_user_id()
+    days = request.args.get('days', 30, type=int)
+
+    track_tool_usage(user_id, 'analytics', 'view', {'report': 'notes'})
+
+    report = get_notes_report(user_id=user_id, days=days)
+    return jsonify({'success': True, 'report': report})
+
+
+@quick_tools_bp.route('/analytics/tasks', methods=['GET'])
+@require_login
+def get_tasks_analytics_route():
+    """Get task analytics report."""
+    user_id = get_current_user_id()
+    days = request.args.get('days', 30, type=int)
+
+    track_tool_usage(user_id, 'analytics', 'view', {'report': 'tasks'})
+
+    report = get_tasks_report(user_id=user_id, days=days)
+    return jsonify({'success': True, 'report': report})
+
+
+@quick_tools_bp.route('/analytics/reminders', methods=['GET'])
+@require_login
+def get_reminders_analytics_route():
+    """Get reminder analytics report."""
+    user_id = get_current_user_id()
+    days = request.args.get('days', 30, type=int)
+
+    track_tool_usage(user_id, 'analytics', 'view', {'report': 'reminders'})
+
+    report = get_reminders_report(user_id=user_id, days=days)
+    return jsonify({'success': True, 'report': report})
 
 
 # ============================================================================

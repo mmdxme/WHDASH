@@ -37,12 +37,25 @@ from collections import Counter
 import re
 
 from permissions import user_has_permission
+from translations import get_translation
+from wms_schema import initialize_wms_schema
 
 # Import export utilities
 from export_utils import (
     send_export_response,
     get_export_columns
 )
+
+
+def get_user_language():
+    """Get user's preferred language."""
+    return session.get('language', 'en')
+
+
+def t(key, default=None):
+    """Shortcut for getting translations."""
+    lang = get_user_language()
+    return get_translation(lang, key, default)
 
 # Module-level flag to track WMS schema initialization
 # This persists across database connections unlike connection-attribute flags
@@ -90,8 +103,8 @@ def register_wms_routes(app, get_db):
                         return jsonify({'success': False, 'error': 'Authentication required'}), 401
                     return redirect(url_for('login'))
                 user_id = session.get('user_id')
-                if session.get('role_name') == 'Global Admin':
-                    return f(*args, **kwargs)
+                # SECURITY: Global Admin bypass is handled internally via wildcard permissions
+                # in user_has_permission(). Do NOT add custom role checks here.
                 if not user_has_permission(user_id, 'wms', resource, action):
                     if wants_json:
                         return jsonify({'success': False, 'error': 'Permission denied'}), 403
@@ -113,7 +126,7 @@ def register_wms_routes(app, get_db):
             if request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and not validate_wms_csrf():
                 if request.is_json:
                     return jsonify({'success': False, 'error': 'CSRF validation failed'}), 403
-                flash('CSRF validation failed. Please refresh the page and try again.', 'error')
+                flash(t('wms_csrf_failed', 'CSRF validation failed. Please refresh the page and try again.'), 'error')
                 return redirect(request.referrer or url_for('wms_dashboard'))
             return f(*args, **kwargs)
         return decorated_function
@@ -2421,7 +2434,7 @@ def register_wms_routes(app, get_db):
     # WMS DASHBOARD
     # ============================================================
 
-    init_wms_tables()
+    initialize_wms_schema(get_db)
 
     @app.route('/wms')
     @app.route('/wms/dashboard')
@@ -2432,6 +2445,9 @@ def register_wms_routes(app, get_db):
         user_id = session.get('user_id')
         wh_filter = get_warehouse_filter(user_id)
         company_filter = get_company_filter(user_id)
+
+        # Ensure total_locations is always initialized before any conditional logic
+        total_locations = 0
 
         # Total active SKUs
         total_skus = db.execute(f'''
@@ -2500,12 +2516,36 @@ def register_wms_routes(app, get_db):
                 WHERE is_empty = 1 AND is_active = 1
             ''').fetchone()['cnt']
 
-        # Total locations
+        # Total locations (initialized to 0 at line 2450)
         if wh_filter:
             total_locations = db.execute(f'''
                 SELECT COUNT(*) as cnt FROM wms_locations
-            WHERE is_active = 1 {wh_filter}
-        ''').fetchone()['cnt']
+                WHERE is_active = 1 {wh_filter}
+            ''').fetchone()['cnt']
+        else:
+            total_locations = db.execute('''
+                SELECT COUNT(*) as cnt FROM wms_locations
+                WHERE is_active = 1
+            ''').fetchone()['cnt']
+
+        # Initialize remaining variables that might be unbound
+        active_alerts = 0
+        pending_receiving = 0
+        pending_putaway = 0
+        pending_picking = 0
+        pending_packing = 0
+        pending_transfers = 0
+        pending_returns = 0
+        pending_counts = 0
+        pending_replenishment = 0
+        zero_stock = 0
+        negative_stock = 0
+        count_discrepancies = 0
+        warehouse_stats = []
+        recent_movements = []
+        top_alerts = []
+        warehouses = []
+        stock_by_status = []
 
         # Active alerts
         active_alerts = db.execute(f'''
@@ -2630,6 +2670,11 @@ def register_wms_routes(app, get_db):
         ''').fetchall()
 
         title = 'WMS Dashboard'
+
+        # Ensure total_locations is always defined
+        if 'total_locations' not in dir() or total_locations is None:
+            total_locations = 0
+
         return render_template('wms/dashboard.html',
             title=title,
             total_skus=total_skus,
@@ -2804,14 +2849,14 @@ def register_wms_routes(app, get_db):
                 db.commit()
                 item_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
                 log_wms_audit('CREATE', 'ITEM', item_id, {'item_code': data.get('item_code')})
-                flash('Item created successfully!', 'success')
+                flash(t('wms_item_created', 'Item created successfully!'), 'success')
                 return redirect(url_for('wms_item_detail', item_id=item_id))
             except Exception as e:
                 import traceback
                 print(f"WMS item create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating item. Please try again.', 'error')
+                flash(t('wms_error_creating_item', 'Error creating item. Please try again.'), 'error')
 
         categories = db.execute('SELECT * FROM wms_item_categories WHERE is_active = 1 ORDER BY name').fetchall()
         brands = db.execute('SELECT * FROM wms_item_brands WHERE is_active = 1 ORDER BY name').fetchall()
@@ -2849,7 +2894,7 @@ def register_wms_routes(app, get_db):
         ''', (item_id,)).fetchone()
 
         if not item:
-            flash('Item not found.', 'error')
+            flash(t('wms_item_not_found', 'Item not found.'), 'error')
             return redirect(url_for('wms_items'))
 
         tab = request.args.get('tab', 'overview')
@@ -2929,7 +2974,7 @@ def register_wms_routes(app, get_db):
         db = get_db()
         item = db.execute('SELECT * FROM wms_items WHERE id = ?', (item_id,)).fetchone()
         if not item:
-            flash('Item not found.', 'error')
+            flash(t('wms_item_not_found', 'Item not found.'), 'error')
             return redirect(url_for('wms_items'))
 
         if request.method == 'POST':
@@ -3012,14 +3057,14 @@ def register_wms_routes(app, get_db):
                 ))
                 db.commit()
                 log_wms_audit('UPDATE', 'ITEM', item_id, {'item_code': data.get('item_code')})
-                flash('Item updated successfully!', 'success')
+                flash(t('wms_item_updated', 'Item updated successfully!'), 'success')
                 return redirect(url_for('wms_item_detail', item_id=item_id))
             except Exception as e:
                 import traceback
                 print(f"WMS item update error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error updating item. Please try again.', 'error')
+                flash(t('wms_error_updating_item', 'Error updating item. Please try again.'), 'error')
 
         categories = db.execute('SELECT * FROM wms_item_categories WHERE is_active = 1 ORDER BY name').fetchall()
         brands = db.execute('SELECT * FROM wms_item_brands WHERE is_active = 1 ORDER BY name').fetchall()
@@ -3076,9 +3121,9 @@ def register_wms_routes(app, get_db):
             name = (data.get('name') or '').strip()
             if not code or not name:
                 if not code:
-                    flash('Warehouse code is required.', 'error')
+                    flash(t('wms_warehouse_code_required', 'Warehouse code is required.'), 'error')
                 if not name:
-                    flash('Warehouse name is required.', 'error')
+                    flash(t('wms_warehouse_name_required', 'Warehouse name is required.'), 'error')
                 companies = db.execute('SELECT * FROM wms_companies WHERE is_active = 1 ORDER BY name').fetchall()
                 if not companies:
                     companies = db.execute('SELECT id, name FROM companies ORDER BY name').fetchall()
@@ -3107,14 +3152,14 @@ def register_wms_routes(app, get_db):
                 db.commit()
                 wh_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
                 log_wms_audit('CREATE', 'WAREHOUSE', wh_id, {'code': data.get('code')})
-                flash('Warehouse created successfully!', 'success')
+                flash(t('wms_warehouse_created', 'Warehouse created successfully!'), 'success')
                 return redirect(url_for('wms_warehouse_detail', warehouse_id=wh_id))
             except Exception as e:
                 import traceback
                 print(f"WMS warehouse create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating warehouse. Please try again.', 'error')
+                flash(t('wms_error_creating_warehouse', 'Error creating warehouse. Please try again.'), 'error')
 
         companies = db.execute('SELECT * FROM wms_companies WHERE is_active = 1 ORDER BY name').fetchall()
         if not companies:
@@ -3144,7 +3189,7 @@ def register_wms_routes(app, get_db):
         ''', (warehouse_id,)).fetchone()
 
         if not warehouse:
-            flash('Warehouse not found.', 'error')
+            flash(t('wms_warehouse_not_found', 'Warehouse not found.'), 'error')
             return redirect(url_for('wms_warehouses'))
 
         # Zones
@@ -3194,7 +3239,7 @@ def register_wms_routes(app, get_db):
         db = get_db()
         warehouse = db.execute('SELECT * FROM wms_warehouses WHERE id = ?', (warehouse_id,)).fetchone()
         if not warehouse:
-            flash('Warehouse not found.', 'error')
+            flash(t('wms_warehouse_not_found', 'Warehouse not found.'), 'error')
             return redirect(url_for('wms_warehouses'))
 
         if request.method == 'POST':
@@ -3225,14 +3270,14 @@ def register_wms_routes(app, get_db):
                 ))
                 db.commit()
                 log_wms_audit('UPDATE', 'WAREHOUSE', warehouse_id, {'code': data.get('code')})
-                flash('Warehouse updated successfully!', 'success')
+                flash(t('wms_warehouse_updated', 'Warehouse updated successfully!'), 'success')
                 return redirect(url_for('wms_warehouse_detail', warehouse_id=warehouse_id))
             except Exception as e:
                 import traceback
                 print(f"WMS warehouse update error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error updating warehouse. Please try again.', 'error')
+                flash(t('wms_error_updating_warehouse', 'Error updating warehouse. Please try again.'), 'error')
 
         companies = db.execute('SELECT * FROM wms_companies WHERE is_active = 1 ORDER BY name').fetchall()
         if not companies:
@@ -3361,14 +3406,14 @@ def register_wms_routes(app, get_db):
                 db.commit()
                 loc_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
                 log_wms_audit('CREATE', 'LOCATION', loc_id, {'code': code})
-                flash('Location created successfully!', 'success')
+                flash(t('wms_location_created', 'Location created successfully!'), 'success')
                 return redirect(url_for('wms_locations'))
             except Exception as e:
                 import traceback
                 print(f"WMS location create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating location. Please try again.', 'error')
+                flash(t('wms_error_creating_location', 'Error creating location. Please try again.'), 'error')
 
         warehouse_id = request.args.get('warehouse_id')
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
@@ -3401,7 +3446,7 @@ def register_wms_routes(app, get_db):
         ''', (location_id,)).fetchone()
 
         if not location:
-            flash('Location not found.', 'error')
+            flash(t('wms_location_not_found', 'Location not found.'), 'error')
             return redirect(url_for('wms_locations'))
 
         # Stock at this location
@@ -3441,7 +3486,7 @@ def register_wms_routes(app, get_db):
         db = get_db()
         location = db.execute('SELECT * FROM wms_locations WHERE id = ?', (location_id,)).fetchone()
         if not location:
-            flash('Location not found.', 'error')
+            flash(t('wms_location_not_found', 'Location not found.'), 'error')
             return redirect(url_for('wms_locations'))
 
         if request.method == 'POST':
@@ -3490,14 +3535,14 @@ def register_wms_routes(app, get_db):
                 ))
                 db.commit()
                 log_wms_audit('UPDATE', 'LOCATION', location_id, {'code': code})
-                flash('Location updated successfully!', 'success')
+                flash(t('wms_location_updated', 'Location updated successfully!'), 'success')
                 return redirect(url_for('wms_location_detail', location_id=location_id))
             except Exception as e:
                 import traceback
                 print(f"WMS location update error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error updating location. Please try again.', 'error')
+                flash(t('wms_error_updating_location', 'Error updating location. Please try again.'), 'error')
 
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
         zones = db.execute('SELECT * FROM wms_zones WHERE warehouse_id = ? AND is_active = 1 ORDER BY name', (location['warehouse_id'],)).fetchall()
@@ -3735,14 +3780,14 @@ def register_wms_routes(app, get_db):
                 db.commit()
                 receipt_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
                 log_wms_audit('CREATE', 'INBOUND_RECEIPT', receipt_id, {'receipt_number': receipt_number})
-                flash(f'Receipt {receipt_number} created! Add line items next.', 'success')
+                flash(t('wms_receipt_created', f'Receipt {receipt_number} created! Add line items next.'), 'success')
                 return redirect(url_for('wms_receiving_detail', receipt_id=receipt_id))
             except Exception as e:
                 import traceback
                 print(f"WMS receipt create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating receipt. Please try again.', 'error')
+                flash(t('wms_error_creating_receipt', 'Error creating receipt. Please try again.'), 'error')
 
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
         suppliers = db.execute('SELECT * FROM suppliers ORDER BY name').fetchall()
@@ -3778,7 +3823,7 @@ def register_wms_routes(app, get_db):
         ''', (receipt_id,)).fetchone()
 
         if not receipt:
-            flash('Receipt not found.', 'error')
+            flash(t('wms_receipt_not_found', 'Receipt not found.'), 'error')
             return redirect(url_for('wms_receiving'))
 
         lines = db.execute('''
@@ -3843,7 +3888,7 @@ def register_wms_routes(app, get_db):
                 # Add new line
                 item_id = data.get('item_id')
                 if not item_id:
-                    flash('Item is required.', 'error')
+                    flash(t('wms_item_required', 'Item is required.'), 'error')
                     return redirect(url_for('wms_receiving_detail', receipt_id=receipt_id))
 
                 line_num = db.execute('SELECT MAX(line_number) as max_line FROM wms_inbound_receipt_lines WHERE receipt_id = ?', (receipt_id,)).fetchone()['max_line'] or 0
@@ -3924,13 +3969,13 @@ def register_wms_routes(app, get_db):
 
             db.commit()
             log_wms_audit('RECEIVE', 'INBOUND_RECEIPT', receipt_id, {'received_qty': accepted_qty})
-            flash(f'Received {accepted_qty} units successfully!', 'success')
+            flash(t('wms_received_success', f'Received {accepted_qty} units successfully!'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS receive action error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error receiving. Please try again.', 'error')
+            flash(t('wms_error_receiving', 'Error receiving. Please try again.'), 'error')
 
         return redirect(url_for('wms_receiving_detail', receipt_id=receipt_id))
 
@@ -4012,15 +4057,15 @@ def register_wms_routes(app, get_db):
                 WHERE p.id = ?
             ''', (task_id,)).fetchone()
             if not task:
-                flash('Task not found.', 'error')
+                flash(t('wms_task_not_found', 'Task not found.'), 'error')
                 return redirect(url_for('wms_putaway'))
             if not ensure_warehouse_allowed(task['warehouse_id']):
-                flash('You do not have access to this warehouse.', 'error')
+                flash(t('wms_no_warehouse_access', 'You do not have access to this warehouse.'), 'error')
                 return redirect(url_for('wms_putaway'))
 
             destination_location_id = parse_positive_int(request.form.get('location_id'))
             if not destination_location_id:
-                flash('A valid destination location is required.', 'error')
+                flash(t('wms_destination_required', 'A valid destination location is required.'), 'error')
                 return redirect(url_for('wms_putaway'))
 
             destination = db.execute('''
@@ -4030,13 +4075,13 @@ def register_wms_routes(app, get_db):
                 WHERE id = ?
             ''', (destination_location_id,)).fetchone()
             if not destination or destination['is_active'] != 1:
-                flash('Destination location is not active.', 'error')
+                flash(t('wms_destination_inactive', 'Destination location is not active.'), 'error')
                 return redirect(url_for('wms_putaway'))
             if destination['warehouse_id'] != task['warehouse_id']:
-                flash('Destination location must be in the task warehouse.', 'error')
+                flash(t('wms_destination_wrong_warehouse', 'Destination location must be in the task warehouse.'), 'error')
                 return redirect(url_for('wms_putaway'))
             if destination['is_locked']:
-                flash('Destination location is locked.', 'error')
+                flash(t('wms_destination_locked', 'Destination location is locked.'), 'error')
                 return redirect(url_for('wms_putaway'))
 
             db.execute('''
@@ -4068,13 +4113,13 @@ def register_wms_routes(app, get_db):
                 'after_destination_location_id': destination_location_id,
                 'quantity': task['quantity'],
             })
-            flash('Putaway task completed!', 'success')
+            flash(t('wms_putaway_completed', 'Putaway task completed!'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS putaway task complete error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error completing task. Please try again.', 'error')
+            flash(t('wms_error_completing_putaway', 'Error completing task. Please try again.'), 'error')
 
         return redirect(url_for('wms_putaway'))
 
@@ -4149,14 +4194,14 @@ def register_wms_routes(app, get_db):
                       velocity_class, hazmat_class, session.get('user_id')))
                 db.commit()
                 log_wms_audit('CREATE', 'PUTAWAY_RULE', db.execute('SELECT last_insert_rowid() as id').fetchone()['id'])
-                flash('Putaway rule created successfully!', 'success')
+                flash(t('wms_putaway_rule_created', 'Putaway rule created successfully!'), 'success')
                 return redirect(url_for('wms_putaway_rules'))
             except Exception as e:
                 import traceback
                 print(f"WMS putaway rule create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating rule. Please try again.', 'error')
+                flash(t('wms_error_creating_putaway_rule', 'Error creating rule. Please try again.'), 'error')
 
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
         zones = db.execute('SELECT * FROM wms_zones WHERE is_active = 1 ORDER BY name').fetchall()
@@ -4176,7 +4221,7 @@ def register_wms_routes(app, get_db):
         rule = db.execute('SELECT * FROM wms_putaway_rules WHERE id = ?', (rule_id,)).fetchone()
 
         if not rule:
-            flash('Rule not found.', 'error')
+            flash(t('wms_rule_not_found', 'Rule not found.'), 'error')
             return redirect(url_for('wms_putaway_rules'))
 
         if request.method == 'POST':
@@ -4206,14 +4251,14 @@ def register_wms_routes(app, get_db):
                       velocity_class, hazmat_class, rule_id))
                 db.commit()
                 log_wms_audit('UPDATE', 'PUTAWAY_RULE', rule_id)
-                flash('Putaway rule updated successfully!', 'success')
+                flash(t('wms_putaway_rule_updated', 'Putaway rule updated successfully!'), 'success')
                 return redirect(url_for('wms_putaway_rules'))
             except Exception as e:
                 import traceback
                 print(f"WMS putaway rule update error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error updating rule. Please try again.', 'error')
+                flash(t('wms_error_updating_putaway_rule', 'Error updating rule. Please try again.'), 'error')
 
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
         zones = db.execute('SELECT * FROM wms_zones WHERE is_active = 1 ORDER BY name').fetchall()
@@ -4234,13 +4279,13 @@ def register_wms_routes(app, get_db):
             db.execute('DELETE FROM wms_putaway_rules WHERE id = ?', (rule_id,))
             db.commit()
             log_wms_audit('DELETE', 'PUTAWAY_RULE', rule_id)
-            flash('Putaway rule deleted successfully!', 'success')
+            flash(t('wms_putaway_rule_deleted', 'Putaway rule deleted successfully!'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS putaway rule delete error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error deleting rule. Please try again.', 'error')
+            flash(t('wms_error_deleting_rule', 'Error deleting rule. Please try again.'), 'error')
         return redirect(url_for('wms_putaway_rules'))
 
     @app.route('/wms/putaway/rules/<int:rule_id>/toggle', methods=['POST'])
@@ -4256,13 +4301,13 @@ def register_wms_routes(app, get_db):
                           (new_status, rule_id))
                 db.commit()
                 log_wms_audit('TOGGLE', 'PUTAWAY_RULE', rule_id)
-                flash(f'Rule {"activated" if new_status else "deactivated"} successfully!', 'success')
+                flash(t('wms_rule_status_changed', f'Rule {"activated" if new_status else "deactivated"} successfully!'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS putaway rule toggle error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error toggling rule. Please try again.', 'error')
+            flash(t('wms_error_toggling_rule', 'Error toggling rule. Please try again.'), 'error')
         return redirect(url_for('wms_putaway_rules'))
 
     @app.route('/wms/putaway/calculate-suggestion', methods=['POST'])
@@ -4435,7 +4480,7 @@ def register_wms_routes(app, get_db):
                 ''', (item_id, source_location_id)).fetchone()['qty']
 
                 if available < quantity:
-                    flash(f'Insufficient stock. Available: {available}', 'error')
+                    flash(t('wms_insufficient_stock', f'Insufficient stock. Available: {available}'), 'error')
                     return redirect(url_for('wms_movements_new'))
 
                 warehouse_id = db.execute(
@@ -4512,14 +4557,14 @@ def register_wms_routes(app, get_db):
 
                 db.commit()
                 log_wms_audit('CREATE', 'INTERNAL_MOVEMENT', None, {'movement_number': movement_number})
-                flash(f'Movement {movement_number} created successfully!', 'success')
+                flash(t('wms_movement_created', f'Movement {movement_number} created successfully!'), 'success')
                 return redirect(url_for('wms_movements'))
             except Exception as e:
                 import traceback
                 print(f"WMS movement create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating movement. Please try again.', 'error')
+                flash(t('wms_error_creating_movement', 'Error creating movement. Please try again.'), 'error')
 
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
         items = db.execute('SELECT * FROM wms_items WHERE is_active = 1 ORDER BY name LIMIT 200').fetchall()
@@ -4649,14 +4694,14 @@ def register_wms_routes(app, get_db):
                 ''', (item_id, warehouse_id, min_quantity, max_quantity, reorder_point,
                       reorder_quantity, safety_stock, lead_time_days, replenishment_method))
                 db.commit()
-                flash('Replenishment configuration created!', 'success')
+                flash(t('wms_replenishment_config_created', 'Replenishment configuration created!'), 'success')
                 return redirect(url_for('wms_replenishment_config'))
             except Exception as e:
                 import traceback
                 print(f"WMS replenishment config create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating replenishment config. Please try again.', 'error')
+                flash(t('wms_error_creating_replenishment_config', 'Error creating replenishment config. Please try again.'), 'error')
 
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
         items = db.execute('SELECT * FROM wms_items WHERE is_active = 1 ORDER BY item_code').fetchall()
@@ -4815,10 +4860,10 @@ def register_wms_routes(app, get_db):
             WHERE p.id = ?
         ''', (task_id,)).fetchone()
         if not task:
-            flash('Pick task not found.', 'error')
+            flash(t('wms_pick_task_not_found', 'Pick task not found.'), 'error')
             return redirect(url_for('wms_picking'))
         if not ensure_warehouse_allowed(task['warehouse_id']):
-            flash('You do not have access to this warehouse.', 'error')
+            flash(t('wms_no_warehouse_access', 'You do not have access to this warehouse.'), 'error')
             return redirect(url_for('wms_picking'))
         held = db.execute('''
             SELECT COALESCE(SUM(quantity_held), 0) as qty
@@ -4828,13 +4873,13 @@ def register_wms_routes(app, get_db):
               AND (? IS NULL OR lot_id = ?)
         ''', (task['item_id'], task['warehouse_id'], task['source_location_id'], task['source_location_id'], task['lot_id'], task['lot_id'])).fetchone()['qty']
         if held and held >= task['quantity']:
-            flash('This stock is on active quality hold and cannot be picked.', 'error')
+            flash(t('wms_stock_on_quality_hold', 'This stock is on active quality hold and cannot be picked.'), 'error')
             return redirect(url_for('wms_picking'))
         db.execute('UPDATE wms_pick_tasks SET status = "IN_PROGRESS", assigned_to = COALESCE(assigned_to, ?), started_at = COALESCE(started_at, datetime("now")), updated_at = CURRENT_TIMESTAMP WHERE id = ?',
                    (session.get('user_id'), task_id))
         db.commit()
         log_wms_audit('START', 'PICK_TASK', task_id)
-        flash('Pick task started.', 'success')
+        flash(t('wms_pick_task_started', 'Pick task started.'), 'success')
         return redirect(url_for('wms_picking'))
 
     @app.route('/wms/picking/<int:task_id>/complete', methods=['POST'])
@@ -4849,16 +4894,16 @@ def register_wms_routes(app, get_db):
             WHERE p.id = ?
         ''', (task_id,)).fetchone()
         if not task:
-            flash('Pick task not found.', 'error')
+            flash(t('wms_pick_task_not_found', 'Pick task not found.'), 'error')
             return redirect(url_for('wms_picking'))
         picked_qty = request.form.get('picked_quantity', type=float, default=task['quantity'])
         short_reason = request.form.get('short_pick_reason', '').strip()
         if picked_qty < 0 or picked_qty > task['quantity']:
-            flash('Picked quantity must be between zero and the task quantity.', 'error')
+            flash(t('wms_pick_quantity_invalid', 'Picked quantity must be between zero and the task quantity.'), 'error')
             return redirect(url_for('wms_picking'))
         status = 'COMPLETED' if picked_qty >= task['quantity'] else 'SHORT_PICK'
         if status == 'SHORT_PICK' and not short_reason:
-            flash('Short pick reason is required for partial picks.', 'error')
+            flash(t('wms_short_pick_reason_required', 'Short pick reason is required for partial picks.'), 'error')
             return redirect(url_for('wms_picking'))
         db.execute('''
             UPDATE wms_pick_tasks
@@ -4868,7 +4913,7 @@ def register_wms_routes(app, get_db):
         ''', (picked_qty, status, short_reason or None, session.get('user_id'), task_id))
         db.commit()
         log_wms_audit('COMPLETE', 'PICK_TASK', task_id, {'picked_quantity': picked_qty, 'short_pick_reason': short_reason})
-        flash('Pick task updated.', 'success')
+        flash(t('wms_pick_task_updated', 'Pick task updated.'), 'success')
         return redirect(url_for('wms_picking'))
 
     # ============================================================
@@ -4931,11 +4976,11 @@ def register_wms_routes(app, get_db):
         db = get_db()
         task = db.execute('SELECT * FROM wms_pack_tasks WHERE id = ?', (task_id,)).fetchone()
         if not task:
-            flash('Pack task not found.', 'error')
+            flash(t('wms_pack_task_not_found', 'Pack task not found.'), 'error')
             return redirect(url_for('wms_packing'))
         carton_count = request.form.get('carton_count', type=int, default=task['carton_count'] or 1)
         if carton_count <= 0:
-            flash('Carton count must be positive.', 'error')
+            flash(t('wms_carton_count_invalid', 'Carton count must be positive.'), 'error')
             return redirect(url_for('wms_packing'))
         db.execute('''
             UPDATE wms_pack_tasks
@@ -4946,7 +4991,7 @@ def register_wms_routes(app, get_db):
         ''', (carton_count, request.form.get('packed_weight_kg') or None, request.form.get('packing_material') or None, session.get('user_id'), task_id))
         db.commit()
         log_wms_audit('COMPLETE', 'PACK_TASK', task_id, {'carton_count': carton_count})
-        flash('Pack task completed.', 'success')
+        flash(t('wms_pack_task_completed', 'Pack task completed.'), 'success')
         return redirect(url_for('wms_packing'))
 
     # ============================================================
@@ -5007,10 +5052,10 @@ def register_wms_routes(app, get_db):
         db = get_db()
         shipment = db.execute('SELECT * FROM wms_shipments WHERE id = ?', (shipment_id,)).fetchone()
         if not shipment:
-            flash('Shipment not found.', 'error')
+            flash(t('wms_shipment_not_found', 'Shipment not found.'), 'error')
             return redirect(url_for('wms_dispatch'))
         if not ensure_warehouse_allowed(shipment['warehouse_id']):
-            flash('You do not have access to this warehouse.', 'error')
+            flash(t('wms_no_warehouse_access', 'You do not have access to this warehouse.'), 'error')
             return redirect(url_for('wms_dispatch'))
         db.execute('''
             UPDATE wms_shipments
@@ -5023,7 +5068,7 @@ def register_wms_routes(app, get_db):
         ''', (request.form.get('carrier_name', ''), request.form.get('tracking_number', ''), request.form.get('driver_name', ''), shipment_id))
         db.commit()
         log_wms_audit('GATE_OUT', 'SHIPMENT', shipment_id)
-        flash('Shipment dispatched.', 'success')
+        flash(t('wms_shipment_dispatched', 'Shipment dispatched.'), 'success')
         return redirect(url_for('wms_dispatch'))
 
     # ============================================================
@@ -5112,14 +5157,14 @@ def register_wms_routes(app, get_db):
                 db.commit()
                 transfer_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
                 log_wms_audit('CREATE', 'TRANSFER', transfer_id, {'transfer_number': transfer_number})
-                flash(f'Transfer {transfer_number} created! Add line items.', 'success')
+                flash(t('wms_transfer_created', f'Transfer {transfer_number} created! Add line items.'), 'success')
                 return redirect(url_for('wms_transfer_detail', transfer_id=transfer_id))
             except Exception as e:
                 import traceback
                 print(f"WMS transfer create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating transfer. Please try again.', 'error')
+                flash(t('wms_error_creating_transfer', 'Error creating transfer. Please try again.'), 'error')
 
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
         companies = db.execute('SELECT * FROM wms_companies WHERE is_active = 1 ORDER BY name').fetchall()
@@ -5154,7 +5199,7 @@ def register_wms_routes(app, get_db):
         ''', (transfer_id,)).fetchone()
 
         if not transfer:
-            flash('Transfer not found.', 'error')
+            flash(t('wms_transfer_not_found', 'Transfer not found.'), 'error')
             return redirect(url_for('wms_transfers'))
 
         lines = db.execute('''
@@ -5256,14 +5301,14 @@ def register_wms_routes(app, get_db):
                 db.commit()
                 return_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
                 log_wms_audit('CREATE', 'RETURN', return_id, {'return_number': return_number})
-                flash(f'Return {return_number} created!', 'success')
+                flash(t('wms_return_created', f'Return {return_number} created!'), 'success')
                 return redirect(url_for('wms_return_detail', return_id=return_id))
             except Exception as e:
                 import traceback
                 print(f"WMS return create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating return. Please try again.', 'error')
+                flash(t('wms_error_creating_return', 'Error creating return. Please try again.'), 'error')
 
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
         customers = db.execute('SELECT * FROM customers ORDER BY name LIMIT 200').fetchall()
@@ -5300,7 +5345,7 @@ def register_wms_routes(app, get_db):
         ''', (return_id,)).fetchone()
 
         if not return_rec:
-            flash('Return not found.', 'error')
+            flash(t('wms_return_not_found', 'Return not found.'), 'error')
             return redirect(url_for('wms_returns'))
 
         lines = db.execute('''
@@ -5397,14 +5442,14 @@ def register_wms_routes(app, get_db):
                 db.commit()
                 count_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
                 log_wms_audit('CREATE', 'STOCK_COUNT', count_id, {'count_number': count_number})
-                flash(f'Stock count {count_number} created!', 'success')
+                flash(t('wms_stock_count_created', f'Stock count {count_number} created!'), 'success')
                 return redirect(url_for('wms_stock_count_detail', count_id=count_id))
             except Exception as e:
                 import traceback
                 print(f"WMS stock count create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating stock count. Please try again.', 'error')
+                flash(t('wms_error_creating_stock_count', 'Error creating stock count. Please try again.'), 'error')
 
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
         categories = db.execute('SELECT * FROM wms_item_categories WHERE is_active = 1 ORDER BY name').fetchall()
@@ -5433,7 +5478,7 @@ def register_wms_routes(app, get_db):
         ''', (count_id,)).fetchone()
 
         if not count_rec:
-            flash('Stock count not found.', 'error')
+            flash(t('wms_stock_count_not_found', 'Stock count not found.'), 'error')
             return redirect(url_for('wms_stock_counts'))
 
         lines = db.execute('''
@@ -5523,14 +5568,14 @@ def register_wms_routes(app, get_db):
                 ))
                 db.commit()
                 adj_id = db.execute('SELECT last_insert_rowid()').fetchone()[0]
-                flash(f'Adjustment {adjustment_number} created!', 'success')
+                flash(t('wms_adjustment_created', f'Adjustment {adjustment_number} created!'), 'success')
                 return redirect(url_for('wms_adjustment_detail', adjustment_id=adj_id))
             except Exception as e:
                 import traceback
                 print(f"WMS adjustment create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating adjustment. Please try again.', 'error')
+                flash(t('wms_error_creating_adjustment', 'Error creating adjustment. Please try again.'), 'error')
 
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
         reason_codes = db.execute("SELECT * FROM wms_reason_codes WHERE reason_type IN ('adjustment', 'count_var', 'correction') AND is_active = 1").fetchall()
@@ -5558,7 +5603,7 @@ def register_wms_routes(app, get_db):
         ''', (adjustment_id,)).fetchone()
 
         if not adjustment:
-            flash('Adjustment not found.', 'error')
+            flash(t('wms_adjustment_not_found', 'Adjustment not found.'), 'error')
             return redirect(url_for('wms_adjustments'))
 
         lines = db.execute('''
@@ -5651,7 +5696,7 @@ def register_wms_routes(app, get_db):
                 SELECT ?, NULL, ?, NULL, ?, ?, ?, ?, ?, datetime('now')
             ''', (f'UD-{date.today().strftime("%Y%m%d")}-{random.randint(1000,9999)}', item_id, decision_code, quantity, disposition, notes, session.get('user_id')))
             db.commit()
-            flash('Usage decision created!', 'success')
+            flash(t('wms_usage_decision_created', 'Usage decision created!'), 'success')
             return redirect(url_for('wms_quality_decisions'))
         items = db.execute('SELECT * FROM wms_items WHERE is_active = 1 ORDER BY item_code').fetchall()
         title = 'New Usage Decision'
@@ -5680,7 +5725,7 @@ def register_wms_routes(app, get_db):
             db.execute('INSERT INTO wms_defect_codes (code, category, description, severity, disposition) VALUES (?, ?, ?, ?, ?)',
                        (code, category, description, severity, disposition))
             db.commit()
-            flash('Defect code created!', 'success')
+            flash(t('wms_defect_code_created', 'Defect code created!'), 'success')
             return redirect(url_for('wms_quality_defect_codes'))
         title = 'New Defect Code'
         return render_template('wms/quality_defect_code_form.html', title=title, code=None)
@@ -5730,7 +5775,7 @@ def register_wms_routes(app, get_db):
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', (f'CAPA-{date.today().strftime("%Y%m%d")}-{random.randint(100,999)}', root_cause, corrective, preventive, priority, session.get('user_id'), 'OPEN'))
             db.commit()
-            flash('CAPA created!', 'success')
+            flash(t('wms_capa_created', 'CAPA created!'), 'success')
             return redirect(url_for('wms_quality_capa'))
         defect_codes = db.execute('SELECT * FROM wms_defect_codes WHERE is_active = 1').fetchall()
         title = 'New CAPA'
@@ -5763,14 +5808,14 @@ def register_wms_routes(app, get_db):
                     VALUES (?, ?, ?, ?, ?)
                 ''', (rule_name, inspection_level, aql_level, lot_size_min, lot_size_max))
                 db.commit()
-                flash('AQL Rule created!', 'success')
+                flash(t('wms_aql_rule_created', 'AQL Rule created!'), 'success')
                 return redirect(url_for('wms_quality_aql_rules'))
             except Exception as e:
                 import traceback
                 print(f"WMS AQL rule create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating AQL rule. Please try again.', 'error')
+                flash(t('wms_error_creating_aql_rule', 'Error creating AQL rule. Please try again.'), 'error')
         title = 'New AQL Rule'
         return render_template('wms/quality_aql_rule_form.html', title=title, rule=None)
 
@@ -5856,19 +5901,19 @@ def register_wms_routes(app, get_db):
                 source_return_line_id = request.form.get('source_return_line_id')
                 source_inspection_id = request.form.get('source_inspection_id')
                 if not item_id or not warehouse_id or quantity_held <= 0 or not hold_reason:
-                    flash('Item, warehouse, positive quantity, and hold reason are required.', 'error')
+                    flash(t('wms_hold_fields_required', 'Item, warehouse, positive quantity, and hold reason are required.'), 'error')
                     return redirect(url_for('wms_quality_holds_new'))
                 if not ensure_warehouse_allowed(warehouse_id):
-                    flash('You do not have access to this warehouse.', 'error')
+                    flash(t('wms_no_warehouse_access', 'You do not have access to this warehouse.'), 'error')
                     return redirect(url_for('wms_quality_holds'))
                 item = db.execute('SELECT id FROM wms_items WHERE id = ? AND is_active = 1', (item_id,)).fetchone()
                 if not item:
-                    flash('Selected item is invalid or inactive.', 'error')
+                    flash(t('wms_selected_item_invalid', 'Selected item is invalid or inactive.'), 'error')
                     return redirect(url_for('wms_quality_holds_new'))
                 if location_id:
                     loc = db.execute('SELECT id, warehouse_id FROM wms_locations WHERE id = ? AND is_active = 1', (location_id,)).fetchone()
                     if not loc or loc['warehouse_id'] != warehouse_id:
-                        flash('Hold location must be active and in the selected warehouse.', 'error')
+                        flash(t('wms_hold_location_invalid', 'Hold location must be active and in the selected warehouse.'), 'error')
                         return redirect(url_for('wms_quality_holds_new'))
                 available_row = db.execute('''
                     SELECT COALESCE(SUM(quantity - reserved_quantity - allocated_quantity - blocked_quantity), 0) as available_qty
@@ -5880,7 +5925,7 @@ def register_wms_routes(app, get_db):
                       AND (? IS NULL OR lot_id = ?)
                 ''', (item_id, warehouse_id, location_id, location_id, lot_id if lot_id else None, lot_id if lot_id else None)).fetchone()
                 if (available_row['available_qty'] or 0) < quantity_held:
-                    flash('Insufficient available stock for this quality hold.', 'error')
+                    flash(t('wms_insufficient_stock_for_hold', 'Insufficient available stock for this quality hold.'), 'error')
                     return redirect(url_for('wms_quality_holds_new'))
 
                 db.execute('''
@@ -5926,14 +5971,14 @@ def register_wms_routes(app, get_db):
                     'hold_type': hold_type,
                     'hold_reason': hold_reason,
                 })
-                flash(f'Quality hold {hold_number} created!', 'success')
+                flash(t('wms_quality_hold_created', f'Quality hold {hold_number} created!'), 'success')
                 return redirect(url_for('wms_quality_holds'))
             except Exception as e:
                 import traceback
                 print(f"WMS quality hold create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating quality hold. Please try again.', 'error')
+                flash(t('wms_error_creating_quality_hold', 'Error creating quality hold. Please try again.'), 'error')
 
         items = db.execute('SELECT * FROM wms_items WHERE is_active = 1 ORDER BY item_code').fetchall()
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
@@ -5967,7 +6012,7 @@ def register_wms_routes(app, get_db):
         ''', (hold_id,)).fetchone()
 
         if not hold:
-            flash('Quality hold not found.', 'error')
+            flash(t('wms_quality_hold_not_found', 'Quality hold not found.'), 'error')
             return redirect(url_for('wms_quality_holds'))
 
         audit_log = db.execute('''
@@ -5990,13 +6035,13 @@ def register_wms_routes(app, get_db):
         try:
             hold = db.execute('SELECT * FROM wms_quality_holds WHERE id = ?', (hold_id,)).fetchone()
             if not hold:
-                flash('Hold not found.', 'error')
+                flash(t('wms_hold_not_found', 'Hold not found.'), 'error')
                 return redirect(url_for('wms_quality_holds'))
             if not ensure_warehouse_allowed(hold['warehouse_id']):
-                flash('You do not have access to this warehouse.', 'error')
+                flash(t('wms_no_warehouse_access', 'You do not have access to this warehouse.'), 'error')
                 return redirect(url_for('wms_quality_holds'))
             if hold['status'] != 'ACTIVE':
-                flash('Only active holds can be released.', 'error')
+                flash(t('wms_only_active_holds_can_be_released', 'Only active holds can be released.'), 'error')
                 return redirect(url_for('wms_quality_hold_detail', hold_id=hold_id))
 
             release_reason = request.form.get('release_reason', '')
@@ -6033,13 +6078,13 @@ def register_wms_routes(app, get_db):
 
             log_wms_audit('RELEASE', 'QUALITY_HOLD', hold['hold_number'],
                           {'disposition': disposition, 'release_reason': release_reason})
-            flash(f'Hold {hold["hold_number"]} released!', 'success')
+            flash(t('wms_hold_released', f'Hold {hold["hold_number"]} released!'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS quality hold release error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error releasing hold. Please try again.', 'error')
+            flash(t('wms_error_releasing_hold', 'Error releasing hold. Please try again.'), 'error')
 
         return redirect(url_for('wms_quality_hold_detail', hold_id=hold_id))
 
@@ -6053,19 +6098,19 @@ def register_wms_routes(app, get_db):
         try:
             hold = db.execute('SELECT * FROM wms_quality_holds WHERE id = ?', (hold_id,)).fetchone()
             if not hold:
-                flash('Hold not found.', 'error')
+                flash(t('wms_hold_not_found', 'Hold not found.'), 'error')
                 return redirect(url_for('wms_quality_holds'))
 
             db.execute('DELETE FROM wms_quality_holds WHERE id = ?', (hold_id,))
             db.commit()
             log_wms_audit('DELETE', 'QUALITY_HOLD', hold['hold_number'])
-            flash(f'Hold {hold["hold_number"]} deleted.', 'success')
+            flash(t('wms_hold_deleted', f'Hold {hold["hold_number"]} deleted.'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS quality hold delete error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error deleting hold.', 'error')
+            flash(t('wms_error_deleting_hold', 'Error deleting hold.'), 'error')
 
         return redirect(url_for('wms_quality_holds'))
 
@@ -6076,7 +6121,7 @@ def register_wms_routes(app, get_db):
         db = get_db()
         rule = db.execute('SELECT * FROM wms_aql_rules WHERE id = ?', (rule_id,)).fetchone()
         if not rule:
-            flash('Rule not found', 'error')
+            flash(t('wms_aql_rule_not_found', 'Rule not found'), 'error')
             return redirect(url_for('wms_quality_aql_rules'))
 
         if request.method == 'POST':
@@ -6093,14 +6138,14 @@ def register_wms_routes(app, get_db):
                     WHERE id = ?
                 ''', (rule_name, inspection_level, aql_level, lot_size_min, lot_size_max, rule_id))
                 db.commit()
-                flash('AQL Rule updated!', 'success')
+                flash(t('wms_aql_rule_updated', 'AQL Rule updated!'), 'success')
                 return redirect(url_for('wms_quality_aql_rules'))
             except Exception as e:
                 import traceback
                 print(f"WMS AQL rule update error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error updating AQL rule. Please try again.', 'error')
+                flash(t('wms_error_updating_aql_rule', 'Error updating AQL rule. Please try again.'), 'error')
         title = 'Edit AQL Rule'
         return render_template('wms/quality_aql_rule_form.html', title=title, rule=rule)
 
@@ -6112,13 +6157,13 @@ def register_wms_routes(app, get_db):
         try:
             db.execute('UPDATE wms_aql_rules SET is_active = 0 WHERE id = ?', (rule_id,))
             db.commit()
-            flash('AQL Rule deleted!', 'success')
+            flash(t('wms_aql_rule_deleted', 'AQL Rule deleted!'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS AQL rule delete error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error deleting AQL rule. Please try again.', 'error')
+            flash(t('wms_error_deleting_aql_rule', 'Error deleting AQL rule. Please try again.'), 'error')
         return redirect(url_for('wms_quality_aql_rules'))
 
     # ============================================================
@@ -6475,7 +6520,7 @@ def register_wms_routes(app, get_db):
             params.append(status)
         if warehouse_id:
             if not ensure_warehouse_allowed(warehouse_id):
-                flash('You do not have access to this warehouse.', 'error')
+                flash(t('wms_no_warehouse_access', 'You do not have access to this warehouse.'), 'error')
                 return redirect(url_for('wms_report_quality_holds'))
             query += ' AND h.warehouse_id = ?'
             params.append(warehouse_id)
@@ -6591,13 +6636,13 @@ def register_wms_routes(app, get_db):
                         ''', (value, setting_key))
             db.commit()
             log_wms_audit('UPDATE', 'SETTINGS', None, {'keys': list(data.keys())})
-            flash('Settings saved successfully!', 'success')
+            flash(t('wms_settings_saved', 'Settings saved successfully!'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS settings save error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error saving settings. Please try again.', 'error')
+            flash(t('wms_error_saving_settings', 'Error saving settings. Please try again.'), 'error')
 
         return redirect(url_for('wms_settings'))
 
@@ -6627,14 +6672,14 @@ def register_wms_routes(app, get_db):
                     data.get('sort_order', 0)
                 ))
                 db.commit()
-                flash('Zone created successfully!', 'success')
+                flash(t('wms_zone_created', 'Zone created successfully!'), 'success')
                 return redirect(url_for('wms_warehouse_detail', warehouse_id=data.get('warehouse_id')))
             except Exception as e:
                 import traceback
                 print(f"WMS zone create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating zone. Please try again.', 'error')
+                flash(t('wms_error_creating_zone', 'Error creating zone. Please try again.'), 'error')
 
         warehouse_id = request.args.get('warehouse_id')
         warehouses = db.execute('SELECT * FROM wms_warehouses WHERE is_active = 1 ORDER BY name').fetchall()
@@ -6697,14 +6742,14 @@ def register_wms_routes(app, get_db):
                 ''', (parent_id, data.get('code'), data.get('name'), data.get('name_local'),
                       data.get('description'), level, path, data.get('sort_order', 0)))
                 db.commit()
-                flash('Category created successfully!', 'success')
+                flash(t('wms_category_created', 'Category created successfully!'), 'success')
                 return redirect(url_for('wms_item_categories'))
             except Exception as e:
                 import traceback
                 print(f"WMS category create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating category. Please try again.', 'error')
+                flash(t('wms_error_creating_category', 'Error creating category. Please try again.'), 'error')
 
         parent_categories = db.execute('SELECT * FROM wms_item_categories WHERE is_active = 1 ORDER BY name').fetchall()
 
@@ -6756,14 +6801,14 @@ def register_wms_routes(app, get_db):
                       data.get('manufacturer'), data.get('country'),
                       data.get('website'), data.get('description')))
                 db.commit()
-                flash('Brand created successfully!', 'success')
+                flash(t('wms_brand_created', 'Brand created successfully!'), 'success')
                 return redirect(url_for('wms_item_brands'))
             except Exception as e:
                 import traceback
                 print(f"WMS brand create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating brand. Please try again.', 'error')
+                flash(t('wms_error_creating_brand', 'Error creating brand. Please try again.'), 'error')
 
         title = 'New Brand'
         return render_template('wms/item_brand_form.html',
@@ -6946,23 +6991,23 @@ def register_wms_routes(app, get_db):
         try:
             alert = db.execute('SELECT warehouse_id FROM wms_alerts WHERE id = ?', (alert_id,)).fetchone()
             if not alert:
-                flash('Alert not found.', 'error')
+                flash(t('wms_alert_not_found', 'Alert not found.'), 'error')
                 return redirect(url_for('wms_alerts'))
             if alert['warehouse_id'] and not ensure_warehouse_allowed(alert['warehouse_id']):
-                flash('You do not have access to this warehouse alert.', 'error')
+                flash(t('wms_no_alert_access', 'You do not have access to this warehouse alert.'), 'error')
                 return redirect(url_for('wms_alerts'))
             db.execute('''
                 UPDATE wms_alerts SET is_acknowledged = 1, acknowledged_by = ?, acknowledged_at = datetime('now')
                 WHERE id = ?
             ''', (session.get('user_id'), alert_id))
             db.commit()
-            flash('Alert acknowledged.', 'success')
+            flash(t('wms_alert_acknowledged', 'Alert acknowledged.'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS alert acknowledge error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error acknowledging alert. Please try again.', 'error')
+            flash(t('wms_error_acknowledging_alert', 'Error acknowledging alert. Please try again.'), 'error')
 
         return redirect(url_for('wms_alerts'))
 
@@ -7271,10 +7316,10 @@ def register_wms_routes(app, get_db):
             WHERE o.id = ?
         ''', (order_id,)).fetchone()
         if not order:
-            flash('Outbound order not found', 'error')
+            flash(t('wms_outbound_order_not_found', 'Outbound order not found'), 'error')
             return redirect(url_for('wms_picking'))
         if not ensure_warehouse_allowed(order['warehouse_id']):
-            flash('You do not have access to this warehouse order.', 'error')
+            flash(t('wms_no_order_access', 'You do not have access to this warehouse order.'), 'error')
             return redirect(url_for('wms_picking'))
 
         lines = db.execute('''
@@ -7337,10 +7382,10 @@ def register_wms_routes(app, get_db):
             WHERE p.id = ?
         ''', (task_id,)).fetchone()
         if not task:
-            flash('Pick task not found', 'error')
+            flash(t('wms_pick_task_not_found', 'Pick task not found'), 'error')
             return redirect(url_for('wms_picking'))
         if task['warehouse_id'] and not ensure_warehouse_allowed(task['warehouse_id']):
-            flash('You do not have access to this pick task.', 'error')
+            flash(t('wms_no_pick_task_access', 'You do not have access to this pick task.'), 'error')
             return redirect(url_for('wms_picking'))
 
         return render_template('wms/pickup_detail.html',
@@ -7429,7 +7474,7 @@ def register_wms_routes(app, get_db):
 
         if request.method == 'POST':
             if not validate_wms_csrf():
-                flash('CSRF validation failed. Please refresh the page and try again.', 'error')
+                flash(t('wms_csrf_failed', 'CSRF validation failed. Please refresh the page and try again.'), 'error')
                 return redirect(url_for('wms_waves_new'))
             warehouse_id = request.form.get('warehouse_id')
             template_id = request.form.get('template_id') or None
@@ -7462,7 +7507,7 @@ def register_wms_routes(app, get_db):
                   priority, session.get('user_id')))
             db.commit()
 
-            flash(f'Wave {wave_number} created successfully', 'success')
+            flash(t('wms_wave_created', f'Wave {wave_number} created successfully'), 'success')
             return redirect(url_for('wms_waves'))
 
         # GET
@@ -7498,7 +7543,7 @@ def register_wms_routes(app, get_db):
         ''', (wave_id,)).fetchone()
 
         if not wave:
-            flash('Wave not found', 'error')
+            flash(t('wms_wave_not_found', 'Wave not found'), 'error')
             return redirect(url_for('wms_waves'))
 
         orders = db.execute('''
@@ -7542,16 +7587,16 @@ def register_wms_routes(app, get_db):
         """Release a wave."""
         db = get_db()
         if not validate_wms_csrf():
-            flash('CSRF validation failed. Please refresh the page and try again.', 'error')
+            flash(t('wms_csrf_failed', 'CSRF validation failed. Please refresh the page and try again.'), 'error')
             return redirect(url_for('wms_wave_detail', wave_id=wave_id))
 
         wave = db.execute('SELECT * FROM wms_waves WHERE id = ?', (wave_id,)).fetchone()
         if not wave:
-            flash('Wave not found', 'error')
+            flash(t('wms_wave_not_found', 'Wave not found'), 'error')
             return redirect(url_for('wms_waves'))
 
         if wave['status'] not in ['PLANNED']:
-            flash(f'Cannot release wave in status {wave["status"]}', 'error')
+            flash(t('wms_cannot_release_wave', f'Cannot release wave in status {wave["status"]}'), 'error')
             return redirect(url_for('wms_wave_detail', wave_id=wave_id))
 
         # Get orders in wave
@@ -7575,7 +7620,7 @@ def register_wms_routes(app, get_db):
             f'Wave {wave["wave_number"]} has been released with {wave["order_count"]} orders',
             'success', 'wave', wave_id)
 
-        flash(f'Wave {wave["wave_number"]} released successfully', 'success')
+        flash(t('wms_wave_released', f'Wave {wave["wave_number"]} released successfully'), 'success')
         return redirect(url_for('wms_wave_detail', wave_id=wave_id))
 
     @app.route('/wms/wave/<int:wave_id>/cancel', methods=['POST'])
@@ -7584,16 +7629,16 @@ def register_wms_routes(app, get_db):
         """Cancel a wave."""
         db = get_db()
         if not validate_wms_csrf():
-            flash('CSRF validation failed. Please refresh the page and try again.', 'error')
+            flash(t('wms_csrf_failed', 'CSRF validation failed. Please refresh the page and try again.'), 'error')
             return redirect(url_for('wms_wave_detail', wave_id=wave_id))
 
         wave = db.execute('SELECT * FROM wms_waves WHERE id = ?', (wave_id,)).fetchone()
         if not wave:
-            flash('Wave not found', 'error')
+            flash(t('wms_wave_not_found', 'Wave not found'), 'error')
             return redirect(url_for('wms_waves'))
 
         if wave['status'] in ['COMPLETED', 'CANCELLED']:
-            flash(f'Cannot cancel wave in status {wave["status"]}', 'error')
+            flash(t('wms_cannot_cancel_wave', f'Cannot cancel wave in status {wave["status"]}'), 'error')
             return redirect(url_for('wms_wave_detail', wave_id=wave_id))
 
         cancel_reason = request.form.get('cancel_reason', 'User cancelled')
@@ -7612,7 +7657,7 @@ def register_wms_routes(app, get_db):
         db.commit()
 
         log_wms_audit('WAVE_CANCELLED', 'wms_waves', wave_id, {'wave_number': wave['wave_number'], 'reason': cancel_reason})
-        flash(f'Wave {wave["wave_number"]} cancelled', 'warning')
+        flash(t('wms_wave_cancelled', f'Wave {wave["wave_number"]} cancelled'), 'warning')
         return redirect(url_for('wms_wave_detail', wave_id=wave_id))
 
     @app.route('/wms/wave/<int:wave_id>/complete', methods=['POST'])
@@ -7621,16 +7666,16 @@ def register_wms_routes(app, get_db):
         """Complete a wave."""
         db = get_db()
         if not validate_wms_csrf():
-            flash('CSRF validation failed. Please refresh the page and try again.', 'error')
+            flash(t('wms_csrf_failed', 'CSRF validation failed. Please refresh the page and try again.'), 'error')
             return redirect(url_for('wms_wave_detail', wave_id=wave_id))
 
         wave = db.execute('SELECT * FROM wms_waves WHERE id = ?', (wave_id,)).fetchone()
         if not wave:
-            flash('Wave not found', 'error')
+            flash(t('wms_wave_not_found', 'Wave not found'), 'error')
             return redirect(url_for('wms_waves'))
 
         if wave['status'] not in ['RELEASED', 'IN_PROGRESS']:
-            flash(f'Cannot complete wave in status {wave["status"]}', 'error')
+            flash(t('wms_cannot_complete_wave', f'Cannot complete wave in status {wave["status"]}'), 'error')
             return redirect(url_for('wms_wave_detail', wave_id=wave_id))
 
         db.execute('''
@@ -7640,7 +7685,7 @@ def register_wms_routes(app, get_db):
         db.commit()
 
         log_wms_audit('WAVE_COMPLETED', 'wms_waves', wave_id, {'wave_number': wave['wave_number']})
-        flash(f'Wave {wave["wave_number"]} completed', 'success')
+        flash(t('wms_wave_completed', f'Wave {wave["wave_number"]} completed'), 'success')
         return redirect(url_for('wms_wave_detail', wave_id=wave_id))
 
     @app.route('/wms/waves/templates')
@@ -7665,7 +7710,7 @@ def register_wms_routes(app, get_db):
 
         if request.method == 'POST':
             if not validate_wms_csrf():
-                flash('CSRF validation failed. Please refresh the page and try again.', 'error')
+                flash(t('wms_csrf_failed', 'CSRF validation failed. Please refresh the page and try again.'), 'error')
                 return redirect(url_for('wms_wave_templates_new'))
             template_name = request.form.get('template_name')
             description = request.form.get('description', '')
@@ -7683,7 +7728,7 @@ def register_wms_routes(app, get_db):
                   max_picks, auto_assign, release_type, session.get('user_id')))
             db.commit()
 
-            flash(f'Template {template_name} created', 'success')
+            flash(t('wms_wave_template_created', f'Template {template_name} created'), 'success')
             return redirect(url_for('wms_wave_templates'))
 
         title = 'Create Wave Template'
@@ -7696,12 +7741,12 @@ def register_wms_routes(app, get_db):
         db = get_db()
         template = db.execute('SELECT * FROM wms_wave_templates WHERE id = ?', (template_id,)).fetchone()
         if not template:
-            flash('Wave template not found', 'error')
+            flash(t('wms_wave_template_not_found', 'Wave template not found'), 'error')
             return redirect(url_for('wms_wave_templates'))
 
         if request.method == 'POST':
             if not validate_wms_csrf():
-                flash('CSRF validation failed. Please refresh the page and try again.', 'error')
+                flash(t('wms_csrf_failed', 'CSRF validation failed. Please refresh the page and try again.'), 'error')
                 return redirect(url_for('wms_wave_templates_edit', template_id=template_id))
             template_name = request.form.get('template_name')
             description = request.form.get('description', '')
@@ -7737,7 +7782,7 @@ def register_wms_routes(app, get_db):
                     'is_active': is_active
                 }
             })
-            flash(f'Template {template_name} updated', 'success')
+            flash(t('wms_wave_template_updated', f'Template {template_name} updated'), 'success')
             return redirect(url_for('wms_wave_templates'))
 
         title = 'Edit Wave Template'
@@ -7949,7 +7994,7 @@ def register_wms_routes(app, get_db):
                 db.execute('INSERT INTO wms_voice_config (config_key, config_value, language) VALUES (?, ?, ?)',
                            (config_key, config_value, language))
             db.commit()
-            flash('Configuration updated!', 'success')
+            flash(t('wms_configuration_updated', 'Configuration updated!'), 'success')
             return redirect(url_for('wms_voice_picking_config'))
 
         configs = db.execute('SELECT * FROM wms_voice_config ORDER BY config_key').fetchall()
@@ -8044,14 +8089,14 @@ def register_wms_routes(app, get_db):
                       partner_code, contact_email, is_active))
                 db.commit()
                 log_wms_audit('CREATE', 'EDI_PARTNER', db.execute('SELECT last_insert_rowid() as id').fetchone()['id'])
-                flash('EDI Partner created successfully!', 'success')
+                flash(t('wms_edi_partner_created', 'EDI Partner created successfully!'), 'success')
                 return redirect(url_for('wms_edi_partners'))
             except Exception as e:
                 import traceback
                 print(f"WMS EDI partner create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating partner. Please try again.', 'error')
+                flash(t('wms_error_creating_partner', 'Error creating partner. Please try again.'), 'error')
 
         title = 'New EDI Partner'
         return render_template('wms/edi_partner_form.html',
@@ -8067,7 +8112,7 @@ def register_wms_routes(app, get_db):
         partner = db.execute('SELECT * FROM wms_edi_partners WHERE id = ?', (partner_id,)).fetchone()
 
         if not partner:
-            flash('Partner not found.', 'error')
+            flash(t('wms_partner_not_found', 'Partner not found.'), 'error')
             return redirect(url_for('wms_edi_partners'))
 
         if request.method == 'POST':
@@ -8104,14 +8149,14 @@ def register_wms_routes(app, get_db):
                           partner_code, contact_email, is_active, partner_id))
                 db.commit()
                 log_wms_audit('UPDATE', 'EDI_PARTNER', partner_id)
-                flash('EDI Partner updated successfully!', 'success')
+                flash(t('wms_edi_partner_updated', 'EDI Partner updated successfully!'), 'success')
                 return redirect(url_for('wms_edi_partners'))
             except Exception as e:
                 import traceback
                 print(f"WMS EDI partner update error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error updating partner. Please try again.', 'error')
+                flash(t('wms_error_updating_partner', 'Error updating partner. Please try again.'), 'error')
 
         title = 'Edit EDI Partner'
         return render_template('wms/edi_partner_form.html',
@@ -8219,14 +8264,14 @@ def register_wms_routes(app, get_db):
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (mapping_name, message_type, direction, field_mappings_json, transformation_rules_json, session.get('user_id')))
                 db.commit()
-                flash('EDI Mapping created successfully!', 'success')
+                flash(t('wms_edi_mapping_created', 'EDI Mapping created successfully!'), 'success')
                 return redirect(url_for('wms_edi_mappings'))
             except Exception as e:
                 import traceback
                 print(f"WMS EDI mapping create error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error creating mapping. Please try again.', 'error')
+                flash(t('wms_error_creating_mapping', 'Error creating mapping. Please try again.'), 'error')
 
         title = 'New EDI Mapping'
         return render_template('wms/edi_mapping_form.html',
@@ -8241,7 +8286,7 @@ def register_wms_routes(app, get_db):
         db = get_db()
         mapping = db.execute('SELECT * FROM wms_edi_mappings WHERE id = ?', (mapping_id,)).fetchone()
         if not mapping:
-            flash('Mapping not found', 'error')
+            flash(t('wms_mapping_not_found', 'Mapping not found'), 'error')
             return redirect(url_for('wms_edi_mappings'))
 
         if request.method == 'POST':
@@ -8259,14 +8304,14 @@ def register_wms_routes(app, get_db):
                     WHERE id = ?
                 ''', (mapping_name, message_type, direction, field_mappings_json, transformation_rules_json, mapping_id))
                 db.commit()
-                flash('EDI Mapping updated successfully!', 'success')
+                flash(t('wms_edi_mapping_updated', 'EDI Mapping updated successfully!'), 'success')
                 return redirect(url_for('wms_edi_mappings'))
             except Exception as e:
                 import traceback
                 print(f"WMS EDI mapping update error: {e}")
                 traceback.print_exc()
                 db.rollback()
-                flash('Error updating mapping. Please try again.', 'error')
+                flash(t('wms_error_updating_mapping', 'Error updating mapping. Please try again.'), 'error')
 
         title = 'Edit EDI Mapping'
         return render_template('wms/edi_mapping_form.html',
@@ -8282,13 +8327,13 @@ def register_wms_routes(app, get_db):
         try:
             db.execute('DELETE FROM wms_edi_mappings WHERE id = ?', (mapping_id,))
             db.commit()
-            flash('EDI Mapping deleted successfully!', 'success')
+            flash(t('wms_edi_mapping_deleted', 'EDI Mapping deleted successfully!'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS EDI mapping delete error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error deleting mapping. Please try again.', 'error')
+            flash(t('wms_error_deleting_mapping', 'Error deleting mapping. Please try again.'), 'error')
         return redirect(url_for('wms_edi_mappings'))
 
     @app.route('/wms/edi/idoc/<int:idoc_id>')
@@ -8300,7 +8345,7 @@ def register_wms_routes(app, get_db):
         if not idoc:
             idoc = db.execute('SELECT * FROM wms_inbound_idocs WHERE id = ?', (idoc_id,)).fetchone()
         if not idoc:
-            flash('IDoc not found', 'error')
+            flash(t('wms_idoc_not_found', 'IDoc not found'), 'error')
             return redirect(url_for('wms_edi_dashboard'))
 
         partner = db.execute('SELECT * FROM wms_edi_partners WHERE id = ?', (idoc['partner_id'],)).fetchone() if idoc.get('partner_id') else None
@@ -8336,13 +8381,13 @@ def register_wms_routes(app, get_db):
             ''', (idoc_id, idoc['status'], f'Resend to {partner["partner_name"]}', session.get('user_id')))
             db.commit()
 
-            flash('IDoc queued for resend', 'success')
+            flash(t('wms_idoc_queued', 'IDoc queued for resend'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS IDoc resend error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error resending IDoc. Please try again.', 'error')
+            flash(t('wms_error_resending_idoc', 'Error resending IDoc. Please try again.'), 'error')
         return redirect(url_for('wms_edi_outbound'))
 
     @app.route('/wms/edi/process/<int:idoc_id>', methods=['POST'])
@@ -8353,7 +8398,7 @@ def register_wms_routes(app, get_db):
         try:
             idoc = db.execute('SELECT * FROM wms_inbound_idocs WHERE id = ?', (idoc_id,)).fetchone()
             if not idoc:
-                flash('IDoc not found', 'error')
+                flash(t('wms_idoc_not_found', 'IDoc not found'), 'error')
                 return redirect(url_for('wms_edi_inbound'))
 
             db.execute('''
@@ -8366,13 +8411,13 @@ def register_wms_routes(app, get_db):
             ''', (idoc_id, idoc['status'], 'Manually processed', session.get('user_id')))
             db.commit()
 
-            flash('IDoc processed successfully!', 'success')
+            flash(t('wms_idoc_processed', 'IDoc processed successfully!'), 'success')
         except Exception as e:
             import traceback
             print(f"WMS IDoc process error: {e}")
             traceback.print_exc()
             db.rollback()
-            flash('Error processing IDoc. Please try again.', 'error')
+            flash(t('wms_error_processing_idoc', 'Error processing IDoc. Please try again.'), 'error')
         return redirect(url_for('wms_edi_inbound'))
 
     @app.route('/wms/edi/send-test/<int:idoc_id>', methods=['POST'])
