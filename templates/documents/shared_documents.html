@@ -15,43 +15,198 @@
 <body>
     {% include 'base.html' %}
     {% block content %}
-    <div class="container-fluid py-4">
-        <h1 class="h3 mb-4"><i class="fas fa-share-alt me-2 text-success"></i>{{ page_title }}</h1>
-        <div class="card">
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table mb-0">
-                        <thead>
-                            <tr>
-                                <th>Document</th>
-                                <th>Category</th>
-                                <th>Permission</th>
-                                <th>Status</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for doc in documents %}
-                            <tr>
-                                <td>
-                                    <a href="{{ url_for('documents_detail', document_id=doc.id) }}" class="text-decoration-none">
-                                        <i class="fas fa-file-alt me-2"></i>{{ doc.title }}
+    <div class="space-y-6 fade-in">
+        <!-- Page Header -->
+        <div class="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+                <p class="text-[10px] font-black uppercase tracking-[0.25em] text-emerald-300">Documents</p>
+                <h1 class="mt-2 text-3xl font-extrabold tracking-tight text-white">{{ page_title }}</h1>
+                <p class="mt-2 max-w-3xl text-sm text-slate-400">View and manage documents that have been shared with you by other users.</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <a href="{{ url_for('documents_dashboard') }}" class="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-slate-300 transition-all hover:bg-white/10 hover:text-white">
+                    <i class="fa-solid fa-arrow-left mr-2"></i>All Documents
+                </a>
+            </div>
+        </div>
+
+        <!-- Stats Bar -->
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div class="glass-panel rounded-xl border border-white/5 p-5">
+                <div class="flex items-center gap-4">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-300">
+                        <i class="fa-solid fa-share-nodes text-xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Shared With Me</p>
+                        <p class="text-2xl font-extrabold text-white">{{ documents|length }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="glass-panel rounded-xl border border-white/5 p-5">
+                <div class="flex items-center gap-4">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-300">
+                        <i class="fa-solid fa-eye text-xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Read Access</p>
+                        <p class="text-2xl font-extrabold text-white">{{ documents|selectattr('permission_level', 'equalto', 'Read')|list|length }}</p>
+                    </div>
+                </div>
+            </div>
+            <div class="glass-panel rounded-xl border border-white/5 p-5">
+                <div class="flex items-center gap-4">
+                    <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 text-amber-300">
+                        <i class="fa-solid fa-pen-to-square text-xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-black uppercase tracking-widest text-slate-500">Write Access</p>
+                        <p class="text-2xl font-extrabold text-white">{{ documents|selectattr('permission_level', 'equalto', 'Write')|list|length }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documents Table -->
+        <div class="glass-panel overflow-hidden rounded-2xl border border-white/5">
+            <div class="border-b border-white/5 bg-white/[0.02] p-5 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-500/10 text-brand-300">
+                        <i class="fa-solid fa-share-nodes"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-black text-white">Shared Documents</h2>
+                        <p class="text-xs text-slate-500">Documents shared with you by other users</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-sm btn-ghost text-slate-400 hover:text-white">
+                        <i class="fa-solid fa-filter mr-1"></i>Filter
+                    </button>
+                    <button class="btn btn-sm btn-ghost text-slate-400 hover:text-white">
+                        <i class="fa-solid fa-sort mr-1"></i>Sort
+                    </button>
+                </div>
+            </div>
+            <div class="overflow-auto max-h-[60vh]">
+                <table class="min-w-[1000px] w-full text-left text-sm">
+                    <thead class="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-white/5">
+                        <tr class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                            <th class="px-5 py-4 w-12">
+                                <input type="checkbox" class="h-4 w-4 rounded border-white/10 bg-white/5">
+                            </th>
+                            <th class="px-4 py-4">Document</th>
+                            <th class="px-4 py-4">Category</th>
+                            <th class="px-4 py-4">Permission</th>
+                            <th class="px-4 py-4">Status</th>
+                            <th class="px-4 py-4">Shared By</th>
+                            <th class="px-4 py-4 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5 bg-slate-900/10">
+                        {% for doc in documents %}
+                        <tr class="hover:bg-white/[0.04] transition-colors group">
+                            <td class="px-5 py-4">
+                                <input type="checkbox" class="h-4 w-4 rounded border-white/10 bg-white/5">
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex items-center gap-3">
+                                    <span class="inline-flex h-10 w-10 items-center justify-center rounded-xl {% if doc.category_name == 'Contracts' %}bg-amber-500/10 text-amber-300{% elif doc.category_name == 'Invoices' %}bg-cyan-500/10 text-cyan-200{% else %}bg-brand-500/10 text-brand-200{% endif %}">
+                                        <i class="fa-solid {% if doc.category_name == 'Contracts' %}fa-file-contract{% elif doc.category_name == 'Invoices' %}fa-file-invoice{% else %}fa-file-alt{% endif %}"></i>
+                                    </span>
+                                    <div>
+                                        <a href="{{ url_for('documents_detail', document_id=doc.id) }}" class="font-bold text-white hover:text-brand-300 transition-colors">{{ doc.title }}</a>
+                                        <div class="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                                            <span class="font-mono">{{ doc.document_code }}</span>
+                                            <span>•</span>
+                                            <span>{{ doc.file_size or '--' }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300">
+                                    <i class="fa-solid fa-folder text-slate-500"></i>
+                                    {{ doc.category_name or 'Uncategorized' }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-4">
+                                {% if doc.permission_level == 'Write' %}
+                                <span class="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-emerald-200">
+                                    <i class="fa-solid fa-pen text-emerald-300"></i>Write
+                                </span>
+                                {% elif doc.permission_level == 'Read' %}
+                                <span class="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-cyan-200">
+                                    <i class="fa-solid fa-eye text-cyan-300"></i>Read
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1.5 rounded-full border border-slate-500/20 bg-slate-500/10 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-slate-400">
+                                    {{ doc.permission_level or 'Read' }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-4 py-4">
+                                <span class="inline-flex items-center gap-1.5 rounded-full border {% if doc.status == 'Approved' %}border-emerald-500/20 bg-emerald-500/10 text-emerald-300{% elif doc.status == 'Pending' %}border-amber-500/20 bg-amber-500/10 text-amber-300{% else %}border-slate-500/20 bg-slate-500/10 text-slate-400{% endif %} px-3 py-1.5 text-xs font-medium">
+                                    <span class="h-1.5 w-1.5 rounded-full {% if doc.status == 'Approved' %}bg-emerald-400{% elif doc.status == 'Pending' %}bg-amber-400{% else %}bg-slate-500{% endif %}"></span>
+                                    {{ doc.status or 'Draft' }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-4">
+                                <div class="flex items-center gap-2">
+                                    <div class="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-cyan-500 text-xs font-bold text-white">
+                                        {{ doc.shared_by_name[0] if doc.shared_by_name else '?' }}
+                                    </div>
+                                    <span class="text-sm text-slate-300">{{ doc.shared_by_name or 'Unknown' }}</span>
+                                </div>
+                            </td>
+                            <td class="px-4 py-4 text-right">
+                                <div class="flex items-center justify-end gap-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                                    <a href="{{ url_for('documents_detail', document_id=doc.id) }}" class="rounded-lg border border-white/10 bg-white/5 p-2.5 text-xs text-slate-300 transition-all hover:bg-white/10 hover:text-white" title="View">
+                                        <i class="fa-solid fa-eye"></i>
                                     </a>
-                                    <div class="small text-muted">{{ doc.document_code }}</div>
-                                </td>
-                                <td>{{ doc.category_name or '-' }}</td>
-                                <td><span class="badge bg-info">{{ doc.permission_level or 'Read' }}</span></td>
-                                <td><span class="badge bg-secondary">{{ doc.status or 'Draft' }}</span></td>
-                                <td>
-                                    <a href="{{ url_for('documents_detail', document_id=doc.id) }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-eye"></i></a>
-                                    <a href="{{ url_for('documents_download', document_id=doc.id) }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-download"></i></a>
-                                </td>
-                            </tr>
-                            {% else %}
-                            <tr><td colspan="5" class="text-center py-4 text-muted"><i class="fas fa-share-alt fa-2x mb-2"></i><p class="mb-0">No shared documents</p></td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                                    <a href="{{ url_for('documents_download', document_id=doc.id) }}" class="rounded-lg border border-brand-500/20 bg-brand-500/10 p-2.5 text-xs text-brand-200 transition-all hover:bg-brand-500 hover:text-white" title="Download">
+                                        <i class="fa-solid fa-download"></i>
+                                    </a>
+                                    {% if doc.permission_level == 'Write' %}
+                                    <button class="rounded-lg border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs text-amber-200 transition-all hover:bg-amber-500 hover:text-slate-950" title="Edit">
+                                        <i class="fa-solid fa-pen"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="px-4 py-20">
+                                <div class="flex flex-col items-center justify-center">
+                                    <div class="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/5 text-slate-500 mb-4">
+                                        <i class="fa-solid fa-share-nodes text-3xl"></i>
+                                    </div>
+                                    <h3 class="text-lg font-bold text-white mb-1">No Shared Documents</h3>
+                                    <p class="text-sm text-slate-500 text-center max-w-md">Documents shared with you by other users will appear here. Currently, no documents have been shared with your account.</p>
+                                    <a href="{{ url_for('documents_dashboard') }}" class="mt-6 rounded-xl border border-brand-500/20 bg-brand-500/10 px-5 py-3 text-[10px] font-black uppercase tracking-widest text-brand-200 transition-all hover:bg-brand-500 hover:text-white">
+                                        Browse All Documents
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <!-- Table Footer -->
+            <div class="border-t border-white/5 bg-white/[0.02] px-5 py-4 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <span class="text-xs text-slate-500">Selected <span class="font-bold text-white">0</span> items</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button class="btn btn-sm btn-ghost text-slate-400 hover:text-white" disabled>
+                        <i class="fa-solid fa-chevron-left mr-1"></i>Previous
+                    </button>
+                    <span class="px-3 py-1 text-xs text-slate-400">Page <span class="font-bold text-white">1</span> of <span class="font-bold text-white">1</span></span>
+                    <button class="btn btn-sm btn-ghost text-slate-400 hover:text-white" disabled>
+                        Next<i class="fa-solid fa-chevron-right ml-1"></i>
+                    </button>
                 </div>
             </div>
         </div>

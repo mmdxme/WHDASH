@@ -51,6 +51,10 @@ import queue
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DATABASE_PATH = os.environ.get('DATABASE_PATH', os.path.join(BASE_DIR, 'warehouse.db'))
 
+# Detect DB engine (default: SQLite for backward compatibility)
+_DB_ENGINE = os.environ.get('DB_ENGINE', 'sqlite').lower()
+_is_sqlite = _DB_ENGINE != 'postgresql'
+
 # Ensure database directory exists
 _db_dir = os.path.dirname(DATABASE_PATH)
 if _db_dir:
@@ -58,10 +62,12 @@ if _db_dir:
 
 
 # ============================================================================
-# PRAGMA SETTINGS
+# PRAGMA SETTINGS (SQLite only)
 # ============================================================================
 
-# Connection PRAGMAs applied to every new connection for consistency and performance
+# Connection PRAGMAs applied to every new SQLite connection for consistency and performance.
+# These are SQLite-specific and MUST NOT be applied to PostgreSQL connections.
+# PostgreSQL uses server-side configuration (postgresql.conf) instead.
 STANDARD_PRAGMAS = [
     ("PRAGMA journal_mode=WAL", "Write-Ahead Logging for better concurrency"),
     ("PRAGMA synchronous=NORMAL", "Balanced durability/performance"),
@@ -69,7 +75,7 @@ STANDARD_PRAGMAS = [
     ("PRAGMA temp_store=MEMORY", "Temp tables in memory"),
     ("PRAGMA foreign_keys=ON", "Enforce foreign key constraints"),
     ("PRAGMA busy_timeout=5000", "5 second busy wait"),
-]
+] if _is_sqlite else []
 
 
 # ============================================================================
@@ -211,6 +217,7 @@ def get_db() -> sqlite3.Connection:
 
     Returns:
         sqlite3.Connection: A SQLite connection with Row factory and optimized PRAGMAs.
+        For PostgreSQL, returns a psycopg2 connection when DB_ENGINE=postgresql.
 
     Example:
         db = get_db()
@@ -229,17 +236,43 @@ def get_db() -> sqlite3.Connection:
         concurrency. Connections must be returned via return_connection()
         or by using get_db_context() which handles this automatically.
     """
-    if _DB_POOLING_ENABLED:
-        return get_pool().get_connection()
+    if _is_sqlite:
+        if _DB_POOLING_ENABLED:
+            return get_pool().get_connection()
 
-    conn = sqlite3.connect(DATABASE_PATH, timeout=30.0)
-    conn.row_factory = sqlite3.Row
+        conn = sqlite3.connect(DATABASE_PATH, timeout=30.0)
+        conn.row_factory = sqlite3.Row
 
-    # Apply all standard PRAGMAs
-    for pragma_sql, _ in STANDARD_PRAGMAS:
-        conn.execute(pragma_sql)
+        # Apply all standard PRAGMAs (SQLite only)
+        for pragma_sql, _ in STANDARD_PRAGMAS:
+            conn.execute(pragma_sql)
 
-    return conn
+        return conn
+    else:
+        # PostgreSQL connection path
+        import psycopg2
+        password = os.environ.get('POSTGRESQL_PASSWORD', '')
+        user = os.environ.get('POSTGRESQL_USER', 'postgres')
+        host = os.environ.get('POSTGRESQL_HOST', 'localhost')
+        port = int(os.environ.get('POSTGRESQL_PORT', '5432'))
+        database = os.environ.get('POSTGRESQL_DATABASE', 'whdash')
+
+        if password:
+            conn = psycopg2.connect(
+                user=user,
+                password=password,
+                host=host,
+                port=port,
+                database=database
+            )
+        else:
+            conn = psycopg2.connect(
+                user=user,
+                host=host,
+                port=port,
+                database=database
+            )
+        return conn
 
 
 def get_db_pooled():
@@ -2066,5 +2099,15 @@ def initialize_platform_schema():
             set_platform_setting(key, value, category, description)
 
 
-# Run initialization when this module is imported
-initialize_platform_schema()
+# NOTE: initialize_platform_schema() is NO LONGER auto-run at import time.
+# It must be called explicitly during application startup.
+# This prevents schema mutations during normal imports.
+#
+# The platform schema (platform_audit_log, platform_notifications, etc.) is
+# now managed through Alembic migrations (migrations/versions/001_initial_schema.py).
+#
+# If you need to ensure platform tables exist (e.g. on fresh DB):
+#   from database import initialize_platform_schema
+#   initialize_platform_schema()
+#
+# See: migrate.py for migration management commands.

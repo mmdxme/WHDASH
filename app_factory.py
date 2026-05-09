@@ -97,6 +97,10 @@ def initialize_core(app: Flask):
     from settings import initialize_settings
     initialize_settings()
 
+    # Register Jinja2 custom filters (including 'date' filter)
+    from jinja_filters import register_jinja_filters
+    register_jinja_filters(app)
+
 
 # =============================================================================
 # ROUTE REGISTRATION HELPERS
