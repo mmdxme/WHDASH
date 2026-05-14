@@ -125,3 +125,88 @@ def register_context_processors(app: Flask) -> None:
                 'is_rtl': lambda lang: False,
                 'get_language_direction': lambda lang: 'ltr',
             }
+
+    @app.context_processor
+    def inject_user_preferences():
+        """Inject user preferences into all templates."""
+        try:
+            from flask import session
+            from database import get_one
+
+            user_id = session.get('user_id')
+            if user_id:
+                prefs = get_one("SELECT * FROM user_preferences WHERE user_id = ?", (user_id,))
+                if prefs:
+                    # Build user_preferences object with computed properties
+                    import copy
+                    user_prefs = dict(prefs)
+
+                    # Compute direction_resolved
+                    interface_direction = user_prefs.get('interface_direction', 'auto')
+                    language = user_prefs.get('language', 'en')
+                    if interface_direction == 'auto':
+                        user_prefs['direction_resolved'] = 'rtl' if language in ('fa', 'ar', 'he', 'ur') else 'ltr'
+                    else:
+                        user_prefs['direction_resolved'] = interface_direction
+
+                    # Compute is_dark
+                    theme = user_prefs.get('theme', 'default')
+                    user_prefs['is_dark'] = theme in ('dark', 'midnight', 'AMOLED Dark')
+
+                    # Compute font_size_value
+                    density = user_prefs.get('density', 'default')
+                    font_size_map = {'compact': '13px', 'default': '14px', 'comfortable': '15px', 'spacious': '16px'}
+                    user_prefs['font_size_value'] = font_size_map.get(density, '14px')
+
+                    # Compute font_weight_value
+                    font_weight = user_prefs.get('font_weight', 'regular')
+                    font_weight_map = {'light': '300', 'regular': '400', 'medium': '500', 'semibold': '600', 'bold': '700'}
+                    user_prefs['font_weight_value'] = font_weight_map.get(font_weight, '400')
+
+                    # Font stack
+                    user_prefs['font_stack'] = user_prefs.get('font_stack', 'Manrope, Outfit, Space Grotesk, sans-serif')
+
+                    # Currency symbol
+                    currency = user_prefs.get('currency', 'AED')
+                    currency_symbols = {'AED': 'د.إ', 'USD': '$', 'EUR': '€', 'GBP': '£', 'SAR': '﷼', 'QAR': '﷼', 'KWD': 'د.ك', 'BHD': '.د.ب', 'OMR': 'ر.ع.'}
+                    user_prefs['currency_symbol'] = currency_symbols.get(currency, currency)
+
+                    # Timezone label
+                    user_prefs['timezone_label'] = user_prefs.get('timezone_label', 'GST (UTC+4)')
+
+                    return {'user_preferences': user_prefs}
+            # Return default preferences for anonymous users
+            return {
+                'user_preferences': {
+                    'direction_resolved': 'ltr',
+                    'theme': 'default',
+                    'is_dark': False,
+                    'language': 'en',
+                    'density': 'default',
+                    'reduced_motion': False,
+                    'currency': 'AED',
+                    'currency_symbol': 'د.إ',
+                    'font_size_value': '14px',
+                    'font_weight_value': '400',
+                    'font_stack': 'Manrope, Outfit, Space Grotesk, sans-serif',
+                    'timezone_label': 'GST (UTC+4)',
+                }
+            }
+        except Exception:
+            # Fallback for errors
+            return {
+                'user_preferences': {
+                    'direction_resolved': 'ltr',
+                    'theme': 'default',
+                    'is_dark': False,
+                    'language': 'en',
+                    'density': 'default',
+                    'reduced_motion': False,
+                    'currency': 'AED',
+                    'currency_symbol': 'د.إ',
+                    'font_size_value': '14px',
+                    'font_weight_value': '400',
+                    'font_stack': 'Manrope, Outfit, Space Grotesk, sans-serif',
+                    'timezone_label': 'GST (UTC+4)',
+                }
+            }
